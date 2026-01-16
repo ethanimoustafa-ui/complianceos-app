@@ -1,0 +1,264 @@
+'use client'
+
+import { useState } from 'react'
+import Link from 'next/link'
+import { useRouter } from 'next/navigation'
+import { useForm } from 'react-hook-form'
+import { zodResolver } from '@hookform/resolvers/zod'
+import { z } from 'zod'
+import { Icon } from '@iconify/react'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+
+const signInSchema = z.object({
+  email: z.string().email('Please enter a valid email'),
+  password: z.string().min(8, 'Password must be at least 8 characters'),
+})
+
+type SignInInput = z.infer<typeof signInSchema>
+
+export default function SignInPage() {
+  const router = useRouter()
+  const [showPassword, setShowPassword] = useState(false)
+  const [isLoading, setIsLoading] = useState(false)
+
+  const {
+    register,
+    handleSubmit,
+    formState: { errors },
+  } = useForm<SignInInput>({
+    resolver: zodResolver(signInSchema),
+  })
+
+  const onSubmit = async (data: SignInInput) => {
+    setIsLoading(true)
+    // Simulate API call
+    await new Promise((resolve) => setTimeout(resolve, 1500))
+    setIsLoading(false)
+    // Navigate to dashboard
+    router.push('/dashboard')
+  }
+
+  return (
+    <div className="flex min-h-[calc(100vh-5rem)]">
+      {/* Left Side - Sign In Form */}
+      <div className="w-full lg:w-1/2 flex items-center justify-center px-6 py-12">
+        <div className="w-full max-w-md">
+          {/* Welcome Text */}
+          <div className="mb-10 animate-fade-in">
+            <h1 className="text-4xl font-display font-bold text-slate-900 mb-3">
+              Welcome Back
+            </h1>
+            <p className="text-base text-slate-500">
+              Enter your credentials to access ComplianceOS
+            </p>
+          </div>
+
+          {/* Sign In Form */}
+          <form className="space-y-6" onSubmit={handleSubmit(onSubmit)}>
+            {/* Email Field */}
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-2">
+                Email Address
+              </label>
+              <div className="relative">
+                <Icon
+                  icon="lucide:mail"
+                  className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-lg"
+                />
+                <input
+                  type="email"
+                  placeholder="you@company.com"
+                  className="w-full pl-12 pr-4 py-3.5 bg-white border border-slate-300 rounded-lg text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition-all"
+                  {...register('email')}
+                />
+              </div>
+              {errors.email && (
+                <p className="mt-1.5 text-xs text-rose-500">{errors.email.message}</p>
+              )}
+            </div>
+
+            {/* Password Field */}
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-2">
+                Password
+              </label>
+              <div className="relative">
+                <Icon
+                  icon="lucide:lock"
+                  className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-lg"
+                />
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  placeholder="••••••••"
+                  className="w-full pl-12 pr-12 py-3.5 bg-white border border-slate-300 rounded-lg text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition-all"
+                  {...register('password')}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
+                >
+                  <Icon icon={showPassword ? 'lucide:eye-off' : 'lucide:eye'} className="text-lg" />
+                </button>
+              </div>
+              {errors.password && (
+                <p className="mt-1.5 text-xs text-rose-500">{errors.password.message}</p>
+              )}
+            </div>
+
+            {/* Remember Me & Forgot Password */}
+            <div className="flex items-center justify-between">
+              <label className="flex items-center gap-2 cursor-pointer group">
+                <input
+                  type="checkbox"
+                  className="w-4 h-4 text-emerald-600 border-slate-300 rounded focus:ring-emerald-500 cursor-pointer"
+                />
+                <span className="text-sm text-slate-600 group-hover:text-slate-900 transition-colors">
+                  Remember me
+                </span>
+              </label>
+              <Link
+                href="/forgot-password"
+                className="text-sm font-medium text-emerald-600 hover:text-emerald-700 transition-colors"
+              >
+                Forgot password?
+              </Link>
+            </div>
+
+            {/* Sign In Button */}
+            <Button
+              type="submit"
+              disabled={isLoading}
+              className="w-full py-3.5 text-base"
+              variant="primary"
+            >
+              {isLoading ? (
+                <>
+                  <Icon icon="lucide:loader-2" className="animate-spin" />
+                  Signing in...
+                </>
+              ) : (
+                <>
+                  Sign In
+                  <Icon icon="lucide:arrow-right" />
+                </>
+              )}
+            </Button>
+
+            {/* Sign Up Link */}
+            <div className="text-center pt-4">
+              <p className="text-sm text-slate-500">
+                Don't have an account?{' '}
+                <Link
+                  href="/sign-up"
+                  className="font-medium text-emerald-600 hover:text-emerald-700 transition-colors"
+                >
+                  Sign up
+                </Link>
+              </p>
+            </div>
+          </form>
+
+          {/* Social Sign In */}
+          <div className="mt-8">
+            <div className="relative">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-slate-200" />
+              </div>
+              <div className="relative flex justify-center text-sm">
+                <span className="px-4 bg-white text-slate-500">Or continue with</span>
+              </div>
+            </div>
+
+            <div className="mt-6 grid grid-cols-2 gap-4">
+              <Button variant="outline" type="button" className="py-3">
+                <Icon icon="flat-color-icons:google" className="text-xl" />
+                Google
+              </Button>
+              <Button variant="outline" type="button" className="py-3">
+                <Icon icon="logos:microsoft-icon" className="text-xl" />
+                Microsoft
+              </Button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Right Side - Decorative Background */}
+      <div className="hidden lg:block lg:w-1/2 bg-gradient-to-br from-slate-50 to-emerald-50 relative overflow-hidden">
+        <div className="absolute inset-0 flex items-center justify-center p-12">
+          <div className="max-w-lg">
+            {/* Feature Cards */}
+            <div className="space-y-8">
+              <FeatureCard
+                icon="lucide:shield-check"
+                title="Secure & Compliant"
+                description="Enterprise-grade security with SOC 2 Type II certification and end-to-end encryption"
+              />
+              <FeatureCard
+                icon="lucide:zap"
+                title="Real-Time Insights"
+                description="Monitor compliance metrics and audit trails with live dashboards and notifications"
+                className="ml-12"
+              />
+              <FeatureCard
+                icon="lucide:users"
+                title="Team Collaboration"
+                description="Seamless workflows with role-based access and automated task assignments"
+              />
+            </div>
+
+            {/* Stats */}
+            <div className="mt-12 grid grid-cols-3 gap-6">
+              <StatItem value="500+" label="Companies" />
+              <StatItem value="99.9%" label="Uptime" />
+              <StatItem value="24/7" label="Support" />
+            </div>
+          </div>
+        </div>
+
+        {/* Decorative Shapes */}
+        <div className="absolute top-20 right-20 w-64 h-64 bg-emerald-200/30 rounded-full blur-3xl" />
+        <div className="absolute bottom-20 left-20 w-64 h-64 bg-emerald-300/20 rounded-full blur-3xl" />
+      </div>
+    </div>
+  )
+}
+
+function FeatureCard({
+  icon,
+  title,
+  description,
+  className,
+}: {
+  icon: string
+  title: string
+  description: string
+  className?: string
+}) {
+  return (
+    <div
+      className={`bg-white/80 backdrop-blur-sm rounded-2xl p-6 shadow-lg transform hover:scale-105 transition-transform duration-300 ${className}`}
+    >
+      <div className="flex items-start gap-4">
+        <div className="w-12 h-12 bg-emerald-100 rounded-xl flex items-center justify-center flex-shrink-0">
+          <Icon icon={icon} className="text-2xl text-emerald-600" />
+        </div>
+        <div>
+          <h3 className="text-lg font-display font-bold text-slate-900 mb-2">{title}</h3>
+          <p className="text-sm text-slate-600">{description}</p>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function StatItem({ value, label }: { value: string; label: string }) {
+  return (
+    <div className="text-center">
+      <div className="text-3xl font-display font-bold text-slate-900 mb-1">{value}</div>
+      <div className="text-sm text-slate-600">{label}</div>
+    </div>
+  )
+}
