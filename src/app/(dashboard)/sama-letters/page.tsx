@@ -93,7 +93,122 @@ We remain at your disposal for any further information or clarification required
   },
 ]
 
-const letterTemplates = [
+type TemplateStatus = 'Active' | 'Draft'
+
+interface LetterTemplate {
+  id: string
+  name: string
+  type: LetterType
+  icon: string
+  color: string
+  description: string
+  status: TemplateStatus
+  createdDate: string
+  lastModified: string
+  usageCount: number
+}
+
+const letterTemplates: LetterTemplate[] = [
+  {
+    id: 'tmpl-001',
+    name: 'Key Function Appointment',
+    type: 'Non-Objection',
+    icon: 'lucide:user-check',
+    color: 'emerald',
+    description: 'Hiring key positions or launching new products.',
+    status: 'Active',
+    createdDate: 'Jan 15, 2024',
+    lastModified: 'Oct 10, 2024',
+    usageCount: 45,
+  },
+  {
+    id: 'tmpl-002',
+    name: 'Product Launch Request',
+    type: 'Non-Objection',
+    icon: 'lucide:package',
+    color: 'emerald',
+    description: 'Request approval for new financial product launches.',
+    status: 'Active',
+    createdDate: 'Feb 20, 2024',
+    lastModified: 'Sep 15, 2024',
+    usageCount: 23,
+  },
+  {
+    id: 'tmpl-003',
+    name: 'Circular Clarification',
+    type: 'Inquiry',
+    icon: 'lucide:help-circle',
+    color: 'blue',
+    description: 'Seeking clarification on rules and circulars.',
+    status: 'Active',
+    createdDate: 'Mar 05, 2024',
+    lastModified: 'Aug 22, 2024',
+    usageCount: 38,
+  },
+  {
+    id: 'tmpl-004',
+    name: 'Regulatory Interpretation',
+    type: 'Inquiry',
+    icon: 'lucide:book-open',
+    color: 'blue',
+    description: 'Request interpretation of specific regulatory requirements.',
+    status: 'Draft',
+    createdDate: 'Sep 01, 2024',
+    lastModified: 'Oct 18, 2024',
+    usageCount: 0,
+  },
+  {
+    id: 'tmpl-005',
+    name: 'Quarterly AML Report',
+    type: 'Submission',
+    icon: 'lucide:file-up',
+    color: 'amber',
+    description: 'Filing periodic reports and compliance data.',
+    status: 'Active',
+    createdDate: 'Jan 01, 2024',
+    lastModified: 'Oct 01, 2024',
+    usageCount: 12,
+  },
+  {
+    id: 'tmpl-006',
+    name: 'Annual Compliance Report',
+    type: 'Submission',
+    icon: 'lucide:file-text',
+    color: 'amber',
+    description: 'Submit annual compliance assessment to SAMA.',
+    status: 'Active',
+    createdDate: 'Jan 10, 2024',
+    lastModified: 'Dec 15, 2024',
+    usageCount: 4,
+  },
+  {
+    id: 'tmpl-007',
+    name: 'Incident Notification',
+    type: 'Notification',
+    icon: 'lucide:alert-triangle',
+    color: 'rose',
+    description: 'Reporting outages, breaches, or structural changes.',
+    status: 'Active',
+    createdDate: 'Apr 12, 2024',
+    lastModified: 'Jul 30, 2024',
+    usageCount: 8,
+  },
+  {
+    id: 'tmpl-008',
+    name: 'System Outage Report',
+    type: 'Notification',
+    icon: 'lucide:server-crash',
+    color: 'rose',
+    description: 'Report critical system outages affecting banking services.',
+    status: 'Active',
+    createdDate: 'May 20, 2024',
+    lastModified: 'Nov 05, 2024',
+    usageCount: 3,
+  },
+]
+
+// Helper to get display templates for the dashboard cards
+const templateTypeCards = [
   {
     type: 'Non-Objection' as LetterType,
     icon: 'lucide:user-check',
@@ -145,9 +260,119 @@ export default function SAMALettersPage() {
   const [toastMessage, setToastMessage] = useState<string | null>(null)
   const [language, setLanguage] = useState<'en' | 'ar'>('en')
 
+  // Template Management State
+  const [isTemplateManagementOpen, setIsTemplateManagementOpen] = useState(false)
+  const [templateSearch, setTemplateSearch] = useState('')
+  const [templateTypeFilter, setTemplateTypeFilter] = useState<LetterType | 'All'>('All')
+  const [templateStatusFilter, setTemplateStatusFilter] = useState<TemplateStatus | 'All'>('All')
+
+  // Template Actions State
+  const [templates, setTemplates] = useState<LetterTemplate[]>(letterTemplates)
+  const [selectedTemplate, setSelectedTemplate] = useState<LetterTemplate | null>(null)
+  const [isViewTemplateModalOpen, setIsViewTemplateModalOpen] = useState(false)
+  const [isEditTemplateModalOpen, setIsEditTemplateModalOpen] = useState(false)
+  const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false)
+
   const showToast = useCallback((message: string) => {
     setToastMessage(message)
   }, [])
+
+  // Filter templates based on search and filters
+  const filteredTemplates = templates.filter((template) => {
+    const matchesSearch =
+      templateSearch === '' ||
+      template.name.toLowerCase().includes(templateSearch.toLowerCase()) ||
+      template.description.toLowerCase().includes(templateSearch.toLowerCase())
+    const matchesType = templateTypeFilter === 'All' || template.type === templateTypeFilter
+    const matchesStatus = templateStatusFilter === 'All' || template.status === templateStatusFilter
+    return matchesSearch && matchesType && matchesStatus
+  })
+
+  // Template Action Handlers
+  const handleViewTemplate = (template: LetterTemplate) => {
+    setSelectedTemplate(template)
+    setIsViewTemplateModalOpen(true)
+  }
+
+  const handleEditTemplate = (template: LetterTemplate) => {
+    setSelectedTemplate(template)
+    setIsEditTemplateModalOpen(true)
+  }
+
+  const handleDuplicateTemplate = (template: LetterTemplate) => {
+    const duplicatedTemplate: LetterTemplate = {
+      ...template,
+      id: `tmpl-${Date.now()}`,
+      name: `${template.name} (Copy)`,
+      status: 'Draft',
+      createdDate: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+      lastModified: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+      usageCount: 0,
+    }
+    setTemplates([duplicatedTemplate, ...templates])
+    showToast('Template duplicated successfully')
+  }
+
+  const handleDeleteTemplate = (template: LetterTemplate) => {
+    setSelectedTemplate(template)
+    setIsDeleteConfirmOpen(true)
+  }
+
+  const handleConfirmDelete = () => {
+    if (selectedTemplate) {
+      setTemplates(templates.filter((t) => t.id !== selectedTemplate.id))
+      showToast('Template deleted successfully')
+      setIsDeleteConfirmOpen(false)
+      setSelectedTemplate(null)
+    }
+  }
+
+  const handleCreateTemplate = () => {
+    setSelectedTemplate(null)
+    setIsEditTemplateModalOpen(true)
+  }
+
+  const handleSaveTemplate = (templateData: Partial<LetterTemplate>) => {
+    if (selectedTemplate) {
+      // Editing existing template
+      setTemplates(templates.map((t) =>
+        t.id === selectedTemplate.id
+          ? { ...t, ...templateData, lastModified: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) }
+          : t
+      ))
+      showToast('Template updated successfully')
+    } else {
+      // Creating new template
+      const typeColors: Record<LetterType, string> = {
+        'Non-Objection': 'emerald',
+        'Inquiry': 'blue',
+        'Submission': 'amber',
+        'Notification': 'rose',
+      }
+      const typeIcons: Record<LetterType, string> = {
+        'Non-Objection': 'lucide:user-check',
+        'Inquiry': 'lucide:help-circle',
+        'Submission': 'lucide:file-up',
+        'Notification': 'lucide:alert-triangle',
+      }
+      const newTemplate: LetterTemplate = {
+        id: `tmpl-${Date.now()}`,
+        name: templateData.name || 'Untitled Template',
+        type: templateData.type || 'Non-Objection',
+        icon: typeIcons[templateData.type || 'Non-Objection'],
+        color: typeColors[templateData.type || 'Non-Objection'],
+        description: templateData.description || '',
+        status: templateData.status || 'Draft',
+        createdDate: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+        lastModified: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+        usageCount: 0,
+      }
+      setTemplates([newTemplate, ...templates])
+      showToast('Template created successfully')
+    }
+    setIsEditTemplateModalOpen(false)
+    setSelectedTemplate(null)
+  }
 
   const handleViewLetter = (letter: Letter) => {
     setSelectedLetter(letter)
@@ -262,7 +487,212 @@ export default function SAMALettersPage() {
 
       {/* Content Area */}
       <div className="flex-1 overflow-auto hide-scrollbar bg-slate-50 p-8">
-        {view === 'dashboard' ? (
+        {isTemplateManagementOpen ? (
+          /* Template Management Databank View */
+          <div>
+            {/* Header */}
+            <div className="flex justify-between items-center mb-8">
+              <div className="flex items-center gap-4">
+                <button
+                  onClick={() => {
+                    setIsTemplateManagementOpen(false)
+                    setTemplateSearch('')
+                    setTemplateTypeFilter('All')
+                    setTemplateStatusFilter('All')
+                  }}
+                  className="w-10 h-10 bg-white border border-slate-200 rounded-lg flex items-center justify-center text-slate-500 hover:bg-slate-50 cursor-pointer"
+                >
+                  <Icon icon="lucide:chevron-left" className="text-xl" />
+                </button>
+                <div>
+                  <h2 className="text-2xl font-bold text-slate-900 font-display">Template Databank</h2>
+                  <p className="text-sm text-slate-500">Manage and organize letter templates</p>
+                </div>
+              </div>
+              <button
+                onClick={handleCreateTemplate}
+                className="bg-emerald-600 text-white px-5 py-2.5 rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-emerald-700 transition-colors shadow-lg shadow-emerald-100 cursor-pointer"
+              >
+                <Icon icon="lucide:plus" />
+                Create Template
+              </button>
+            </div>
+
+            {/* Filters Section */}
+            <div className="glass-card rounded-2xl p-6 mb-6">
+              <div className="flex flex-wrap gap-4 items-center">
+                {/* Search Input */}
+                <div className="relative flex-1 min-w-[280px]">
+                  <Icon
+                    icon="lucide:search"
+                    className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+                  />
+                  <input
+                    type="text"
+                    value={templateSearch}
+                    onChange={(e) => setTemplateSearch(e.target.value)}
+                    placeholder="Search templates by name or description..."
+                    className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 outline-none"
+                  />
+                </div>
+
+                {/* Type Filter */}
+                <div className="flex items-center gap-2">
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wide">Type:</label>
+                  <select
+                    value={templateTypeFilter}
+                    onChange={(e) => setTemplateTypeFilter(e.target.value as LetterType | 'All')}
+                    className="px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm font-medium focus:ring-2 focus:ring-emerald-500 outline-none min-w-[150px]"
+                  >
+                    <option value="All">All Types</option>
+                    <option value="Non-Objection">Non-Objection</option>
+                    <option value="Inquiry">Inquiry</option>
+                    <option value="Submission">Submission</option>
+                    <option value="Notification">Notification</option>
+                  </select>
+                </div>
+
+                {/* Status Filter */}
+                <div className="flex items-center gap-2">
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wide">Status:</label>
+                  <select
+                    value={templateStatusFilter}
+                    onChange={(e) => setTemplateStatusFilter(e.target.value as TemplateStatus | 'All')}
+                    className="px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm font-medium focus:ring-2 focus:ring-emerald-500 outline-none min-w-[130px]"
+                  >
+                    <option value="All">All Status</option>
+                    <option value="Active">Active</option>
+                    <option value="Draft">Draft</option>
+                  </select>
+                </div>
+
+                {/* Results Count */}
+                <div className="text-sm text-slate-500">
+                  <span className="font-bold text-slate-900">{filteredTemplates.length}</span> templates found
+                </div>
+              </div>
+            </div>
+
+            {/* Templates Table */}
+            <div className="glass-card rounded-2xl overflow-hidden shadow-sm">
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead className="bg-slate-50/50 text-slate-500 uppercase text-[10px] font-bold tracking-widest border-b border-slate-100">
+                    <tr>
+                      <th className="px-6 py-4 text-left">Template Name</th>
+                      <th className="px-6 py-4 text-left">Type</th>
+                      <th className="px-6 py-4 text-left">Description</th>
+                      <th className="px-6 py-4 text-left">Status</th>
+                      <th className="px-6 py-4 text-left">Last Modified</th>
+                      <th className="px-6 py-4 text-center">Usage</th>
+                      <th className="px-6 py-4 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {filteredTemplates.length === 0 ? (
+                      <tr>
+                        <td colSpan={7} className="px-6 py-12 text-center">
+                          <div className="flex flex-col items-center gap-3">
+                            <div className="w-12 h-12 bg-slate-100 rounded-full flex items-center justify-center">
+                              <Icon icon="lucide:file-x" className="text-2xl text-slate-400" />
+                            </div>
+                            <p className="text-sm text-slate-500">No templates found matching your criteria</p>
+                            <button
+                              onClick={() => {
+                                setTemplateSearch('')
+                                setTemplateTypeFilter('All')
+                                setTemplateStatusFilter('All')
+                              }}
+                              className="text-xs font-bold text-emerald-600 hover:underline cursor-pointer"
+                            >
+                              Clear filters
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ) : (
+                      filteredTemplates.map((template) => (
+                        <tr
+                          key={template.id}
+                          className="hover:bg-slate-50 transition-colors group"
+                        >
+                          <td className="px-6 py-4">
+                            <div className="flex items-center gap-3">
+                              <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
+                                template.color === 'emerald' ? 'bg-emerald-50 text-emerald-600' :
+                                template.color === 'blue' ? 'bg-blue-50 text-blue-600' :
+                                template.color === 'amber' ? 'bg-amber-50 text-amber-600' :
+                                'bg-rose-50 text-rose-600'
+                              }`}>
+                                <Icon icon={template.icon} className="text-lg" />
+                              </div>
+                              <span className="text-sm font-bold text-slate-900">{template.name}</span>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4">
+                            <span className={`px-2 py-1 text-[10px] font-bold rounded-md ${getTypeBadgeColor(template.type)}`}>
+                              {template.type}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4">
+                            <p className="text-sm text-slate-500 truncate max-w-xs">{template.description}</p>
+                          </td>
+                          <td className="px-6 py-4">
+                            <span className={`flex items-center gap-1.5 text-xs font-bold ${
+                              template.status === 'Active' ? 'text-emerald-600' : 'text-amber-600'
+                            }`}>
+                              <span className={`w-1.5 h-1.5 rounded-full ${
+                                template.status === 'Active' ? 'bg-emerald-600' : 'bg-amber-600'
+                              }`} />
+                              {template.status}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 text-sm text-slate-400">{template.lastModified}</td>
+                          <td className="px-6 py-4 text-center">
+                            <span className="text-sm font-bold text-slate-900">{template.usageCount}</span>
+                            <span className="text-xs text-slate-400 ml-1">uses</span>
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <button
+                                onClick={() => handleViewTemplate(template)}
+                                className="p-1.5 hover:bg-slate-200 rounded text-slate-400 hover:text-slate-900 transition-colors cursor-pointer"
+                                title="View"
+                              >
+                                <Icon icon="lucide:eye" />
+                              </button>
+                              <button
+                                onClick={() => handleEditTemplate(template)}
+                                className="p-1.5 hover:bg-slate-200 rounded text-slate-400 hover:text-slate-900 transition-colors cursor-pointer"
+                                title="Edit"
+                              >
+                                <Icon icon="lucide:pencil" />
+                              </button>
+                              <button
+                                onClick={() => handleDuplicateTemplate(template)}
+                                className="p-1.5 hover:bg-slate-200 rounded text-slate-400 hover:text-slate-900 transition-colors cursor-pointer"
+                                title="Duplicate"
+                              >
+                                <Icon icon="lucide:copy" />
+                              </button>
+                              <button
+                                onClick={() => handleDeleteTemplate(template)}
+                                className="p-1.5 hover:bg-rose-100 rounded text-slate-400 hover:text-rose-600 transition-colors cursor-pointer"
+                                title="Delete"
+                              >
+                                <Icon icon="lucide:trash-2" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        ) : view === 'dashboard' ? (
           <div>
             {/* Stats Section */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-10">
@@ -301,12 +731,15 @@ export default function SAMALettersPage() {
             <div className="mb-10">
               <div className="flex items-baseline justify-between mb-6">
                 <h2 className="text-lg font-bold font-display text-slate-900">Letter Templates</h2>
-                <button className="text-xs font-bold text-emerald-600 hover:underline cursor-pointer">
+                <button
+                  onClick={() => setIsTemplateManagementOpen(true)}
+                  className="text-xs font-bold text-emerald-600 hover:underline cursor-pointer"
+                >
                   Manage Templates &rarr;
                 </button>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                {letterTemplates.map((template) => (
+                {templateTypeCards.map((template) => (
                   <TemplateCard
                     key={template.type}
                     type={template.type}
@@ -711,6 +1144,164 @@ export default function SAMALettersPage() {
         />
       </Modal>
 
+      {/* View Template Modal */}
+      <Modal
+        isOpen={isViewTemplateModalOpen}
+        onClose={() => {
+          setIsViewTemplateModalOpen(false)
+          setSelectedTemplate(null)
+        }}
+        size="md"
+      >
+        {selectedTemplate && (
+          <div className="p-8">
+            <div className="flex justify-between items-start mb-6">
+              <div className="flex items-center gap-4">
+                <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
+                  selectedTemplate.color === 'emerald' ? 'bg-emerald-50 text-emerald-600' :
+                  selectedTemplate.color === 'blue' ? 'bg-blue-50 text-blue-600' :
+                  selectedTemplate.color === 'amber' ? 'bg-amber-50 text-amber-600' :
+                  'bg-rose-50 text-rose-600'
+                }`}>
+                  <Icon icon={selectedTemplate.icon} className="text-2xl" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-bold text-slate-900 font-display">{selectedTemplate.name}</h2>
+                  <span className={`px-2 py-1 text-[10px] font-bold rounded-md ${getTypeBadgeColor(selectedTemplate.type)}`}>
+                    {selectedTemplate.type}
+                  </span>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  setIsViewTemplateModalOpen(false)
+                  setSelectedTemplate(null)
+                }}
+                className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-slate-100 transition-colors cursor-pointer"
+              >
+                <Icon icon="lucide:x" className="text-2xl text-slate-400" />
+              </button>
+            </div>
+
+            <div className="space-y-6">
+              <div>
+                <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-2">
+                  Description
+                </label>
+                <p className="text-sm text-slate-600">{selectedTemplate.description}</p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="bg-slate-50 rounded-xl p-4">
+                  <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-1">
+                    Status
+                  </label>
+                  <span className={`flex items-center gap-1.5 text-sm font-bold ${
+                    selectedTemplate.status === 'Active' ? 'text-emerald-600' : 'text-amber-600'
+                  }`}>
+                    <span className={`w-2 h-2 rounded-full ${
+                      selectedTemplate.status === 'Active' ? 'bg-emerald-600' : 'bg-amber-600'
+                    }`} />
+                    {selectedTemplate.status}
+                  </span>
+                </div>
+                <div className="bg-slate-50 rounded-xl p-4">
+                  <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-1">
+                    Usage Count
+                  </label>
+                  <span className="text-sm font-bold text-slate-900">{selectedTemplate.usageCount} times used</span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="bg-slate-50 rounded-xl p-4">
+                  <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-1">
+                    Created Date
+                  </label>
+                  <span className="text-sm text-slate-600">{selectedTemplate.createdDate}</span>
+                </div>
+                <div className="bg-slate-50 rounded-xl p-4">
+                  <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-1">
+                    Last Modified
+                  </label>
+                  <span className="text-sm text-slate-600">{selectedTemplate.lastModified}</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-8 flex justify-end">
+              <button
+                onClick={() => {
+                  setIsViewTemplateModalOpen(false)
+                  setSelectedTemplate(null)
+                }}
+                className="px-6 py-2.5 bg-slate-100 text-slate-600 rounded-xl text-sm font-bold hover:bg-slate-200 transition-colors cursor-pointer"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      {/* Edit/Create Template Modal */}
+      <Modal
+        isOpen={isEditTemplateModalOpen}
+        onClose={() => {
+          setIsEditTemplateModalOpen(false)
+          setSelectedTemplate(null)
+        }}
+        size="lg"
+      >
+        <TemplateEditForm
+          template={selectedTemplate}
+          onClose={() => {
+            setIsEditTemplateModalOpen(false)
+            setSelectedTemplate(null)
+          }}
+          onSave={handleSaveTemplate}
+        />
+      </Modal>
+
+      {/* Delete Confirmation Modal */}
+      <Modal
+        isOpen={isDeleteConfirmOpen}
+        onClose={() => {
+          setIsDeleteConfirmOpen(false)
+          setSelectedTemplate(null)
+        }}
+        size="sm"
+      >
+        <div className="p-8">
+          <div className="flex items-center justify-center mb-6">
+            <div className="w-16 h-16 bg-rose-50 rounded-full flex items-center justify-center">
+              <Icon icon="lucide:alert-triangle" className="text-3xl text-rose-600" />
+            </div>
+          </div>
+          <h2 className="text-xl font-bold text-slate-900 text-center mb-2">Delete Template</h2>
+          <p className="text-sm text-slate-500 text-center mb-6">
+            Are you sure you want to delete <strong>{selectedTemplate?.name}</strong>? This action cannot be undone.
+          </p>
+          <div className="flex gap-3">
+            <button
+              onClick={() => {
+                setIsDeleteConfirmOpen(false)
+                setSelectedTemplate(null)
+              }}
+              className="flex-1 px-4 py-2.5 bg-slate-100 text-slate-600 rounded-xl text-sm font-bold hover:bg-slate-200 transition-colors cursor-pointer"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleConfirmDelete}
+              className="flex-1 px-4 py-2.5 bg-rose-600 text-white rounded-xl text-sm font-bold hover:bg-rose-700 transition-colors cursor-pointer"
+            >
+              Delete Template
+            </button>
+          </div>
+        </div>
+      </Modal>
+
       {/* Toast */}
       {toastMessage && <Toast message={toastMessage} onClose={() => setToastMessage(null)} />}
     </div>
@@ -733,11 +1324,11 @@ function StatCard({
   subtextColor?: 'emerald' | 'amber' | 'rose' | 'blue'
   borderColor: 'emerald' | 'amber' | 'rose' | 'blue'
 }) {
-  const borderColors = {
-    emerald: 'border-l-emerald-500',
-    amber: 'border-l-amber-500',
-    rose: 'border-l-rose-500',
-    blue: 'border-l-blue-500',
+  const borderColorValues = {
+    emerald: '#22c55e',  // emerald-500
+    amber: '#f59e0b',    // amber-500
+    rose: '#f43f5e',     // rose-500
+    blue: '#3b82f6',     // blue-500
   }
 
   const textColors = {
@@ -749,12 +1340,22 @@ function StatCard({
 
   return (
     <div
-      className={`glass-card p-6 rounded-2xl stat-card-hover border-l-4 ${borderColors[borderColor]}`}
+      className="glass-card p-6 rounded-2xl stat-card-hover"
+      style={{
+        border: `1px solid ${borderColorValues[borderColor]}`,
+        borderLeftWidth: '6px'
+      }}
     >
       <p className="text-slate-500 text-[10px] font-bold uppercase tracking-widest mb-1">{label}</p>
       <h2 className="text-3xl font-black text-slate-900 font-display">{value}</h2>
       <p
-        className={`text-xs font-bold mt-2 flex items-center gap-1 ${subtextColor ? textColors[subtextColor] : 'text-slate-400'}`}
+        className={`text-xs mt-2 ${
+          subtextIcon
+            ? `font-bold flex items-center gap-1 ${subtextColor ? textColors[subtextColor] : 'text-slate-400'}`
+            : subtextColor
+              ? `font-bold ${textColors[subtextColor]}`
+              : 'font-medium text-slate-400'
+        }`}
       >
         {subtextIcon && <Icon icon={subtextIcon} />}
         {subtext}
@@ -1027,6 +1628,161 @@ function CreateLetterForm({
             )}
           </button>
         </div>
+      </div>
+    </div>
+  )
+}
+
+// Template Edit Form Component
+function TemplateEditForm({
+  template,
+  onClose,
+  onSave,
+}: {
+  template: LetterTemplate | null
+  onClose: () => void
+  onSave: (data: Partial<LetterTemplate>) => void
+}) {
+  const [name, setName] = useState(template?.name || '')
+  const [type, setType] = useState<LetterType>(template?.type || 'Non-Objection')
+  const [description, setDescription] = useState(template?.description || '')
+  const [status, setStatus] = useState<TemplateStatus>(template?.status || 'Draft')
+  const [isSaving, setIsSaving] = useState(false)
+
+  const isCreateMode = template === null
+
+  const handleSubmit = () => {
+    setIsSaving(true)
+    setTimeout(() => {
+      onSave({
+        name,
+        type,
+        description,
+        status,
+      })
+      setIsSaving(false)
+    }, 500)
+  }
+
+  return (
+    <div className="p-8">
+      <div className="flex justify-between items-start mb-8">
+        <div>
+          <h2 className="text-2xl font-bold text-slate-900 font-display">
+            {isCreateMode ? 'Create New Template' : 'Edit Template'}
+          </h2>
+          <p className="text-sm text-slate-500 mt-1">
+            {isCreateMode ? 'Add a new letter template to the databank' : `Editing: ${template?.name}`}
+          </p>
+        </div>
+        <button
+          onClick={onClose}
+          className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-slate-100 transition-colors cursor-pointer"
+        >
+          <Icon icon="lucide:x" className="text-2xl text-slate-400" />
+        </button>
+      </div>
+
+      <div className="space-y-6">
+        <div>
+          <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-2">
+            Template Name
+          </label>
+          <input
+            type="text"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Enter template name..."
+            className="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-sm font-medium focus:ring-2 focus:ring-emerald-500 outline-none"
+          />
+        </div>
+
+        <div>
+          <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-2">
+            Letter Type
+          </label>
+          <select
+            value={type}
+            onChange={(e) => setType(e.target.value as LetterType)}
+            className="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-sm font-medium focus:ring-2 focus:ring-emerald-500 outline-none"
+          >
+            <option value="Non-Objection">Non-Objection</option>
+            <option value="Inquiry">Inquiry</option>
+            <option value="Submission">Submission</option>
+            <option value="Notification">Notification</option>
+          </select>
+        </div>
+
+        <div>
+          <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-2">
+            Description
+          </label>
+          <textarea
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            placeholder="Describe what this template is used for..."
+            rows={3}
+            className="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-sm font-medium focus:ring-2 focus:ring-emerald-500 outline-none resize-none"
+          />
+        </div>
+
+        <div>
+          <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-2">
+            Status
+          </label>
+          <div className="flex gap-3">
+            <button
+              type="button"
+              onClick={() => setStatus('Active')}
+              className={`flex-1 py-3 px-4 rounded-xl text-sm font-bold transition-all flex items-center justify-center gap-2 ${
+                status === 'Active'
+                  ? 'bg-emerald-50 border-2 border-emerald-500 text-emerald-700'
+                  : 'bg-slate-50 border-2 border-transparent text-slate-500 hover:bg-slate-100'
+              }`}
+            >
+              <span className={`w-2 h-2 rounded-full ${status === 'Active' ? 'bg-emerald-500' : 'bg-slate-300'}`} />
+              Active
+            </button>
+            <button
+              type="button"
+              onClick={() => setStatus('Draft')}
+              className={`flex-1 py-3 px-4 rounded-xl text-sm font-bold transition-all flex items-center justify-center gap-2 ${
+                status === 'Draft'
+                  ? 'bg-amber-50 border-2 border-amber-500 text-amber-700'
+                  : 'bg-slate-50 border-2 border-transparent text-slate-500 hover:bg-slate-100'
+              }`}
+            >
+              <span className={`w-2 h-2 rounded-full ${status === 'Draft' ? 'bg-amber-500' : 'bg-slate-300'}`} />
+              Draft
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-8 flex justify-end gap-3">
+        <button
+          onClick={onClose}
+          className="px-6 py-2.5 bg-slate-100 text-slate-600 rounded-xl text-sm font-bold hover:bg-slate-200 transition-colors cursor-pointer"
+        >
+          Cancel
+        </button>
+        <button
+          onClick={handleSubmit}
+          disabled={isSaving || !name.trim()}
+          className="px-8 py-2.5 bg-emerald-600 text-white rounded-xl text-sm font-bold hover:bg-emerald-700 transition-colors shadow-lg shadow-emerald-100 disabled:opacity-50 flex items-center gap-2 cursor-pointer"
+        >
+          {isSaving ? (
+            <>
+              <Icon icon="lucide:loader-2" className="animate-spin" />
+              Saving...
+            </>
+          ) : (
+            <>
+              <Icon icon="lucide:check" />
+              {isCreateMode ? 'Create Template' : 'Save Changes'}
+            </>
+          )}
+        </button>
       </div>
     </div>
   )

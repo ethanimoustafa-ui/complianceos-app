@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useMemo } from 'react'
 import Link from 'next/link'
 import { Icon } from '@iconify/react'
 import { Button } from '@/components/ui/button'
@@ -8,10 +8,16 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Drawer } from '@/components/ui/drawer'
 import { Modal } from '@/components/ui/modal'
+import { MultiSelectFilter, FilterOption } from '@/components/ui/multi-select-filter'
 import { cn } from '@/lib/utils'
 
 // Tab type for header switching
 type TabValue = 'audits' | 'executive' | 'detailed'
+
+// Audit type definitions
+type AuditSource = 'sama_inspection' | 'internal_audit' | 'sharia_audit'
+type AuditFrequency = 'annual' | 'semi_annual' | 'quarterly' | 'monthly' | 'ad_hoc'
+type AuditCategory = 'security_compliance' | 'financial_compliance' | 'regulatory_compliance' | 'operational_compliance' | 'hr_compliance' | 'sharia_compliance'
 
 // Types
 type Severity = 'critical' | 'high' | 'medium' | 'low'
@@ -67,6 +73,9 @@ interface Audit {
   status: AuditStatus
   priority: AuditPriority
   progress: number
+  source: AuditSource
+  frequency: AuditFrequency
+  category: AuditCategory
 }
 
 // Config
@@ -116,6 +125,30 @@ const auditPriorityConfig: Record<AuditPriority, { label: string; bgColor: strin
   low: { label: 'Low', bgColor: 'bg-slate-50', textColor: 'text-slate-500', borderColor: 'border-slate-200' },
 }
 
+// Audit filter options
+const auditSourceOptions: FilterOption<AuditSource>[] = [
+  { value: 'sama_inspection', label: 'SAMA Inspection', color: { dot: 'bg-red-500', bg: 'bg-red-50', text: 'text-red-600', border: 'border-red-200' } },
+  { value: 'internal_audit', label: 'Internal Audit', color: { dot: 'bg-blue-500', bg: 'bg-blue-50', text: 'text-blue-600', border: 'border-blue-200' } },
+  { value: 'sharia_audit', label: 'Sharia Audit', color: { dot: 'bg-purple-500', bg: 'bg-purple-50', text: 'text-purple-600', border: 'border-purple-200' } },
+]
+
+const auditFrequencyOptions: FilterOption<AuditFrequency>[] = [
+  { value: 'annual', label: 'Annual', color: { dot: 'bg-emerald-500', bg: 'bg-emerald-50', text: 'text-emerald-600', border: 'border-emerald-200' } },
+  { value: 'semi_annual', label: 'Semi-Annual', color: { dot: 'bg-teal-500', bg: 'bg-teal-50', text: 'text-teal-600', border: 'border-teal-200' } },
+  { value: 'quarterly', label: 'Quarterly', color: { dot: 'bg-cyan-500', bg: 'bg-cyan-50', text: 'text-cyan-600', border: 'border-cyan-200' } },
+  { value: 'monthly', label: 'Monthly', color: { dot: 'bg-sky-500', bg: 'bg-sky-50', text: 'text-sky-600', border: 'border-sky-200' } },
+  { value: 'ad_hoc', label: 'Ad-hoc', color: { dot: 'bg-slate-500', bg: 'bg-slate-50', text: 'text-slate-600', border: 'border-slate-200' } },
+]
+
+const auditCategoryOptions: FilterOption<AuditCategory>[] = [
+  { value: 'security_compliance', label: 'Security', color: { dot: 'bg-indigo-500', bg: 'bg-indigo-50', text: 'text-indigo-600', border: 'border-indigo-200' } },
+  { value: 'financial_compliance', label: 'Financial', color: { dot: 'bg-green-500', bg: 'bg-green-50', text: 'text-green-600', border: 'border-green-200' } },
+  { value: 'regulatory_compliance', label: 'Regulatory', color: { dot: 'bg-orange-500', bg: 'bg-orange-50', text: 'text-orange-600', border: 'border-orange-200' } },
+  { value: 'operational_compliance', label: 'Operational', color: { dot: 'bg-amber-500', bg: 'bg-amber-50', text: 'text-amber-600', border: 'border-amber-200' } },
+  { value: 'hr_compliance', label: 'HR', color: { dot: 'bg-pink-500', bg: 'bg-pink-50', text: 'text-pink-600', border: 'border-pink-200' } },
+  { value: 'sharia_compliance', label: 'Sharia', color: { dot: 'bg-violet-500', bg: 'bg-violet-50', text: 'text-violet-600', border: 'border-violet-200' } },
+]
+
 // Mock data
 const complianceTrend: ComplianceTrendData[] = [
   { month: 'Jul', actual: 70, target: 90 },
@@ -149,6 +182,9 @@ const audits: Audit[] = [
     status: 'in_progress',
     priority: 'critical',
     progress: 60,
+    source: 'internal_audit',
+    frequency: 'annual',
+    category: 'security_compliance',
   },
   {
     id: 'audit-2',
@@ -159,6 +195,9 @@ const audits: Audit[] = [
     status: 'pending',
     priority: 'high',
     progress: 0,
+    source: 'internal_audit',
+    frequency: 'annual',
+    category: 'operational_compliance',
   },
   {
     id: 'audit-3',
@@ -169,6 +208,9 @@ const audits: Audit[] = [
     status: 'in_review',
     priority: 'medium',
     progress: 90,
+    source: 'internal_audit',
+    frequency: 'quarterly',
+    category: 'regulatory_compliance',
   },
   {
     id: 'audit-4',
@@ -179,6 +221,9 @@ const audits: Audit[] = [
     status: 'completed',
     priority: 'high',
     progress: 100,
+    source: 'internal_audit',
+    frequency: 'quarterly',
+    category: 'security_compliance',
   },
   {
     id: 'audit-5',
@@ -189,6 +234,74 @@ const audits: Audit[] = [
     status: 'pending',
     priority: 'low',
     progress: 0,
+    source: 'internal_audit',
+    frequency: 'semi_annual',
+    category: 'operational_compliance',
+  },
+  {
+    id: 'audit-6',
+    name: 'SAMA Cybersecurity Framework',
+    description: 'Annual SAMA CSF Assessment',
+    responsible: { name: 'Ahmed A.', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Ahmed' },
+    dueDate: new Date('2026-02-28'),
+    status: 'in_progress',
+    priority: 'critical',
+    progress: 35,
+    source: 'sama_inspection',
+    frequency: 'annual',
+    category: 'regulatory_compliance',
+  },
+  {
+    id: 'audit-7',
+    name: 'Sharia Compliance Review',
+    description: 'Product & Service Compliance',
+    responsible: { name: 'Khalid M.', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Khalid' },
+    dueDate: new Date('2026-01-20'),
+    status: 'in_review',
+    priority: 'high',
+    progress: 85,
+    source: 'sharia_audit',
+    frequency: 'quarterly',
+    category: 'sharia_compliance',
+  },
+  {
+    id: 'audit-8',
+    name: 'Saudization Compliance',
+    description: 'HR Nitaqat Requirements',
+    responsible: { name: 'Sarah C.', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Sarah' },
+    dueDate: new Date('2026-03-15'),
+    status: 'pending',
+    priority: 'medium',
+    progress: 0,
+    source: 'sama_inspection',
+    frequency: 'monthly',
+    category: 'hr_compliance',
+  },
+  {
+    id: 'audit-9',
+    name: 'Financial Controls Review',
+    description: 'Q1 Financial Audit',
+    responsible: { name: 'Michael S.', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Michael' },
+    dueDate: new Date('2026-01-31'),
+    status: 'in_progress',
+    priority: 'high',
+    progress: 45,
+    source: 'internal_audit',
+    frequency: 'quarterly',
+    category: 'financial_compliance',
+  },
+  {
+    id: 'audit-10',
+    name: 'Ad-hoc Security Assessment',
+    description: 'Post-Incident Review',
+    responsible: { name: 'Felix H.', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Felix' },
+    dueDate: new Date('2026-01-18'),
+    status: 'completed',
+    priority: 'critical',
+    progress: 100,
+    source: 'internal_audit',
+    frequency: 'ad_hoc',
+    category: 'security_compliance',
   },
 ]
 
@@ -344,6 +457,26 @@ export default function ReportsPage() {
 
   // Custom filter dropdown state
   const [showFilterDropdown, setShowFilterDropdown] = useState(false)
+
+  // Audit filter state
+  const [selectedSources, setSelectedSources] = useState<Set<AuditSource>>(
+    new Set(['sama_inspection', 'internal_audit', 'sharia_audit'])
+  )
+  const [selectedFrequencies, setSelectedFrequencies] = useState<Set<AuditFrequency>>(
+    new Set(['annual', 'semi_annual', 'quarterly', 'monthly', 'ad_hoc'])
+  )
+  const [selectedCategories, setSelectedCategories] = useState<Set<AuditCategory>>(
+    new Set(['security_compliance', 'financial_compliance', 'regulatory_compliance', 'operational_compliance', 'hr_compliance', 'sharia_compliance'])
+  )
+
+  // Filtered audits based on selected filters
+  const filteredAudits = useMemo(() => {
+    return audits.filter(audit =>
+      selectedSources.has(audit.source) &&
+      selectedFrequencies.has(audit.frequency) &&
+      selectedCategories.has(audit.category)
+    )
+  }, [selectedSources, selectedFrequencies, selectedCategories])
 
   // Filter data for Executive View - changes based on period filter
   const filterData: Record<string, { compliance: string; findings: string; audits: number; mttr: string }> = {
@@ -592,19 +725,19 @@ export default function ReportsPage() {
           {/* Audit Stats */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Total Audits</p>
-              <p className="text-2xl font-bold text-slate-900">{audits.length}</p>
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Filtered Audits</p>
+              <p className="text-2xl font-bold text-slate-900">{filteredAudits.length}</p>
             </div>
             <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">In Progress</p>
               <p className="text-2xl font-bold text-emerald-600">
-                {audits.filter((a) => a.status === 'in_progress').length}
+                {filteredAudits.filter((a) => a.status === 'in_progress').length}
               </p>
             </div>
             <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Overdue</p>
               <p className="text-2xl font-bold text-rose-600">
-                {audits.filter((a) => a.dueDate < new Date() && a.status !== 'completed').length}
+                {filteredAudits.filter((a) => a.dueDate < new Date() && a.status !== 'completed').length}
               </p>
             </div>
             <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
@@ -613,21 +746,43 @@ export default function ReportsPage() {
             </div>
           </div>
 
+          {/* Audit Filters */}
+          <Card className="overflow-hidden">
+            <div className="p-6 border-b border-slate-100 bg-slate-50/30">
+              <h3 className="text-sm font-bold text-slate-900 mb-4">Filter Audits</h3>
+              <div className="flex flex-wrap items-start gap-6">
+                <MultiSelectFilter
+                  label="Source"
+                  options={auditSourceOptions}
+                  selected={selectedSources}
+                  onChange={setSelectedSources}
+                  showAllOption
+                />
+                <MultiSelectFilter
+                  label="Frequency"
+                  options={auditFrequencyOptions}
+                  selected={selectedFrequencies}
+                  onChange={setSelectedFrequencies}
+                  showAllOption
+                />
+                <MultiSelectFilter
+                  label="Category"
+                  options={auditCategoryOptions}
+                  selected={selectedCategories}
+                  onChange={setSelectedCategories}
+                  showAllOption
+                />
+              </div>
+            </div>
+          </Card>
+
           {/* Audit Table */}
           <Card className="overflow-hidden">
             <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/30">
               <h3 className="text-sm font-bold text-slate-900">Active Audit Pipeline</h3>
-              <div className="flex items-center gap-2">
-                <button className="px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-white border border-transparent hover:border-slate-200 rounded-md transition-all cursor-pointer">
-                  All
-                </button>
-                <button className="px-3 py-1.5 text-xs font-bold text-emerald-600 bg-white border border-slate-200 rounded-md shadow-sm cursor-pointer">
-                  Active
-                </button>
-                <button className="px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-white border border-transparent hover:border-slate-200 rounded-md transition-all cursor-pointer">
-                  Completed
-                </button>
-              </div>
+              <span className="text-xs text-slate-500">
+                Showing {filteredAudits.length} of {audits.length} audits
+              </span>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-left">
@@ -655,7 +810,7 @@ export default function ReportsPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {audits.map((audit) => {
+                  {filteredAudits.map((audit) => {
                     const statusStyle = auditStatusConfig[audit.status]
                     const priorityStyle = auditPriorityConfig[audit.priority]
                     return (
@@ -742,7 +897,7 @@ export default function ReportsPage() {
             </div>
             <div className="p-6 border-t border-slate-100 flex items-center justify-between bg-slate-50/20">
               <p className="text-xs text-slate-500 font-medium">
-                Showing 1 to {audits.length} of {audits.length} audits
+                Showing 1 to {filteredAudits.length} of {filteredAudits.length} audits
               </p>
               <div className="flex gap-2">
                 <button

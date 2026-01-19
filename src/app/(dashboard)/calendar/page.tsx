@@ -1,8 +1,9 @@
 'use client'
 
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo } from 'react'
 import { Icon } from '@iconify/react'
 import { cn } from '@/lib/utils'
+import type { FilterOption } from '@/components/ui/multi-select-filter'
 
 // Types
 type TaskType = 'audit_task' | 'submission_deadline' | 'letter_send' | 'observation_deadline'
@@ -52,6 +53,14 @@ const priorityColors: Record<Priority, string> = {
   Med: 'bg-amber-500 text-white',
   Low: 'bg-slate-400 text-white'
 }
+
+// Task type filter options
+const taskTypeFilterOptions: FilterOption<TaskType>[] = [
+  { value: 'audit_task', label: 'Audit Task', color: { dot: 'bg-emerald-500', bg: 'bg-emerald-50', text: 'text-emerald-600', border: 'border-emerald-200' } },
+  { value: 'submission_deadline', label: 'Submission', color: { dot: 'bg-orange-500', bg: 'bg-orange-50', text: 'text-orange-600', border: 'border-orange-200' } },
+  { value: 'letter_send', label: 'Letter', color: { dot: 'bg-amber-500', bg: 'bg-amber-50', text: 'text-amber-600', border: 'border-amber-200' } },
+  { value: 'observation_deadline', label: 'Observation', color: { dot: 'bg-rose-500', bg: 'bg-rose-50', text: 'text-rose-600', border: 'border-rose-200' } },
+]
 
 // Sample data from HTML prototype
 const TASK_STORE: TaskStore = {
@@ -131,7 +140,10 @@ const TASK_STORE: TaskStore = {
 
 // Helper functions
 function formatDateKey(date: Date): string {
-  return date.toISOString().split('T')[0]
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
 }
 
 function getSubmissionTypeLabel(type: TaskType): string {
@@ -174,6 +186,11 @@ export default function CalendarPage() {
 
   // Submissions filter state
   const [showCompletedSubmissions, setShowCompletedSubmissions] = useState(false)
+  const [submissionFilterDate, setSubmissionFilterDate] = useState<string | null>(null)
+  const [submissionGroupBy, setSubmissionGroupBy] = useState<'date' | 'month' | 'year'>('date')
+  const [selectedTaskTypes, setSelectedTaskTypes] = useState<Set<TaskType>>(
+    new Set(['audit_task', 'submission_deadline', 'letter_send', 'observation_deadline'])
+  )
 
   // New task form state
   const [newTask, setNewTask] = useState({
@@ -302,20 +319,48 @@ export default function CalendarPage() {
 
             {/* View Toggle */}
             <div className="flex bg-slate-100 p-1 rounded-lg">
+              {/* Date View button - only visible in submissions view */}
+              {viewMode === 'submissions' && (
+                <button
+                  onClick={() => setSubmissionGroupBy('date')}
+                  className={cn(
+                    'px-4 py-2 text-xs font-bold rounded-md transition-all cursor-pointer',
+                    submissionGroupBy === 'date' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500 hover:text-slate-900'
+                  )}
+                >
+                  Date View
+                </button>
+              )}
               <button
-                onClick={() => changeView('month')}
+                onClick={() => {
+                  if (viewMode === 'submissions') {
+                    setSubmissionGroupBy('month')
+                  } else {
+                    changeView('month')
+                  }
+                }}
                 className={cn(
                   'px-4 py-2 text-xs font-bold rounded-md transition-all cursor-pointer',
-                  viewMode === 'month' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500 hover:text-slate-900'
+                  viewMode === 'month' || (viewMode === 'submissions' && submissionGroupBy === 'month')
+                    ? 'bg-white shadow-sm text-slate-900'
+                    : 'text-slate-500 hover:text-slate-900'
                 )}
               >
                 Month View
               </button>
               <button
-                onClick={() => changeView('year')}
+                onClick={() => {
+                  if (viewMode === 'submissions') {
+                    setSubmissionGroupBy('year')
+                  } else {
+                    changeView('year')
+                  }
+                }}
                 className={cn(
                   'px-4 py-2 text-xs font-bold rounded-md transition-all cursor-pointer',
-                  viewMode === 'year' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500 hover:text-slate-900'
+                  viewMode === 'year' || (viewMode === 'submissions' && submissionGroupBy === 'year')
+                    ? 'bg-white shadow-sm text-slate-900'
+                    : 'text-slate-500 hover:text-slate-900'
                 )}
               >
                 Year View
@@ -377,20 +422,31 @@ export default function CalendarPage() {
               </button>
             </div>
 
-            {/* Show Completed toggle (only for submissions view) */}
+            {/* Submissions view filters */}
             {viewMode === 'submissions' && (
-              <button
-                onClick={() => setShowCompletedSubmissions(!showCompletedSubmissions)}
-                className={cn(
-                  'px-4 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer flex items-center gap-2',
-                  showCompletedSubmissions
-                    ? 'bg-emerald-600 text-white'
-                    : 'bg-slate-100 text-slate-500 hover:text-slate-900'
+              <>
+                <button
+                  onClick={() => setShowCompletedSubmissions(!showCompletedSubmissions)}
+                  className={cn(
+                    'px-4 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer flex items-center gap-2',
+                    showCompletedSubmissions
+                      ? 'bg-emerald-600 text-white'
+                      : 'bg-slate-100 text-slate-500 hover:text-slate-900'
+                  )}
+                >
+                  <Icon icon="lucide:check-circle" className="text-sm" />
+                  Show Completed
+                </button>
+                {submissionFilterDate && (
+                  <button
+                    onClick={() => setSubmissionFilterDate(null)}
+                    className="px-4 py-2 text-xs font-bold rounded-lg bg-slate-100 text-slate-500 hover:text-slate-900 transition-all cursor-pointer flex items-center gap-2"
+                  >
+                    <Icon icon="lucide:x" className="text-sm" />
+                    Remove Filter
+                  </button>
                 )}
-              >
-                <Icon icon="lucide:check-circle" className="text-sm" />
-                Show Completed
-              </button>
+              </>
             )}
 
             <button
@@ -405,9 +461,44 @@ export default function CalendarPage() {
 
         {/* Calendar Content */}
         <div className="flex-1 overflow-auto bg-slate-50 hide-scrollbar">
-          {viewMode === 'month' && <MonthView currentDate={currentDate} taskStore={taskStore} selectedDayKey={selectedDayKey} onSelectDay={selectDay} />}
-          {viewMode === 'year' && <YearView currentDate={currentDate} taskStore={taskStore} onSelectMonth={(month) => { setCurrentDate(new Date(currentDate.getFullYear(), month, 1)); setViewMode('month') }} />}
-          {viewMode === 'submissions' && <SubmissionsList taskStore={taskStore} selectedTaskId={selectedTaskId} onSelectTask={selectTask} showCompleted={showCompletedSubmissions} filterMonth={currentDate.getMonth()} filterYear={currentDate.getFullYear()} />}
+          {/* Task Type Filter - visible in all views */}
+          <div className="flex items-center gap-2 flex-wrap p-6 pb-0">
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mr-2">
+              Filter by type:
+            </span>
+            {taskTypeFilterOptions.map((option) => {
+              const isSelected = selectedTaskTypes.has(option.value)
+              return (
+                <button
+                  key={option.value}
+                  onClick={() => {
+                    const newSelected = new Set(selectedTaskTypes)
+                    if (newSelected.has(option.value)) {
+                      newSelected.delete(option.value)
+                    } else {
+                      newSelected.add(option.value)
+                    }
+                    setSelectedTaskTypes(newSelected)
+                  }}
+                  className={cn(
+                    'px-3 py-1.5 text-[10px] font-bold rounded-full border transition-all cursor-pointer flex items-center gap-1.5',
+                    isSelected
+                      ? cn(option.color?.bg, option.color?.text, option.color?.border)
+                      : 'bg-white text-slate-400 border-slate-200 hover:border-slate-300'
+                  )}
+                >
+                  {option.color?.dot && isSelected && (
+                    <span className={cn('w-1.5 h-1.5 rounded-full', option.color.dot)} />
+                  )}
+                  {option.label}
+                </button>
+              )
+            })}
+          </div>
+
+          {viewMode === 'month' && <MonthView currentDate={currentDate} taskStore={taskStore} selectedDayKey={selectedDayKey} onSelectDay={selectDay} selectedTypes={selectedTaskTypes} />}
+          {viewMode === 'year' && <YearView currentDate={currentDate} taskStore={taskStore} onSelectMonth={(month) => { setCurrentDate(new Date(currentDate.getFullYear(), month, 1)); setViewMode('month') }} selectedTypes={selectedTaskTypes} />}
+          {viewMode === 'submissions' && <SubmissionsList taskStore={taskStore} selectedTaskId={selectedTaskId} onSelectTask={selectTask} showCompleted={showCompletedSubmissions} filterMonth={currentDate.getMonth()} filterYear={currentDate.getFullYear()} filterDate={submissionFilterDate} groupBy={submissionGroupBy} selectedTypes={selectedTaskTypes} />}
         </div>
       </main>
 
@@ -531,6 +622,10 @@ export default function CalendarPage() {
           onSelectYear={(year) => { setCurrentDate(new Date(year, currentDate.getMonth(), 1)) }}
           onOpenMonthView={() => { setViewMode('month'); setIsPickerOpen(false) }}
           onOpenYearView={() => { setViewMode('year'); setIsPickerOpen(false) }}
+          viewMode={viewMode}
+          onSelectDay={(dateKey) => { setSubmissionFilterDate(dateKey); setIsPickerOpen(false) }}
+          selectedDate={submissionFilterDate}
+          onClearFilter={() => setSubmissionFilterDate(null)}
         />
       )}
 
@@ -614,11 +709,12 @@ export default function CalendarPage() {
 }
 
 // Month View Component
-function MonthView({ currentDate, taskStore, selectedDayKey, onSelectDay }: {
+function MonthView({ currentDate, taskStore, selectedDayKey, onSelectDay, selectedTypes }: {
   currentDate: Date
   taskStore: TaskStore
   selectedDayKey: string | null
   onSelectDay: (key: string) => void
+  selectedTypes: Set<TaskType>
 }) {
   const year = currentDate.getFullYear()
   const month = currentDate.getMonth()
@@ -658,14 +754,16 @@ function MonthView({ currentDate, taskStore, selectedDayKey, onSelectDay }: {
 
         const key = formatDateKey(date)
         const data = taskStore[key]
-        const task = data?.tasks[0]
+        // Filter tasks by selected types
+        const filteredTasks = data?.tasks.filter(t => selectedTypes.has(t.type)) || []
+        const task = filteredTasks[0]
         const isSelected = key === selectedDayKey
 
-        const hasCritical = data?.tasks.some(t => t.priority === 'Critical')
-        const isDone = data?.tasks.every(t => t.status === 'completed')
+        const hasCritical = filteredTasks.some(t => t.priority === 'Critical')
+        const isDone = filteredTasks.length > 0 && filteredTasks.every(t => t.status === 'completed')
 
         let heatmapClass = ''
-        if (data) {
+        if (filteredTasks.length > 0) {
           if (hasCritical) heatmapClass = 'heatmap-critical'
           else if (isDone) heatmapClass = 'heatmap-success'
           else heatmapClass = 'heatmap-pending'
@@ -712,10 +810,11 @@ function MonthView({ currentDate, taskStore, selectedDayKey, onSelectDay }: {
 }
 
 // Year View Component
-function YearView({ currentDate, taskStore, onSelectMonth }: {
+function YearView({ currentDate, taskStore, onSelectMonth, selectedTypes }: {
   currentDate: Date
   taskStore: TaskStore
   onSelectMonth: (month: number) => void
+  selectedTypes: Set<TaskType>
 }) {
   const year = currentDate.getFullYear()
 
@@ -741,13 +840,15 @@ function YearView({ currentDate, taskStore, onSelectMonth }: {
               ))}
               {Array.from({ length: daysInMonth }).map((_, d) => {
                 const dayKey = formatDateKey(new Date(year, m, d + 1))
-                const hasData = taskStore[dayKey]
+                const dayData = taskStore[dayKey]
+                // Filter tasks by selected types
+                const hasFilteredTasks = dayData?.tasks.some(t => selectedTypes.has(t.type)) || false
                 return (
                   <span
                     key={d}
                     className={cn(
                       'text-[9px] font-medium p-0.5',
-                      hasData ? 'bg-emerald-500 text-white rounded-full' : 'text-slate-600'
+                      hasFilteredTasks ? 'bg-emerald-500 text-white rounded-full' : 'text-slate-600'
                     )}
                   >
                     {d + 1}
@@ -763,22 +864,31 @@ function YearView({ currentDate, taskStore, onSelectMonth }: {
 }
 
 // Submissions List View
-function SubmissionsList({ taskStore, selectedTaskId, onSelectTask, showCompleted = false, filterMonth, filterYear }: {
+function SubmissionsList({ taskStore, selectedTaskId, onSelectTask, showCompleted = false, filterMonth, filterYear, filterDate = null, groupBy = 'date', selectedTypes }: {
   taskStore: TaskStore
   selectedTaskId: string | null
   onSelectTask: (taskId: string, dateKey: string) => void
   showCompleted: boolean
   filterMonth: number
   filterYear: number
+  filterDate?: string | null
+  groupBy?: 'date' | 'month' | 'year'
+  selectedTypes: Set<TaskType>
 }) {
-  // Get all tasks filtered by month/year and optionally by completed status
+  // Get all tasks filtered by date or month/year, and optionally by completed status
   const allTasks: (Task & { date: string })[] = []
   Object.keys(taskStore).forEach(dateKey => {
-    const taskDate = new Date(dateKey)
-
-    // Filter by month/year
-    if (taskDate.getMonth() !== filterMonth || taskDate.getFullYear() !== filterYear) {
-      return // skip tasks outside current month
+    // If filterDate is set, only show tasks for that specific day
+    if (filterDate) {
+      if (dateKey !== filterDate) {
+        return // skip tasks not on the filtered date
+      }
+    } else {
+      // Filter by month/year
+      const taskDate = new Date(dateKey)
+      if (taskDate.getMonth() !== filterMonth || taskDate.getFullYear() !== filterYear) {
+        return // skip tasks outside current month
+      }
     }
 
     const dayData = taskStore[dateKey]
@@ -787,15 +897,29 @@ function SubmissionsList({ taskStore, selectedTaskId, onSelectTask, showComplete
       if (!showCompleted && task.status === 'completed') {
         return // skip completed
       }
+      // Filter by task type
+      if (!selectedTypes.has(task.type)) {
+        return // skip tasks not in selected types
+      }
       allTasks.push({ ...task, date: dateKey })
     })
   })
   allTasks.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
 
-  // Group by date within the month
+  // Group tasks based on groupBy prop
   const grouped: Record<string, (Task & { date: string })[]> = {}
   allTasks.forEach(task => {
-    const groupKey = task.date // Group by date
+    let groupKey: string
+    const taskDate = new Date(task.date)
+
+    if (groupBy === 'date') {
+      groupKey = task.date // "2024-10-06"
+    } else if (groupBy === 'month') {
+      groupKey = `${taskDate.getFullYear()}-${String(taskDate.getMonth() + 1).padStart(2, '0')}` // "2024-10"
+    } else {
+      groupKey = `${taskDate.getFullYear()}` // "2024"
+    }
+
     if (!grouped[groupKey]) {
       grouped[groupKey] = []
     }
@@ -803,13 +927,15 @@ function SubmissionsList({ taskStore, selectedTaskId, onSelectTask, showComplete
   })
 
   if (allTasks.length === 0) {
-    const monthName = new Date(filterYear, filterMonth).toLocaleDateString('default', { month: 'long', year: 'numeric' })
+    const emptyLabel = filterDate
+      ? new Date(filterDate).toLocaleDateString('default', { month: 'long', day: 'numeric', year: 'numeric' })
+      : new Date(filterYear, filterMonth).toLocaleDateString('default', { month: 'long', year: 'numeric' })
     return (
       <div className="flex flex-col items-center justify-center py-20 px-6">
         <div className="w-24 h-24 bg-emerald-50 rounded-full flex items-center justify-center mb-6">
           <Icon icon="lucide:check-circle" className="text-5xl text-emerald-500" />
         </div>
-        <h3 className="text-xl font-bold text-slate-900 mb-2">No submissions for {monthName}</h3>
+        <h3 className="text-xl font-bold text-slate-900 mb-2">No submissions for {emptyLabel}</h3>
         <p className="text-sm text-slate-500 text-center">
           {showCompleted ? 'No tasks found for this month.' : 'No pending tasks or submissions for this month.'}
         </p>
@@ -817,24 +943,46 @@ function SubmissionsList({ taskStore, selectedTaskId, onSelectTask, showComplete
     )
   }
 
+  // Helper to format group headers based on groupBy
+  const getGroupHeader = (key: string): { main: string; sub?: string } => {
+    if (groupBy === 'date') {
+      const dateObj = new Date(key)
+      return {
+        main: dateObj.toLocaleDateString('default', { month: 'long', day: 'numeric', year: 'numeric' }),
+        sub: dateObj.toLocaleDateString('default', { weekday: 'long' })
+      }
+    } else if (groupBy === 'month') {
+      // key is "2024-10"
+      const [year, month] = key.split('-')
+      const dateObj = new Date(parseInt(year), parseInt(month) - 1, 1)
+      return {
+        main: dateObj.toLocaleDateString('default', { month: 'long', year: 'numeric' })
+      }
+    } else {
+      // key is "2024"
+      return { main: key }
+    }
+  }
+
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-6 pt-0 space-y-6">
+      {/* Grouped tasks */}
       {Object.keys(grouped).sort().map(groupKey => {
         const tasks = grouped[groupKey]
-        const dateObj = new Date(groupKey)
-        const dateMain = dateObj.toLocaleDateString('default', { month: 'long', day: 'numeric', year: 'numeric' })
-        const dateSub = dateObj.toLocaleDateString('default', { weekday: 'long' })
+        const header = getGroupHeader(groupKey)
 
         return (
           <div key={groupKey}>
             <div className="mb-3">
               <div className="flex items-center gap-3">
                 <h3 className="text-lg font-bold text-slate-900">
-                  {dateMain}
+                  {header.main}
                 </h3>
-                <span className="text-xs font-bold text-slate-400 uppercase">
-                  {dateSub}
-                </span>
+                {header.sub && (
+                  <span className="text-xs font-bold text-slate-400 uppercase">
+                    {header.sub}
+                  </span>
+                )}
                 <span className="text-xs font-bold text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">
                   {tasks.length} {tasks.length === 1 ? 'task' : 'tasks'}
                 </span>
@@ -976,16 +1124,21 @@ function TaskDetailCard({ task }: { task: Task }) {
 }
 
 // Date Picker Modal
-function DatePickerModal({ currentDate, onClose, onSelectMonth, onSelectYear, onOpenMonthView, onOpenYearView }: {
+function DatePickerModal({ currentDate, onClose, onSelectMonth, onSelectYear, onOpenMonthView, onOpenYearView, viewMode, onSelectDay, selectedDate, onClearFilter }: {
   currentDate: Date
   onClose: () => void
   onSelectMonth: (month: number) => void
   onSelectYear: (year: number) => void
   onOpenMonthView: () => void
   onOpenYearView: () => void
+  viewMode?: ViewMode
+  onSelectDay?: (dateKey: string) => void
+  selectedDate?: string | null
+  onClearFilter?: () => void
 }) {
   const currentMonth = currentDate.getMonth()
   const currentYear = currentDate.getFullYear()
+  const [showDayPicker, setShowDayPicker] = useState(false)
 
   // Generate month positions in a radial layout
   const radius = 120
@@ -1029,14 +1182,79 @@ function DatePickerModal({ currentDate, onClose, onSelectMonth, onSelectYear, on
                 </button>
               )
             })}
+
+            {/* Day picker OVERLAY - covers the radial dial when open */}
+            {showDayPicker && viewMode === 'submissions' && (
+              <div className="absolute inset-0 bg-white rounded-xl p-4 border border-slate-200 shadow-lg z-20 flex flex-col">
+                {/* Selected day indicator */}
+                {selectedDate && (
+                  <div className="text-center text-xs text-emerald-600 font-bold mb-2">
+                    Filtered: {new Date(selectedDate).toLocaleDateString('default', { month: 'short', day: 'numeric', year: 'numeric' })}
+                  </div>
+                )}
+                {/* Day headers */}
+                <div className="grid grid-cols-7 gap-1 mb-2">
+                  {['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((d, i) => (
+                    <span key={i} className="text-center text-[10px] text-slate-400 font-bold">{d}</span>
+                  ))}
+                </div>
+                {/* Days grid */}
+                <div className="grid grid-cols-7 gap-1 flex-1 content-start">
+                  {/* Leading empty cells for first day offset */}
+                  {Array.from({ length: (new Date(currentYear, currentMonth, 1).getDay() + 6) % 7 }).map((_, i) => (
+                    <div key={`empty-${i}`} />
+                  ))}
+                  {/* Day buttons */}
+                  {Array.from({ length: new Date(currentYear, currentMonth + 1, 0).getDate() }).map((_, d) => {
+                    const day = d + 1
+                    const dateKey = formatDateKey(new Date(currentYear, currentMonth, day))
+                    const isSelected = dateKey === selectedDate
+                    return (
+                      <button
+                        key={day}
+                        onClick={() => onSelectDay?.(dateKey)}
+                        className={cn(
+                          'w-9 h-9 rounded-full text-sm font-medium transition-colors cursor-pointer flex items-center justify-center',
+                          isSelected
+                            ? 'bg-emerald-500 text-white'
+                            : 'hover:bg-emerald-100 hover:text-emerald-700'
+                        )}
+                      >
+                        {day}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
           </div>
 
-          <button
-            onClick={onOpenMonthView}
-            className="w-full px-6 py-3 bg-emerald-600 text-white text-xs font-bold rounded-xl hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-100 flex items-center justify-center gap-2 cursor-pointer"
-          >
-            <Icon icon="lucide:calendar-days" /> Open Monthly View
-          </button>
+          {viewMode === 'submissions' ? (
+            <div className="w-full flex items-center gap-2">
+              <button
+                onClick={() => setShowDayPicker(!showDayPicker)}
+                className="flex-1 px-6 py-3 bg-emerald-600 text-white text-xs font-bold rounded-xl hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-100 flex items-center justify-center gap-2 cursor-pointer"
+              >
+                <Icon icon="lucide:calendar-days" /> {showDayPicker ? 'Hide Date Picker' : 'Open Date Picker'}
+              </button>
+              {selectedDate && (
+                <button
+                  onClick={onClearFilter}
+                  className="p-3 bg-slate-200 text-slate-600 rounded-xl hover:bg-slate-300 transition-colors cursor-pointer"
+                  title="Clear day filter"
+                >
+                  <Icon icon="lucide:x" className="text-lg" />
+                </button>
+              )}
+            </div>
+          ) : (
+            <button
+              onClick={onOpenMonthView}
+              className="w-full px-6 py-3 bg-emerald-600 text-white text-xs font-bold rounded-xl hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-100 flex items-center justify-center gap-2 cursor-pointer"
+            >
+              <Icon icon="lucide:calendar-days" /> Open Monthly View
+            </button>
+          )}
         </div>
 
         {/* Year Selection Section */}
