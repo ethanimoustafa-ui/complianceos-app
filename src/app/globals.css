@@ -178,7 +178,7 @@ body::-webkit-scrollbar {
 
 /* Selected day card styling */
 .day-card-selected {
-  background-color: #0f172a !important;
+  background: #0f172a !important;
   color: white !important;
   box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.1);
   transform: scale(1.02) translateY(-2px);

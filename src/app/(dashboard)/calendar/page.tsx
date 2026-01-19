@@ -175,6 +175,60 @@ function getDueStatus(dateKey: string): { text: string; className: string } {
 const MONTHS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC']
 const MONTHS_FULL = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
 
+// Hijri calendar conversion helpers
+function toHijri(date: Date): { year: number; month: number; day: number } {
+  // Use local date components to avoid timezone offset issues
+  const utcTime = Date.UTC(date.getFullYear(), date.getMonth(), date.getDate())
+  const jd = Math.floor((utcTime / 86400000) + 2440588)
+  const l = jd - 1948440 + 10632
+  const n = Math.floor((l - 1) / 10631)
+  const l2 = l - 10631 * n + 354
+  const j = Math.floor((10985 - l2) / 5316) * Math.floor((50 * l2) / 17719) + Math.floor(l2 / 5670) * Math.floor((43 * l2) / 15238)
+  const l3 = l2 - Math.floor((30 - j) / 15) * Math.floor((17719 * j) / 50) - Math.floor(j / 16) * Math.floor((15238 * j) / 43) + 29
+  const month = Math.floor((24 * l3) / 709)
+  const day = l3 - Math.floor((709 * month) / 24)
+  const year = 30 * n + j - 30
+  return { year, month, day }
+}
+
+const HIJRI_MONTHS = ['Muharram', 'Safar', 'Rabi\' al-Awwal', 'Rabi\' al-Thani', 'Jumada al-Awwal', 'Jumada al-Thani', 'Rajab', 'Sha\'ban', 'Ramadan', 'Shawwal', 'Dhu al-Qi\'dah', 'Dhu al-Hijjah']
+const HIJRI_MONTHS_SHORT = ['MUH', 'SAF', 'RAW', 'RAT', 'JAW', 'JAT', 'RAJ', 'SHA', 'RAM', 'SHW', 'DHQ', 'DHH']
+
+// Saudi holidays (fixed Gregorian dates and approximate Hijri-based)
+const SAUDI_HOLIDAYS: Record<string, string> = {
+  // 2024
+  '2024-02-22': 'Founding Day',
+  '2024-09-23': 'National Day',
+  '2024-04-10': 'Eid al-Fitr',
+  '2024-04-11': 'Eid al-Fitr',
+  '2024-04-12': 'Eid al-Fitr',
+  '2024-06-16': 'Eid al-Adha',
+  '2024-06-17': 'Eid al-Adha',
+  '2024-06-18': 'Eid al-Adha',
+  '2024-06-19': 'Eid al-Adha',
+  // 2025
+  '2025-02-22': 'Founding Day',
+  '2025-09-23': 'National Day',
+  '2025-03-30': 'Eid al-Fitr',
+  '2025-03-31': 'Eid al-Fitr',
+  '2025-04-01': 'Eid al-Fitr',
+  '2025-06-06': 'Eid al-Adha',
+  '2025-06-07': 'Eid al-Adha',
+  '2025-06-08': 'Eid al-Adha',
+  '2025-06-09': 'Eid al-Adha',
+}
+
+// Saudi weekend: Friday (5) and Saturday (6)
+function isSaudiWeekend(date: Date): boolean {
+  const day = date.getDay()
+  return day === 5 || day === 6
+}
+
+// Saudi week day headers (Saturday to Friday)
+const DAYS_SAUDI = ['Sat', 'Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri']
+
+type CalendarType = 'gregorian' | 'hijri'
+
 export default function CalendarPage() {
   const [currentDate, setCurrentDate] = useState(new Date(2024, 9, 1)) // October 2024
   const [viewMode, setViewMode] = useState<ViewMode>('month')
@@ -183,6 +237,7 @@ export default function CalendarPage() {
   const [isPickerOpen, setIsPickerOpen] = useState(false)
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false)
   const [taskStore, setTaskStore] = useState<TaskStore>(TASK_STORE)
+  const [calendarType, setCalendarType] = useState<CalendarType>('gregorian')
 
   // Submissions filter state
   const [showCompletedSubmissions, setShowCompletedSubmissions] = useState(false)
@@ -287,6 +342,14 @@ export default function CalendarPage() {
 
   // Get display label for date navigation
   const getDisplayLabel = () => {
+    if (calendarType === 'hijri') {
+      const hijri = toHijri(currentDate)
+      if (viewMode === 'year') {
+        return `${hijri.year} هـ`
+      }
+      return `${HIJRI_MONTHS[hijri.month - 1]} ${hijri.year} هـ`
+    }
+
     if (viewMode === 'month') {
       return `${MONTHS_FULL[currentDate.getMonth()]} ${currentDate.getFullYear()}`
     } else if (viewMode === 'year') {
@@ -462,43 +525,54 @@ export default function CalendarPage() {
         {/* Calendar Content */}
         <div className="flex-1 overflow-auto bg-slate-50 hide-scrollbar">
           {/* Task Type Filter - visible in all views */}
-          <div className="flex items-center gap-2 flex-wrap p-6 pb-0">
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mr-2">
-              Filter by type:
-            </span>
-            {taskTypeFilterOptions.map((option) => {
-              const isSelected = selectedTaskTypes.has(option.value)
-              return (
-                <button
-                  key={option.value}
-                  onClick={() => {
-                    const newSelected = new Set(selectedTaskTypes)
-                    if (newSelected.has(option.value)) {
-                      newSelected.delete(option.value)
-                    } else {
-                      newSelected.add(option.value)
-                    }
-                    setSelectedTaskTypes(newSelected)
-                  }}
-                  className={cn(
-                    'px-3 py-1.5 text-[10px] font-bold rounded-full border transition-all cursor-pointer flex items-center gap-1.5',
-                    isSelected
-                      ? cn(option.color?.bg, option.color?.text, option.color?.border)
-                      : 'bg-white text-slate-400 border-slate-200 hover:border-slate-300'
-                  )}
-                >
-                  {option.color?.dot && isSelected && (
-                    <span className={cn('w-1.5 h-1.5 rounded-full', option.color.dot)} />
-                  )}
-                  {option.label}
-                </button>
-              )
-            })}
+          <div className="flex items-center justify-between p-6 pb-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mr-2">
+                Filter by type:
+              </span>
+              {taskTypeFilterOptions.map((option) => {
+                const isSelected = selectedTaskTypes.has(option.value)
+                return (
+                  <button
+                    key={option.value}
+                    onClick={() => {
+                      const newSelected = new Set(selectedTaskTypes)
+                      if (newSelected.has(option.value)) {
+                        newSelected.delete(option.value)
+                      } else {
+                        newSelected.add(option.value)
+                      }
+                      setSelectedTaskTypes(newSelected)
+                    }}
+                    className={cn(
+                      'px-3 py-1.5 text-[10px] font-bold rounded-full border transition-all cursor-pointer flex items-center gap-1.5',
+                      isSelected
+                        ? cn(option.color?.bg, option.color?.text, option.color?.border)
+                        : 'bg-white text-slate-400 border-slate-200 hover:border-slate-300'
+                    )}
+                  >
+                    {option.color?.dot && isSelected && (
+                      <span className={cn('w-1.5 h-1.5 rounded-full', option.color.dot)} />
+                    )}
+                    {option.label}
+                  </button>
+                )
+              })}
+            </div>
+
+            {/* Hijri/Gregorian Toggle */}
+            <button
+              onClick={() => setCalendarType(prev => prev === 'gregorian' ? 'hijri' : 'gregorian')}
+              className="px-4 py-2 text-xs font-bold rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors flex items-center gap-2 cursor-pointer"
+            >
+              <Icon icon="lucide:calendar" />
+              {calendarType === 'gregorian' ? 'التقويم الهجري' : 'Gregorian'}
+            </button>
           </div>
 
-          {viewMode === 'month' && <MonthView currentDate={currentDate} taskStore={taskStore} selectedDayKey={selectedDayKey} onSelectDay={selectDay} selectedTypes={selectedTaskTypes} />}
+          {viewMode === 'month' && <MonthView currentDate={currentDate} taskStore={taskStore} selectedDayKey={selectedDayKey} onSelectDay={selectDay} selectedTypes={selectedTaskTypes} calendarType={calendarType} />}
           {viewMode === 'year' && <YearView currentDate={currentDate} taskStore={taskStore} onSelectMonth={(month) => { setCurrentDate(new Date(currentDate.getFullYear(), month, 1)); setViewMode('month') }} selectedTypes={selectedTaskTypes} />}
-          {viewMode === 'submissions' && <SubmissionsList taskStore={taskStore} selectedTaskId={selectedTaskId} onSelectTask={selectTask} showCompleted={showCompletedSubmissions} filterMonth={currentDate.getMonth()} filterYear={currentDate.getFullYear()} filterDate={submissionFilterDate} groupBy={submissionGroupBy} selectedTypes={selectedTaskTypes} />}
+          {viewMode === 'submissions' && <SubmissionsList taskStore={taskStore} selectedTaskId={selectedTaskId} onSelectTask={selectTask} showCompleted={showCompletedSubmissions} filterMonth={currentDate.getMonth()} filterYear={currentDate.getFullYear()} filterDate={submissionFilterDate} groupBy={submissionGroupBy} selectedTypes={selectedTaskTypes} calendarType={calendarType} />}
         </div>
       </main>
 
@@ -517,7 +591,16 @@ export default function CalendarPage() {
               </button>
             </div>
             <h2 className="text-xl font-bold text-slate-900">
-              {selectedDayKey ? new Date(selectedDayKey).toLocaleDateString('default', { month: 'long', day: 'numeric', year: 'numeric' }) : '-'}
+              {selectedDayKey ? (
+                calendarType === 'hijri' ? (
+                  (() => {
+                    const h = toHijri(new Date(selectedDayKey))
+                    return `${h.day} ${HIJRI_MONTHS[h.month - 1]} ${h.year} هـ`
+                  })()
+                ) : (
+                  new Date(selectedDayKey).toLocaleDateString('default', { month: 'long', day: 'numeric', year: 'numeric' })
+                )
+              ) : '-'}
             </h2>
             <p className="text-sm text-slate-500">
               {selectedTask ? selectedTask.assignee : selectedDayData ? 'Active Compliance Cycle' : 'Select a task to view details'}
@@ -626,6 +709,7 @@ export default function CalendarPage() {
           onSelectDay={(dateKey) => { setSubmissionFilterDate(dateKey); setIsPickerOpen(false) }}
           selectedDate={submissionFilterDate}
           onClearFilter={() => setSubmissionFilterDate(null)}
+          calendarType={calendarType}
         />
       )}
 
@@ -709,21 +793,23 @@ export default function CalendarPage() {
 }
 
 // Month View Component
-function MonthView({ currentDate, taskStore, selectedDayKey, onSelectDay, selectedTypes }: {
+function MonthView({ currentDate, taskStore, selectedDayKey, onSelectDay, selectedTypes, calendarType }: {
   currentDate: Date
   taskStore: TaskStore
   selectedDayKey: string | null
   onSelectDay: (key: string) => void
   selectedTypes: Set<TaskType>
+  calendarType: CalendarType
 }) {
   const year = currentDate.getFullYear()
   const month = currentDate.getMonth()
   const firstDay = new Date(year, month, 1)
   const lastDay = new Date(year, month + 1, 0)
 
-  // Get start offset (Mon=0)
-  let startOffset = firstDay.getDay() - 1
-  if (startOffset < 0) startOffset = 6
+  // Get start offset for Saudi week (Saturday=0)
+  // getDay(): 0=Sun, 1=Mon, ..., 5=Fri, 6=Sat
+  // For Saudi week (Sat=0): offset = (day + 1) % 7
+  let startOffset = (firstDay.getDay() + 1) % 7
 
   const days: (Date | null)[] = []
 
@@ -739,9 +825,16 @@ function MonthView({ currentDate, taskStore, selectedDayKey, onSelectDay, select
 
   return (
     <div className="grid grid-cols-7 gap-px bg-slate-200 border border-slate-200 rounded-xl overflow-hidden shadow-sm m-6">
-      {/* Day headers */}
-      {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(d => (
-        <div key={d} className="bg-slate-50 py-3 text-center text-[10px] font-black text-slate-400 uppercase tracking-widest">
+      {/* Day headers - Saudi week (Sat-Fri) */}
+      {DAYS_SAUDI.map((d, i) => (
+        <div
+          key={d}
+          className={cn(
+            "bg-slate-50 py-3 text-center text-[10px] font-black uppercase tracking-widest",
+            // Weekend headers (Fri=6, Sat=0 in DAYS_SAUDI)
+            (i === 0 || i === 6) ? "text-emerald-600 bg-emerald-50/50" : "text-slate-400"
+          )}
+        >
           {d}
         </div>
       ))}
@@ -762,6 +855,15 @@ function MonthView({ currentDate, taskStore, selectedDayKey, onSelectDay, select
         const hasCritical = filteredTasks.some(t => t.priority === 'Critical')
         const isDone = filteredTasks.length > 0 && filteredTasks.every(t => t.status === 'completed')
 
+        // Saudi weekend check
+        const isWeekend = isSaudiWeekend(date)
+
+        // Holiday check
+        const holiday = SAUDI_HOLIDAYS[key]
+
+        // Hijri date conversion
+        const hijri = toHijri(date)
+
         let heatmapClass = ''
         if (filteredTasks.length > 0) {
           if (hasCritical) heatmapClass = 'heatmap-critical'
@@ -774,17 +876,47 @@ function MonthView({ currentDate, taskStore, selectedDayKey, onSelectDay, select
             key={idx}
             onClick={() => onSelectDay(key)}
             className={cn(
-              'bg-white min-h-[140px] p-4 border-r border-b border-slate-100 flex flex-col cursor-pointer transition-all hover:bg-slate-50 relative group',
+              'min-h-[140px] p-4 border-r border-b border-slate-100 flex flex-col cursor-pointer transition-all hover:bg-slate-50 relative group',
+              // Weekend styling
+              isWeekend ? 'bg-slate-100/70' : 'bg-white',
               heatmapClass,
               isSelected && 'day-card-selected'
             )}
           >
             <div className="flex justify-between items-start">
-              <span className={cn('text-sm font-bold', isSelected && 'text-white')}>{date.getDate()}</span>
-              {task && (
-                <div className={cn('w-1.5 h-1.5 rounded-full', submissionColors[task.type].badge)} />
-              )}
+              <div className="flex flex-col">
+                {/* Gregorian or Hijri date based on calendar type */}
+                {calendarType === 'gregorian' ? (
+                  <>
+                    <span className="text-sm font-bold">{date.getDate()}</span>
+                    <span className="text-[9px] text-slate-400 font-medium">{hijri.day}</span>
+                  </>
+                ) : (
+                  <>
+                    <span className="text-sm font-bold">{hijri.day}</span>
+                    <span className="text-[9px] text-slate-400 font-medium">{date.getDate()}</span>
+                  </>
+                )}
+              </div>
+              <div className="flex items-center gap-1">
+                {/* Holiday indicator */}
+                {holiday && (
+                  <div className="group/holiday relative">
+                    <div className="w-2 h-2 rounded-full bg-red-500" />
+                    <div className="absolute right-0 top-4 hidden group-hover/holiday:block bg-slate-900 text-white text-[9px] px-2 py-1 rounded whitespace-nowrap z-10">
+                      {holiday}
+                    </div>
+                  </div>
+                )}
+                {task && (
+                  <div className={cn('w-1.5 h-1.5 rounded-full', submissionColors[task.type].badge)} />
+                )}
+              </div>
             </div>
+            {/* Holiday label */}
+            {holiday && (
+              <span className="text-[8px] font-bold text-red-600 mt-1">{holiday}</span>
+            )}
             {task && (
               <>
                 <div className="mt-3 bg-white/80 p-2 rounded-lg border border-slate-200/50 shadow-sm">
@@ -864,7 +996,7 @@ function YearView({ currentDate, taskStore, onSelectMonth, selectedTypes }: {
 }
 
 // Submissions List View
-function SubmissionsList({ taskStore, selectedTaskId, onSelectTask, showCompleted = false, filterMonth, filterYear, filterDate = null, groupBy = 'date', selectedTypes }: {
+function SubmissionsList({ taskStore, selectedTaskId, onSelectTask, showCompleted = false, filterMonth, filterYear, filterDate = null, groupBy = 'date', selectedTypes, calendarType = 'gregorian' }: {
   taskStore: TaskStore
   selectedTaskId: string | null
   onSelectTask: (taskId: string, dateKey: string) => void
@@ -874,6 +1006,7 @@ function SubmissionsList({ taskStore, selectedTaskId, onSelectTask, showComplete
   filterDate?: string | null
   groupBy?: 'date' | 'month' | 'year'
   selectedTypes: Set<TaskType>
+  calendarType?: CalendarType
 }) {
   // Get all tasks filtered by date or month/year, and optionally by completed status
   const allTasks: (Task & { date: string })[] = []
@@ -947,6 +1080,13 @@ function SubmissionsList({ taskStore, selectedTaskId, onSelectTask, showComplete
   const getGroupHeader = (key: string): { main: string; sub?: string } => {
     if (groupBy === 'date') {
       const dateObj = new Date(key)
+      if (calendarType === 'hijri') {
+        const h = toHijri(dateObj)
+        return {
+          main: `${h.day} ${HIJRI_MONTHS[h.month - 1]} ${h.year} هـ`,
+          sub: dateObj.toLocaleDateString('default', { weekday: 'long' })
+        }
+      }
       return {
         main: dateObj.toLocaleDateString('default', { month: 'long', day: 'numeric', year: 'numeric' }),
         sub: dateObj.toLocaleDateString('default', { weekday: 'long' })
@@ -954,12 +1094,21 @@ function SubmissionsList({ taskStore, selectedTaskId, onSelectTask, showComplete
     } else if (groupBy === 'month') {
       // key is "2024-10"
       const [year, month] = key.split('-')
+      if (calendarType === 'hijri') {
+        const dateObj = new Date(parseInt(year), parseInt(month) - 1, 15) // mid-month
+        const h = toHijri(dateObj)
+        return { main: `${HIJRI_MONTHS[h.month - 1]} ${h.year} هـ` }
+      }
       const dateObj = new Date(parseInt(year), parseInt(month) - 1, 1)
       return {
         main: dateObj.toLocaleDateString('default', { month: 'long', year: 'numeric' })
       }
     } else {
       // key is "2024"
+      if (calendarType === 'hijri') {
+        const h = toHijri(new Date(parseInt(key), 6, 1)) // mid-year
+        return { main: `${h.year} هـ` }
+      }
       return { main: key }
     }
   }
@@ -1124,7 +1273,7 @@ function TaskDetailCard({ task }: { task: Task }) {
 }
 
 // Date Picker Modal
-function DatePickerModal({ currentDate, onClose, onSelectMonth, onSelectYear, onOpenMonthView, onOpenYearView, viewMode, onSelectDay, selectedDate, onClearFilter }: {
+function DatePickerModal({ currentDate, onClose, onSelectMonth, onSelectYear, onOpenMonthView, onOpenYearView, viewMode, onSelectDay, selectedDate, onClearFilter, calendarType = 'gregorian' }: {
   currentDate: Date
   onClose: () => void
   onSelectMonth: (month: number) => void
@@ -1135,6 +1284,7 @@ function DatePickerModal({ currentDate, onClose, onSelectMonth, onSelectYear, on
   onSelectDay?: (dateKey: string) => void
   selectedDate?: string | null
   onClearFilter?: () => void
+  calendarType?: CalendarType
 }) {
   const currentMonth = currentDate.getMonth()
   const currentYear = currentDate.getFullYear()
@@ -1154,16 +1304,22 @@ function DatePickerModal({ currentDate, onClose, onSelectMonth, onSelectYear, on
           <div className="relative w-[320px] h-[320px] flex items-center justify-center">
             {/* Center */}
             <div className="absolute w-24 h-24 bg-white rounded-full shadow-2xl flex flex-col items-center justify-center z-10 border-4 border-emerald-500">
-              <span className="text-lg font-bold text-slate-900">{MONTHS[currentMonth]}</span>
+              <span className="text-lg font-bold text-slate-900">
+                {calendarType === 'hijri'
+                  ? HIJRI_MONTHS_SHORT[toHijri(currentDate).month - 1]
+                  : MONTHS[currentMonth]}
+              </span>
               <span className="text-[8px] font-black text-emerald-600 tracking-widest uppercase">Active</span>
             </div>
 
             {/* Month items */}
-            {MONTHS.map((m, i) => {
+            {(calendarType === 'hijri' ? HIJRI_MONTHS_SHORT : MONTHS).map((m, i) => {
               const angle = (i * 30 - 90) * (Math.PI / 180)
               const x = Math.cos(angle) * radius
               const y = Math.sin(angle) * radius
-              const isActive = i === currentMonth
+              const isActive = calendarType === 'hijri'
+                ? i === toHijri(currentDate).month - 1
+                : i === currentMonth
 
               return (
                 <button
@@ -1184,12 +1340,19 @@ function DatePickerModal({ currentDate, onClose, onSelectMonth, onSelectYear, on
             })}
 
             {/* Day picker OVERLAY - covers the radial dial when open */}
-            {showDayPicker && viewMode === 'submissions' && (
+            {showDayPicker && (
               <div className="absolute inset-0 bg-white rounded-xl p-4 border border-slate-200 shadow-lg z-20 flex flex-col">
                 {/* Selected day indicator */}
                 {selectedDate && (
                   <div className="text-center text-xs text-emerald-600 font-bold mb-2">
-                    Filtered: {new Date(selectedDate).toLocaleDateString('default', { month: 'short', day: 'numeric', year: 'numeric' })}
+                    Filtered: {calendarType === 'hijri'
+                      ? (() => {
+                          const [y, m, d] = selectedDate.split('-').map(Number)
+                          const h = toHijri(new Date(y, m - 1, d))
+                          return `${h.day} ${HIJRI_MONTHS[h.month - 1]} ${h.year} هـ`
+                        })()
+                      : new Date(selectedDate).toLocaleDateString('default', { month: 'short', day: 'numeric', year: 'numeric' })
+                    }
                   </div>
                 )}
                 {/* Day headers */}
@@ -1220,7 +1383,10 @@ function DatePickerModal({ currentDate, onClose, onSelectMonth, onSelectYear, on
                             : 'hover:bg-emerald-100 hover:text-emerald-700'
                         )}
                       >
-                        {day}
+                        {calendarType === 'hijri'
+                          ? toHijri(new Date(currentYear, currentMonth, day)).day
+                          : day
+                        }
                       </button>
                     )
                   })}
@@ -1249,10 +1415,10 @@ function DatePickerModal({ currentDate, onClose, onSelectMonth, onSelectYear, on
             </div>
           ) : (
             <button
-              onClick={onOpenMonthView}
+              onClick={() => setShowDayPicker(!showDayPicker)}
               className="w-full px-6 py-3 bg-emerald-600 text-white text-xs font-bold rounded-xl hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-100 flex items-center justify-center gap-2 cursor-pointer"
             >
-              <Icon icon="lucide:calendar-days" /> Open Monthly View
+              <Icon icon="lucide:calendar-days" /> {showDayPicker ? 'Hide Calendar' : 'Open Calendar'}
             </button>
           )}
         </div>
@@ -1262,7 +1428,11 @@ function DatePickerModal({ currentDate, onClose, onSelectMonth, onSelectYear, on
           <div className="flex items-center justify-between mb-8 shrink-0">
             <div className="space-y-1">
               <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest">Year Selection</h3>
-              <p className="text-[10px] text-slate-500">Browse compliance archives and future schedules (2000-2100)</p>
+              <p className="text-[10px] text-slate-500">
+                {calendarType === 'hijri'
+                  ? 'Browse compliance archives and future schedules (1420-1530 هـ)'
+                  : 'Browse compliance archives and future schedules (2000-2100)'}
+              </p>
             </div>
             <button onClick={onClose} className="text-slate-400 hover:text-slate-900 transition-colors p-2 hover:bg-slate-100 rounded-full cursor-pointer">
               <Icon icon="lucide:x" className="text-2xl" />
@@ -1271,34 +1441,68 @@ function DatePickerModal({ currentDate, onClose, onSelectMonth, onSelectYear, on
 
           {/* Year Grid */}
           <div className="flex-1 overflow-y-auto hide-scrollbar grid grid-cols-5 gap-3 pr-6">
-            {Array.from({ length: 11 }).map((_, decadeIdx) => {
-              const decade = 2000 + decadeIdx * 10
-              return (
-                <div key={decade} className="contents">
-                  {/* Decade Header */}
-                  <div className="col-span-5 pt-4 pb-2 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100">
-                    {decade}s
+            {calendarType === 'hijri' ? (
+              // Hijri years (1420-1530 range)
+              Array.from({ length: 12 }).map((_, decadeIdx) => {
+                const decade = 1420 + decadeIdx * 10
+                const currentHijriYear = toHijri(currentDate).year
+                return (
+                  <div key={decade} className="contents">
+                    {/* Decade Header */}
+                    <div className="col-span-5 pt-4 pb-2 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100">
+                      {decade}s هـ
+                    </div>
+                    {/* Years in Decade */}
+                    {Array.from({ length: Math.min(10, 1531 - decade) }).map((_, yIdx) => {
+                      const y = decade + yIdx
+                      const isActive = y === currentHijriYear
+                      return (
+                        <button
+                          key={y}
+                          onClick={() => onSelectYear(y)}
+                          className={cn(
+                            'py-3 text-sm font-bold rounded-xl transition-all cursor-pointer',
+                            isActive ? 'bg-emerald-600 text-white shadow-xl shadow-emerald-100 scale-105' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'
+                          )}
+                        >
+                          {y}
+                        </button>
+                      )
+                    })}
                   </div>
-                  {/* Years in Decade */}
-                  {Array.from({ length: Math.min(10, 2101 - decade) }).map((_, yIdx) => {
-                    const y = decade + yIdx
-                    const isActive = y === currentYear
-                    return (
-                      <button
-                        key={y}
-                        onClick={() => onSelectYear(y)}
-                        className={cn(
-                          'py-3 text-sm font-bold rounded-xl transition-all cursor-pointer',
-                          isActive ? 'bg-emerald-600 text-white shadow-xl shadow-emerald-100 scale-105' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'
-                        )}
-                      >
-                        {y}
-                      </button>
-                    )
-                  })}
-                </div>
-              )
-            })}
+                )
+              })
+            ) : (
+              // Gregorian years (2000-2100)
+              Array.from({ length: 11 }).map((_, decadeIdx) => {
+                const decade = 2000 + decadeIdx * 10
+                return (
+                  <div key={decade} className="contents">
+                    {/* Decade Header */}
+                    <div className="col-span-5 pt-4 pb-2 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100">
+                      {decade}s
+                    </div>
+                    {/* Years in Decade */}
+                    {Array.from({ length: Math.min(10, 2101 - decade) }).map((_, yIdx) => {
+                      const y = decade + yIdx
+                      const isActive = y === currentYear
+                      return (
+                        <button
+                          key={y}
+                          onClick={() => onSelectYear(y)}
+                          className={cn(
+                            'py-3 text-sm font-bold rounded-xl transition-all cursor-pointer',
+                            isActive ? 'bg-emerald-600 text-white shadow-xl shadow-emerald-100 scale-105' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'
+                          )}
+                        >
+                          {y}
+                        </button>
+                      )
+                    })}
+                  </div>
+                )
+              })
+            )}
           </div>
 
           <div className="mt-6 pt-6 border-t border-slate-100 flex justify-between items-center shrink-0">
