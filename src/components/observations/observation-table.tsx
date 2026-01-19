@@ -114,7 +114,7 @@ export function ObservationTable({
                         onClick={(e) => {
                           e.stopPropagation()
                         }}
-                        className="text-slate-400 hover:text-slate-900 transition-colors"
+                        className="text-slate-400 hover:text-slate-900 transition-colors cursor-pointer"
                       >
                         <Icon icon="lucide:more-horizontal" className="text-xl" />
                       </button>
@@ -136,7 +136,7 @@ export function ObservationTable({
           <button
             onClick={() => onPageChange(currentPage - 1)}
             disabled={currentPage === 1}
-            className="px-3 py-1 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-600 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            className="px-3 py-1 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-600 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors cursor-pointer"
           >
             Previous
           </button>
@@ -145,7 +145,7 @@ export function ObservationTable({
               <button
                 key={page}
                 onClick={() => onPageChange(page)}
-                className={`px-3 py-1 border rounded-lg text-xs font-bold transition-colors ${
+                className={`px-3 py-1 border rounded-lg text-xs font-bold transition-colors cursor-pointer ${
                   currentPage === page
                     ? 'text-emerald-600 bg-emerald-50 border-emerald-100'
                     : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
@@ -158,7 +158,7 @@ export function ObservationTable({
           <button
             onClick={() => onPageChange(currentPage + 1)}
             disabled={currentPage === totalPages}
-            className="px-3 py-1 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-600 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            className="px-3 py-1 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-600 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors cursor-pointer"
           >
             Next
           </button>

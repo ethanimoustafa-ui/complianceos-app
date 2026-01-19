@@ -138,7 +138,7 @@ export default function AuditsPage() {
           <div className="flex bg-slate-100 p-1 rounded-lg">
             <button
               onClick={() => setActiveTab('executive')}
-              className={`px-4 py-2 text-xs font-bold rounded-md transition-all ${
+              className={`px-4 py-2 text-xs font-bold rounded-md transition-all cursor-pointer ${
                 activeTab === 'executive'
                   ? 'bg-white shadow-sm text-slate-900'
                   : 'text-slate-500 hover:text-slate-900'
@@ -148,7 +148,7 @@ export default function AuditsPage() {
             </button>
             <button
               onClick={() => setActiveTab('detailed')}
-              className={`px-4 py-2 text-xs font-bold rounded-md transition-all ${
+              className={`px-4 py-2 text-xs font-bold rounded-md transition-all cursor-pointer ${
                 activeTab === 'detailed'
                   ? 'bg-white shadow-sm text-slate-900'
                   : 'text-slate-500 hover:text-slate-900'
@@ -163,7 +163,7 @@ export default function AuditsPage() {
           <div className="relative">
             <button
               onClick={() => setShowFilterDropdown(!showFilterDropdown)}
-              className="px-4 py-2 text-sm font-bold text-slate-900 hover:bg-slate-50 transition-colors flex items-center gap-2 border border-slate-200 rounded-lg"
+              className="px-4 py-2 text-sm font-bold text-slate-900 hover:bg-slate-50 transition-colors flex items-center gap-2 border border-slate-200 rounded-lg cursor-pointer"
             >
               <Icon icon="lucide:filter" className="text-slate-400" />
               <span>{filterPeriod}</span>
@@ -178,7 +178,7 @@ export default function AuditsPage() {
                       setFilterPeriod(period)
                       setShowFilterDropdown(false)
                     }}
-                    className={`w-full text-left px-4 py-3 text-sm transition-colors font-medium border-b border-slate-100 last:border-b-0 ${
+                    className={`w-full text-left px-4 py-3 text-sm transition-colors font-medium border-b border-slate-100 last:border-b-0 cursor-pointer ${
                       filterPeriod === period
                         ? 'text-emerald-600 bg-emerald-50/30 font-bold'
                         : 'text-slate-700 hover:bg-slate-50'
@@ -197,7 +197,7 @@ export default function AuditsPage() {
         </div>
       </header>
 
-      <div className="flex-1 overflow-auto custom-scrollbar p-8 space-y-8">
+      <div className="flex-1 overflow-auto hide-scrollbar p-8 space-y-8">
         {/* Analytics Overview */}
         <section className="grid grid-cols-1 md:grid-cols-4 gap-6">
           <StatCard
@@ -290,7 +290,7 @@ export default function AuditsPage() {
             </div>
             <button
               onClick={() => setShowBreakdownModal(true)}
-              className="w-full mt-8 py-3 text-xs font-bold text-emerald-600 hover:text-emerald-700 transition-colors bg-emerald-50 rounded-xl group flex items-center justify-center gap-2"
+              className="w-full mt-8 py-3 text-xs font-bold text-emerald-600 hover:text-emerald-700 transition-colors bg-emerald-50 rounded-xl group flex items-center justify-center gap-2 cursor-pointer"
             >
               View Full Breakdown
               <Icon icon="lucide:external-link" className="group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
@@ -380,7 +380,7 @@ export default function AuditsPage() {
             <div className="p-8 border-b border-slate-100">
               <div className="flex items-center justify-between mb-4">
                 <span className="text-[10px] font-black text-emerald-600 uppercase tracking-[0.2em]">Finding Detail</span>
-                <button onClick={() => setShowDrawer(false)} className="text-slate-400 hover:text-slate-600 transition-colors">
+                <button onClick={() => setShowDrawer(false)} className="text-slate-400 hover:text-slate-600 transition-colors cursor-pointer">
                   <Icon icon="lucide:x" className="text-xl" />
                 </button>
               </div>
@@ -388,7 +388,7 @@ export default function AuditsPage() {
               <p className="text-sm text-slate-500">Access Control Review Analysis</p>
             </div>
 
-            <div className="flex-1 overflow-y-auto custom-scrollbar p-8 space-y-10">
+            <div className="flex-1 overflow-y-auto hide-scrollbar p-8 space-y-10">
               <section>
                 <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">Issue Summary</h3>
                 <p className="text-sm text-slate-600 leading-relaxed">
@@ -589,7 +589,7 @@ function ExecutiveView({
         </table>
       </div>
       <div className="px-8 py-4 bg-slate-50/50 flex justify-center border-t border-slate-100">
-        <button className="text-[10px] font-black text-slate-400 uppercase tracking-widest hover:text-slate-900 transition-colors">
+        <button className="text-[10px] font-black text-slate-400 uppercase tracking-widest hover:text-slate-900 transition-colors cursor-pointer">
           Load More Findings
         </button>
       </div>
@@ -711,7 +711,7 @@ function DetailedLogsView({
           <Badge variant="success" size="sm">Live Tracking</Badge>
         </div>
         <div className="overflow-x-auto">
-          <div className="max-h-[700px] overflow-y-auto custom-scrollbar">
+          <div className="max-h-[700px] overflow-y-auto hide-scrollbar">
             <table className="w-full text-left border-collapse">
               <thead className="sticky top-0 bg-slate-50 z-10">
                 <tr className="border-b border-slate-100">
@@ -798,7 +798,7 @@ function DetailedLogsView({
         </div>
         <div className="px-8 py-4 bg-slate-50/50 flex justify-between items-center border-t border-slate-100">
           <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Showing {logs.length} activity entries</span>
-          <button className="text-[10px] font-black text-slate-400 uppercase tracking-widest hover:text-slate-900 transition-colors">Load More Logs</button>
+          <button className="text-[10px] font-black text-slate-400 uppercase tracking-widest hover:text-slate-900 transition-colors cursor-pointer">Load More Logs</button>
         </div>
       </Card>
     </div>

@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import Link from 'next/link'
 import { Icon } from '@iconify/react'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -119,18 +120,24 @@ export default function RegulatoryUpdatesPage() {
           <div className="h-8 w-px bg-slate-200 mx-2"></div>
 
           <div className="flex gap-2">
-            <button className="px-3 py-1.5 text-xs font-bold text-slate-600 bg-slate-50 hover:bg-slate-100 rounded-lg transition-all border border-slate-200 flex items-center gap-2">
+            <Link
+              href="/sama-letters"
+              className="px-3 py-1.5 text-xs font-bold text-slate-600 bg-slate-50 hover:bg-slate-100 rounded-lg transition-all border border-slate-200 flex items-center gap-2"
+            >
               <Icon icon="lucide:mail" className="text-emerald-500" />
               SAMA Letters
-            </button>
-            <button className="px-3 py-1.5 text-xs font-bold text-white bg-emerald-600 rounded-lg transition-all border border-emerald-600 flex items-center gap-2">
+            </Link>
+            <span className="px-3 py-1.5 text-xs font-bold text-white bg-emerald-600 rounded-lg transition-all border border-emerald-600 flex items-center gap-2">
               <Icon icon="lucide:refresh-cw" className="text-white" />
               Regulatory Updates
-            </button>
-            <button className="px-3 py-1.5 text-xs font-bold text-slate-600 bg-slate-50 hover:bg-slate-100 rounded-lg transition-all border border-slate-200 flex items-center gap-2">
+            </span>
+            <Link
+              href="/observations"
+              className="px-3 py-1.5 text-xs font-bold text-slate-600 bg-slate-50 hover:bg-slate-100 rounded-lg transition-all border border-slate-200 flex items-center gap-2"
+            >
               <Icon icon="lucide:crosshair" className="text-rose-500" />
               Observations Tracker
-            </button>
+            </Link>
           </div>
         </div>
 
@@ -154,7 +161,7 @@ export default function RegulatoryUpdatesPage() {
       </header>
 
       {/* Content Area */}
-      <div className="flex-1 overflow-auto custom-scrollbar p-8">
+      <div className="flex-1 overflow-auto hide-scrollbar p-8">
         {/* Summary Stats */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
           <StatCard
@@ -218,7 +225,7 @@ export default function RegulatoryUpdatesPage() {
           </div>
           <div className="flex items-center gap-2 text-xs font-bold text-slate-500">
             <span>Sort by:</span>
-            <button className="flex items-center gap-1 hover:text-emerald-600">
+            <button className="flex items-center gap-1 hover:text-emerald-600 cursor-pointer">
               Deadline
               <Icon icon="lucide:chevron-down" />
             </button>
@@ -519,7 +526,7 @@ function RuleDetailsContent({ rule, onClose }: { rule: Rule; onClose: () => void
             placeholder="Add internal comments or observations..."
           ></textarea>
           <div className="flex justify-end mt-2">
-            <button className="text-xs font-bold text-emerald-600">Post Note</button>
+            <button className="text-xs font-bold text-emerald-600 cursor-pointer">Post Note</button>
           </div>
         </section>
       </div>

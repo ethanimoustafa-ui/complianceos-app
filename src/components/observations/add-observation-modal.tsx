@@ -58,7 +58,7 @@ export function AddObservationModal({ isOpen, onClose, onSave }: AddObservationM
   return (
     <Modal isOpen={isOpen} onClose={onClose} size="xl">
       <div className="flex flex-col max-h-[85vh] -m-6">
-        <div className="p-8 flex-1 overflow-y-auto">
+        <div className="p-8 flex-1 overflow-y-auto hide-scrollbar">
           <div className="flex justify-between items-start mb-8">
             <div>
               <h2 className="text-2xl font-bold font-display text-slate-900">

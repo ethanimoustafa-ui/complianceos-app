@@ -43,23 +43,29 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* Global scrollbar hiding for html and body */
+html, body {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+html::-webkit-scrollbar,
+body::-webkit-scrollbar {
+  display: none;
+}
+
 .font-display {
   font-family: var(--font-display);
 }
 
-/* Custom scrollbar */
-.custom-scrollbar::-webkit-scrollbar {
-  width: 4px;
-  height: 4px;
+/* Hide scrollbar but keep scrolling - targeted to scrollable containers */
+.hide-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
 }
 
-.custom-scrollbar::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.custom-scrollbar::-webkit-scrollbar-thumb {
-  background: #e2e8f0;
-  border-radius: 10px;
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;
 }
 
 /* Health gradient for cards */
@@ -109,4 +115,182 @@ body {
 
 .animate-slide-up {
   animation: slideUp 0.3s ease-out;
+}
+
+/* Drawer animations */
+@keyframes slideInRight {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+@keyframes slideInLeft {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+.animate-slide-in-right {
+  animation: slideInRight 0.3s ease-out;
+}
+
+.animate-slide-in-left {
+  animation: slideInLeft 0.3s ease-out;
+}
+
+/* Log row expand animation */
+@keyframes expandRow {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-expand-row {
+  animation: expandRow 0.3s ease-out forwards;
+}
+
+/* Calendar heatmap colors */
+.heatmap-critical {
+  background: linear-gradient(135deg, #fff1f2 0%, #ffe4e6 100%);
+  border-color: #fecdd3;
+}
+
+.heatmap-success {
+  background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
+  border-color: #bbf7d0;
+}
+
+.heatmap-pending {
+  background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
+  border-color: #fde68a;
+}
+
+/* Selected day card styling */
+.day-card-selected {
+  background-color: #0f172a !important;
+  color: white !important;
+  box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.1);
+  transform: scale(1.02) translateY(-2px);
+  z-index: 20;
+}
+
+/* Task row hover effect */
+.task-row {
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.task-row:hover {
+  background-color: #f8fafc;
+  transform: translateX(4px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+}
+
+.task-row-selected {
+  background-color: #f1f5f9 !important;
+  border-left: 4px solid #10b981 !important;
+}
+
+/* Radial dial for calendar month picker */
+.radial-item {
+  position: absolute;
+  transform-origin: center;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Glass card effect for Correspondence Hub */
+.glass-card {
+  background: rgba(255, 255, 255, 0.8);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(241, 245, 249, 1);
+}
+
+/* Stat card hover for Correspondence Hub */
+.stat-card-hover {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.stat-card-hover:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.05);
+}
+
+/* Risk matrix cell styling */
+.risk-matrix-cell {
+  transition: all 0.2s ease;
+  min-height: 110px;
+}
+
+.risk-matrix-cell:hover {
+  transform: scale(1.03);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+/* Risk dot fade in */
+.risk-dot {
+  animation: fadeIn 0.5s ease-out;
+}
+
+/* Modal animations - matching HTML prototype */
+@keyframes modalSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(20px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.modal-overlay {
+  animation: fadeIn 0.3s ease-out;
+}
+
+.modal-content {
+  animation: modalSlideIn 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Toast notification */
+@keyframes toastSlideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-toast {
+  animation: toastSlideUp 0.5s ease-out forwards;
+}
+
+/* Impact label vertical text for risk matrix */
+.impact-label-vertical {
+  position: absolute;
+  left: -20px;
+  top: 50%;
+  transform: translateY(-50%) rotate(-90deg);
+  transform-origin: center center;
+  white-space: nowrap;
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: #475569;
+}
+
+/* Requirements view animation */
+.requirements-view {
+  animation: modalSlideIn 0.4s cubic-bezier(0.4, 0, 0.2, 1);
 }

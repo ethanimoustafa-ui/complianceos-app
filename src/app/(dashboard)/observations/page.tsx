@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useMemo } from 'react'
+import Link from 'next/link'
 import { Icon } from '@iconify/react'
 import { Header } from '@/components/layout/header'
 import { Button } from '@/components/ui/button'
@@ -198,20 +199,20 @@ export default function ObservationsPage() {
 
           {/* Quick Links */}
           <div className="hidden lg:flex gap-2">
-            <a
-              href="/correspondence"
+            <Link
+              href="/sama-letters"
               className="px-3 py-1.5 text-xs font-bold text-slate-600 bg-slate-50 hover:bg-slate-100 rounded-lg transition-all border border-slate-200 flex items-center gap-2"
             >
               <Icon icon="lucide:mail" className="text-emerald-500" />
               SAMA Letters
-            </a>
-            <a
-              href="/audits"
+            </Link>
+            <Link
+              href="/regulatory-updates"
               className="px-3 py-1.5 text-xs font-bold text-slate-600 bg-slate-50 hover:bg-slate-100 rounded-lg transition-all border border-slate-200 flex items-center gap-2"
             >
               <Icon icon="lucide:refresh-cw" className="text-blue-500" />
               Regulatory Updates
-            </a>
+            </Link>
             <span className="px-3 py-1.5 text-xs font-bold text-emerald-700 bg-emerald-50 rounded-lg border border-emerald-200 flex items-center gap-2">
               <Icon icon="lucide:crosshair" className="text-emerald-600" />
               Observations Tracker
@@ -241,7 +242,7 @@ export default function ObservationsPage() {
       </header>
 
       {/* Content Area */}
-      <div className="flex-1 overflow-auto bg-slate-50 p-8">
+      <div className="flex-1 overflow-auto hide-scrollbar bg-slate-50 p-8">
         {/* Metrics Strip */}
         <ObservationStats />
 

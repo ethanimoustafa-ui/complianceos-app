@@ -1,16 +1,28 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, useCallback } from 'react'
+import Link from 'next/link'
 import { Icon } from '@iconify/react'
-import { Header } from '@/components/layout/header'
-import { Card } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { Modal } from '@/components/ui/modal'
 
+// Types
 type LetterStatus = 'Draft' | 'Pending Approval' | 'Approved' | 'Sent to SAMA' | 'SAMA Response Received' | 'Overdue'
 type LetterType = 'Non-Objection' | 'Inquiry' | 'Submission' | 'Notification'
+
+interface Attachment {
+  id: string
+  name: string
+  size: string
+  type: 'pdf' | 'image'
+}
+
+interface TimelineEvent {
+  id: string
+  title: string
+  date: string
+  user?: string
+  status: 'completed' | 'active' | 'pending'
+}
 
 interface Letter {
   id: string
@@ -21,8 +33,13 @@ interface Letter {
   lastModified: string
   createdBy: string
   assignedTo: string
+  contentEn?: string
+  contentAr?: string
+  attachments?: Attachment[]
+  timeline?: TimelineEvent[]
 }
 
+// Sample data matching prototype
 const mockLetters: Letter[] = [
   {
     id: '1',
@@ -33,6 +50,26 @@ const mockLetters: Letter[] = [
     lastModified: 'Oct 12, 2024',
     createdBy: 'Felix H.',
     assignedTo: 'Board Secretary',
+    contentEn: `In accordance with SAMA circular 22/34 regarding the Governance requirements for Financial Institutions, we are writing to formally request a non-objection regarding the appointment of Mr. Ahmad Al-Zahrani as the Chief Risk Officer of ComplianceOS Bank.
+
+Mr. Al-Zahrani possesses over 15 years of experience in regional banking risk management and has previously served as the Head of Operational Risk at a major local bank. We have attached his full professional credentials, FIT test results, and our Board Nomination Committee's recommendation for your review.
+
+We remain at your disposal for any further information or clarification required to process this request.`,
+    contentAr: `إشارة إلى تعميم البنك المركزي السعودي رقم 22/34 بشأن متطلبات الحوكمة للمؤسسات المالية، نود التقدم بطلب رسمي للحصول على عدم ممانعة بشأن تعيين الأستاذ أحمد الزهراني في منصب رئيس إدارة المخاطر ببنك ComplianceOS.
+
+يمتلك الأستاذ الزهراني خبرة تزيد عن 15 عاماً في إدارة المخاطر المصرفية الإقليمية، وقد شغل سابقاً منصب رئيس المخاطر التشغيلية في أحد البنوك المحلية الكبرى. نرفق لكم سيرته الذاتية الكاملة، ونتائج اختبار الملاءمة، وتوصية لجنة الترشيحات بمجلس الإدارة لمراجعتكم.
+
+ونحن على أتم الاستعداد لتزويدكم بأي معلومات إضافية أو إيضاحات مطلوبة لمعالجة هذا الطلب.`,
+    attachments: [
+      { id: '1', name: 'Resume_AlZahrani.pdf', size: '1.2 MB', type: 'pdf' },
+      { id: '2', name: 'FIT_Results_Final.pdf', size: '445 KB', type: 'pdf' },
+    ],
+    timeline: [
+      { id: '1', title: 'Draft Created', date: 'Oct 10, 2024', user: 'Felix H.', status: 'completed' },
+      { id: '2', title: 'Compliance Approved', date: 'Oct 11, 2024', user: 'Sarah C.', status: 'completed' },
+      { id: '3', title: 'Sent to SAMA', date: 'Oct 12, 2024', user: 'Automated System', status: 'active' },
+      { id: '4', title: 'Pending SAMA Reply', date: 'Expected: Nov 12, 2024', status: 'pending' },
+    ],
   },
   {
     id: '2',
@@ -53,36 +90,6 @@ const mockLetters: Letter[] = [
     lastModified: 'Oct 05, 2024',
     createdBy: 'Ahmed K.',
     assignedTo: 'Legal Team',
-  },
-  {
-    id: '4',
-    reference: 'NOT-2024-018',
-    type: 'Notification',
-    subject: 'System Outage Incident Report - Core Banking',
-    status: 'SAMA Response Received',
-    lastModified: 'Sep 28, 2024',
-    createdBy: 'Michael C.',
-    assignedTo: 'IT Operations',
-  },
-  {
-    id: '5',
-    reference: 'NOB-2024-079',
-    type: 'Non-Objection',
-    subject: 'New Digital Product Launch - Mobile Wallet',
-    status: 'Pending Approval',
-    lastModified: 'Oct 18, 2024',
-    createdBy: 'Lisa M.',
-    assignedTo: 'Product Team',
-  },
-  {
-    id: '6',
-    reference: 'SUB-2024-108',
-    type: 'Submission',
-    subject: 'Annual Governance Report 2024',
-    status: 'Overdue',
-    lastModified: 'Oct 01, 2024',
-    createdBy: 'Felix H.',
-    assignedTo: 'Compliance Team',
   },
 ]
 
@@ -113,43 +120,49 @@ const letterTemplates = [
   },
 ]
 
+// Toast component
+function Toast({ message, onClose }: { message: string; onClose: () => void }) {
+  useEffect(() => {
+    const timer = setTimeout(onClose, 4000)
+    return () => clearTimeout(timer)
+  }, [onClose])
+
+  return (
+    <div className="fixed bottom-8 right-8 bg-slate-900 text-white px-6 py-4 rounded-2xl shadow-2xl flex items-center gap-3 z-[100] animate-toast">
+      <div className="w-8 h-8 bg-emerald-500 rounded-full flex items-center justify-center text-white shrink-0">
+        <Icon icon="lucide:check" />
+      </div>
+      <span className="font-bold text-sm">{message}</span>
+    </div>
+  )
+}
+
 export default function SAMALettersPage() {
-  const [searchQuery, setSearchQuery] = useState('')
-  const [statusFilter, setStatusFilter] = useState<LetterStatus | 'All'>('All')
+  const [view, setView] = useState<'dashboard' | 'detail'>('dashboard')
+  const [selectedLetter, setSelectedLetter] = useState<Letter | null>(null)
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
   const [selectedLetterType, setSelectedLetterType] = useState<LetterType>('Non-Objection')
-  const [selectedLetter, setSelectedLetter] = useState<Letter | null>(null)
+  const [toastMessage, setToastMessage] = useState<string | null>(null)
+  const [language, setLanguage] = useState<'en' | 'ar'>('en')
 
-  const filteredLetters = mockLetters.filter((letter) => {
-    const matchesSearch =
-      letter.reference.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      letter.subject.toLowerCase().includes(searchQuery.toLowerCase())
-    const matchesStatus = statusFilter === 'All' || letter.status === statusFilter
-    return matchesSearch && matchesStatus
-  })
+  const showToast = useCallback((message: string) => {
+    setToastMessage(message)
+  }, [])
+
+  const handleViewLetter = (letter: Letter) => {
+    setSelectedLetter(letter)
+    setView('detail')
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  const handleBackToDashboard = () => {
+    setView('dashboard')
+    setSelectedLetter(null)
+  }
 
   const handleOpenCreateModal = (type: LetterType = 'Non-Objection') => {
     setSelectedLetterType(type)
     setIsCreateModalOpen(true)
-  }
-
-  const getStatusBadgeVariant = (status: LetterStatus) => {
-    switch (status) {
-      case 'Draft':
-        return 'neutral'
-      case 'Pending Approval':
-        return 'warning'
-      case 'Approved':
-        return 'success'
-      case 'Sent to SAMA':
-        return 'info'
-      case 'SAMA Response Received':
-        return 'success'
-      case 'Overdue':
-        return 'danger'
-      default:
-        return 'neutral'
-    }
   }
 
   const getTypeBadgeColor = (type: LetterType) => {
@@ -162,222 +175,545 @@ export default function SAMALettersPage() {
         return 'bg-amber-50 text-amber-700'
       case 'Notification':
         return 'bg-rose-50 text-rose-700'
-      default:
-        return 'bg-slate-50 text-slate-700'
     }
   }
 
-  return (
-    <>
-      <Header title="SAMA Letters" subtitle="Correspondence Hub" />
+  const getStatusDisplay = (status: LetterStatus) => {
+    switch (status) {
+      case 'Sent to SAMA':
+        return { color: 'text-blue-600', dotColor: 'bg-blue-600' }
+      case 'Draft':
+        return { color: 'text-amber-600', dotColor: 'bg-amber-600' }
+      case 'Approved':
+        return { color: 'text-emerald-600', dotColor: 'bg-emerald-600' }
+      case 'Pending Approval':
+        return { color: 'text-amber-600', dotColor: 'bg-amber-600' }
+      case 'SAMA Response Received':
+        return { color: 'text-emerald-600', dotColor: 'bg-emerald-600' }
+      case 'Overdue':
+        return { color: 'text-rose-600', dotColor: 'bg-rose-600' }
+      default:
+        return { color: 'text-slate-600', dotColor: 'bg-slate-600' }
+    }
+  }
 
-      <div className="flex-1 overflow-auto custom-scrollbar p-8">
-        <div className="max-w-7xl mx-auto space-y-8">
-          {/* Stats Section */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-            <StatCard
-              label="Total Letters (YTD)"
-              value="142"
-              trend="+12% from 2023"
-              trendUp
-              borderColor="emerald"
-            />
-            <StatCard
-              label="Sent This Quarter"
-              value="28"
-              detail="Last sent: Yesterday"
-              borderColor="blue"
-            />
-            <StatCard
-              label="Pending Drafts"
-              value="09"
-              detail="3 due this week"
-              detailIcon="lucide:clock"
-              detailColor="amber"
-              borderColor="amber"
-            />
-            <StatCard
-              label="Overdue Replies"
-              value="02"
-              detail="Critical Escalation"
-              detailColor="rose"
-              borderColor="rose"
-            />
+  const getStatusLabel = (status: LetterStatus) => {
+    if (status === 'Draft') return 'Drafting'
+    if (status === 'Approved') return 'Approved for Sending'
+    return status
+  }
+
+  return (
+    <div className="flex-1 flex flex-col overflow-hidden">
+      {/* Header */}
+      <header className="h-20 bg-white border-b border-slate-200 px-8 flex items-center justify-between shrink-0">
+        <div className="flex items-center gap-8">
+          <div>
+            <h1 className="text-xl font-bold font-display text-slate-900">SAMA Letters</h1>
+            <p className="text-xs text-slate-500 font-medium tracking-wide uppercase">
+              Form Submission Overview
+            </p>
           </div>
 
-          {/* Letter Templates */}
-          <section>
-            <div className="flex items-baseline justify-between mb-6">
-              <h2 className="text-lg font-bold font-display text-slate-900">Letter Templates</h2>
-              <button className="text-xs font-bold text-emerald-600 hover:underline">
-                Manage Templates &rarr;
-              </button>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              {letterTemplates.map((template) => (
-                <TemplateCard
-                  key={template.type}
-                  type={template.type}
-                  icon={template.icon}
-                  color={template.color}
-                  description={template.description}
-                  onClick={() => handleOpenCreateModal(template.type)}
-                />
-              ))}
-            </div>
-          </section>
+          <div className="h-8 w-px bg-slate-200 mx-2" />
 
-          {/* Recent Correspondence Table */}
-          <Card className="overflow-hidden">
-            <div className="px-6 py-5 border-b border-slate-100 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-white/50">
-              <h2 className="font-bold text-slate-900">Recent Correspondence</h2>
-              <div className="flex gap-3 w-full sm:w-auto">
-                <div className="relative flex-1 sm:flex-none">
-                  <Icon
-                    icon="lucide:search"
-                    className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+          <div className="flex gap-2">
+            <Link
+              href="/sama-letters"
+              className="px-3 py-1.5 text-xs font-bold text-emerald-700 bg-emerald-50 rounded-lg transition-all border border-emerald-100 flex items-center gap-2"
+            >
+              <Icon icon="lucide:mail" className="text-emerald-500" />
+              SAMA Letters
+            </Link>
+            <Link
+              href="/regulatory-updates"
+              className="px-3 py-1.5 text-xs font-bold text-slate-600 bg-slate-50 hover:bg-slate-100 rounded-lg transition-all border border-slate-200 flex items-center gap-2"
+            >
+              <Icon icon="lucide:refresh-cw" className="text-blue-500" />
+              Regulatory Updates
+            </Link>
+            <Link
+              href="/observations"
+              className="px-3 py-1.5 text-xs font-bold text-slate-600 bg-slate-50 hover:bg-slate-100 rounded-lg transition-all border border-slate-200 flex items-center gap-2"
+            >
+              <Icon icon="lucide:crosshair" className="text-rose-500" />
+              Observations Tracker
+            </Link>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-1 bg-slate-50 border border-slate-200 p-1 rounded-lg">
+            <div className="px-4 py-1.5 text-sm font-bold text-slate-900 flex items-center gap-2">
+              <span>Live Pulse</span>
+              <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+            </div>
+          </div>
+
+          <button
+            onClick={() => handleOpenCreateModal()}
+            className="bg-emerald-600 text-white px-5 py-2.5 rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-emerald-700 transition-colors shadow-lg shadow-emerald-100 cursor-pointer"
+          >
+            <Icon icon="lucide:plus" />
+            Draft New Letter
+          </button>
+        </div>
+      </header>
+
+      {/* Content Area */}
+      <div className="flex-1 overflow-auto hide-scrollbar bg-slate-50 p-8">
+        {view === 'dashboard' ? (
+          <div>
+            {/* Stats Section */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-10">
+              <StatCard
+                label="Total Letters (YTD)"
+                value="142"
+                subtext="+12% from 2023"
+                subtextIcon="lucide:trending-up"
+                subtextColor="emerald"
+                borderColor="emerald"
+              />
+              <StatCard
+                label="Sent This Quarter"
+                value="28"
+                subtext="Last sent: Yesterday"
+                borderColor="blue"
+              />
+              <StatCard
+                label="Pending Drafts"
+                value="09"
+                subtext="3 due this week"
+                subtextIcon="lucide:clock"
+                subtextColor="amber"
+                borderColor="amber"
+              />
+              <StatCard
+                label="Overdue Replies"
+                value="02"
+                subtext="Critical Escalation"
+                subtextColor="rose"
+                borderColor="rose"
+              />
+            </div>
+
+            {/* Letter Templates */}
+            <div className="mb-10">
+              <div className="flex items-baseline justify-between mb-6">
+                <h2 className="text-lg font-bold font-display text-slate-900">Letter Templates</h2>
+                <button className="text-xs font-bold text-emerald-600 hover:underline cursor-pointer">
+                  Manage Templates &rarr;
+                </button>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                {letterTemplates.map((template) => (
+                  <TemplateCard
+                    key={template.type}
+                    type={template.type}
+                    icon={template.icon}
+                    color={template.color}
+                    description={template.description}
+                    onClick={() => handleOpenCreateModal(template.type)}
                   />
-                  <input
-                    type="text"
-                    placeholder="Search reference..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="pl-10 pr-4 py-2 bg-slate-100 rounded-lg text-xs focus:ring-2 focus:ring-emerald-500 outline-none w-full sm:w-64"
-                  />
-                </div>
-                <select
-                  value={statusFilter}
-                  onChange={(e) => setStatusFilter(e.target.value as LetterStatus | 'All')}
-                  className="px-3 py-2 bg-slate-100 rounded-lg text-xs focus:ring-2 focus:ring-emerald-500 outline-none"
-                >
-                  <option value="All">All Status</option>
-                  <option value="Draft">Draft</option>
-                  <option value="Pending Approval">Pending Approval</option>
-                  <option value="Approved">Approved</option>
-                  <option value="Sent to SAMA">Sent to SAMA</option>
-                  <option value="SAMA Response Received">SAMA Response</option>
-                  <option value="Overdue">Overdue</option>
-                </select>
-                <Button variant="primary" size="sm" onClick={() => handleOpenCreateModal()}>
-                  <Icon icon="lucide:plus" />
-                  New Letter
-                </Button>
+                ))}
               </div>
             </div>
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-slate-50/50 text-slate-500 uppercase text-[10px] font-bold tracking-widest border-b border-slate-100">
-                  <tr>
-                    <th className="px-6 py-4 text-left">Reference #</th>
-                    <th className="px-6 py-4 text-left">Type</th>
-                    <th className="px-6 py-4 text-left">Subject</th>
-                    <th className="px-6 py-4 text-left">Status</th>
-                    <th className="px-6 py-4 text-left">Last Modified</th>
-                    <th className="px-6 py-4 text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {filteredLetters.map((letter) => (
-                    <tr
-                      key={letter.id}
-                      onClick={() => setSelectedLetter(letter)}
-                      className="hover:bg-slate-50 cursor-pointer transition-colors group"
-                    >
-                      <td className="px-6 py-4">
-                        <span className="text-sm font-bold text-slate-900 font-display">
-                          {letter.reference}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4">
-                        <span
-                          className={`px-2 py-1 text-[10px] font-bold rounded-md ${getTypeBadgeColor(
-                            letter.type
-                          )}`}
-                        >
-                          {letter.type}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4">
-                        <p className="text-sm text-slate-600 font-medium truncate max-w-xs">
-                          {letter.subject}
-                        </p>
-                      </td>
-                      <td className="px-6 py-4">
-                        <Badge variant={getStatusBadgeVariant(letter.status)} size="sm">
-                          <span className="w-1.5 h-1.5 rounded-full bg-current" />
-                          {letter.status}
-                        </Badge>
-                      </td>
-                      <td className="px-6 py-4 text-sm text-slate-400">{letter.lastModified}</td>
-                      <td className="px-6 py-4 text-right">
-                        <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-end gap-2">
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              setSelectedLetter(letter)
-                            }}
-                            className="p-1.5 hover:bg-slate-200 rounded text-slate-400 hover:text-slate-900 transition-colors"
-                            title="View"
-                          >
-                            <Icon icon="lucide:eye" />
-                          </button>
-                          <button
-                            onClick={(e) => e.stopPropagation()}
-                            className="p-1.5 hover:bg-slate-200 rounded text-slate-400 hover:text-slate-900 transition-colors"
-                            title="Edit"
-                          >
-                            <Icon icon="lucide:pencil" />
-                          </button>
-                          <button
-                            onClick={(e) => e.stopPropagation()}
-                            className="p-1.5 hover:bg-slate-200 rounded text-slate-400 hover:text-slate-900 transition-colors"
-                            title="More"
-                          >
-                            <Icon icon="lucide:more-vertical" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              {filteredLetters.length === 0 && (
-                <div className="text-center py-12">
-                  <Icon icon="lucide:inbox" className="text-4xl text-slate-300 mx-auto mb-3" />
-                  <p className="text-sm text-slate-500">No letters found matching your criteria.</p>
+
+            {/* Recent Letters Table */}
+            <div className="glass-card rounded-2xl overflow-hidden shadow-sm">
+              <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between bg-white/50">
+                <h2 className="font-bold text-slate-900">Recent Correspondence</h2>
+                <div className="flex gap-3">
+                  <div className="relative">
+                    <Icon
+                      icon="lucide:search"
+                      className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+                    />
+                    <input
+                      type="text"
+                      placeholder="Search reference..."
+                      className="pl-10 pr-4 py-2 bg-slate-100 rounded-lg text-xs focus:ring-2 focus:ring-emerald-500 outline-none w-64"
+                    />
+                  </div>
+                  <button className="p-2 bg-slate-100 rounded-lg text-slate-600 hover:bg-slate-200 transition-colors cursor-pointer">
+                    <Icon icon="lucide:filter" />
+                  </button>
                 </div>
-              )}
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead className="bg-slate-50/50 text-slate-500 uppercase text-[10px] font-bold tracking-widest border-b border-slate-100">
+                    <tr>
+                      <th className="px-6 py-4 text-left">Reference #</th>
+                      <th className="px-6 py-4 text-left">Type</th>
+                      <th className="px-6 py-4 text-left">Subject</th>
+                      <th className="px-6 py-4 text-left">Status</th>
+                      <th className="px-6 py-4 text-left">Last Modified</th>
+                      <th className="px-6 py-4 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {mockLetters.map((letter) => {
+                      const statusDisplay = getStatusDisplay(letter.status)
+                      return (
+                        <tr
+                          key={letter.id}
+                          onClick={() => handleViewLetter(letter)}
+                          className="hover:bg-slate-50 cursor-pointer transition-colors group"
+                        >
+                          <td className="px-6 py-4">
+                            <span className="text-sm font-bold text-slate-900 font-display">
+                              {letter.reference}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4">
+                            <span
+                              className={`px-2 py-1 text-[10px] font-bold rounded-md ${getTypeBadgeColor(letter.type)}`}
+                            >
+                              {letter.type}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4">
+                            <p className="text-sm text-slate-600 font-medium truncate max-w-xs">
+                              {letter.subject}
+                            </p>
+                          </td>
+                          <td className="px-6 py-4">
+                            <span
+                              className={`flex items-center gap-1.5 text-xs font-bold ${statusDisplay.color}`}
+                            >
+                              <span className={`w-1.5 h-1.5 rounded-full ${statusDisplay.dotColor}`} />
+                              {getStatusLabel(letter.status)}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 text-sm text-slate-400">{letter.lastModified}</td>
+                          <td className="px-6 py-4 text-right opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button
+                              onClick={(e) => e.stopPropagation()}
+                              className="p-1.5 hover:bg-slate-200 rounded text-slate-400 hover:text-slate-900 transition-colors"
+                            >
+                              <Icon icon="lucide:more-vertical" />
+                            </button>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
             </div>
-          </Card>
-        </div>
+          </div>
+        ) : (
+          // Detail View
+          <div>
+            <div className="flex justify-between items-center mb-6">
+              <div className="flex items-center gap-4">
+                <button
+                  onClick={handleBackToDashboard}
+                  className="w-10 h-10 bg-white border border-slate-200 rounded-lg flex items-center justify-center text-slate-500 hover:bg-slate-50 cursor-pointer"
+                >
+                  <Icon icon="lucide:chevron-left" className="text-xl" />
+                </button>
+                <div>
+                  <h2 className="text-2xl font-bold text-slate-900 font-display">
+                    {selectedLetter?.reference}
+                  </h2>
+                  <p className="text-sm text-slate-500">
+                    {selectedLetter?.type} &bull; Sent on {selectedLetter?.lastModified}
+                  </p>
+                </div>
+              </div>
+              <div className="flex gap-3">
+                <button className="px-4 py-2 bg-white border border-slate-200 rounded-lg text-sm font-bold text-slate-700 flex items-center gap-2 hover:bg-slate-50 transition-colors cursor-pointer">
+                  <Icon icon="lucide:printer" />
+                  Print PDF
+                </button>
+                <button className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-emerald-700 transition-colors shadow-lg shadow-emerald-100 cursor-pointer">
+                  <Icon icon="lucide:pencil" />
+                  Edit Letter
+                </button>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-12 gap-8">
+              {/* Letter Content */}
+              <div className="col-span-12 lg:col-span-8">
+                <div
+                  className="bg-white rounded-2xl border border-slate-200 p-12 relative overflow-hidden"
+                  style={{ boxShadow: '0 10px 30px -10px rgba(0,0,0,0.1)', minHeight: '600px' }}
+                >
+                  {/* Header */}
+                  <div className="flex justify-between border-b-2 border-slate-100 pb-8 mb-8">
+                    <div className="flex items-center gap-3">
+                      <div className="w-12 h-12 bg-slate-900 rounded-xl flex items-center justify-center text-emerald-400">
+                        <Icon icon="lucide:shield-check" className="text-3xl" />
+                      </div>
+                      <div>
+                        <h3 className="font-black text-slate-900 uppercase tracking-widest text-sm">
+                          ComplianceOS Bank
+                        </h3>
+                        <p className="text-[10px] text-slate-500 font-bold uppercase tracking-tighter">
+                          Headquarters, Riyadh KSA
+                        </p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className="inline-flex rounded-lg bg-slate-100 p-1 mb-2">
+                        <button
+                          onClick={() => setLanguage('en')}
+                          className={`px-3 py-1 text-[10px] font-bold rounded-md transition-all cursor-pointer ${
+                            language === 'en'
+                              ? 'bg-white shadow-sm'
+                              : 'text-slate-500 hover:text-slate-900'
+                          }`}
+                        >
+                          English
+                        </button>
+                        <button
+                          onClick={() => setLanguage('ar')}
+                          className={`px-3 py-1 text-[10px] font-bold rounded-md transition-all cursor-pointer ${
+                            language === 'ar'
+                              ? 'bg-white shadow-sm'
+                              : 'text-slate-500 hover:text-slate-900'
+                          }`}
+                        >
+                          Arabic
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Letter Content */}
+                  {language === 'en' ? (
+                    <div className="space-y-6">
+                      <div className="flex justify-between items-start">
+                        <div className="text-sm text-slate-900">
+                          <p className="font-bold">To: Compliance Department</p>
+                          <p>Saudi Central Bank (SAMA)</p>
+                          <p>Riyadh, Saudi Arabia</p>
+                        </div>
+                        <div className="text-right text-sm">
+                          <p className="text-slate-500">Date: 12 October 2024</p>
+                          <p className="text-slate-500">Ref: {selectedLetter?.reference}</p>
+                        </div>
+                      </div>
+
+                      <div className="py-4">
+                        <h4 className="font-black text-lg text-slate-900">
+                          Subject: Request for Non-Objection - Appointment of Chief Risk Officer
+                        </h4>
+                      </div>
+
+                      <div className="text-slate-700 text-sm leading-relaxed space-y-4">
+                        <p>Dear Sir/Madam,</p>
+                        <p>
+                          In accordance with SAMA circular 22/34 regarding the Governance
+                          requirements for Financial Institutions, we are writing to formally
+                          request a non-objection regarding the appointment of{' '}
+                          <strong>Mr. Ahmad Al-Zahrani</strong> as the Chief Risk Officer of
+                          ComplianceOS Bank.
+                        </p>
+                        <p>
+                          Mr. Al-Zahrani possesses over 15 years of experience in regional banking
+                          risk management and has previously served as the Head of Operational Risk
+                          at a major local bank. We have attached his full professional credentials,
+                          FIT test results, and our Board Nomination Committee&apos;s recommendation
+                          for your review.
+                        </p>
+                        <p>
+                          We remain at your disposal for any further information or clarification
+                          required to process this request.
+                        </p>
+                        <p className="pt-8">Yours sincerely,</p>
+                        <div>
+                          <p className="font-black text-slate-900">Felix Henderson</p>
+                          <p className="text-slate-500">Head of Compliance</p>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-6" dir="rtl" style={{ fontFamily: "'Amiri', serif" }}>
+                      <div className="flex justify-between items-start">
+                        <div className="text-lg text-slate-900">
+                          <p className="font-bold">إلى: إدارة الالتزام</p>
+                          <p>البنك المركزي السعودي (ساما)</p>
+                          <p>الرياض، المملكة العربية السعودية</p>
+                        </div>
+                        <div className="text-left text-sm" style={{ fontFamily: 'Inter, sans-serif' }}>
+                          <p className="text-slate-500">التاريخ: 12 أكتوبر 2024</p>
+                          <p className="text-slate-500">المرجع: {selectedLetter?.reference}</p>
+                        </div>
+                      </div>
+
+                      <div className="py-4">
+                        <h4 className="font-bold text-2xl text-slate-900">
+                          الموضوع: طلب عدم ممانعة - تعيين رئيس إدارة المخاطر
+                        </h4>
+                      </div>
+
+                      <div className="text-slate-700 text-lg leading-relaxed space-y-4">
+                        <p>السادة الكرام،</p>
+                        <p>
+                          إشارة إلى تعميم البنك المركزي السعودي رقم 22/34 بشأن متطلبات الحوكمة
+                          للمؤسسات المالية، نود التقدم بطلب رسمي للحصول على عدم ممانعة بشأن تعيين{' '}
+                          <strong>الأستاذ أحمد الزهراني</strong> في منصب رئيس إدارة المخاطر ببنك
+                          ComplianceOS.
+                        </p>
+                        <p>
+                          يمتلك الأستاذ الزهراني خبرة تزيد عن 15 عاماً في إدارة المخاطر المصرفية
+                          الإقليمية، وقد شغل سابقاً منصب رئيس المخاطر التشغيلية في أحد البنوك المحلية
+                          الكبرى. نرفق لكم سيرته الذاتية الكاملة، ونتائج اختبار الملاءمة، وتوصية لجنة
+                          الترشيحات بمجلس الإدارة لمراجعتكم.
+                        </p>
+                        <p>
+                          ونحن على أتم الاستعداد لتزويدكم بأي معلومات إضافية أو إيضاحات مطلوبة
+                          لمعالجة هذا الطلب.
+                        </p>
+                        <p className="pt-8">وتقبلوا خالص التحية والتقدير،،</p>
+                        <div>
+                          <p className="font-bold text-slate-900">فيليكس هندرسون</p>
+                          <p className="text-slate-500 text-sm" style={{ fontFamily: 'Inter, sans-serif' }}>
+                            رئيس إدارة الالتزام
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Sidebar Info */}
+              <div className="col-span-12 lg:col-span-4 space-y-6">
+                {/* Metadata */}
+                <section className="glass-card p-6 rounded-2xl">
+                  <h4 className="text-xs font-black text-slate-500 uppercase tracking-widest mb-4">
+                    Metadata
+                  </h4>
+                  <div className="space-y-4">
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs text-slate-500">Category</span>
+                      <span className="text-xs font-bold text-slate-900">
+                        {selectedLetter?.type}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs text-slate-500">Recipient Dept.</span>
+                      <span className="text-xs font-bold text-slate-900">Compliance</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs text-slate-500">Created By</span>
+                      <div className="flex items-center gap-2">
+                        <img
+                          src="https://api.dicebear.com/7.x/avataaars/svg?seed=Felix"
+                          className="w-5 h-5 rounded-full"
+                          alt="Felix"
+                        />
+                        <span className="text-xs font-bold text-slate-900">
+                          {selectedLetter?.createdBy}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs text-slate-500">Assigned To</span>
+                      <span className="text-xs font-bold text-emerald-600">
+                        {selectedLetter?.assignedTo}
+                      </span>
+                    </div>
+                  </div>
+                </section>
+
+                {/* Attachments */}
+                <section className="glass-card p-6 rounded-2xl">
+                  <h4 className="text-xs font-black text-slate-500 uppercase tracking-widest mb-4">
+                    Attachments ({selectedLetter?.attachments?.length || 0})
+                  </h4>
+                  <div className="space-y-3">
+                    {selectedLetter?.attachments?.map((attachment) => (
+                      <div
+                        key={attachment.id}
+                        className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl border border-slate-100 group cursor-pointer hover:bg-white hover:shadow-sm transition-all"
+                      >
+                        <div
+                          className={`w-8 h-8 ${attachment.type === 'pdf' ? 'bg-rose-50 text-rose-500' : 'bg-blue-50 text-blue-500'} flex items-center justify-center rounded-lg`}
+                        >
+                          <Icon icon="lucide:file-text" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-[11px] font-bold text-slate-900 truncate">
+                            {attachment.name}
+                          </p>
+                          <p className="text-[9px] text-slate-400">{attachment.size}</p>
+                        </div>
+                        <Icon
+                          icon="lucide:download"
+                          className="text-slate-300 group-hover:text-slate-900"
+                        />
+                      </div>
+                    ))}
+                    <button className="w-full py-2 border-2 border-dashed border-slate-200 rounded-xl text-[10px] font-bold text-slate-400 hover:border-emerald-300 hover:text-emerald-500 transition-all cursor-pointer">
+                      + Add Attachment
+                    </button>
+                  </div>
+                </section>
+
+                {/* Activity Timeline */}
+                <section className="glass-card p-6 rounded-2xl">
+                  <h4 className="text-xs font-black text-slate-500 uppercase tracking-widest mb-6">
+                    Activity Timeline
+                  </h4>
+                  <div className="space-y-6 relative before:absolute before:left-2 before:top-1 before:bottom-1 before:w-0.5 before:bg-slate-100">
+                    {selectedLetter?.timeline?.map((event) => (
+                      <div key={event.id} className="relative pl-8">
+                        <div
+                          className={`absolute left-0 top-1 w-4 h-4 rounded-full border-2 ${
+                            event.status === 'completed'
+                              ? 'bg-emerald-100 border-emerald-500'
+                              : event.status === 'active'
+                                ? 'bg-blue-100 border-blue-500'
+                                : 'bg-slate-100 border-slate-300'
+                          }`}
+                        />
+                        <p
+                          className={`text-xs font-bold ${event.status === 'pending' ? 'text-slate-300' : 'text-slate-900'}`}
+                        >
+                          {event.title}
+                        </p>
+                        <p
+                          className={`text-[10px] ${event.status === 'pending' ? 'text-slate-300' : 'text-slate-400'}`}
+                        >
+                          {event.date}
+                          {event.user && ` \u2022 ${event.user}`}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Create Letter Modal */}
       <Modal
         isOpen={isCreateModalOpen}
         onClose={() => setIsCreateModalOpen(false)}
-        title="Draft Official Correspondence"
         size="xl"
       >
         <CreateLetterForm
           selectedType={selectedLetterType}
           onTypeChange={setSelectedLetterType}
           onClose={() => setIsCreateModalOpen(false)}
+          onSuccess={() => {
+            setIsCreateModalOpen(false)
+            showToast('Letter submitted for internal compliance approval.')
+          }}
         />
       </Modal>
 
-      {/* Letter Detail Modal */}
-      <Modal
-        isOpen={!!selectedLetter}
-        onClose={() => setSelectedLetter(null)}
-        title={selectedLetter?.reference || ''}
-        size="xl"
-      >
-        {selectedLetter && (
-          <LetterDetailView letter={selectedLetter} onClose={() => setSelectedLetter(null)} />
-        )}
-      </Modal>
-    </>
+      {/* Toast */}
+      {toastMessage && <Toast message={toastMessage} onClose={() => setToastMessage(null)} />}
+    </div>
   )
 }
 
@@ -385,20 +721,16 @@ export default function SAMALettersPage() {
 function StatCard({
   label,
   value,
-  trend,
-  trendUp,
-  detail,
-  detailIcon,
-  detailColor,
+  subtext,
+  subtextIcon,
+  subtextColor,
   borderColor,
 }: {
   label: string
   value: string
-  trend?: string
-  trendUp?: boolean
-  detail?: string
-  detailIcon?: string
-  detailColor?: 'emerald' | 'amber' | 'rose' | 'blue'
+  subtext: string
+  subtextIcon?: string
+  subtextColor?: 'emerald' | 'amber' | 'rose' | 'blue'
   borderColor: 'emerald' | 'amber' | 'rose' | 'blue'
 }) {
   const borderColors = {
@@ -408,7 +740,7 @@ function StatCard({
     blue: 'border-l-blue-500',
   }
 
-  const detailColors = {
+  const textColors = {
     emerald: 'text-emerald-600',
     amber: 'text-amber-600',
     rose: 'text-rose-600',
@@ -416,30 +748,18 @@ function StatCard({
   }
 
   return (
-    <Card
-      className={`p-6 border-l-4 ${borderColors[borderColor]} hover:shadow-lg transition-all hover:-translate-y-1`}
+    <div
+      className={`glass-card p-6 rounded-2xl stat-card-hover border-l-4 ${borderColors[borderColor]}`}
     >
-      <p className="text-slate-500 text-[10px] font-bold uppercase tracking-widest mb-1">
-        {label}
-      </p>
+      <p className="text-slate-500 text-[10px] font-bold uppercase tracking-widest mb-1">{label}</p>
       <h2 className="text-3xl font-black text-slate-900 font-display">{value}</h2>
-      {trend && (
-        <p className="text-xs text-emerald-600 font-bold mt-2 flex items-center gap-1">
-          <Icon icon={trendUp ? 'lucide:trending-up' : 'lucide:trending-down'} />
-          {trend}
-        </p>
-      )}
-      {detail && (
-        <p
-          className={`text-xs font-bold mt-2 flex items-center gap-1 ${
-            detailColor ? detailColors[detailColor] : 'text-slate-400'
-          }`}
-        >
-          {detailIcon && <Icon icon={detailIcon} />}
-          {detail}
-        </p>
-      )}
-    </Card>
+      <p
+        className={`text-xs font-bold mt-2 flex items-center gap-1 ${subtextColor ? textColors[subtextColor] : 'text-slate-400'}`}
+      >
+        {subtextIcon && <Icon icon={subtextIcon} />}
+        {subtext}
+      </p>
+    </div>
   )
 }
 
@@ -467,11 +787,9 @@ function TemplateCard({
   return (
     <button
       onClick={onClick}
-      className="bg-white p-5 rounded-2xl text-left border border-slate-100 hover:border-emerald-500 hover:bg-emerald-50/30 transition-all"
+      className="bg-white p-5 rounded-2xl text-left border border-slate-100 hover:border-emerald-500 hover:bg-emerald-50/30 transition-all cursor-pointer"
     >
-      <div
-        className={`w-10 h-10 rounded-xl flex items-center justify-center mb-4 ${colorClasses[color]}`}
-      >
+      <div className={`w-10 h-10 rounded-xl flex items-center justify-center mb-4 ${colorClasses[color]}`}>
         <Icon icon={icon} className="text-xl" />
       </div>
       <h3 className="font-bold text-slate-900 text-sm mb-1">{type}</h3>
@@ -480,15 +798,17 @@ function TemplateCard({
   )
 }
 
-// Create Letter Form Component
+// Create Letter Form Component (Bilingual)
 function CreateLetterForm({
   selectedType,
   onTypeChange,
   onClose,
+  onSuccess,
 }: {
   selectedType: LetterType
   onTypeChange: (type: LetterType) => void
   onClose: () => void
+  onSuccess: () => void
 }) {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [priority, setPriority] = useState<'Standard' | 'Urgent'>('Standard')
@@ -497,7 +817,7 @@ function CreateLetterForm({
     setIsSubmitting(true)
     setTimeout(() => {
       setIsSubmitting(false)
-      onClose()
+      onSuccess()
     }, 1500)
   }
 
@@ -511,21 +831,32 @@ function CreateLetterForm({
         return 'SUB'
       case 'Notification':
         return 'NOT'
-      default:
-        return 'GEN'
     }
   }
 
   return (
-    <div className="space-y-6">
-      <p className="text-sm text-slate-500">
-        Reference assigned:{' '}
-        <span className="font-mono font-bold text-emerald-600">
-          {getRefPrefix(selectedType)}-2026-001
-        </span>
-      </p>
+    <div className="p-8">
+      <div className="flex justify-between items-start mb-8">
+        <div>
+          <h2 className="text-2xl font-bold text-slate-900 font-display">
+            Draft Official Correspondence
+          </h2>
+          <p className="text-sm text-slate-500 mt-1">
+            Reference assigned:{' '}
+            <span className="font-mono font-bold text-emerald-600">
+              {getRefPrefix(selectedType)}-2026-001
+            </span>
+          </p>
+        </div>
+        <button
+          onClick={onClose}
+          className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-slate-100 transition-colors cursor-pointer"
+        >
+          <Icon icon="lucide:x" className="text-2xl text-slate-400" />
+        </button>
+      </div>
 
-      <div className="grid grid-cols-2 gap-6">
+      <div className="grid grid-cols-2 gap-8 mb-8">
         <div className="space-y-4">
           <div>
             <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-2">
@@ -585,7 +916,7 @@ function CreateLetterForm({
                 onClick={() => setPriority('Urgent')}
                 className={`flex-1 py-3 px-4 rounded-xl text-xs font-bold transition-all ${
                   priority === 'Urgent'
-                    ? 'bg-rose-50 border-2 border-rose-500 text-rose-700'
+                    ? 'bg-slate-50 border-2 border-emerald-500 text-emerald-700'
                     : 'bg-slate-50 border-2 border-transparent text-slate-500 hover:bg-slate-100'
                 }`}
               >
@@ -596,46 +927,96 @@ function CreateLetterForm({
         </div>
       </div>
 
-      <div>
-        <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-2">
-          Subject
-        </label>
-        <Input placeholder="Enter subject..." className="w-full" />
-      </div>
-
-      <div>
-        <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-2">
-          Content
-        </label>
-        <div className="min-h-[200px] w-full bg-slate-50 border border-slate-100 rounded-xl p-4">
-          <div className="flex gap-2 border-b border-slate-200 pb-2 mb-3">
-            <button className="p-1 hover:bg-slate-200 rounded text-slate-500">
-              <Icon icon="lucide:bold" />
-            </button>
-            <button className="p-1 hover:bg-slate-200 rounded text-slate-500">
-              <Icon icon="lucide:italic" />
-            </button>
-            <button className="p-1 hover:bg-slate-200 rounded text-slate-500">
-              <Icon icon="lucide:list" />
-            </button>
-          </div>
-          <textarea
-            placeholder="Type your message here..."
-            className="w-full h-32 bg-transparent resize-none text-sm text-slate-700 focus:outline-none"
+      {/* Bilingual Editors */}
+      <div className="grid grid-cols-2 gap-8 mb-8">
+        {/* English Side */}
+        <div>
+          <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-2">
+            Subject (English)
+          </label>
+          <input
+            type="text"
+            placeholder="Enter English subject..."
+            className="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-sm font-medium focus:ring-2 focus:ring-emerald-500 outline-none mb-4"
           />
+          <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-2">
+            Content (English)
+          </label>
+          <div className="min-h-[200px] w-full bg-slate-50 border border-slate-100 rounded-xl p-4">
+            <div className="flex gap-2 border-b border-slate-200 pb-2 mb-3">
+              <button className="p-1 hover:bg-slate-200 rounded text-slate-500">
+                <Icon icon="lucide:bold" />
+              </button>
+              <button className="p-1 hover:bg-slate-200 rounded text-slate-500">
+                <Icon icon="lucide:italic" />
+              </button>
+              <button className="p-1 hover:bg-slate-200 rounded text-slate-500">
+                <Icon icon="lucide:list" />
+              </button>
+            </div>
+            <textarea
+              placeholder="Type your message here..."
+              className="w-full h-32 bg-transparent resize-none text-sm text-slate-400 focus:outline-none"
+            />
+          </div>
+        </div>
+
+        {/* Arabic Side */}
+        <div dir="rtl" style={{ fontFamily: "'Amiri', serif" }}>
+          <label
+            className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-2"
+            style={{ fontFamily: 'Inter, sans-serif' }}
+          >
+            الموضوع (عربي)
+          </label>
+          <input
+            type="text"
+            placeholder="أدخل الموضوع بالعربي..."
+            className="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-lg font-medium focus:ring-2 focus:ring-emerald-500 outline-none mb-4"
+          />
+          <label
+            className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-2"
+            style={{ fontFamily: 'Inter, sans-serif' }}
+          >
+            المحتوى (عربي)
+          </label>
+          <div className="min-h-[200px] w-full bg-slate-50 border border-slate-100 rounded-xl p-4">
+            <div className="flex gap-2 border-b border-slate-200 pb-2 mb-3">
+              <button className="p-1 hover:bg-slate-200 rounded text-slate-500">
+                <Icon icon="lucide:bold" />
+              </button>
+              <button className="p-1 hover:bg-slate-200 rounded text-slate-500">
+                <Icon icon="lucide:italic" />
+              </button>
+              <button className="p-1 hover:bg-slate-200 rounded text-slate-500">
+                <Icon icon="lucide:list" />
+              </button>
+            </div>
+            <textarea
+              placeholder="اكتب نص الرسالة هنا..."
+              className="w-full h-32 bg-transparent resize-none text-lg text-slate-400 focus:outline-none"
+            />
+          </div>
         </div>
       </div>
 
-      <div className="flex justify-between items-center pt-4 border-t border-slate-100">
-        <button className="flex items-center gap-2 text-sm font-bold text-slate-500 hover:text-slate-900 transition-colors">
+      <div className="flex justify-between items-center">
+        <button className="flex items-center gap-2 text-sm font-bold text-slate-500 hover:text-slate-900 transition-colors cursor-pointer">
           <Icon icon="lucide:paperclip" />
           Manage Attachments (0)
         </button>
         <div className="flex gap-3">
-          <Button variant="secondary" onClick={onClose}>
+          <button
+            onClick={onClose}
+            className="px-6 py-3 bg-slate-100 text-slate-600 rounded-xl text-sm font-bold hover:bg-slate-200 transition-colors cursor-pointer"
+          >
             Save as Draft
-          </Button>
-          <Button variant="primary" onClick={handleSubmit} disabled={isSubmitting}>
+          </button>
+          <button
+            onClick={handleSubmit}
+            disabled={isSubmitting}
+            className="px-8 py-3 bg-emerald-600 text-white rounded-xl text-sm font-bold hover:bg-emerald-700 transition-colors shadow-lg shadow-emerald-100 disabled:opacity-50 flex items-center gap-2 cursor-pointer"
+          >
             {isSubmitting ? (
               <>
                 <Icon icon="lucide:loader-2" className="animate-spin" />
@@ -644,275 +1025,9 @@ function CreateLetterForm({
             ) : (
               'Send for Approval'
             )}
-          </Button>
+          </button>
         </div>
       </div>
-    </div>
-  )
-}
-
-// Letter Detail View Component
-function LetterDetailView({ letter, onClose }: { letter: Letter; onClose: () => void }) {
-  const [language, setLanguage] = useState<'en' | 'ar'>('en')
-
-  return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <Badge
-            variant={
-              letter.status === 'Sent to SAMA'
-                ? 'info'
-                : letter.status === 'Approved'
-                  ? 'success'
-                  : letter.status === 'Draft'
-                    ? 'neutral'
-                    : letter.status === 'Overdue'
-                      ? 'danger'
-                      : 'warning'
-            }
-          >
-            {letter.status}
-          </Badge>
-          <p className="text-sm text-slate-500 mt-1">
-            {letter.type} - Last modified: {letter.lastModified}
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <Button variant="outline" size="sm">
-            <Icon icon="lucide:printer" />
-            Print PDF
-          </Button>
-          <Button variant="primary" size="sm">
-            <Icon icon="lucide:pencil" />
-            Edit Letter
-          </Button>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-12 gap-6">
-        {/* Letter Content */}
-        <div className="col-span-8">
-          <div className="bg-white rounded-xl border border-slate-200 p-8 min-h-[400px]">
-            {/* Language Toggle */}
-            <div className="flex justify-end mb-6">
-              <div className="inline-flex rounded-lg bg-slate-100 p-1">
-                <button
-                  onClick={() => setLanguage('en')}
-                  className={`px-3 py-1 text-[10px] font-bold rounded-md transition-all ${
-                    language === 'en' ? 'bg-white shadow-sm' : 'text-slate-500 hover:text-slate-900'
-                  }`}
-                >
-                  English
-                </button>
-                <button
-                  onClick={() => setLanguage('ar')}
-                  className={`px-3 py-1 text-[10px] font-bold rounded-md transition-all ${
-                    language === 'ar' ? 'bg-white shadow-sm' : 'text-slate-500 hover:text-slate-900'
-                  }`}
-                >
-                  Arabic
-                </button>
-              </div>
-            </div>
-
-            {language === 'en' ? (
-              <div className="space-y-6">
-                <div className="flex justify-between items-start">
-                  <div className="text-sm text-slate-900">
-                    <p className="font-bold">To: Compliance Department</p>
-                    <p>Saudi Central Bank (SAMA)</p>
-                    <p>Riyadh, Saudi Arabia</p>
-                  </div>
-                  <div className="text-right text-sm">
-                    <p className="text-slate-500">Date: {letter.lastModified}</p>
-                    <p className="text-slate-500">Ref: {letter.reference}</p>
-                  </div>
-                </div>
-
-                <div className="py-4">
-                  <h4 className="font-black text-lg text-slate-900">Subject: {letter.subject}</h4>
-                </div>
-
-                <div className="text-slate-700 text-sm leading-relaxed space-y-4">
-                  <p>Dear Sir/Madam,</p>
-                  <p>
-                    In accordance with SAMA circular 22/34 regarding the Governance requirements for
-                    Financial Institutions, we are writing to formally submit this correspondence
-                    for your review and consideration.
-                  </p>
-                  <p>
-                    We remain at your disposal for any further information or clarification required
-                    to process this request.
-                  </p>
-                  <p className="pt-8">Yours sincerely,</p>
-                  <div>
-                    <p className="font-black text-slate-900">Felix Henderson</p>
-                    <p className="text-slate-500">Head of Compliance</p>
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <div className="space-y-6 text-right" dir="rtl">
-                <div className="flex justify-between items-start">
-                  <div className="text-lg text-slate-900">
-                    <p className="font-bold">To: Department of Compliance</p>
-                    <p>Saudi Central Bank</p>
-                    <p>Riyadh, Saudi Arabia</p>
-                  </div>
-                  <div className="text-left text-sm">
-                    <p className="text-slate-500">Date: {letter.lastModified}</p>
-                    <p className="text-slate-500">Ref: {letter.reference}</p>
-                  </div>
-                </div>
-
-                <div className="py-4">
-                  <h4 className="font-bold text-xl text-slate-900">Subject: {letter.subject}</h4>
-                </div>
-
-                <div className="text-slate-700 text-base leading-relaxed space-y-4">
-                  <p>Dear Sir/Madam,</p>
-                  <p>
-                    In accordance with SAMA circular 22/34 regarding the Governance requirements for
-                    Financial Institutions.
-                  </p>
-                  <p className="pt-8">Sincerely,</p>
-                  <div>
-                    <p className="font-bold text-slate-900">Felix Henderson</p>
-                    <p className="text-slate-500 text-sm">Head of Compliance</p>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Sidebar Info */}
-        <div className="col-span-4 space-y-4">
-          {/* Metadata */}
-          <Card className="p-4">
-            <h4 className="text-xs font-black text-slate-500 uppercase tracking-widest mb-4">
-              Metadata
-            </h4>
-            <div className="space-y-3">
-              <MetadataRow label="Category" value={letter.type} />
-              <MetadataRow label="Created By" value={letter.createdBy} />
-              <MetadataRow label="Assigned To" value={letter.assignedTo} highlight />
-            </div>
-          </Card>
-
-          {/* Attachments */}
-          <Card className="p-4">
-            <h4 className="text-xs font-black text-slate-500 uppercase tracking-widest mb-4">
-              Attachments (2)
-            </h4>
-            <div className="space-y-2">
-              <AttachmentItem name="Document_1.pdf" size="1.2 MB" />
-              <AttachmentItem name="Supporting_Info.pdf" size="445 KB" />
-              <button className="w-full py-2 border-2 border-dashed border-slate-200 rounded-xl text-[10px] font-bold text-slate-400 hover:border-emerald-300 hover:text-emerald-500 transition-all">
-                + Add Attachment
-              </button>
-            </div>
-          </Card>
-
-          {/* Activity Timeline */}
-          <Card className="p-4">
-            <h4 className="text-xs font-black text-slate-500 uppercase tracking-widest mb-4">
-              Activity Timeline
-            </h4>
-            <div className="space-y-4 relative before:absolute before:left-2 before:top-1 before:bottom-1 before:w-0.5 before:bg-slate-100">
-              <TimelineItem title="Draft Created" date="Oct 10, 2024" user="Felix H." active />
-              <TimelineItem
-                title="Compliance Approved"
-                date="Oct 11, 2024"
-                user="Sarah C."
-                active
-              />
-              <TimelineItem
-                title="Sent to SAMA"
-                date="Oct 12, 2024"
-                user="Automated"
-                color="blue"
-                active
-              />
-              <TimelineItem title="Pending SAMA Reply" date="Expected: Nov 12, 2024" pending />
-            </div>
-          </Card>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-// Helper Components
-function MetadataRow({
-  label,
-  value,
-  highlight,
-}: {
-  label: string
-  value: string
-  highlight?: boolean
-}) {
-  return (
-    <div className="flex justify-between items-center">
-      <span className="text-xs text-slate-500">{label}</span>
-      <span className={`text-xs font-bold ${highlight ? 'text-emerald-600' : 'text-slate-900'}`}>
-        {value}
-      </span>
-    </div>
-  )
-}
-
-function AttachmentItem({ name, size }: { name: string; size: string }) {
-  return (
-    <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl border border-slate-100 group cursor-pointer hover:bg-white hover:shadow-sm transition-all">
-      <div className="w-8 h-8 bg-rose-50 text-rose-500 flex items-center justify-center rounded-lg">
-        <Icon icon="lucide:file-text" />
-      </div>
-      <div className="flex-1 min-w-0">
-        <p className="text-[11px] font-bold text-slate-900 truncate">{name}</p>
-        <p className="text-[9px] text-slate-400">{size}</p>
-      </div>
-      <Icon icon="lucide:download" className="text-slate-300 group-hover:text-slate-900" />
-    </div>
-  )
-}
-
-function TimelineItem({
-  title,
-  date,
-  user,
-  color = 'emerald',
-  active,
-  pending,
-}: {
-  title: string
-  date: string
-  user?: string
-  color?: 'emerald' | 'blue'
-  active?: boolean
-  pending?: boolean
-}) {
-  const dotColors = {
-    emerald: 'bg-emerald-100 border-emerald-500',
-    blue: 'bg-blue-100 border-blue-500',
-  }
-
-  return (
-    <div className="relative pl-6">
-      <div
-        className={`absolute left-0 top-1 w-4 h-4 rounded-full border-2 ${
-          pending ? 'bg-slate-100 border-slate-300' : dotColors[color]
-        }`}
-      />
-      <p className={`text-xs font-bold ${pending ? 'text-slate-300' : 'text-slate-900'}`}>
-        {title}
-      </p>
-      <p className={`text-[10px] ${pending ? 'text-slate-300' : 'text-slate-400'}`}>
-        {date}
-        {user && ` - ${user}`}
-      </p>
     </div>
   )
 }

@@ -36,28 +36,29 @@ const sampleRisks: Risk[] = [
 interface RiskMatrixProps {
   risks?: Risk[]
   className?: string
+  onEmptyCellClick?: () => void
 }
 
-// Function to get cell color based on combined risk score
-function getCellColor(impact: number, likelihood: string): string {
+// Function to get cell style based on combined risk score (using inline styles for Tailwind v4 compatibility)
+function getCellStyle(impact: number, likelihood: string): { bg: string; border: string } {
   const likelihoodScore = likelihood === 'low' ? 2 : likelihood === 'medium' ? 3 : 4
   const score = impact * likelihoodScore
-  if (score >= 16) return 'bg-rose-500'
-  if (score >= 12) return 'bg-orange-500'
-  if (score >= 8) return 'bg-amber-400'
-  return 'bg-blue-400'
+  if (score >= 16) return { bg: 'rgba(244, 63, 94, 0.2)', border: 'rgb(244, 63, 94)' }      // rose-500
+  if (score >= 12) return { bg: 'rgba(249, 115, 22, 0.2)', border: 'rgb(249, 115, 22)' }    // orange-500
+  if (score >= 8) return { bg: 'rgba(251, 191, 36, 0.2)', border: 'rgb(251, 191, 36)' }     // amber-400
+  return { bg: 'rgba(96, 165, 250, 0.2)', border: 'rgb(96, 165, 250)' }                      // blue-400
 }
 
-function getCellBgColor(impact: number, likelihood: string): string {
+function getCellDotColor(impact: number, likelihood: string): string {
   const likelihoodScore = likelihood === 'low' ? 2 : likelihood === 'medium' ? 3 : 4
   const score = impact * likelihoodScore
-  if (score >= 16) return 'bg-rose-500/20 border-rose-500'
-  if (score >= 12) return 'bg-orange-500/20 border-orange-500'
-  if (score >= 8) return 'bg-amber-400/20 border-amber-400'
-  return 'bg-blue-400/20 border-blue-400'
+  if (score >= 16) return 'rgb(244, 63, 94)'    // rose-500
+  if (score >= 12) return 'rgb(249, 115, 22)'   // orange-500
+  if (score >= 8) return 'rgb(251, 191, 36)'    // amber-400
+  return 'rgb(96, 165, 250)'                     // blue-400
 }
 
-export function RiskMatrix({ risks = sampleRisks, className }: RiskMatrixProps) {
+export function RiskMatrix({ risks = sampleRisks, className, onEmptyCellClick }: RiskMatrixProps) {
   const [selectedCell, setSelectedCell] = useState<{ impact: number; likelihood: string } | null>(null)
   const [isModalOpen, setIsModalOpen] = useState(false)
 
@@ -79,6 +80,8 @@ export function RiskMatrix({ risks = sampleRisks, className }: RiskMatrixProps) 
     if (cellRisks.length > 0) {
       setSelectedCell({ impact, likelihood })
       setIsModalOpen(true)
+    } else if (onEmptyCellClick) {
+      onEmptyCellClick()
     }
   }
 
@@ -124,14 +127,14 @@ export function RiskMatrix({ risks = sampleRisks, className }: RiskMatrixProps) 
       </div>
 
       {/* Matrix Grid */}
-      <div className="bg-slate-50 p-6 rounded-xl border border-slate-200">
+      <div className="bg-slate-50 p-8 rounded-xl border border-slate-200">
         {/* Likelihood Header */}
         <div className="flex items-center justify-center mb-4">
           <div className="text-sm font-bold text-slate-600">Likelihood &rarr;</div>
         </div>
 
         {/* Column Headers */}
-        <div className="grid grid-cols-[100px_1fr_1fr_1fr] gap-4 mb-4">
+        <div className="grid grid-cols-[120px_1fr_1fr_1fr] gap-6 mb-4">
           <div />
           {likelihoodLevels.map((level) => (
             <div key={level} className="text-xs font-bold text-slate-600 text-center">
@@ -147,30 +150,26 @@ export function RiskMatrix({ risks = sampleRisks, className }: RiskMatrixProps) 
           </div>
           <div className="space-y-3 ml-4">
             {impactLevels.map((impact, impactIndex) => (
-              <div key={impact} className="grid grid-cols-[100px_1fr_1fr_1fr] gap-4">
+              <div key={impact} className="grid grid-cols-[120px_1fr_1fr_1fr] gap-6">
                 <div className="flex items-center justify-end pr-4 text-xs font-bold text-slate-600">
                   {impactLabels[impactIndex]}
                 </div>
                 {likelihoodLevels.map((likelihood) => {
                   const cellRisks = getRisksForCell(impact, likelihood)
-                  const cellColor = getCellColor(impact, likelihood)
-                  const cellBgColor = getCellBgColor(impact, likelihood)
+                  const cellStyle = getCellStyle(impact, likelihood)
+                  const dotColor = getCellDotColor(impact, likelihood)
                   return (
                     <div
                       key={`${impact}-${likelihood}`}
-                      className={cn(
-                        'min-h-[80px] border-2 rounded-lg p-2 flex flex-wrap gap-1 content-start cursor-pointer transition-all hover:scale-105 hover:shadow-lg',
-                        cellBgColor
-                      )}
+                      className="h-[110px] border-2 rounded-lg p-3 flex flex-wrap gap-1 content-start cursor-pointer transition-all hover:scale-105 hover:shadow-lg risk-matrix-cell"
+                      style={{ backgroundColor: cellStyle.bg, borderColor: cellStyle.border }}
                       onClick={() => handleCellClick(impact, likelihood)}
                     >
                       {cellRisks.map((risk, idx) => (
                         <div
                           key={risk.id}
-                          className={cn(
-                            'w-6 h-6 rounded-full flex items-center justify-center text-white text-[10px] font-bold',
-                            cellColor
-                          )}
+                          className="w-6 h-6 rounded-full flex items-center justify-center text-white text-[10px] font-bold"
+                          style={{ backgroundColor: dotColor }}
                           title={risk.name}
                         >
                           {idx + 1}
@@ -226,7 +225,7 @@ export function RiskMatrix({ risks = sampleRisks, className }: RiskMatrixProps) 
         }
         size="lg"
       >
-        <div className="space-y-3 max-h-[400px] overflow-y-auto">
+        <div className="space-y-3 max-h-[400px] overflow-y-auto hide-scrollbar">
           {selectedRisks.map((risk) => (
             <div
               key={risk.id}

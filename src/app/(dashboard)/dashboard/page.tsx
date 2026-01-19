@@ -9,8 +9,8 @@ export default function DashboardPage() {
     <>
       <Header title="Executive Insights" subtitle="Organization-wide Compliance Matrix" />
 
-      <div className="flex-1 overflow-auto custom-scrollbar p-8">
-        <div className="max-w-7xl mx-auto space-y-8">
+      <div className="flex-1 overflow-auto hide-scrollbar p-8">
+        <div className="space-y-8">
 
           {/* Top Alerts */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -164,7 +164,7 @@ export default function DashboardPage() {
                 <Card className="p-6">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                     <div className="flex items-center gap-6">
-                      <CircularProgress value={82} size={96} strokeWidth={8} />
+                      <CircularProgress value={82} size={96} strokeWidth={8} color="blue" compact />
                       <div>
                         <p className="text-sm font-bold text-slate-800">Overall Completion</p>
                         <p className="text-xs text-slate-500 mt-1">1,240 Employees Completed</p>
@@ -259,7 +259,7 @@ function AlertCard({
         <p className={`text-sm ${s.messageColor} font-medium`}>{message}</p>
       </div>
       <button
-        className={`text-[10px] font-bold ${s.buttonColor} uppercase tracking-widest px-3 py-1 bg-white border rounded-lg`}
+        className={`text-[10px] font-bold ${s.buttonColor} uppercase tracking-widest px-3 py-1 bg-white border rounded-lg cursor-pointer`}
       >
         {actionLabel}
       </button>
@@ -272,15 +272,21 @@ function CircularProgress({
   size,
   strokeWidth = 10,
   label,
+  color = 'emerald',
+  compact = false,
 }: {
   value: number
   size: number
   strokeWidth?: number
   label?: string
+  color?: 'emerald' | 'blue'
+  compact?: boolean
 }) {
   const radius = 40
   const circumference = 2 * Math.PI * radius
   const offset = circumference - (value / 100) * circumference
+
+  const strokeColor = color === 'blue' ? 'rgb(59, 130, 246)' : 'rgb(34, 197, 94)'
 
   return (
     <div className="relative" style={{ width: size, height: size }}>
@@ -294,7 +300,6 @@ function CircularProgress({
           cy="50"
         />
         <circle
-          className="text-emerald-500 stroke-current"
           strokeWidth={strokeWidth}
           strokeLinecap="round"
           fill="transparent"
@@ -303,15 +308,22 @@ function CircularProgress({
           cy="50"
           strokeDasharray={circumference}
           strokeDashoffset={offset}
+          style={{ stroke: strokeColor }}
         />
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center">
-        <span className="text-4xl font-black font-display text-slate-900">
-          {value}
-          <span className="text-lg">%</span>
-        </span>
-        {label && (
-          <span className="text-[10px] font-bold text-slate-400 tracking-widest">{label}</span>
+        {compact ? (
+          <span className="text-lg font-bold text-slate-900">{value}%</span>
+        ) : (
+          <>
+            <span className="text-4xl font-black font-display text-slate-900">
+              {value}
+              <span className="text-lg">%</span>
+            </span>
+            {label && (
+              <span className="text-[10px] font-bold text-slate-400 tracking-widest">{label}</span>
+            )}
+          </>
         )}
       </div>
     </div>

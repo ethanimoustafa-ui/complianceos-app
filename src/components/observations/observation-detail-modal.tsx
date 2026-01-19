@@ -29,7 +29,7 @@ export function ObservationDetailModal({
     <Modal isOpen={isOpen} onClose={onClose} size="xl">
       <div className="flex flex-col lg:flex-row h-[80vh] -m-6">
         {/* Main Section */}
-        <div className="flex-1 p-8 overflow-y-auto bg-white">
+        <div className="flex-1 p-8 overflow-y-auto hide-scrollbar bg-white">
           <div className="flex items-center gap-3 mb-6">
             <button
               onClick={onClose}
@@ -133,7 +133,7 @@ export function ObservationDetailModal({
         </div>
 
         {/* Sidebar Info */}
-        <div className="w-full lg:w-80 bg-slate-50 border-t lg:border-t-0 lg:border-l border-slate-200 p-8 space-y-8 shrink-0 overflow-y-auto">
+        <div className="w-full lg:w-80 bg-slate-50 border-t lg:border-t-0 lg:border-l border-slate-200 p-8 space-y-8 shrink-0 overflow-y-auto hide-scrollbar">
           {/* Severity */}
           <div>
             <h4 className="text-xs font-black uppercase text-slate-500 tracking-widest mb-4">

@@ -8,6 +8,7 @@ interface ModalProps {
   isOpen: boolean
   onClose: () => void
   title?: string
+  subtitle?: string
   children: React.ReactNode
   size?: 'sm' | 'md' | 'lg' | 'xl'
 }
@@ -19,7 +20,7 @@ const sizeClasses = {
   xl: 'max-w-4xl',
 }
 
-export function Modal({ isOpen, onClose, title, children, size = 'md' }: ModalProps) {
+export function Modal({ isOpen, onClose, title, subtitle, children, size = 'md' }: ModalProps) {
   const handleEscape = useCallback(
     (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose()
@@ -41,36 +42,39 @@ export function Modal({ isOpen, onClose, title, children, size = 'md' }: ModalPr
   if (!isOpen) return null
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center animate-fade-in"
-      onClick={onClose}
-    >
-      {/* Backdrop */}
-      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      {/* Backdrop - separate div with its own fade animation */}
+      <div
+        className="modal-overlay absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+        onClick={onClose}
+      />
 
-      {/* Modal Content */}
+      {/* Modal Content - separate slide animation */}
       <div
         className={cn(
-          'relative w-full mx-4 bg-white rounded-2xl shadow-xl animate-slide-up',
+          'modal-content relative w-full bg-white rounded-2xl shadow-2xl max-h-[90vh] overflow-y-auto hide-scrollbar',
           sizeClasses[size]
         )}
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Header */}
-        {title && (
-          <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
-            <h2 className="text-lg font-semibold text-slate-900">{title}</h2>
-            <button
-              onClick={onClose}
-              className="text-slate-400 hover:text-slate-600 transition-colors"
-            >
-              <Icon icon="lucide:x" className="w-5 h-5" />
-            </button>
-          </div>
-        )}
-
-        {/* Body */}
-        <div className="px-6 py-4">{children}</div>
+        {/* Single p-8 wrapper for all content */}
+        <div className="p-8">
+          {title && (
+            <div className="flex justify-between items-start mb-6">
+              <div>
+                <h2 className="text-2xl font-bold text-slate-900 font-display">{title}</h2>
+                {subtitle && <p className="text-sm text-slate-500 mt-1">{subtitle}</p>}
+              </div>
+              <button
+                onClick={onClose}
+                className="text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"
+              >
+                <Icon icon="lucide:x" className="text-2xl" />
+              </button>
+            </div>
+          )}
+          {children}
+        </div>
       </div>
     </div>
   )

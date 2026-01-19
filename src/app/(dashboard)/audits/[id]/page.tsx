@@ -188,9 +188,7 @@ export default function AuditDetailPage() {
       <header className="h-20 bg-white border-b border-slate-200 px-8 flex items-center justify-between shrink-0">
         <div>
           <div className="flex items-center gap-2 text-xs font-bold text-slate-400 uppercase tracking-widest mb-0.5">
-            <span>Organization</span>
-            <Icon icon="lucide:chevron-right" />
-            <Link href="/audits" className="hover:text-emerald-600 transition-colors cursor-pointer">Audits</Link>
+            <Link href="/reports" className="hover:text-emerald-600 transition-colors cursor-pointer">Audits</Link>
             <Icon icon="lucide:chevron-right" />
             <span className="text-emerald-600">Details</span>
           </div>
@@ -218,8 +216,8 @@ export default function AuditDetailPage() {
       </header>
 
       {/* Content */}
-      <div className="flex-1 overflow-y-auto custom-scrollbar p-8">
-        <div className="max-w-7xl mx-auto">
+      <div className="flex-1 overflow-y-auto hide-scrollbar p-8">
+        <div>
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             {/* Left: Main Details & Tasks */}
             <div className="lg:col-span-2 space-y-8">
@@ -253,11 +251,11 @@ export default function AuditDetailPage() {
                 <div className="p-6 border-b border-slate-100 flex items-center justify-between">
                   <h3 className="text-sm font-bold text-slate-900">Control Checklist (A.9 & A.12)</h3>
                   <div className="flex gap-2">
-                    <button className="p-1.5 text-slate-400 hover:text-emerald-600 transition-colors" title="Filter tasks">
+                    <button className="p-1.5 text-slate-400 hover:text-emerald-600 transition-colors cursor-pointer" title="Filter tasks">
                       <Icon icon="lucide:filter" />
                     </button>
                     <button
-                      className="p-1.5 text-slate-400 hover:text-emerald-600 transition-colors"
+                      className="p-1.5 text-slate-400 hover:text-emerald-600 transition-colors cursor-pointer"
                       title="Add new control task"
                       onClick={() => setShowAddTaskModal(true)}
                     >
@@ -303,7 +301,7 @@ export default function AuditDetailPage() {
                             alt={task.assignee.name}
                           />
                           <button
-                            className="p-1 opacity-0 group-hover:opacity-100 transition-opacity text-slate-300 hover:text-slate-600"
+                            className="p-1 opacity-0 group-hover:opacity-100 transition-opacity text-slate-300 hover:text-slate-600 cursor-pointer"
                             onClick={(e) => {
                               e.stopPropagation()
                               showToast('Opening task options...')
@@ -326,7 +324,7 @@ export default function AuditDetailPage() {
                   ))}
                 </div>
                 <div className="p-4 bg-slate-50/50 flex justify-center">
-                  <button className="text-xs font-bold text-emerald-600 hover:underline">View 9 more tasks</button>
+                  <button className="text-xs font-bold text-emerald-600 hover:underline cursor-pointer">View 9 more tasks</button>
                 </div>
               </Card>
 
@@ -396,7 +394,7 @@ export default function AuditDetailPage() {
                 <div className="p-6 border-b border-slate-100 flex items-center justify-between">
                   <h3 className="text-sm font-bold text-slate-900">Audit Team</h3>
                   <button
-                    className="text-emerald-600 text-xs font-bold hover:underline"
+                    className="text-emerald-600 text-xs font-bold hover:underline cursor-pointer"
                     onClick={() => setShowManageTeamModal(true)}
                   >
                     Manage
@@ -420,14 +418,14 @@ export default function AuditDetailPage() {
                       </div>
                       <div className={`w-2 h-2 rounded-full ${member.isOnline ? 'bg-emerald-500' : 'bg-slate-300'} shrink-0`}></div>
                       <div className="opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
-                        <button className="p-1 text-slate-400 hover:text-blue-600" title="Message" onClick={(e) => { e.stopPropagation(); showToast('Message action triggered') }}>
+                        <button className="p-1 text-slate-400 hover:text-blue-600 cursor-pointer" title="Message" onClick={(e) => { e.stopPropagation(); showToast('Message action triggered') }}>
                           <Icon icon="lucide:message-circle" className="text-sm" />
                         </button>
-                        <button className="p-1 text-slate-400 hover:text-amber-600" title="Change role" onClick={(e) => { e.stopPropagation(); showToast('Change role action triggered') }}>
+                        <button className="p-1 text-slate-400 hover:text-amber-600 cursor-pointer" title="Change role" onClick={(e) => { e.stopPropagation(); showToast('Change role action triggered') }}>
                           <Icon icon="lucide:user-cog" className="text-sm" />
                         </button>
                         {!member.isOwner && (
-                          <button className="p-1 text-slate-400 hover:text-rose-600" title="Remove" onClick={(e) => { e.stopPropagation(); showToast('Remove action triggered') }}>
+                          <button className="p-1 text-slate-400 hover:text-rose-600 cursor-pointer" title="Remove" onClick={(e) => { e.stopPropagation(); showToast('Remove action triggered') }}>
                             <Icon icon="lucide:user-x" className="text-sm" />
                           </button>
                         )}
@@ -435,7 +433,7 @@ export default function AuditDetailPage() {
                     </div>
                   ))}
                   <button
-                    className="w-full mt-4 py-2 border-2 border-dashed border-slate-200 rounded-xl text-slate-400 hover:border-emerald-200 hover:text-emerald-500 hover:bg-emerald-50/50 transition-all text-sm font-bold flex items-center justify-center gap-2"
+                    className="w-full mt-4 py-2 border-2 border-dashed border-slate-200 rounded-xl text-slate-400 hover:border-emerald-200 hover:text-emerald-500 hover:bg-emerald-50/50 transition-all text-sm font-bold flex items-center justify-center gap-2 cursor-pointer"
                     onClick={() => setShowAddMemberModal(true)}
                   >
                     <Icon icon="lucide:user-plus" />
@@ -454,7 +452,7 @@ export default function AuditDetailPage() {
                   {documents.map((doc) => (
                     <button
                       key={doc.name}
-                      className="flex items-center gap-3 p-3 bg-slate-800 rounded-xl hover:bg-slate-700 transition-colors group w-full text-left"
+                      className="flex items-center gap-3 p-3 bg-slate-800 rounded-xl hover:bg-slate-700 transition-colors group w-full text-left cursor-pointer"
                       onClick={() => showToast(`Opening ${doc.name}...`)}
                     >
                       <Icon icon={doc.icon} className="text-slate-500 group-hover:text-emerald-400" />
@@ -470,7 +468,7 @@ export default function AuditDetailPage() {
 
       {/* Edit Audit Modal */}
       <Modal isOpen={showEditModal} onClose={() => setShowEditModal(false)} title="Edit Audit Details" size="lg">
-        <div className="space-y-6 max-h-[60vh] overflow-y-auto custom-scrollbar">
+        <div className="space-y-6 max-h-[60vh] overflow-y-auto hide-scrollbar">
           <div>
             <label className="block text-sm font-bold text-slate-700 mb-2">Audit Title</label>
             <input type="text" defaultValue={auditData.title} className="w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all" />
@@ -618,7 +616,7 @@ export default function AuditDetailPage() {
 
       {/* Manage Team Modal */}
       <Modal isOpen={showManageTeamModal} onClose={() => setShowManageTeamModal(false)} title="Manage Audit Team" size="md">
-        <div className="space-y-4 max-h-[400px] overflow-y-auto custom-scrollbar">
+        <div className="space-y-4 max-h-[400px] overflow-y-auto hide-scrollbar">
           {teamMembers.map((member) => (
             <div key={member.id} className="flex items-center justify-between p-3 border border-slate-100 rounded-xl hover:bg-slate-50">
               <div className="flex items-center gap-3">
@@ -631,14 +629,14 @@ export default function AuditDetailPage() {
               {member.isOwner ? (
                 <span className="text-[10px] font-bold text-slate-400 bg-slate-100 px-2 py-1 rounded">OWNER</span>
               ) : (
-                <button className="text-rose-500 hover:text-rose-700">
+                <button className="text-rose-500 hover:text-rose-700 cursor-pointer">
                   <Icon icon="lucide:trash-2" />
                 </button>
               )}
             </div>
           ))}
           <button
-            className="w-full mt-6 py-3 border-2 border-dashed border-slate-200 rounded-xl text-slate-400 hover:border-emerald-200 hover:text-emerald-500 hover:bg-emerald-50/50 transition-all text-sm font-bold flex items-center justify-center gap-2"
+            className="w-full mt-6 py-3 border-2 border-dashed border-slate-200 rounded-xl text-slate-400 hover:border-emerald-200 hover:text-emerald-500 hover:bg-emerald-50/50 transition-all text-sm font-bold flex items-center justify-center gap-2 cursor-pointer"
             onClick={() => { setShowManageTeamModal(false); setShowAddMemberModal(true) }}
           >
             <Icon icon="lucide:user-plus" />

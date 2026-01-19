@@ -1,13 +1,13 @@
 'use client'
 
-import { useState } from 'react'
+import React, { useState } from 'react'
 import { Icon } from '@iconify/react'
-import { Header } from '@/components/layout/header'
 import { Card, CardHeader, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Modal } from '@/components/ui/modal'
+import { cn } from '@/lib/utils'
 
 // Types
 interface TeamMember {
@@ -24,14 +24,16 @@ interface TeamMember {
   permissions: { label: string; enabled: boolean }[]
 }
 
-interface AuditLog {
+interface UserLog {
   id: number
   timestamp: string
   user: string
-  action: 'opened' | 'closed' | 'deleted' | 'commented' | 'uploaded' | 'created' | 'assigned' | 'updated'
-  audit: string
+  action: 'sign_in' | 'sign_out' | 'session_timeout' | 'password_change' | 'profile_update' | 'permission_change' | 'mfa_enabled' | 'failed_login'
   details: string
-  status: 'completed' | 'pending' | 'failed' | 'info'
+  ipAddress: string
+  device: string
+  location: string
+  status: 'success' | 'warning' | 'failed' | 'info'
 }
 
 // Mock Data
@@ -111,17 +113,22 @@ const teamMembers: TeamMember[] = [
   },
 ]
 
-const auditLogs: AuditLog[] = [
-  { id: 1, timestamp: '2024-01-15 14:32:18', user: 'Sarah Connor', action: 'opened', audit: 'ISO 27001 Annual Review', details: 'Opened audit for review', status: 'completed' },
-  { id: 2, timestamp: '2024-01-15 14:28:45', user: 'Michael Scott', action: 'commented', audit: 'SOC2 Internal Audit (Q3)', details: 'Added comment: "Needs additional documentation"', status: 'info' },
-  { id: 3, timestamp: '2024-01-15 13:55:12', user: 'David Wallace', action: 'uploaded', audit: 'GDPR Compliance Check', details: 'Uploaded file: compliance_report_v2.pdf', status: 'completed' },
-  { id: 4, timestamp: '2024-01-15 13:42:30', user: 'Kelly Kapoor', action: 'closed', audit: 'PCI DSS Quarterly Review', details: 'Marked audit as completed', status: 'completed' },
-  { id: 5, timestamp: '2024-01-15 12:18:09', user: 'John Smith', action: 'created', audit: 'HIPAA Security Assessment', details: 'Created new audit template', status: 'completed' },
-  { id: 6, timestamp: '2024-01-15 11:45:22', user: 'Jane Doe', action: 'assigned', audit: 'ISO 27001 Annual Review', details: 'Assigned to Sarah Connor', status: 'completed' },
-  { id: 7, timestamp: '2024-01-15 11:20:33', user: 'Sarah Connor', action: 'updated', audit: 'SOC2 Internal Audit (Q3)', details: 'Updated audit status to In Progress', status: 'completed' },
-  { id: 8, timestamp: '2024-01-15 10:55:47', user: 'Michael Scott', action: 'deleted', audit: 'Legacy Audit 2023', details: 'Permanently deleted archived audit', status: 'completed' },
-  { id: 9, timestamp: '2024-01-15 10:12:18', user: 'David Wallace', action: 'opened', audit: 'NIST Framework Assessment', details: 'Opened audit for initial review', status: 'completed' },
-  { id: 10, timestamp: '2024-01-15 09:38:55', user: 'Kelly Kapoor', action: 'uploaded', audit: 'ISO 27001 Annual Review', details: 'Uploaded file: evidence_pack.zip', status: 'completed' },
+const userLogs: UserLog[] = [
+  { id: 1, timestamp: '2024-01-15 14:32:18', user: 'Sarah Connor', action: 'sign_in', details: 'Signed in via SSO', ipAddress: '192.168.1.45', device: 'Chrome on MacOS', location: 'San Francisco, CA', status: 'success' },
+  { id: 2, timestamp: '2024-01-15 14:28:45', user: 'Michael Scott', action: 'session_timeout', details: 'Session expired after 30 min inactivity', ipAddress: '192.168.1.102', device: 'Firefox on Windows', location: 'New York, NY', status: 'info' },
+  { id: 3, timestamp: '2024-01-15 13:55:12', user: 'David Wallace', action: 'password_change', details: 'Password updated successfully', ipAddress: '192.168.1.88', device: 'Safari on iOS', location: 'Chicago, IL', status: 'success' },
+  { id: 4, timestamp: '2024-01-15 13:42:30', user: 'Kelly Kapoor', action: 'sign_out', details: 'User signed out manually', ipAddress: '192.168.1.76', device: 'Chrome on Windows', location: 'Los Angeles, CA', status: 'success' },
+  { id: 5, timestamp: '2024-01-15 12:18:09', user: 'John Smith', action: 'mfa_enabled', details: 'Enabled two-factor authentication', ipAddress: '192.168.1.201', device: 'Edge on Windows', location: 'Seattle, WA', status: 'success' },
+  { id: 6, timestamp: '2024-01-15 11:45:22', user: 'Jane Doe', action: 'profile_update', details: 'Updated profile picture and bio', ipAddress: '192.168.1.55', device: 'Chrome on MacOS', location: 'Austin, TX', status: 'success' },
+  { id: 7, timestamp: '2024-01-15 11:20:33', user: 'Sarah Connor', action: 'permission_change', details: 'Granted document approval access', ipAddress: '192.168.1.45', device: 'Chrome on MacOS', location: 'San Francisco, CA', status: 'success' },
+  { id: 8, timestamp: '2024-01-15 10:55:47', user: 'Michael Scott', action: 'failed_login', details: 'Invalid password attempt (2 of 3)', ipAddress: '192.168.1.102', device: 'Firefox on Windows', location: 'New York, NY', status: 'warning' },
+  { id: 9, timestamp: '2024-01-15 10:12:18', user: 'David Wallace', action: 'sign_in', details: 'Signed in with password', ipAddress: '192.168.1.88', device: 'Safari on iOS', location: 'Chicago, IL', status: 'success' },
+  { id: 10, timestamp: '2024-01-15 09:38:55', user: 'Kelly Kapoor', action: 'sign_in', details: 'Signed in via Google OAuth', ipAddress: '192.168.1.76', device: 'Chrome on Windows', location: 'Los Angeles, CA', status: 'success' },
+  { id: 11, timestamp: '2024-01-14 16:45:12', user: 'John Smith', action: 'sign_out', details: 'User signed out manually', ipAddress: '192.168.1.201', device: 'Edge on Windows', location: 'Seattle, WA', status: 'success' },
+  { id: 12, timestamp: '2024-01-14 15:22:30', user: 'Jane Doe', action: 'failed_login', details: 'Account temporarily locked after 3 failed attempts', ipAddress: '10.0.0.55', device: 'Unknown Browser', location: 'Unknown', status: 'failed' },
+  { id: 13, timestamp: '2024-01-14 14:18:45', user: 'Sarah Connor', action: 'session_timeout', details: 'Session expired after 30 min inactivity', ipAddress: '192.168.1.45', device: 'Chrome on MacOS', location: 'San Francisco, CA', status: 'info' },
+  { id: 14, timestamp: '2024-01-14 13:55:09', user: 'Michael Scott', action: 'profile_update', details: 'Updated email notification preferences', ipAddress: '192.168.1.102', device: 'Firefox on Windows', location: 'New York, NY', status: 'success' },
+  { id: 15, timestamp: '2024-01-14 12:42:33', user: 'David Wallace', action: 'permission_change', details: 'Admin access revoked', ipAddress: '192.168.1.88', device: 'Safari on iOS', location: 'Chicago, IL', status: 'warning' },
 ]
 
 const trainingModules = [
@@ -132,8 +139,9 @@ const trainingModules = [
 ]
 
 export default function TeamManagementPage() {
-  const [activeTab, setActiveTab] = useState<'directory' | 'audit'>('directory')
+  const [activeTab, setActiveTab] = useState<'directory' | 'logs'>('directory')
   const [selectedMember, setSelectedMember] = useState<TeamMember | null>(teamMembers[0])
+  const [expandedLogs, setExpandedLogs] = useState<number[]>([])
   const [isDrawerOpen, setIsDrawerOpen] = useState(true)
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
@@ -142,11 +150,12 @@ export default function TeamManagementPage() {
   const [filterAction, setFilterAction] = useState('')
   const [filterStatus, setFilterStatus] = useState('')
 
-  const filteredLogs = auditLogs.filter((log) => {
+  const filteredLogs = userLogs.filter((log) => {
     const matchSearch = !logSearch ||
       log.user.toLowerCase().includes(logSearch.toLowerCase()) ||
-      log.audit.toLowerCase().includes(logSearch.toLowerCase()) ||
-      log.details.toLowerCase().includes(logSearch.toLowerCase())
+      log.details.toLowerCase().includes(logSearch.toLowerCase()) ||
+      log.device.toLowerCase().includes(logSearch.toLowerCase()) ||
+      log.location.toLowerCase().includes(logSearch.toLowerCase())
     const matchUser = !filterUser || log.user === filterUser
     const matchAction = !filterAction || log.action === filterAction
     const matchStatus = !filterStatus || log.status === filterStatus
@@ -160,63 +169,86 @@ export default function TeamManagementPage() {
     setFilterStatus('')
   }
 
+  const toggleLogExpand = (logId: number) => {
+    setExpandedLogs((prev) =>
+      prev.includes(logId) ? prev.filter((id) => id !== logId) : [...prev, logId]
+    )
+  }
+
+  const getActionLabel = (action: UserLog['action']) => {
+    const labels: Record<UserLog['action'], string> = {
+      sign_in: 'Sign In',
+      sign_out: 'Sign Out',
+      session_timeout: 'Session Timeout',
+      password_change: 'Password Change',
+      profile_update: 'Profile Update',
+      permission_change: 'Permission Change',
+      mfa_enabled: 'MFA Enabled',
+      failed_login: 'Failed Login',
+    }
+    return labels[action]
+  }
+
   return (
     <>
-      <Header title="Team Management" subtitle="Organization & Permissions" />
+      {/* Header with Tabs */}
+      <header className="h-20 bg-white border-b border-slate-200 px-8 flex items-center justify-between shrink-0">
+        <div className="flex items-center gap-8">
+          <div>
+            <h1 className="text-xl font-bold text-slate-900">Team Management</h1>
+            <p className="text-xs text-slate-500 font-medium tracking-wide uppercase">Organization & Permissions</p>
+          </div>
+          <div className="flex bg-slate-100 p-1 rounded-lg">
+            <button
+              onClick={() => setActiveTab('directory')}
+              className={`px-4 py-2 text-xs font-bold rounded-md transition-all cursor-pointer ${
+                activeTab === 'directory'
+                  ? 'bg-white shadow-sm text-slate-900'
+                  : 'text-slate-500 hover:text-slate-900'
+              }`}
+            >
+              Active Directory
+            </button>
+            <button
+              onClick={() => setActiveTab('logs')}
+              className={`px-4 py-2 text-xs font-bold rounded-md transition-all cursor-pointer ${
+                activeTab === 'logs'
+                  ? 'bg-white shadow-sm text-slate-900'
+                  : 'text-slate-500 hover:text-slate-900'
+              }`}
+            >
+              User Logs
+            </button>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-1 bg-white border border-slate-200 p-1 rounded-lg">
+            <div className="px-4 py-1.5 text-sm font-bold text-slate-900 transition-colors border-x border-slate-100 flex items-center gap-2">
+              <Icon icon="lucide:search" className="text-slate-400" />
+              <input
+                type="text"
+                placeholder="Find a teammate..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="bg-transparent outline-none text-xs font-medium w-48 placeholder:text-slate-400"
+              />
+            </div>
+            <button className="px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50 rounded cursor-pointer">Filters</button>
+          </div>
+          <Button onClick={() => setIsInviteModalOpen(true)}>
+            <Icon icon="lucide:user-plus" />
+            Invite Member
+          </Button>
+        </div>
+      </header>
 
       <div className="flex-1 flex overflow-hidden">
         {/* Main Content Area */}
         <div className="flex-1 flex flex-col overflow-hidden">
-          {/* Sub Header with Tabs */}
-          <div className="h-14 bg-white border-b border-slate-200 px-8 flex items-center justify-between shrink-0">
-            <div className="flex bg-slate-100 p-1 rounded-lg">
-              <button
-                onClick={() => setActiveTab('directory')}
-                className={`px-4 py-2 text-xs font-bold rounded-md transition-all ${
-                  activeTab === 'directory'
-                    ? 'bg-white shadow-sm text-slate-900'
-                    : 'text-slate-500 hover:text-slate-900'
-                }`}
-              >
-                Active Directory
-              </button>
-              <button
-                onClick={() => setActiveTab('audit')}
-                className={`px-4 py-2 text-xs font-bold rounded-md transition-all ${
-                  activeTab === 'audit'
-                    ? 'bg-white shadow-sm text-slate-900'
-                    : 'text-slate-500 hover:text-slate-900'
-                }`}
-              >
-                Audit Logs
-              </button>
-            </div>
-
-            <div className="flex items-center gap-4">
-              {activeTab === 'directory' && (
-                <>
-                  <div className="flex items-center gap-2 bg-white border border-slate-200 px-3 py-1.5 rounded-lg">
-                    <Icon icon="lucide:search" className="text-slate-400 text-sm" />
-                    <input
-                      type="text"
-                      placeholder="Find a teammate..."
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      className="bg-transparent outline-none text-xs font-medium w-40 placeholder:text-slate-400"
-                    />
-                  </div>
-                  <Button onClick={() => setIsInviteModalOpen(true)}>
-                    <Icon icon="lucide:user-plus" />
-                    Invite Member
-                  </Button>
-                </>
-              )}
-            </div>
-          </div>
-
           {/* Directory Content */}
           {activeTab === 'directory' && (
-            <div className="flex-1 overflow-auto bg-slate-50 p-8">
+            <div className="flex-1 overflow-auto hide-scrollbar bg-slate-50 p-8">
               {/* Stats Row */}
               <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
                 <StatCard
@@ -287,10 +319,10 @@ export default function TeamManagementPage() {
                 <CardHeader className="flex items-center justify-between">
                   <h3 className="text-sm font-bold text-slate-900">All Team Members</h3>
                   <div className="flex items-center gap-2">
-                    <button className="p-2 hover:bg-slate-50 rounded-lg text-slate-400">
+                    <button className="p-2 hover:bg-slate-50 rounded-lg text-slate-400 cursor-pointer">
                       <Icon icon="lucide:download" />
                     </button>
-                    <button className="p-2 hover:bg-slate-50 rounded-lg text-slate-400">
+                    <button className="p-2 hover:bg-slate-50 rounded-lg text-slate-400 cursor-pointer">
                       <Icon icon="lucide:more-vertical" />
                     </button>
                   </div>
@@ -348,7 +380,7 @@ export default function TeamManagementPage() {
                             <td className="px-6 py-4 text-right">
                               <button
                                 onClick={(e) => e.stopPropagation()}
-                                className="text-slate-400 hover:text-slate-900 transition-colors p-2"
+                                className="text-slate-400 hover:text-slate-900 transition-colors p-2 cursor-pointer"
                               >
                                 <Icon icon="lucide:edit-3" />
                               </button>
@@ -373,9 +405,9 @@ export default function TeamManagementPage() {
             </div>
           )}
 
-          {/* Audit Logs Content */}
-          {activeTab === 'audit' && (
-            <div className="flex-1 overflow-auto bg-slate-50 p-8">
+          {/* User Logs Content */}
+          {activeTab === 'logs' && (
+            <div className="flex-1 overflow-auto hide-scrollbar bg-slate-50 p-8">
               {/* Filters */}
               <Card className="p-6 mb-6">
                 <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
@@ -392,7 +424,7 @@ export default function TeamManagementPage() {
                         type="text"
                         value={logSearch}
                         onChange={(e) => setLogSearch(e.target.value)}
-                        placeholder="Search by user, audit, action..."
+                        placeholder="Search by user, device, location..."
                         className="w-full pl-10 pr-4 py-2.5 border border-slate-200 rounded-lg text-sm font-medium focus:outline-none focus:border-emerald-500 transition-colors"
                       />
                     </div>
@@ -425,14 +457,14 @@ export default function TeamManagementPage() {
                       className="w-full px-4 py-2.5 border border-slate-200 rounded-lg text-sm font-medium focus:outline-none focus:border-emerald-500 transition-colors bg-white"
                     >
                       <option value="">All Actions</option>
-                      <option value="opened">Opened</option>
-                      <option value="closed">Closed</option>
-                      <option value="deleted">Deleted</option>
-                      <option value="commented">Commented</option>
-                      <option value="uploaded">Uploaded File</option>
-                      <option value="created">Created</option>
-                      <option value="assigned">Assigned</option>
-                      <option value="updated">Updated</option>
+                      <option value="sign_in">Sign In</option>
+                      <option value="sign_out">Sign Out</option>
+                      <option value="session_timeout">Session Timeout</option>
+                      <option value="password_change">Password Change</option>
+                      <option value="profile_update">Profile Update</option>
+                      <option value="permission_change">Permission Change</option>
+                      <option value="mfa_enabled">MFA Enabled</option>
+                      <option value="failed_login">Failed Login</option>
                     </select>
                   </div>
                   <div>
@@ -445,8 +477,8 @@ export default function TeamManagementPage() {
                       className="w-full px-4 py-2.5 border border-slate-200 rounded-lg text-sm font-medium focus:outline-none focus:border-emerald-500 transition-colors bg-white"
                     >
                       <option value="">All Statuses</option>
-                      <option value="completed">Completed</option>
-                      <option value="pending">Pending</option>
+                      <option value="success">Success</option>
+                      <option value="warning">Warning</option>
                       <option value="failed">Failed</option>
                       <option value="info">Info</option>
                     </select>
@@ -455,7 +487,7 @@ export default function TeamManagementPage() {
                 <div className="flex items-center justify-between mt-4 pt-4 border-t border-slate-100">
                   <button
                     onClick={clearFilters}
-                    className="text-xs font-bold text-slate-500 hover:text-slate-900 transition-colors"
+                    className="text-xs font-bold text-slate-500 hover:text-slate-900 transition-colors cursor-pointer"
                   >
                     Clear Filters
                   </button>
@@ -491,53 +523,114 @@ export default function TeamManagementPage() {
                           </div>
                         </th>
                         <th className="px-6 py-4">Action Type</th>
-                        <th className="px-6 py-4">Audit Name</th>
+                        <th className="px-6 py-4">Device / Location</th>
                         <th className="px-6 py-4">Details</th>
                         <th className="px-6 py-4">Status</th>
-                        <th className="px-6 py-4 text-right">Actions</th>
+                        <th className="px-6 py-4 text-right w-12"></th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-100">
+                    <tbody className="divide-y divide-slate-50">
                       {filteredLogs.map((log) => (
-                        <tr key={log.id} className="hover:bg-slate-50 transition-colors">
-                          <td className="px-6 py-4 text-xs font-medium text-slate-600">
-                            {log.timestamp}
-                          </td>
-                          <td className="px-6 py-4">
-                            <div className="flex items-center gap-2">
-                              <img
-                                src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${log.user.split(' ')[0]}`}
-                                className="w-6 h-6 rounded-full border border-slate-200"
-                                alt={log.user}
+                        <React.Fragment key={log.id}>
+                          <tr
+                            onClick={() => toggleLogExpand(log.id)}
+                            className={cn(
+                              'cursor-pointer transition-colors',
+                              expandedLogs.includes(log.id) ? 'bg-slate-50' : 'hover:bg-slate-50/50'
+                            )}
+                          >
+                            <td className="px-6 py-4 text-xs font-medium text-slate-600">
+                              {log.timestamp}
+                            </td>
+                            <td className="px-6 py-4">
+                              <div className="flex items-center gap-2">
+                                <img
+                                  src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${log.user.split(' ')[0]}`}
+                                  className="w-6 h-6 rounded-full border border-slate-200"
+                                  alt={log.user}
+                                />
+                                <span className="text-sm font-bold text-slate-900">{log.user}</span>
+                              </div>
+                            </td>
+                            <td className="px-6 py-4">
+                              <UserActionBadge action={log.action} />
+                            </td>
+                            <td className="px-6 py-4">
+                              <div>
+                                <p className="text-xs font-medium text-slate-700">{log.device}</p>
+                                <p className="text-[10px] text-slate-400">{log.location}</p>
+                              </div>
+                            </td>
+                            <td className="px-6 py-4 text-xs text-slate-500 max-w-xs truncate">
+                              {log.details}
+                            </td>
+                            <td className="px-6 py-4">
+                              <LogStatusIndicator status={log.status} />
+                            </td>
+                            <td className="px-6 py-4 text-right">
+                              <Icon
+                                icon={expandedLogs.includes(log.id) ? "lucide:chevron-up" : "lucide:chevron-down"}
+                                className="w-4 h-4 text-slate-400"
                               />
-                              <span className="text-sm font-bold text-slate-900">{log.user}</span>
-                            </div>
-                          </td>
-                          <td className="px-6 py-4">
-                            <ActionBadge action={log.action} />
-                          </td>
-                          <td className="px-6 py-4 text-sm font-medium text-slate-700">
-                            {log.audit}
-                          </td>
-                          <td className="px-6 py-4 text-xs text-slate-500 max-w-xs truncate">
-                            {log.details}
-                          </td>
-                          <td className="px-6 py-4">
-                            <LogStatusIndicator status={log.status} />
-                          </td>
-                          <td className="px-6 py-4 text-right">
-                            <button className="text-slate-400 hover:text-slate-900 transition-colors p-2">
-                              <Icon icon="lucide:eye" />
-                            </button>
-                          </td>
-                        </tr>
+                            </td>
+                          </tr>
+                          {/* Expandable detail row */}
+                          {expandedLogs.includes(log.id) && (
+                            <tr className="animate-expand-row">
+                              <td colSpan={7} className="px-4 py-4 bg-slate-50">
+                                <div className="ml-8 p-5 bg-white rounded-xl border border-slate-200 shadow-sm">
+                                  <div className="grid grid-cols-4 gap-6">
+                                    <div className="flex items-center gap-3">
+                                      <img
+                                        src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${log.user.split(' ')[0]}`}
+                                        className="w-10 h-10 rounded-full border-2 border-white shadow-sm"
+                                        alt={log.user}
+                                      />
+                                      <div>
+                                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">User</p>
+                                        <p className="text-sm font-bold text-slate-900">{log.user}</p>
+                                      </div>
+                                    </div>
+                                    <div>
+                                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Log ID</p>
+                                      <p className="font-mono text-sm text-slate-700">#{log.id.toString().padStart(6, '0')}</p>
+                                    </div>
+                                    <div>
+                                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Device</p>
+                                      <p className="text-sm font-bold text-slate-900">{log.device}</p>
+                                    </div>
+                                    <div>
+                                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Location</p>
+                                      <p className="text-sm text-slate-600">{log.location}</p>
+                                    </div>
+                                  </div>
+                                  <div className="mt-4 pt-4 border-t border-slate-100">
+                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Full Context</p>
+                                    <p className="text-sm text-slate-700 leading-relaxed">{log.details}</p>
+                                    <p className="text-xs text-slate-500 mt-2">IP Address: {log.ipAddress}</p>
+                                  </div>
+                                  <div className="flex gap-3 mt-4 pt-4 border-t border-slate-100">
+                                    <Button variant="outline" size="sm">
+                                      <Icon icon="lucide:user" className="w-3 h-3" />
+                                      View User Profile
+                                    </Button>
+                                    <Button variant="ghost" size="sm">
+                                      <Icon icon="lucide:download" className="w-3 h-3" />
+                                      Export Log Entry
+                                    </Button>
+                                  </div>
+                                </div>
+                              </td>
+                            </tr>
+                          )}
+                        </React.Fragment>
                       ))}
                     </tbody>
                   </table>
                 </div>
                 <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex items-center justify-between">
                   <p className="text-xs text-slate-500 font-medium">
-                    Showing {filteredLogs.length} of {auditLogs.length} logs
+                    Showing {filteredLogs.length} of {userLogs.length} logs
                   </p>
                   <Button variant="outline" size="sm">
                     Load More
@@ -551,12 +644,12 @@ export default function TeamManagementPage() {
         {/* Member Detail Drawer */}
         {activeTab === 'directory' && (
           <aside
-            className={`w-[400px] bg-white border-l border-slate-200 flex flex-col shadow-2xl transition-transform duration-300 ${
-              isDrawerOpen && selectedMember ? 'translate-x-0' : 'translate-x-full'
+            className={`bg-white border-l border-slate-200 flex flex-col shadow-2xl transition-all duration-300 overflow-hidden ${
+              isDrawerOpen && selectedMember ? 'w-[400px]' : 'w-0'
             }`}
           >
             {selectedMember && (
-              <div className="flex-1 flex flex-col h-full">
+              <div className="flex-1 flex flex-col h-full min-w-[400px]">
                 <div className="p-6 border-b border-slate-100">
                   <div className="flex items-center justify-between mb-4">
                     <span className="text-[10px] font-black text-emerald-600 uppercase tracking-[0.2em]">
@@ -564,7 +657,7 @@ export default function TeamManagementPage() {
                     </span>
                     <button
                       onClick={() => setIsDrawerOpen(false)}
-                      className="text-slate-400 hover:text-slate-600 transition-colors"
+                      className="text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"
                     >
                       <Icon icon="lucide:x" className="text-xl" />
                     </button>
@@ -642,7 +735,7 @@ export default function TeamManagementPage() {
                       {selectedMember.permissions.map((permission, index) => (
                         <label
                           key={index}
-                          className={`flex items-center justify-between p-3 border border-slate-100 rounded-xl ${
+                          className={`flex items-center justify-between p-3 border border-slate-100 rounded-xl cursor-pointer ${
                             permission.enabled ? 'bg-emerald-50/30' : ''
                           }`}
                         >
@@ -676,6 +769,7 @@ export default function TeamManagementPage() {
             )}
           </aside>
         )}
+
       </div>
 
       {/* Invite Member Modal */}
@@ -844,33 +938,44 @@ function StatusIndicator({ status }: { status: 'active' | 'offline' | 'away' }) 
   )
 }
 
-function ActionBadge({ action }: { action: AuditLog['action'] }) {
-  const actionColors = {
-    opened: 'bg-blue-100 text-blue-700',
-    closed: 'bg-green-100 text-green-700',
-    deleted: 'bg-rose-100 text-rose-700',
-    commented: 'bg-purple-100 text-purple-700',
-    uploaded: 'bg-orange-100 text-orange-700',
-    created: 'bg-emerald-100 text-emerald-700',
-    assigned: 'bg-indigo-100 text-indigo-700',
-    updated: 'bg-slate-100 text-slate-700',
+function UserActionBadge({ action }: { action: UserLog['action'] }) {
+  const actionColors: Record<UserLog['action'], string> = {
+    sign_in: 'bg-emerald-100 text-emerald-700',
+    sign_out: 'bg-slate-100 text-slate-700',
+    session_timeout: 'bg-blue-100 text-blue-700',
+    password_change: 'bg-purple-100 text-purple-700',
+    profile_update: 'bg-indigo-100 text-indigo-700',
+    permission_change: 'bg-orange-100 text-orange-700',
+    mfa_enabled: 'bg-green-100 text-green-700',
+    failed_login: 'bg-rose-100 text-rose-700',
+  }
+
+  const actionLabels: Record<UserLog['action'], string> = {
+    sign_in: 'Sign In',
+    sign_out: 'Sign Out',
+    session_timeout: 'Session Timeout',
+    password_change: 'Password Change',
+    profile_update: 'Profile Update',
+    permission_change: 'Permission Change',
+    mfa_enabled: 'MFA Enabled',
+    failed_login: 'Failed Login',
   }
 
   return (
     <span
       className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${actionColors[action]}`}
     >
-      {action}
+      {actionLabels[action]}
     </span>
   )
 }
 
-function LogStatusIndicator({ status }: { status: AuditLog['status'] }) {
+function LogStatusIndicator({ status }: { status: UserLog['status'] }) {
   const statusConfig = {
-    completed: { color: 'bg-emerald-500', textColor: 'text-emerald-600' },
-    pending: { color: 'bg-orange-500', textColor: 'text-orange-600' },
-    failed: { color: 'bg-rose-500', textColor: 'text-rose-600' },
-    info: { color: 'bg-blue-500', textColor: 'text-blue-600' },
+    success: { color: 'bg-emerald-500', textColor: 'text-emerald-600', label: 'Success' },
+    warning: { color: 'bg-orange-500', textColor: 'text-orange-600', label: 'Warning' },
+    failed: { color: 'bg-rose-500', textColor: 'text-rose-600', label: 'Failed' },
+    info: { color: 'bg-blue-500', textColor: 'text-blue-600', label: 'Info' },
   }
 
   const config = statusConfig[status]
@@ -878,7 +983,7 @@ function LogStatusIndicator({ status }: { status: AuditLog['status'] }) {
   return (
     <span className={`flex items-center gap-1.5 text-[10px] font-bold ${config.textColor} uppercase`}>
       <div className={`w-1.5 h-1.5 rounded-full ${config.color}`} />
-      {status}
+      {config.label}
     </span>
   )
 }
