@@ -7,8 +7,11 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Modal } from '@/components/ui/modal'
+import { useTranslation } from '@/i18n'
 
 export default function SettingsPage() {
+  const { t, language, setLanguage, isRTL } = useTranslation()
+
   // Profile modal
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false)
 
@@ -53,21 +56,21 @@ export default function SettingsPage() {
       <header className="h-20 bg-white border-b border-slate-200 px-8 flex items-center justify-between shrink-0">
         <div className="flex items-center gap-8">
           <div>
-            <h1 className="text-xl font-bold font-display text-slate-900">Settings</h1>
+            <h1 className="text-xl font-bold font-display text-slate-900">{t('settings.title')}</h1>
             <p className="text-xs text-slate-500 font-medium tracking-wide uppercase">
-              Governance & Compliance Configuration
+              {t('settings.subtitle')}
             </p>
           </div>
         </div>
 
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-4 mr-4 text-slate-400">
-            <span className="text-xs font-bold uppercase tracking-widest">Auto-save: Active</span>
+            <span className="text-xs font-bold uppercase tracking-widest">{t('common.autoSaveActive')}</span>
             <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
           </div>
           <Button variant="primary" className="shadow-lg shadow-emerald-100">
             <Icon icon="lucide:save" />
-            Save Changes
+            {t('common.saveChanges')}
           </Button>
         </div>
       </header>
@@ -210,11 +213,15 @@ export default function SettingsPage() {
               <div className="space-y-4">
                 <div>
                   <label className="text-xs font-bold text-slate-700 uppercase mb-2 block">
-                    Language
+                    {t('settings.language')}
                   </label>
-                  <select className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:outline-none text-sm">
-                    <option>English</option>
-                    <option>Arabic</option>
+                  <select
+                    value={language}
+                    onChange={(e) => setLanguage(e.target.value as 'en' | 'ar')}
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:outline-none text-sm"
+                  >
+                    <option value="en">English</option>
+                    <option value="ar">العربية</option>
                   </select>
                 </div>
                 <div>

@@ -14,6 +14,7 @@ interface MultiSelectFilterProps<T extends string> {
   selected: Set<T>
   onChange: (selected: Set<T>) => void
   showAllOption?: boolean
+  allLabel?: string
 }
 
 export function MultiSelectFilter<T extends string>({
@@ -22,6 +23,7 @@ export function MultiSelectFilter<T extends string>({
   selected,
   onChange,
   showAllOption = false,
+  allLabel = 'All',
 }: MultiSelectFilterProps<T>) {
   const allSelected = options.every(opt => selected.has(opt.value))
   const noneSelected = selected.size === 0
@@ -61,7 +63,7 @@ export function MultiSelectFilter<T extends string>({
               : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300'
           )}
         >
-          All
+          {allLabel}
         </button>
       )}
       {options.map((option) => {

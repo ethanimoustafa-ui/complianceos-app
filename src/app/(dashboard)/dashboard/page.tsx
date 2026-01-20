@@ -1,13 +1,18 @@
+'use client'
+
 import { Icon } from '@iconify/react'
 import { Header } from '@/components/layout/header'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { useTranslation } from '@/i18n'
 
 export default function DashboardPage() {
+  const { t, isRTL } = useTranslation()
+
   return (
     <>
-      <Header title="Executive Insights" subtitle="Organization-wide Compliance Matrix" />
+      <Header title={t('dashboard.title')} subtitle={t('dashboard.subtitle')} />
 
       <div className="flex-1 overflow-auto hide-scrollbar p-8">
         <div className="space-y-8">
@@ -16,15 +21,15 @@ export default function DashboardPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <AlertCard
               type="critical"
-              title="Critical Action Required"
+              title={t('dashboard.criticalActionRequired')}
               message="SAMA submission #TX-901 is 2 days overdue."
-              actionLabel="Resolve Now"
+              actionLabel={t('dashboard.resolveNow')}
             />
             <AlertCard
               type="warning"
-              title="Trend Alert"
+              title={t('dashboard.trendAlert')}
               message="Saudization target gap increased by 0.2% this month."
-              actionLabel="View Details"
+              actionLabel={t('dashboard.viewDetails')}
             />
           </div>
 
@@ -35,22 +40,22 @@ export default function DashboardPage() {
               <div className="relative z-10 space-y-4 max-w-md">
                 <Badge variant="success" className="gap-2">
                   <Icon icon="lucide:check-circle" className="w-3 h-3" />
-                  Status: Optimal (94%)
+                  {t('dashboard.statusOptimal')}
                 </Badge>
                 <h2 className="text-3xl font-bold font-display text-slate-900 leading-tight">
-                  Policy Review Status
+                  {t('dashboard.policyReviewStatus')}
                 </h2>
                 <p className="text-slate-500 text-sm leading-relaxed">
-                  <span className="font-bold text-emerald-600">42 Policies</span> up-to-date and active.{' '}
-                  <span className="font-bold text-rose-500">3 Policies</span> are currently overdue for annual review.
+                  <span className="font-bold text-emerald-600">42 {t('dashboard.policiesUpToDate')}</span>.{' '}
+                  <span className="font-bold text-rose-500">3 {t('dashboard.policiesOverdue')}</span>.
                 </p>
                 <div className="flex gap-4 pt-2">
-                  <Button variant="dark">Start Review</Button>
-                  <Button variant="outline">Policy Library</Button>
+                  <Button variant="dark">{t('dashboard.startReview')}</Button>
+                  <Button variant="outline">{t('dashboard.policyLibrary')}</Button>
                 </div>
               </div>
               <div className="relative flex-1 flex justify-center">
-                <CircularProgress value={94} size={176} label="HEALTH" />
+                <CircularProgress value={94} size={176} label={t('dashboard.health')} />
               </div>
             </div>
 
@@ -58,16 +63,16 @@ export default function DashboardPage() {
             <div className="lg:col-span-4 bg-white border border-slate-200 p-8 rounded-[2rem] flex flex-col justify-between">
               <div>
                 <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest mb-6">
-                  SAMA Submissions
+                  {t('dashboard.samaSubmissions')}
                 </h3>
                 <div className="space-y-5">
-                  <ProgressItem label="Overdue" value={3} total={24} color="rose" />
-                  <ProgressItem label="Upcoming (30d)" value={8} total={24} color="amber" />
-                  <ProgressItem label="Completed (Month)" value={13} total={24} color="emerald" />
+                  <ProgressItem label={t('dashboard.overdueLabel')} value={3} total={24} color="rose" />
+                  <ProgressItem label={t('dashboard.upcoming30d')} value={8} total={24} color="amber" />
+                  <ProgressItem label={t('dashboard.completedMonth')} value={13} total={24} color="emerald" />
                 </div>
               </div>
               <p className="text-[10px] text-slate-400 font-bold mt-6 uppercase tracking-widest">
-                Total Submissions: 24
+                {t('dashboard.totalSubmissions')}: 24
               </p>
             </div>
           </div>
@@ -77,45 +82,45 @@ export default function DashboardPage() {
             <MetricCard
               icon="lucide:scale"
               iconColor="blue"
-              label="RULES"
-              title="Active Rules"
+              label={t('dashboard.rules')}
+              title={t('dashboard.activeRules')}
               value="156"
               details={[
-                { text: '142 Implemented', color: 'emerald' },
-                { text: '2 Overdue', color: 'rose' },
+                { text: `142 ${t('dashboard.implemented')}`, color: 'emerald' },
+                { text: `2 ${t('common.overdue')}`, color: 'rose' },
               ]}
             />
             <MetricCard
               icon="lucide:shield-alert"
               iconColor="amber"
-              label="RISKS"
-              title="Open Risks"
+              label={t('dashboard.risks')}
+              title={t('dashboard.openRisks')}
               value="18"
-              valueExtra="4 High"
+              valueExtra={`4 ${t('dashboard.high')}`}
               details={[
-                { text: '6 Medium', color: 'slate' },
-                { text: '8 Low', color: 'slate' },
+                { text: `6 ${t('dashboard.medium')}`, color: 'slate' },
+                { text: `8 ${t('dashboard.low')}`, color: 'slate' },
               ]}
             />
             <MetricCard
               icon="lucide:mail"
               iconColor="slate"
-              label="CORRESPONDENCE"
-              title="Total Letters"
+              label={t('dashboard.correspondence')}
+              title={t('dashboard.totalLetters')}
               value="142"
               details={[
-                { text: '128 Sent', color: 'emerald' },
-                { text: '14 Drafts Pending', color: 'slate' },
+                { text: `128 ${t('dashboard.sent')}`, color: 'emerald' },
+                { text: `14 ${t('dashboard.draftsPending')}`, color: 'slate' },
               ]}
             />
             <MetricCard
               icon="lucide:flag"
               iconColor="emerald"
-              label="SAUDIZATION"
-              title="Current Status"
+              label={t('dashboard.saudization')}
+              title={t('dashboard.currentStatus')}
               value="38.2%"
               details={[
-                { text: 'Target: 42.0%', color: 'slate' },
+                { text: `${t('dashboard.target')}: 42.0%`, color: 'slate' },
                 { text: '(-3.8%)', color: 'rose' },
               ]}
             />
@@ -127,54 +132,54 @@ export default function DashboardPage() {
             <div className="lg:col-span-8 space-y-6">
               <div className="flex items-center justify-between">
                 <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest">
-                  Open Observations Breakdown
+                  {t('dashboard.openObservationsBreakdown')}
                 </h3>
-                <span className="text-xs font-bold text-emerald-600">22 Closed this quarter</span>
+                <span className="text-xs font-bold text-emerald-600">22 {t('dashboard.closedThisQuarter')}</span>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <ObservationCard
-                  title="SAMA Observations"
+                  title={t('dashboard.samaObservations')}
                   count={8}
                   progress={75}
                   color="rose"
-                  detail="3 Critical, 5 Moderate"
+                  detail={`3 ${t('dashboard.critical')}, 5 ${t('dashboard.moderate')}`}
                 />
                 <ObservationCard
-                  title="Internal Audit"
+                  title={t('dashboard.internalAudit')}
                   count={15}
                   progress={50}
                   color="amber"
-                  detail="1 Critical, 14 Minor"
+                  detail={`1 ${t('dashboard.critical')}, 14 ${t('dashboard.minor')}`}
                 />
                 <ObservationCard
-                  title="Sharia Board"
+                  title={t('dashboard.shariaBoard')}
                   count={4}
                   progress={25}
                   color="blue"
-                  detail="4 Pending Remediation"
+                  detail={`4 ${t('dashboard.pendingRemediation')}`}
                 />
               </div>
 
               {/* Training Compliance */}
               <div className="pt-4">
                 <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest mb-4">
-                  Mandatory Training Compliance
+                  {t('dashboard.mandatoryTrainingCompliance')}
                 </h3>
                 <Card className="p-6">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                     <div className="flex items-center gap-6">
                       <CircularProgress value={82} size={96} strokeWidth={8} color="blue" compact />
                       <div>
-                        <p className="text-sm font-bold text-slate-800">Overall Completion</p>
-                        <p className="text-xs text-slate-500 mt-1">1,240 Employees Completed</p>
-                        <p className="text-xs text-rose-500 font-bold mt-1">282 Pending Due</p>
+                        <p className="text-sm font-bold text-slate-800">{t('dashboard.overallCompletion')}</p>
+                        <p className="text-xs text-slate-500 mt-1">1,240 {t('dashboard.employeesCompleted')}</p>
+                        <p className="text-xs text-rose-500 font-bold mt-1">282 {t('dashboard.pendingDue')}</p>
                       </div>
                     </div>
                     <div className="space-y-4">
-                      <TrainingProgress label="Retail Banking" value={94} />
-                      <TrainingProgress label="Risk & Compliance" value={100} />
-                      <TrainingProgress label="Operations" value={68} color="amber" />
+                      <TrainingProgress label={t('dashboard.retailBanking')} value={94} />
+                      <TrainingProgress label={t('dashboard.riskCompliance')} value={100} />
+                      <TrainingProgress label={t('dashboard.operations')} value={68} color="amber" />
                     </div>
                   </div>
                 </Card>
@@ -185,11 +190,11 @@ export default function DashboardPage() {
             <div className="lg:col-span-4 space-y-8">
               <section>
                 <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest mb-4">
-                  Team Workload Overview
+                  {t('dashboard.teamWorkloadOverview')}
                 </h3>
                 <Card className="p-6">
                   <div className="flex items-center justify-between mb-6">
-                    <span className="text-xs font-bold text-slate-500 uppercase">Average Capacity</span>
+                    <span className="text-xs font-bold text-slate-500 uppercase">{t('dashboard.averageCapacity')}</span>
                     <span className="text-lg font-black text-slate-900">88%</span>
                   </div>
                   <div className="space-y-6">
@@ -198,10 +203,11 @@ export default function DashboardPage() {
                       avatar="Michael"
                       workload={104}
                       overloaded
+                      overloadedLabel={t('dashboard.overloaded')}
                     />
-                    <TeamMemberWorkload name="Sarah L." avatar="Sarah" workload={82} />
-                    <TeamMemberWorkload name="Ahmed K." avatar="Ahmed" workload={91} />
-                    <TeamMemberWorkload name="Lisa M." avatar="Lisa" workload={76} />
+                    <TeamMemberWorkload name="Sarah L." avatar="Sarah" workload={82} overloadedLabel={t('dashboard.overloaded')} />
+                    <TeamMemberWorkload name="Ahmed K." avatar="Ahmed" workload={91} overloadedLabel={t('dashboard.overloaded')} />
+                    <TeamMemberWorkload name="Lisa M." avatar="Lisa" workload={76} overloadedLabel={t('dashboard.overloaded')} />
                   </div>
                 </Card>
               </section>
@@ -486,11 +492,13 @@ function TeamMemberWorkload({
   avatar,
   workload,
   overloaded = false,
+  overloadedLabel = 'Overloaded',
 }: {
   name: string
   avatar: string
   workload: number
   overloaded?: boolean
+  overloadedLabel?: string
 }) {
   return (
     <div className="flex items-center gap-3">
@@ -503,7 +511,7 @@ function TeamMemberWorkload({
         <div className="flex justify-between text-[10px] font-bold mb-1">
           <span>{name}</span>
           <span className={overloaded ? 'text-rose-600' : 'text-emerald-600'}>
-            {workload}%{overloaded && ' (Overloaded)'}
+            {workload}%{overloaded && ` (${overloadedLabel})`}
           </span>
         </div>
         <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">

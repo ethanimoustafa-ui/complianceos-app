@@ -294,3 +294,171 @@ body::-webkit-scrollbar {
 .requirements-view {
   animation: modalSlideIn 0.4s cubic-bezier(0.4, 0, 0.2, 1);
 }
+
+/* ================================
+   RTL (Right-to-Left) Support
+   ================================ */
+
+/* Arabic font family */
+.rtl {
+  font-family: 'Noto Sans Arabic', 'Inter', ui-sans-serif, system-ui, sans-serif;
+}
+
+/* RTL text alignment */
+.rtl .text-left {
+  text-align: right;
+}
+
+.rtl .text-right {
+  text-align: left;
+}
+
+/* RTL flex direction */
+.rtl .flex-row {
+  flex-direction: row-reverse;
+}
+
+/* RTL spacing utilities - flip margins and paddings */
+.rtl .ml-auto {
+  margin-left: unset;
+  margin-right: auto;
+}
+
+.rtl .mr-auto {
+  margin-right: unset;
+  margin-left: auto;
+}
+
+/* RTL border utilities */
+.rtl .border-l {
+  border-left: unset;
+  border-right-width: 1px;
+}
+
+.rtl .border-r {
+  border-right: unset;
+  border-left-width: 1px;
+}
+
+.rtl .border-l-4 {
+  border-left-width: unset;
+  border-right-width: 4px;
+}
+
+.rtl .border-r-4 {
+  border-right-width: unset;
+  border-left-width: 4px;
+}
+
+/* RTL rounded corners */
+.rtl .rounded-l-xl {
+  border-top-left-radius: unset;
+  border-bottom-left-radius: unset;
+  border-top-right-radius: 0.75rem;
+  border-bottom-right-radius: 0.75rem;
+}
+
+.rtl .rounded-r-xl {
+  border-top-right-radius: unset;
+  border-bottom-right-radius: unset;
+  border-top-left-radius: 0.75rem;
+  border-bottom-left-radius: 0.75rem;
+}
+
+/* RTL icon positioning */
+.rtl .left-3 {
+  left: unset;
+  right: 0.75rem;
+}
+
+.rtl .right-3 {
+  right: unset;
+  left: 0.75rem;
+}
+
+.rtl .left-4 {
+  left: unset;
+  right: 1rem;
+}
+
+.rtl .right-4 {
+  right: unset;
+  left: 1rem;
+}
+
+/* RTL padding adjustments */
+.rtl .pl-10 {
+  padding-left: unset;
+  padding-right: 2.5rem;
+}
+
+.rtl .pr-10 {
+  padding-right: unset;
+  padding-left: 2.5rem;
+}
+
+.rtl .pl-12 {
+  padding-left: unset;
+  padding-right: 3rem;
+}
+
+.rtl .pr-12 {
+  padding-right: unset;
+  padding-left: 3rem;
+}
+
+/* RTL task row hover */
+.rtl .task-row:hover {
+  transform: translateX(-4px);
+}
+
+/* RTL sidebar positioning */
+.rtl aside {
+  border-right: unset;
+  border-left: 1px solid var(--color-sidebar-border);
+}
+
+/* RTL animations */
+.rtl .animate-slide-in-right {
+  animation: slideInLeft 0.3s ease-out;
+}
+
+.rtl .animate-slide-in-left {
+  animation: slideInRight 0.3s ease-out;
+}
+
+/* RTL timeline */
+.rtl .before\:left-2::before {
+  left: unset;
+  right: 0.5rem;
+}
+
+/* RTL stat card border */
+.rtl .stat-card-hover {
+  border-left-width: 1px !important;
+  border-right-width: 6px !important;
+}
+
+/* RTL table text alignment */
+.rtl th,
+.rtl td {
+  text-align: right;
+}
+
+.rtl th:last-child,
+.rtl td:last-child {
+  text-align: left;
+}
+
+/* RTL gap adjustments for flex items */
+.rtl .gap-2 > *:first-child,
+.rtl .gap-3 > *:first-child,
+.rtl .gap-4 > *:first-child {
+  /* Icons and first children maintain proper spacing */
+}
+
+/* RTL modal close button */
+.rtl .modal-close-btn {
+  right: unset;
+  left: 1rem;
+}

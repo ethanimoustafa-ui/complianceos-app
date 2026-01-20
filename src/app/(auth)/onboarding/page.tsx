@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { Icon } from '@iconify/react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+import { useTranslation } from '@/i18n'
 
 // Types
 type FrameworkId = 'nca-ecc' | 'sama-csf' | 'ndmo-pdpl' | 'nca-cscc' | 'citc' | 'nca-ccc'
@@ -15,8 +16,8 @@ type Region = 'riyadh' | 'makkah' | 'eastern' | 'other'
 
 interface Framework {
   id: FrameworkId
-  name: string
-  description: string
+  nameKey: string
+  descriptionKey: string
   icon: string
   iconBg: string
   iconColor: string
@@ -24,8 +25,8 @@ interface Framework {
 
 interface Integration {
   id: string
-  name: string
-  description: string
+  nameKey: string
+  descriptionKey: string
   icon: string
 }
 
@@ -33,48 +34,48 @@ interface Integration {
 const frameworks: Framework[] = [
   {
     id: 'nca-ecc',
-    name: 'NCA ECC-1:2018',
-    description: 'National Cybersecurity Authority Essential Cybersecurity Controls.',
+    nameKey: 'onboarding.ncaEccName',
+    descriptionKey: 'onboarding.ncaEccDescription',
     icon: 'lucide:shield-check',
     iconBg: 'bg-blue-100',
     iconColor: 'text-blue-600',
   },
   {
     id: 'sama-csf',
-    name: 'SAMA CSF',
-    description: 'Saudi Central Bank Cyber Security Framework for financial entities.',
+    nameKey: 'onboarding.samaCsfName',
+    descriptionKey: 'onboarding.samaCsfDescription',
     icon: 'lucide:landmark',
     iconBg: 'bg-purple-100',
     iconColor: 'text-purple-600',
   },
   {
     id: 'ndmo-pdpl',
-    name: 'NDMO PDPL',
-    description: 'National Data Management Office - Personal Data Protection Law.',
+    nameKey: 'onboarding.ndmoPdplName',
+    descriptionKey: 'onboarding.ndmoPdplDescription',
     icon: 'lucide:database-zap',
     iconBg: 'bg-amber-100',
     iconColor: 'text-amber-600',
   },
   {
     id: 'nca-cscc',
-    name: 'NCA CSCC',
-    description: 'Critical Systems Cybersecurity Controls for vital national infrastructure.',
+    nameKey: 'onboarding.ncaCsccName',
+    descriptionKey: 'onboarding.ncaCsccDescription',
     icon: 'lucide:activity',
     iconBg: 'bg-rose-100',
     iconColor: 'text-rose-600',
   },
   {
     id: 'citc',
-    name: 'CITC Standards',
-    description: 'Regulatory framework for telecom and information technology.',
+    nameKey: 'onboarding.citcName',
+    descriptionKey: 'onboarding.citcDescription',
     icon: 'lucide:rss',
     iconBg: 'bg-indigo-100',
     iconColor: 'text-indigo-600',
   },
   {
     id: 'nca-ccc',
-    name: 'NCA CCC',
-    description: 'Cloud Cybersecurity Controls for governmental cloud implementations.',
+    nameKey: 'onboarding.ncaCccName',
+    descriptionKey: 'onboarding.ncaCccDescription',
     icon: 'lucide:cloud-cog',
     iconBg: 'bg-slate-100',
     iconColor: 'text-slate-600',
@@ -84,38 +85,33 @@ const frameworks: Framework[] = [
 const integrations: Integration[] = [
   {
     id: 'aws',
-    name: 'Amazon Web Services',
-    description: 'Connect AWS accounts for audit logs',
+    nameKey: 'onboarding.awsName',
+    descriptionKey: 'onboarding.awsDescription',
     icon: 'logos:aws',
   },
   {
     id: 'azure',
-    name: 'Microsoft Azure',
-    description: 'Automate Azure Security Center checks',
+    nameKey: 'onboarding.azureName',
+    descriptionKey: 'onboarding.azureDescription',
     icon: 'logos:microsoft-azure',
   },
   {
     id: 'gcp',
-    name: 'Google Cloud Platform',
-    description: 'Sync GCP projects and assets',
+    nameKey: 'onboarding.gcpName',
+    descriptionKey: 'onboarding.gcpDescription',
     icon: 'logos:google-cloud',
   },
   {
     id: 'github',
-    name: 'GitHub Enterprise',
-    description: 'Monitor repository access and policy',
+    nameKey: 'onboarding.githubName',
+    descriptionKey: 'onboarding.githubDescription',
     icon: 'mdi:github',
   },
 ]
 
-const steps = [
-  { id: 1, label: 'Frameworks' },
-  { id: 2, label: 'Company' },
-  { id: 3, label: 'Connect' },
-]
-
 export default function OnboardingPage() {
   const router = useRouter()
+  const { t, isRTL } = useTranslation()
   const [currentStep, setCurrentStep] = useState(1)
   const [isSubmitting, setIsSubmitting] = useState(false)
 
@@ -126,6 +122,12 @@ export default function OnboardingPage() {
   const [industry, setIndustry] = useState<Industry>('technology')
   const [region, setRegion] = useState<Region>('riyadh')
   const [selectedIntegrations, setSelectedIntegrations] = useState<string[]>([])
+
+  const steps = [
+    { id: 1, label: t('onboarding.frameworks') },
+    { id: 2, label: t('onboarding.company') },
+    { id: 3, label: t('onboarding.connect') },
+  ]
 
   const toggleFramework = (id: FrameworkId) => {
     setSelectedFrameworks((prev) =>
@@ -169,7 +171,7 @@ export default function OnboardingPage() {
             </div>
             <span className="text-xl font-bold text-slate-900">ComplianceOS</span>
           </Link>
-          <div className="text-sm font-medium text-slate-600">Onboarding Setup</div>
+          <div className="text-sm font-medium text-slate-600">{t('onboarding.setup')}</div>
         </div>
       </header>
 
@@ -221,11 +223,10 @@ export default function OnboardingPage() {
               <section>
                 <div className="text-center mb-10">
                   <h1 className="text-3xl font-bold text-slate-900 mb-3">
-                    Choose Saudi compliance frameworks
+                    {t('onboarding.chooseFrameworks')}
                   </h1>
                   <p className="text-slate-500 max-w-lg mx-auto">
-                    Select the Saudi Arabian governmental and regulatory standards your
-                    organization needs to adhere to for national compliance.
+                    {t('onboarding.frameworksDescription')}
                   </p>
                 </div>
 
@@ -261,9 +262,9 @@ export default function OnboardingPage() {
                         )}
                       </div>
                       <h3 className="text-lg font-bold text-slate-900 mb-2">
-                        {framework.name}
+                        {t(framework.nameKey as any)}
                       </h3>
-                      <p className="text-sm text-slate-500">{framework.description}</p>
+                      <p className="text-sm text-slate-500">{t(framework.descriptionKey as any)}</p>
                     </div>
                   ))}
                 </div>
@@ -273,12 +274,12 @@ export default function OnboardingPage() {
                     href="/sign-in"
                     className="text-sm font-semibold text-slate-500 hover:text-slate-900 transition-colors flex items-center gap-2"
                   >
-                    <Icon icon="lucide:arrow-left" />
-                    Back to Sign In
+                    <Icon icon={isRTL ? 'lucide:arrow-right' : 'lucide:arrow-left'} />
+                    {t('auth.backToSignIn')}
                   </Link>
                   <Button onClick={handleNext} className="px-10">
-                    Continue to Step 2
-                    <Icon icon="lucide:chevron-right" className="text-lg" />
+                    {t('onboarding.continueToStep2')}
+                    <Icon icon={isRTL ? 'lucide:chevron-left' : 'lucide:chevron-right'} className="text-lg" />
                   </Button>
                 </div>
               </section>
@@ -289,24 +290,23 @@ export default function OnboardingPage() {
               <section>
                 <div className="text-center mb-10">
                   <h1 className="text-3xl font-bold text-slate-900 mb-3">
-                    Tell us about your organization
+                    {t('onboarding.tellUsAboutOrg')}
                   </h1>
                   <p className="text-slate-500 max-w-lg mx-auto">
-                    This helps us customize your compliance controls and dashboard
-                    experience.
+                    {t('onboarding.orgCustomizeDescription')}
                   </p>
                 </div>
 
                 <div className="max-w-xl mx-auto space-y-8 mb-12">
                   <div className="space-y-2">
                     <label className="block text-sm font-medium text-slate-700">
-                      Legal Company Name
+                      {t('onboarding.legalCompanyName')}
                     </label>
                     <input
                       type="text"
                       value={companyName}
                       onChange={(e) => setCompanyName(e.target.value)}
-                      placeholder="Acme Corp Inc."
+                      placeholder={t('onboarding.companyPlaceholder')}
                       className="w-full px-4 py-3.5 bg-white border border-slate-300 rounded-lg text-slate-900 focus:outline-none focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600 transition-all"
                     />
                   </div>
@@ -314,50 +314,50 @@ export default function OnboardingPage() {
                   <div className="grid grid-cols-2 gap-6">
                     <div className="space-y-2">
                       <label className="block text-sm font-medium text-slate-700">
-                        Organization Size
+                        {t('onboarding.organizationSize')}
                       </label>
                       <select
                         value={orgSize}
                         onChange={(e) => setOrgSize(e.target.value as OrgSize)}
                         className="w-full px-4 py-3.5 bg-white border border-slate-300 rounded-lg text-slate-900 focus:outline-none focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600 transition-all"
                       >
-                        <option value="1-20">1-20 employees</option>
-                        <option value="21-100">21-100 employees</option>
-                        <option value="101-500">101-500 employees</option>
-                        <option value="500+">500+ employees</option>
+                        <option value="1-20">{t('onboarding.employees1_20')}</option>
+                        <option value="21-100">{t('onboarding.employees21_100')}</option>
+                        <option value="101-500">{t('onboarding.employees101_500')}</option>
+                        <option value="500+">{t('onboarding.employees500plus')}</option>
                       </select>
                     </div>
                     <div className="space-y-2">
                       <label className="block text-sm font-medium text-slate-700">
-                        Industry
+                        {t('onboarding.industry')}
                       </label>
                       <select
                         value={industry}
                         onChange={(e) => setIndustry(e.target.value as Industry)}
                         className="w-full px-4 py-3.5 bg-white border border-slate-300 rounded-lg text-slate-900 focus:outline-none focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600 transition-all"
                       >
-                        <option value="government">Government Agency</option>
-                        <option value="banking">Banking & Finance (SAMA)</option>
-                        <option value="energy">Energy & Utilities</option>
-                        <option value="healthcare">Healthcare (Seha)</option>
-                        <option value="technology">Technology & SaaS</option>
+                        <option value="government">{t('onboarding.governmentAgency')}</option>
+                        <option value="banking">{t('onboarding.bankingFinance')}</option>
+                        <option value="energy">{t('onboarding.energyUtilities')}</option>
+                        <option value="healthcare">{t('onboarding.healthcareSeha')}</option>
+                        <option value="technology">{t('onboarding.technologySaas')}</option>
                       </select>
                     </div>
                   </div>
 
                   <div className="space-y-2">
                     <label className="block text-sm font-medium text-slate-700">
-                      Headquarters Region
+                      {t('onboarding.headquartersRegion')}
                     </label>
                     <select
                       value={region}
                       onChange={(e) => setRegion(e.target.value as Region)}
                       className="w-full px-4 py-3.5 bg-white border border-slate-300 rounded-lg text-slate-900 focus:outline-none focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600 transition-all"
                     >
-                      <option value="riyadh">Riyadh Region</option>
-                      <option value="makkah">Makkah / Jeddah Region</option>
-                      <option value="eastern">Eastern Province</option>
-                      <option value="other">Other KSA Region</option>
+                      <option value="riyadh">{t('onboarding.riyadhRegion')}</option>
+                      <option value="makkah">{t('onboarding.makkahJeddah')}</option>
+                      <option value="eastern">{t('onboarding.easternProvince')}</option>
+                      <option value="other">{t('onboarding.otherKsa')}</option>
                     </select>
                   </div>
                 </div>
@@ -367,12 +367,12 @@ export default function OnboardingPage() {
                     onClick={handleBack}
                     className="text-sm font-semibold text-slate-500 hover:text-slate-900 transition-colors flex items-center gap-2"
                   >
-                    <Icon icon="lucide:arrow-left" />
-                    Back
+                    <Icon icon={isRTL ? 'lucide:arrow-right' : 'lucide:arrow-left'} />
+                    {t('common.back')}
                   </button>
                   <Button onClick={handleNext} className="px-10">
-                    Final Step
-                    <Icon icon="lucide:chevron-right" className="text-lg" />
+                    {t('onboarding.finalStep')}
+                    <Icon icon={isRTL ? 'lucide:chevron-left' : 'lucide:chevron-right'} className="text-lg" />
                   </Button>
                 </div>
               </section>
@@ -383,11 +383,10 @@ export default function OnboardingPage() {
               <section>
                 <div className="text-center mb-10">
                   <h1 className="text-3xl font-bold text-slate-900 mb-3">
-                    Connect your stack
+                    {t('onboarding.connectYourStack')}
                   </h1>
                   <p className="text-slate-500 max-w-lg mx-auto">
-                    ComplianceOS automatically monitors your infrastructure. Connect your
-                    cloud provider to begin scanning.
+                    {t('onboarding.stackDescription')}
                   </p>
                 </div>
 
@@ -407,9 +406,9 @@ export default function OnboardingPage() {
                         <Icon icon={integration.icon} className="text-2xl" />
                       </div>
                       <div className="flex-1">
-                        <div className="font-bold text-slate-900">{integration.name}</div>
+                        <div className="font-bold text-slate-900">{t(integration.nameKey as any)}</div>
                         <div className="text-xs text-slate-500">
-                          {integration.description}
+                          {t(integration.descriptionKey as any)}
                         </div>
                       </div>
                       {selectedIntegrations.includes(integration.id) ? (
@@ -428,7 +427,7 @@ export default function OnboardingPage() {
                 </div>
 
                 <p className="text-center text-sm text-slate-500 mb-8">
-                  You can skip this step and connect integrations later from Settings.
+                  {t('onboarding.skipIntegrations')}
                 </p>
 
                 <div className="flex items-center justify-between border-t border-slate-100 pt-8">
@@ -436,8 +435,8 @@ export default function OnboardingPage() {
                     onClick={handleBack}
                     className="text-sm font-semibold text-slate-500 hover:text-slate-900 transition-colors flex items-center gap-2"
                   >
-                    <Icon icon="lucide:arrow-left" />
-                    Back
+                    <Icon icon={isRTL ? 'lucide:arrow-right' : 'lucide:arrow-left'} />
+                    {t('common.back')}
                   </button>
                   <Button
                     onClick={handleFinish}
@@ -447,11 +446,11 @@ export default function OnboardingPage() {
                     {isSubmitting ? (
                       <>
                         <Icon icon="lucide:loader-2" className="animate-spin" />
-                        Setting up...
+                        {t('onboarding.settingUp')}
                       </>
                     ) : (
                       <>
-                        Finish & Go to Dashboard
+                        {t('onboarding.finishGoDashboard')}
                         <Icon icon="lucide:rocket" className="text-lg" />
                       </>
                     )}
@@ -466,19 +465,19 @@ export default function OnboardingPage() {
       {/* Footer */}
       <footer className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 py-4">
         <div className="max-w-7xl mx-auto px-6 flex items-center justify-between text-sm">
-          <p className="text-slate-500">© 2024 ComplianceOS. All rights reserved.</p>
+          <p className="text-slate-500">© 2024 ComplianceOS. {t('onboarding.allRightsReserved')}</p>
           <div className="flex items-center gap-6">
             <a
               href="#"
               className="text-slate-600 hover:text-emerald-600 transition-colors"
             >
-              Privacy Policy
+              {t('auth.privacyPolicy')}
             </a>
             <a
               href="#"
               className="text-slate-600 hover:text-emerald-600 transition-colors"
             >
-              Terms of Service
+              {t('auth.termsOfService')}
             </a>
           </div>
         </div>

@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import { Icon } from '@iconify/react'
 import { Modal } from '@/components/ui/modal'
+import { useTranslation } from '@/i18n'
 
 // Types
 type LetterStatus = 'Draft' | 'Pending Approval' | 'Approved' | 'Sent to SAMA' | 'SAMA Response Received' | 'Overdue'
@@ -253,6 +254,7 @@ function Toast({ message, onClose }: { message: string; onClose: () => void }) {
 }
 
 export default function SAMALettersPage() {
+  const { t, isRTL } = useTranslation()
   const [view, setView] = useState<'dashboard' | 'detail'>('dashboard')
   const [selectedLetter, setSelectedLetter] = useState<Letter | null>(null)
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
@@ -429,58 +431,58 @@ export default function SAMALettersPage() {
   }
 
   return (
-    <div className="flex-1 flex flex-col overflow-hidden">
+    <div className={`flex-1 flex flex-col overflow-hidden ${isRTL ? 'rtl' : ''}`}>
       {/* Header */}
       <header className="h-20 bg-white border-b border-slate-200 px-8 flex items-center justify-between shrink-0">
         <div className="flex items-center gap-8">
-          <div>
-            <h1 className="text-xl font-bold font-display text-slate-900">SAMA Letters</h1>
+          <div className={isRTL ? 'text-right' : ''}>
+            <h1 className="text-xl font-bold font-display text-slate-900">{t('samaLetters.title')}</h1>
             <p className="text-xs text-slate-500 font-medium tracking-wide uppercase">
-              Form Submission Overview
+              {t('samaLetters.subtitle')}
             </p>
           </div>
 
           <div className="h-8 w-px bg-slate-200 mx-2" />
 
-          <div className="flex gap-2">
+          <div className={`flex gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
             <Link
               href="/sama-letters"
-              className="px-3 py-1.5 text-xs font-bold text-emerald-700 bg-emerald-50 rounded-lg transition-all border border-emerald-100 flex items-center gap-2"
+              className={`px-3 py-1.5 text-xs font-bold text-emerald-700 bg-emerald-50 rounded-lg transition-all border border-emerald-100 flex items-center gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}
             >
               <Icon icon="lucide:mail" className="text-emerald-500" />
-              SAMA Letters
+              {t('observations.samaLetters')}
             </Link>
             <Link
               href="/regulatory-updates"
-              className="px-3 py-1.5 text-xs font-bold text-slate-600 bg-slate-50 hover:bg-slate-100 rounded-lg transition-all border border-slate-200 flex items-center gap-2"
+              className={`px-3 py-1.5 text-xs font-bold text-slate-600 bg-slate-50 hover:bg-slate-100 rounded-lg transition-all border border-slate-200 flex items-center gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}
             >
               <Icon icon="lucide:refresh-cw" className="text-blue-500" />
-              Regulatory Updates
+              {t('observations.regulatoryUpdates')}
             </Link>
             <Link
               href="/observations"
-              className="px-3 py-1.5 text-xs font-bold text-slate-600 bg-slate-50 hover:bg-slate-100 rounded-lg transition-all border border-slate-200 flex items-center gap-2"
+              className={`px-3 py-1.5 text-xs font-bold text-slate-600 bg-slate-50 hover:bg-slate-100 rounded-lg transition-all border border-slate-200 flex items-center gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}
             >
               <Icon icon="lucide:crosshair" className="text-rose-500" />
-              Observations Tracker
+              {t('regulatoryUpdates.observationsTracker')}
             </Link>
           </div>
         </div>
 
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-1 bg-slate-50 border border-slate-200 p-1 rounded-lg">
-            <div className="px-4 py-1.5 text-sm font-bold text-slate-900 flex items-center gap-2">
-              <span>Live Pulse</span>
+        <div className={`flex items-center gap-4 ${isRTL ? 'flex-row-reverse' : ''}`}>
+          <div className={`flex items-center gap-1 bg-slate-50 border border-slate-200 p-1 rounded-lg ${isRTL ? 'flex-row-reverse' : ''}`}>
+            <div className={`px-4 py-1.5 text-sm font-bold text-slate-900 flex items-center gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
+              <span>{t('common.livePulse')}</span>
               <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
             </div>
           </div>
 
           <button
             onClick={() => handleOpenCreateModal()}
-            className="bg-emerald-600 text-white px-5 py-2.5 rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-emerald-700 transition-colors shadow-lg shadow-emerald-100 cursor-pointer"
+            className={`bg-emerald-600 text-white px-5 py-2.5 rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-emerald-700 transition-colors shadow-lg shadow-emerald-100 cursor-pointer ${isRTL ? 'flex-row-reverse' : ''}`}
           >
             <Icon icon="lucide:plus" />
-            Draft New Letter
+            {t('samaLetters.draftNewLetter')}
           </button>
         </div>
       </header>
@@ -491,8 +493,8 @@ export default function SAMALettersPage() {
           /* Template Management Databank View */
           <div>
             {/* Header */}
-            <div className="flex justify-between items-center mb-8">
-              <div className="flex items-center gap-4">
+            <div className={`flex justify-between items-center mb-8 ${isRTL ? 'flex-row-reverse' : ''}`}>
+              <div className={`flex items-center gap-4 ${isRTL ? 'flex-row-reverse' : ''}`}>
                 <button
                   onClick={() => {
                     setIsTemplateManagementOpen(false)
@@ -502,73 +504,73 @@ export default function SAMALettersPage() {
                   }}
                   className="w-10 h-10 bg-white border border-slate-200 rounded-lg flex items-center justify-center text-slate-500 hover:bg-slate-50 cursor-pointer"
                 >
-                  <Icon icon="lucide:chevron-left" className="text-xl" />
+                  <Icon icon={isRTL ? 'lucide:chevron-right' : 'lucide:chevron-left'} className="text-xl" />
                 </button>
-                <div>
-                  <h2 className="text-2xl font-bold text-slate-900 font-display">Template Databank</h2>
-                  <p className="text-sm text-slate-500">Manage and organize letter templates</p>
+                <div className={isRTL ? 'text-right' : ''}>
+                  <h2 className="text-2xl font-bold text-slate-900 font-display">{t('samaLetters.templateDatabank')}</h2>
+                  <p className="text-sm text-slate-500">{t('samaLetters.manageOrganizeTemplates')}</p>
                 </div>
               </div>
               <button
                 onClick={handleCreateTemplate}
-                className="bg-emerald-600 text-white px-5 py-2.5 rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-emerald-700 transition-colors shadow-lg shadow-emerald-100 cursor-pointer"
+                className={`bg-emerald-600 text-white px-5 py-2.5 rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-emerald-700 transition-colors shadow-lg shadow-emerald-100 cursor-pointer ${isRTL ? 'flex-row-reverse' : ''}`}
               >
                 <Icon icon="lucide:plus" />
-                Create Template
+                {t('samaLetters.createTemplate')}
               </button>
             </div>
 
             {/* Filters Section */}
             <div className="glass-card rounded-2xl p-6 mb-6">
-              <div className="flex flex-wrap gap-4 items-center">
+              <div className={`flex flex-wrap gap-4 items-center ${isRTL ? 'flex-row-reverse' : ''}`}>
                 {/* Search Input */}
                 <div className="relative flex-1 min-w-[280px]">
                   <Icon
                     icon="lucide:search"
-                    className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+                    className={`absolute ${isRTL ? 'right-3' : 'left-3'} top-1/2 -translate-y-1/2 text-slate-400`}
                   />
                   <input
                     type="text"
                     value={templateSearch}
                     onChange={(e) => setTemplateSearch(e.target.value)}
-                    placeholder="Search templates by name or description..."
-                    className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 outline-none"
+                    placeholder={t('samaLetters.searchTemplates')}
+                    className={`w-full ${isRTL ? 'pr-10 pl-4' : 'pl-10 pr-4'} py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 outline-none`}
                   />
                 </div>
 
                 {/* Type Filter */}
-                <div className="flex items-center gap-2">
-                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wide">Type:</label>
+                <div className={`flex items-center gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wide">{t('common.type')}:</label>
                   <select
                     value={templateTypeFilter}
                     onChange={(e) => setTemplateTypeFilter(e.target.value as LetterType | 'All')}
                     className="px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm font-medium focus:ring-2 focus:ring-emerald-500 outline-none min-w-[150px]"
                   >
-                    <option value="All">All Types</option>
-                    <option value="Non-Objection">Non-Objection</option>
-                    <option value="Inquiry">Inquiry</option>
-                    <option value="Submission">Submission</option>
-                    <option value="Notification">Notification</option>
+                    <option value="All">{t('samaLetters.allTypes')}</option>
+                    <option value="Non-Objection">{t('samaLetters.nonObjection')}</option>
+                    <option value="Inquiry">{t('samaLetters.inquiry')}</option>
+                    <option value="Submission">{t('samaLetters.submission')}</option>
+                    <option value="Notification">{t('samaLetters.notification')}</option>
                   </select>
                 </div>
 
                 {/* Status Filter */}
-                <div className="flex items-center gap-2">
-                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wide">Status:</label>
+                <div className={`flex items-center gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wide">{t('common.status')}:</label>
                   <select
                     value={templateStatusFilter}
                     onChange={(e) => setTemplateStatusFilter(e.target.value as TemplateStatus | 'All')}
                     className="px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm font-medium focus:ring-2 focus:ring-emerald-500 outline-none min-w-[130px]"
                   >
-                    <option value="All">All Status</option>
-                    <option value="Active">Active</option>
-                    <option value="Draft">Draft</option>
+                    <option value="All">{t('samaLetters.allStatus')}</option>
+                    <option value="Active">{t('common.active')}</option>
+                    <option value="Draft">{t('common.draft')}</option>
                   </select>
                 </div>
 
                 {/* Results Count */}
-                <div className="text-sm text-slate-500">
-                  <span className="font-bold text-slate-900">{filteredTemplates.length}</span> templates found
+                <div className={`text-sm text-slate-500 ${isRTL ? 'text-right' : ''}`}>
+                  <span className="font-bold text-slate-900">{filteredTemplates.length}</span> {t('samaLetters.templatesFound')}
                 </div>
               </div>
             </div>
@@ -697,45 +699,49 @@ export default function SAMALettersPage() {
             {/* Stats Section */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-10">
               <StatCard
-                label="Total Letters (YTD)"
+                label={t('samaLetters.totalLettersYTD')}
                 value="142"
-                subtext="+12% from 2023"
+                subtext={t('samaLetters.fromPreviousYear')}
                 subtextIcon="lucide:trending-up"
                 subtextColor="emerald"
                 borderColor="emerald"
+                isRTL={isRTL}
               />
               <StatCard
-                label="Sent This Quarter"
+                label={t('samaLetters.sentThisQuarter')}
                 value="28"
-                subtext="Last sent: Yesterday"
+                subtext={t('samaLetters.lastSent')}
                 borderColor="blue"
+                isRTL={isRTL}
               />
               <StatCard
-                label="Pending Drafts"
+                label={t('samaLetters.pendingDrafts')}
                 value="09"
-                subtext="3 due this week"
+                subtext={t('samaLetters.dueThisWeek')}
                 subtextIcon="lucide:clock"
                 subtextColor="amber"
                 borderColor="amber"
+                isRTL={isRTL}
               />
               <StatCard
-                label="Overdue Replies"
+                label={t('samaLetters.overdueReplies')}
                 value="02"
-                subtext="Critical Escalation"
+                subtext={t('samaLetters.criticalEscalation')}
                 subtextColor="rose"
                 borderColor="rose"
+                isRTL={isRTL}
               />
             </div>
 
             {/* Letter Templates */}
             <div className="mb-10">
-              <div className="flex items-baseline justify-between mb-6">
-                <h2 className="text-lg font-bold font-display text-slate-900">Letter Templates</h2>
+              <div className={`flex items-baseline justify-between mb-6 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                <h2 className="text-lg font-bold font-display text-slate-900">{t('samaLetters.letterTemplates')}</h2>
                 <button
                   onClick={() => setIsTemplateManagementOpen(true)}
                   className="text-xs font-bold text-emerald-600 hover:underline cursor-pointer"
                 >
-                  Manage Templates &rarr;
+                  {t('samaLetters.manageTemplates')} {isRTL ? '\u2190' : '\u2192'}
                 </button>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -754,18 +760,18 @@ export default function SAMALettersPage() {
 
             {/* Recent Letters Table */}
             <div className="glass-card rounded-2xl overflow-hidden shadow-sm">
-              <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between bg-white/50">
-                <h2 className="font-bold text-slate-900">Recent Correspondence</h2>
-                <div className="flex gap-3">
+              <div className={`px-6 py-5 border-b border-slate-100 flex items-center justify-between bg-white/50 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                <h2 className="font-bold text-slate-900">{t('samaLetters.recentCorrespondence')}</h2>
+                <div className={`flex gap-3 ${isRTL ? 'flex-row-reverse' : ''}`}>
                   <div className="relative">
                     <Icon
                       icon="lucide:search"
-                      className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+                      className={`absolute ${isRTL ? 'right-3' : 'left-3'} top-1/2 -translate-y-1/2 text-slate-400`}
                     />
                     <input
                       type="text"
-                      placeholder="Search reference..."
-                      className="pl-10 pr-4 py-2 bg-slate-100 rounded-lg text-xs focus:ring-2 focus:ring-emerald-500 outline-none w-64"
+                      placeholder={t('samaLetters.searchReference')}
+                      className={`${isRTL ? 'pr-10 pl-4' : 'pl-10 pr-4'} py-2 bg-slate-100 rounded-lg text-xs focus:ring-2 focus:ring-emerald-500 outline-none w-64`}
                     />
                   </div>
                   <button className="p-2 bg-slate-100 rounded-lg text-slate-600 hover:bg-slate-200 transition-colors cursor-pointer">
@@ -774,15 +780,15 @@ export default function SAMALettersPage() {
                 </div>
               </div>
               <div className="overflow-x-auto">
-                <table className="w-full">
+                <table className={`w-full ${isRTL ? 'text-right' : 'text-left'}`}>
                   <thead className="bg-slate-50/50 text-slate-500 uppercase text-[10px] font-bold tracking-widest border-b border-slate-100">
                     <tr>
-                      <th className="px-6 py-4 text-left">Reference #</th>
-                      <th className="px-6 py-4 text-left">Type</th>
-                      <th className="px-6 py-4 text-left">Subject</th>
-                      <th className="px-6 py-4 text-left">Status</th>
-                      <th className="px-6 py-4 text-left">Last Modified</th>
-                      <th className="px-6 py-4 text-right">Actions</th>
+                      <th className={`px-6 py-4 ${isRTL ? 'text-right' : 'text-left'}`}>{t('samaLetters.reference')}</th>
+                      <th className={`px-6 py-4 ${isRTL ? 'text-right' : 'text-left'}`}>{t('common.type')}</th>
+                      <th className={`px-6 py-4 ${isRTL ? 'text-right' : 'text-left'}`}>{t('samaLetters.subject')}</th>
+                      <th className={`px-6 py-4 ${isRTL ? 'text-right' : 'text-left'}`}>{t('common.status')}</th>
+                      <th className={`px-6 py-4 ${isRTL ? 'text-right' : 'text-left'}`}>{t('samaLetters.lastModified')}</th>
+                      <th className={`px-6 py-4 ${isRTL ? 'text-left' : 'text-right'}`}>{t('common.actions')}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
@@ -839,31 +845,31 @@ export default function SAMALettersPage() {
         ) : (
           // Detail View
           <div>
-            <div className="flex justify-between items-center mb-6">
-              <div className="flex items-center gap-4">
+            <div className={`flex justify-between items-center mb-6 ${isRTL ? 'flex-row-reverse' : ''}`}>
+              <div className={`flex items-center gap-4 ${isRTL ? 'flex-row-reverse' : ''}`}>
                 <button
                   onClick={handleBackToDashboard}
                   className="w-10 h-10 bg-white border border-slate-200 rounded-lg flex items-center justify-center text-slate-500 hover:bg-slate-50 cursor-pointer"
                 >
-                  <Icon icon="lucide:chevron-left" className="text-xl" />
+                  <Icon icon={isRTL ? 'lucide:chevron-right' : 'lucide:chevron-left'} className="text-xl" />
                 </button>
-                <div>
+                <div className={isRTL ? 'text-right' : ''}>
                   <h2 className="text-2xl font-bold text-slate-900 font-display">
                     {selectedLetter?.reference}
                   </h2>
                   <p className="text-sm text-slate-500">
-                    {selectedLetter?.type} &bull; Sent on {selectedLetter?.lastModified}
+                    {selectedLetter?.type} &bull; {t('dashboard.sent')} {selectedLetter?.lastModified}
                   </p>
                 </div>
               </div>
-              <div className="flex gap-3">
-                <button className="px-4 py-2 bg-white border border-slate-200 rounded-lg text-sm font-bold text-slate-700 flex items-center gap-2 hover:bg-slate-50 transition-colors cursor-pointer">
+              <div className={`flex gap-3 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                <button className={`px-4 py-2 bg-white border border-slate-200 rounded-lg text-sm font-bold text-slate-700 flex items-center gap-2 hover:bg-slate-50 transition-colors cursor-pointer ${isRTL ? 'flex-row-reverse' : ''}`}>
                   <Icon icon="lucide:printer" />
-                  Print PDF
+                  {t('samaLetters.printPdf')}
                 </button>
-                <button className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-emerald-700 transition-colors shadow-lg shadow-emerald-100 cursor-pointer">
+                <button className={`px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-emerald-700 transition-colors shadow-lg shadow-emerald-100 cursor-pointer ${isRTL ? 'flex-row-reverse' : ''}`}>
                   <Icon icon="lucide:pencil" />
-                  Edit Letter
+                  {t('samaLetters.editLetter')}
                 </button>
               </div>
             </div>
@@ -1018,24 +1024,24 @@ export default function SAMALettersPage() {
               {/* Sidebar Info */}
               <div className="col-span-12 lg:col-span-4 space-y-6">
                 {/* Metadata */}
-                <section className="glass-card p-6 rounded-2xl">
+                <section className={`glass-card p-6 rounded-2xl ${isRTL ? 'text-right' : ''}`}>
                   <h4 className="text-xs font-black text-slate-500 uppercase tracking-widest mb-4">
-                    Metadata
+                    {t('samaLetters.metadata')}
                   </h4>
                   <div className="space-y-4">
-                    <div className="flex justify-between items-center">
-                      <span className="text-xs text-slate-500">Category</span>
+                    <div className={`flex justify-between items-center ${isRTL ? 'flex-row-reverse' : ''}`}>
+                      <span className="text-xs text-slate-500">{t('common.category')}</span>
                       <span className="text-xs font-bold text-slate-900">
                         {selectedLetter?.type}
                       </span>
                     </div>
-                    <div className="flex justify-between items-center">
-                      <span className="text-xs text-slate-500">Recipient Dept.</span>
-                      <span className="text-xs font-bold text-slate-900">Compliance</span>
+                    <div className={`flex justify-between items-center ${isRTL ? 'flex-row-reverse' : ''}`}>
+                      <span className="text-xs text-slate-500">{t('samaLetters.recipientDept')}</span>
+                      <span className="text-xs font-bold text-slate-900">{t('departments.compliance')}</span>
                     </div>
-                    <div className="flex justify-between items-center">
-                      <span className="text-xs text-slate-500">Created By</span>
-                      <div className="flex items-center gap-2">
+                    <div className={`flex justify-between items-center ${isRTL ? 'flex-row-reverse' : ''}`}>
+                      <span className="text-xs text-slate-500">{t('samaLetters.createdBy')}</span>
+                      <div className={`flex items-center gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
                         <img
                           src="https://api.dicebear.com/7.x/avataaars/svg?seed=Felix"
                           className="w-5 h-5 rounded-full"
@@ -1046,8 +1052,8 @@ export default function SAMALettersPage() {
                         </span>
                       </div>
                     </div>
-                    <div className="flex justify-between items-center">
-                      <span className="text-xs text-slate-500">Assigned To</span>
+                    <div className={`flex justify-between items-center ${isRTL ? 'flex-row-reverse' : ''}`}>
+                      <span className="text-xs text-slate-500">{t('calendar.assignedTo')}</span>
                       <span className="text-xs font-bold text-emerald-600">
                         {selectedLetter?.assignedTo}
                       </span>
@@ -1056,9 +1062,9 @@ export default function SAMALettersPage() {
                 </section>
 
                 {/* Attachments */}
-                <section className="glass-card p-6 rounded-2xl">
+                <section className={`glass-card p-6 rounded-2xl ${isRTL ? 'text-right' : ''}`}>
                   <h4 className="text-xs font-black text-slate-500 uppercase tracking-widest mb-4">
-                    Attachments ({selectedLetter?.attachments?.length || 0})
+                    {t('samaLetters.attachments')} ({selectedLetter?.attachments?.length || 0})
                   </h4>
                   <div className="space-y-3">
                     {selectedLetter?.attachments?.map((attachment) => (
@@ -1084,15 +1090,15 @@ export default function SAMALettersPage() {
                       </div>
                     ))}
                     <button className="w-full py-2 border-2 border-dashed border-slate-200 rounded-xl text-[10px] font-bold text-slate-400 hover:border-emerald-300 hover:text-emerald-500 transition-all cursor-pointer">
-                      + Add Attachment
+                      {t('samaLetters.addAttachment')}
                     </button>
                   </div>
                 </section>
 
                 {/* Activity Timeline */}
-                <section className="glass-card p-6 rounded-2xl">
+                <section className={`glass-card p-6 rounded-2xl ${isRTL ? 'text-right' : ''}`}>
                   <h4 className="text-xs font-black text-slate-500 uppercase tracking-widest mb-6">
-                    Activity Timeline
+                    {t('samaLetters.activityTimeline')}
                   </h4>
                   <div className="space-y-6 relative before:absolute before:left-2 before:top-1 before:bottom-1 before:w-0.5 before:bg-slate-100">
                     {selectedLetter?.timeline?.map((event) => (
@@ -1316,6 +1322,7 @@ function StatCard({
   subtextIcon,
   subtextColor,
   borderColor,
+  isRTL = false,
 }: {
   label: string
   value: string
@@ -1323,6 +1330,7 @@ function StatCard({
   subtextIcon?: string
   subtextColor?: 'emerald' | 'amber' | 'rose' | 'blue'
   borderColor: 'emerald' | 'amber' | 'rose' | 'blue'
+  isRTL?: boolean
 }) {
   const borderColorValues = {
     emerald: '#22c55e',  // emerald-500
@@ -1340,10 +1348,10 @@ function StatCard({
 
   return (
     <div
-      className="glass-card p-6 rounded-2xl stat-card-hover"
+      className={`glass-card p-6 rounded-2xl stat-card-hover ${isRTL ? 'text-right' : ''}`}
       style={{
         border: `1px solid ${borderColorValues[borderColor]}`,
-        borderLeftWidth: '6px'
+        [isRTL ? 'borderRightWidth' : 'borderLeftWidth']: '6px'
       }}
     >
       <p className="text-slate-500 text-[10px] font-bold uppercase tracking-widest mb-1">{label}</p>
@@ -1351,7 +1359,7 @@ function StatCard({
       <p
         className={`text-xs mt-2 ${
           subtextIcon
-            ? `font-bold flex items-center gap-1 ${subtextColor ? textColors[subtextColor] : 'text-slate-400'}`
+            ? `font-bold flex items-center gap-1 ${isRTL ? 'flex-row-reverse' : ''} ${subtextColor ? textColors[subtextColor] : 'text-slate-400'}`
             : subtextColor
               ? `font-bold ${textColors[subtextColor]}`
               : 'font-medium text-slate-400'

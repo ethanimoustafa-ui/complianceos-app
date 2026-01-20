@@ -8,6 +8,8 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Modal } from '@/components/ui/modal'
 import { cn } from '@/lib/utils'
+import { useTranslation } from '@/i18n'
+import type { TranslationKey } from '@/i18n'
 
 // Types
 interface Letter {
@@ -155,6 +157,7 @@ function Toast({ message, onClose }: { message: string; onClose: () => void }) {
 }
 
 export default function CorrespondenceHubPage() {
+  const { t, isRTL } = useTranslation()
   const [letters, setLetters] = useState<Letter[]>(initialLetters)
   const [isNewCorrespondenceOpen, setIsNewCorrespondenceOpen] = useState(false)
   const [isRiskMatrixOpen, setIsRiskMatrixOpen] = useState(false)
@@ -190,12 +193,12 @@ export default function CorrespondenceHubPage() {
       l.id === letterId ? { ...l, archived: !l.archived } : l
     ))
     const letter = letters.find(l => l.id === letterId)
-    showToast(letter?.archived ? 'Letter unarchived' : 'Letter archived')
+    showToast(letter?.archived ? t('correspondence.letterUnarchived') : t('correspondence.letterArchived'))
     setIsLetterDetailOpen(false)
   }
 
   const handleReviewFile = () => {
-    showToast('Opening PRM Report for review...')
+    showToast(t('correspondence.openingPrmReport'))
   }
 
   // Risk counts for heatmap display
@@ -235,7 +238,7 @@ export default function CorrespondenceHubPage() {
     if (cellRisks.length > 0) {
       setSelectedCellRisks(cellRisks)
     } else {
-      showToast('No risks in this category')
+      showToast(t('correspondence.noRisksInCategory'))
     }
   }
 
@@ -256,25 +259,25 @@ export default function CorrespondenceHubPage() {
         <div className="flex-1 overflow-auto hide-scrollbar bg-slate-50 p-8">
           <div className="requirements-view">
             {/* Header */}
-            <div className="flex justify-between items-center mb-8">
-              <div>
-                <div className="flex items-center gap-3 mb-2">
+            <div className={`flex justify-between items-center mb-8 ${isRTL ? 'flex-row-reverse' : ''}`}>
+              <div className={isRTL ? 'text-right' : ''}>
+                <div className={`flex items-center gap-3 mb-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
                   <button
                     onClick={() => setIsRegistryViewOpen(false)}
                     className="text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"
                   >
-                    <Icon icon="lucide:arrow-left" className="text-2xl" />
+                    <Icon icon={isRTL ? "lucide:arrow-right" : "lucide:arrow-left"} className="text-2xl" />
                   </button>
-                  <h1 className="text-2xl font-bold font-display text-slate-900">Regulatory Requirements</h1>
+                  <h1 className="text-2xl font-bold font-display text-slate-900">{t('correspondence.regulatoryRequirements')}</h1>
                 </div>
-                <p className="text-sm text-slate-500 ml-11">Comprehensive list of all regulatory mandates and circulars</p>
+                <p className={`text-sm text-slate-500 ${isRTL ? 'mr-11' : 'ml-11'}`}>{t('correspondence.comprehensiveList')}</p>
               </div>
               <button
                 onClick={() => setIsAddRequirementOpen(true)}
-                className="bg-emerald-600 text-white px-5 py-2.5 rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-emerald-700 transition-colors shadow-lg shadow-emerald-100 cursor-pointer"
+                className={`bg-emerald-600 text-white px-5 py-2.5 rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-emerald-700 transition-colors shadow-lg shadow-emerald-100 cursor-pointer ${isRTL ? 'flex-row-reverse' : ''}`}
               >
                 <Icon icon="lucide:plus" />
-                Add Requirement
+                {t('correspondence.addRequirement')}
               </button>
             </div>
 
@@ -282,53 +285,53 @@ export default function CorrespondenceHubPage() {
             <div className="glass-card rounded-2xl p-6 mb-6">
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <div className="md:col-span-2">
-                  <label className="text-xs font-bold text-slate-700 uppercase mb-2 block">Search</label>
+                  <label className={`text-xs font-bold text-slate-700 uppercase mb-2 block ${isRTL ? 'text-right' : ''}`}>{t('common.search')}</label>
                   <div className="relative">
-                    <Icon icon="lucide:search" className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-lg" />
+                    <Icon icon="lucide:search" className={`absolute ${isRTL ? 'right-3' : 'left-3'} top-1/2 -translate-y-1/2 text-slate-400 text-lg`} />
                     <input
                       type="text"
                       value={searchTerm}
                       onChange={(e) => setSearchTerm(e.target.value)}
-                      placeholder="Search by requirement name..."
-                      className="w-full pl-10 pr-4 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                      placeholder={t('common.searchRecords')}
+                      className={`w-full ${isRTL ? 'pr-10 pl-4 text-right' : 'pl-10 pr-4'} py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500`}
                     />
                   </div>
                 </div>
                 <div>
-                  <label className="text-xs font-bold text-slate-700 uppercase mb-2 block">Category</label>
+                  <label className={`text-xs font-bold text-slate-700 uppercase mb-2 block ${isRTL ? 'text-right' : ''}`}>{t('correspondence.category')}</label>
                   <select
                     value={categoryFilter}
                     onChange={(e) => setCategoryFilter(e.target.value)}
-                    className="w-full px-4 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    className={`w-full px-4 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 ${isRTL ? 'text-right' : ''}`}
                   >
-                    <option value="">All Categories</option>
+                    <option value="">{t('correspondence.allCategories')}</option>
                     {uniqueCategories.map(cat => (
                       <option key={cat} value={cat}>{cat}</option>
                     ))}
                   </select>
                 </div>
                 <div>
-                  <label className="text-xs font-bold text-slate-700 uppercase mb-2 block">Status</label>
+                  <label className={`text-xs font-bold text-slate-700 uppercase mb-2 block ${isRTL ? 'text-right' : ''}`}>{t('common.status')}</label>
                   <select
                     value={statusFilter}
                     onChange={(e) => setStatusFilter(e.target.value)}
-                    className="w-full px-4 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    className={`w-full px-4 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 ${isRTL ? 'text-right' : ''}`}
                   >
-                    <option value="">All Statuses</option>
-                    <option value="completed">Completed</option>
-                    <option value="implementing">Implementing</option>
-                    <option value="drafting">Drafting</option>
-                    <option value="pending">Pending</option>
+                    <option value="">{t('correspondence.allStatuses')}</option>
+                    <option value="completed">{t('common.completed')}</option>
+                    <option value="implementing">{t('correspondence.implementing')}</option>
+                    <option value="drafting">{t('correspondence.drafting')}</option>
+                    <option value="pending">{t('common.pending')}</option>
                   </select>
                 </div>
               </div>
-              <div className="flex gap-3 mt-4">
+              <div className={`flex gap-3 mt-4 ${isRTL ? 'flex-row-reverse' : ''}`}>
                 <button
                   onClick={() => { setSearchTerm(''); setCategoryFilter(''); setStatusFilter(''); }}
-                  className="px-4 py-2 text-sm font-bold text-slate-600 hover:text-slate-900 transition-colors flex items-center gap-1 cursor-pointer"
+                  className={`px-4 py-2 text-sm font-bold text-slate-600 hover:text-slate-900 transition-colors flex items-center gap-1 cursor-pointer ${isRTL ? 'flex-row-reverse' : ''}`}
                 >
                   <Icon icon="lucide:x" className="text-lg" />
-                  Clear Filters
+                  {t('correspondence.clearFilters')}
                 </button>
               </div>
             </div>
@@ -339,27 +342,27 @@ export default function CorrespondenceHubPage() {
                 <table className="w-full">
                   <thead className="bg-slate-50 border-b-2 border-slate-200">
                     <tr>
-                      <th className="text-left p-4 text-xs font-black text-slate-600 uppercase tracking-wider">
-                        Requirement Name
-                        <Icon icon="lucide:chevrons-up-down" className="text-sm inline ml-1" />
+                      <th className={`${isRTL ? 'text-right' : 'text-left'} p-4 text-xs font-black text-slate-600 uppercase tracking-wider`}>
+                        {t('correspondence.requirementName')}
+                        <Icon icon="lucide:chevrons-up-down" className={`text-sm inline ${isRTL ? 'mr-1' : 'ml-1'}`} />
                       </th>
-                      <th className="text-left p-4 text-xs font-black text-slate-600 uppercase tracking-wider">
-                        Category
-                        <Icon icon="lucide:chevrons-up-down" className="text-sm inline ml-1" />
+                      <th className={`${isRTL ? 'text-right' : 'text-left'} p-4 text-xs font-black text-slate-600 uppercase tracking-wider`}>
+                        {t('correspondence.category')}
+                        <Icon icon="lucide:chevrons-up-down" className={`text-sm inline ${isRTL ? 'mr-1' : 'ml-1'}`} />
                       </th>
-                      <th className="text-left p-4 text-xs font-black text-slate-600 uppercase tracking-wider">
-                        Release Date
-                        <Icon icon="lucide:chevrons-up-down" className="text-sm inline ml-1" />
+                      <th className={`${isRTL ? 'text-right' : 'text-left'} p-4 text-xs font-black text-slate-600 uppercase tracking-wider`}>
+                        {t('correspondence.releaseDate')}
+                        <Icon icon="lucide:chevrons-up-down" className={`text-sm inline ${isRTL ? 'mr-1' : 'ml-1'}`} />
                       </th>
-                      <th className="text-left p-4 text-xs font-black text-slate-600 uppercase tracking-wider">
-                        Status
-                        <Icon icon="lucide:chevrons-up-down" className="text-sm inline ml-1" />
+                      <th className={`${isRTL ? 'text-right' : 'text-left'} p-4 text-xs font-black text-slate-600 uppercase tracking-wider`}>
+                        {t('common.status')}
+                        <Icon icon="lucide:chevrons-up-down" className={`text-sm inline ${isRTL ? 'mr-1' : 'ml-1'}`} />
                       </th>
-                      <th className="text-left p-4 text-xs font-black text-slate-600 uppercase tracking-wider">
-                        Due Date
-                        <Icon icon="lucide:chevrons-up-down" className="text-sm inline ml-1" />
+                      <th className={`${isRTL ? 'text-right' : 'text-left'} p-4 text-xs font-black text-slate-600 uppercase tracking-wider`}>
+                        {t('observations.dueDate')}
+                        <Icon icon="lucide:chevrons-up-down" className={`text-sm inline ${isRTL ? 'mr-1' : 'ml-1'}`} />
                       </th>
-                      <th className="text-left p-4 text-xs font-black text-slate-600 uppercase tracking-wider">Actions</th>
+                      <th className={`${isRTL ? 'text-right' : 'text-left'} p-4 text-xs font-black text-slate-600 uppercase tracking-wider`}>{t('common.actions')}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -416,16 +419,16 @@ export default function CorrespondenceHubPage() {
                   </tbody>
                 </table>
               </div>
-              <div className="bg-slate-50 p-4 flex justify-between items-center border-t border-slate-200">
-                <p className="text-sm text-slate-600">
-                  Showing {filteredRequirements.length} of {fullRequirements.length} requirements
+              <div className={`bg-slate-50 p-4 flex justify-between items-center border-t border-slate-200 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                <p className={`text-sm text-slate-600 ${isRTL ? 'text-right' : ''}`}>
+                  {t('correspondence.showingRequirements').replace('{count}', String(filteredRequirements.length)).replace('{total}', String(fullRequirements.length))}
                 </p>
                 <button
                   onClick={() => showToast('Exporting to CSV...')}
-                  className="px-3 py-1.5 text-sm font-bold text-slate-600 hover:text-slate-900 hover:bg-slate-200 rounded transition-colors flex items-center gap-1 cursor-pointer"
+                  className={`px-3 py-1.5 text-sm font-bold text-slate-600 hover:text-slate-900 hover:bg-slate-200 rounded transition-colors flex items-center gap-1 cursor-pointer ${isRTL ? 'flex-row-reverse' : ''}`}
                 >
                   <Icon icon="lucide:download" className="text-lg" />
-                  Export to CSV
+                  {t('correspondence.exportToCsv')}
                 </button>
               </div>
             </div>
@@ -439,13 +442,15 @@ export default function CorrespondenceHubPage() {
         <Modal
           isOpen={isAddRequirementOpen}
           onClose={() => setIsAddRequirementOpen(false)}
-          title="Add New Requirement"
-          subtitle="Create a new regulatory requirement entry"
+          title={t('correspondence.addNewRequirement')}
+          subtitle={t('correspondence.createNewEntry')}
           size="lg"
         >
           <AddRequirementForm
-            onSuccess={() => { setIsAddRequirementOpen(false); showToast('✓ Requirement added successfully!'); }}
-            onValidationError={() => showToast('⚠️ Please fill in all required fields')}
+            t={t}
+            isRTL={isRTL}
+            onSuccess={() => { setIsAddRequirementOpen(false); showToast(t('correspondence.requirementAdded')); }}
+            onValidationError={() => showToast(t('correspondence.fillRequiredFields'))}
           />
         </Modal>
       </div>
@@ -453,56 +458,56 @@ export default function CorrespondenceHubPage() {
   }
 
   return (
-    <div className="flex-1 flex flex-col overflow-hidden">
+    <div className="flex-1 flex flex-col overflow-hidden" dir={isRTL ? 'rtl' : 'ltr'}>
       {/* Header */}
       <header className="h-20 bg-white border-b border-slate-200 px-8 flex items-center justify-between shrink-0">
         <div className="flex items-center gap-8">
-          <div>
-            <h1 className="text-xl font-bold font-display text-slate-900">Correspondence Hub</h1>
-            <p className="text-xs text-slate-500 font-medium tracking-wide uppercase">Regulatory Command Center</p>
+          <div className={isRTL ? 'text-right' : ''}>
+            <h1 className="text-xl font-bold font-display text-slate-900">{t('correspondence.title')}</h1>
+            <p className="text-xs text-slate-500 font-medium tracking-wide uppercase">{t('correspondence.subtitle')}</p>
           </div>
 
           <div className="h-8 w-px bg-slate-200 mx-2" />
 
-          <div className="flex gap-2">
+          <div className={`flex gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
             <Link
               href="/sama-letters"
-              className="px-3 py-1.5 text-xs font-bold text-slate-600 bg-slate-50 hover:bg-slate-100 rounded-lg transition-all border border-slate-200 flex items-center gap-2"
+              className={`px-3 py-1.5 text-xs font-bold text-slate-600 bg-slate-50 hover:bg-slate-100 rounded-lg transition-all border border-slate-200 flex items-center gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}
             >
               <Icon icon="lucide:mail" className="text-emerald-500" />
-              SAMA Letters
+              {t('navigation.samaLetters')}
             </Link>
             <Link
               href="/regulatory-updates"
-              className="px-3 py-1.5 text-xs font-bold text-slate-600 bg-slate-50 hover:bg-slate-100 rounded-lg transition-all border border-slate-200 flex items-center gap-2"
+              className={`px-3 py-1.5 text-xs font-bold text-slate-600 bg-slate-50 hover:bg-slate-100 rounded-lg transition-all border border-slate-200 flex items-center gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}
             >
               <Icon icon="lucide:refresh-cw" className="text-blue-500" />
-              Regulatory Updates
+              {t('navigation.regulatoryUpdates')}
             </Link>
             <Link
               href="/observations"
-              className="px-3 py-1.5 text-xs font-bold text-slate-600 bg-slate-50 hover:bg-slate-100 rounded-lg transition-all border border-slate-200 flex items-center gap-2"
+              className={`px-3 py-1.5 text-xs font-bold text-slate-600 bg-slate-50 hover:bg-slate-100 rounded-lg transition-all border border-slate-200 flex items-center gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}
             >
               <Icon icon="lucide:crosshair" className="text-rose-500" />
-              Observations Tracker
+              {t('navigation.observations')}
             </Link>
           </div>
         </div>
 
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-1 bg-slate-50 border border-slate-200 p-1 rounded-lg">
-            <div className="px-4 py-1.5 text-sm font-bold text-slate-900 flex items-center gap-2">
-              <span>Live Pulse</span>
+        <div className={`flex items-center gap-4 ${isRTL ? 'flex-row-reverse' : ''}`}>
+          <div className={`flex items-center gap-1 bg-slate-50 border border-slate-200 p-1 rounded-lg ${isRTL ? 'flex-row-reverse' : ''}`}>
+            <div className={`px-4 py-1.5 text-sm font-bold text-slate-900 flex items-center gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
+              <span>{t('common.livePulse')}</span>
               <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
             </div>
           </div>
 
           <button
             onClick={() => setIsNewCorrespondenceOpen(true)}
-            className="bg-emerald-600 text-white px-5 py-2.5 rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-emerald-700 transition-colors shadow-lg shadow-emerald-100 cursor-pointer"
+            className={`bg-emerald-600 text-white px-5 py-2.5 rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-emerald-700 transition-colors shadow-lg shadow-emerald-100 cursor-pointer ${isRTL ? 'flex-row-reverse' : ''}`}
           >
             <Icon icon="lucide:plus" />
-            New Correspondence
+            {t('correspondence.newCorrespondence')}
           </button>
         </div>
       </header>
@@ -515,44 +520,48 @@ export default function CorrespondenceHubPage() {
             <MetricCard
               icon="lucide:file-check"
               iconColor="emerald"
-              label="+12% vs LY"
-              title="SAMA Submissions"
+              label={`+12% ${t('correspondence.vsLy')}`}
+              title={t('correspondence.samaSubmissions')}
               value="18"
-              subtitle="/ 24 Quarterly"
+              subtitle={`/ 24 ${t('correspondence.quarterly')}`}
               progress={75}
+              isRTL={isRTL}
             />
             <MetricCard
               icon="lucide:alert-circle"
               iconColor="rose"
-              label="3 Urgent"
-              title="Audit Observations"
+              label={`3 ${t('correspondence.urgent')}`}
+              title={t('correspondence.auditObservations')}
               value="12"
-              subtitle="Open Findings"
+              subtitle={t('correspondence.openFindings')}
               progressSegments={[
                 { color: 'bg-rose-500', flex: 1 },
                 { color: 'bg-rose-300', flex: 1 },
                 { color: 'bg-slate-100', flex: 1 },
               ]}
+              isRTL={isRTL}
             />
             <MetricCard
               icon="lucide:shield-check"
               iconColor="blue"
-              label="On Target"
-              title="Saudization Rate"
+              label={t('correspondence.onTarget')}
+              title={t('correspondence.saudizationRate')}
               value="42.8%"
               subtitle="Target: 40%"
               progress={85}
               progressColor="bg-blue-500"
+              isRTL={isRTL}
             />
             <MetricCard
               icon="lucide:graduation-cap"
               iconColor="amber"
-              label="95% Complete"
-              title="Mandatory Training"
+              label={`95% ${t('correspondence.complete')}`}
+              title={t('correspondence.mandatoryTraining')}
               value="1,240"
-              subtitle="Employees Certified"
+              subtitle={t('correspondence.employeesCertified')}
               progress={95}
               progressColor="bg-amber-500"
+              isRTL={isRTL}
             />
           </div>
 
@@ -562,35 +571,35 @@ export default function CorrespondenceHubPage() {
             <div className="col-span-12 lg:col-span-8 space-y-8">
               {/* Regulatory Tracker */}
               <section className="glass-card rounded-3xl p-6">
-                <div className="flex justify-between items-center mb-6">
-                  <div>
+                <div className={`flex justify-between items-center mb-6 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                  <div className={isRTL ? 'text-right' : ''}>
                     <h2 className="text-lg font-bold font-display text-slate-900">
-                      Regulatory Tracker
+                      {t('correspondence.regulatoryTracker')}
                     </h2>
                     <p className="text-xs text-slate-500">
-                      Real-time status of active circulars and mandates
+                      {t('correspondence.trackerSubtitle')}
                     </p>
                   </div>
-                  <div className="flex gap-3">
+                  <div className={`flex gap-3 ${isRTL ? 'flex-row-reverse' : ''}`}>
                     <button
                       onClick={() => setIsAddRequirementOpen(true)}
-                      className="text-xs font-bold text-blue-600 hover:text-blue-700 cursor-pointer flex items-center gap-2"
+                      className={`text-xs font-bold text-blue-600 hover:text-blue-700 cursor-pointer flex items-center gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}
                     >
                       <Icon icon="lucide:plus-circle" className="text-lg" />
-                      Add Requirement
+                      {t('correspondence.addRequirement')}
                     </button>
                     <button
                       onClick={() => setIsRegistryViewOpen(true)}
                       className="text-xs font-bold text-emerald-600 hover:text-emerald-700 cursor-pointer"
                     >
-                      View Full Registry &rarr;
+                      {t('correspondence.viewFullRegistry')} {isRTL ? '\u2190' : '\u2192'}
                     </button>
                   </div>
                 </div>
 
                 <div className="space-y-4">
                   {requirements.map((req) => (
-                    <RequirementRow key={req.id} requirement={req} />
+                    <RequirementRow key={req.id} requirement={req} t={t} isRTL={isRTL} />
                   ))}
                 </div>
               </section>
@@ -599,9 +608,9 @@ export default function CorrespondenceHubPage() {
               <div className="grid grid-cols-2 gap-8">
                 {/* Letter Correspondence */}
                 <section className="glass-card rounded-3xl p-6">
-                  <h3 className="text-sm font-bold text-slate-900 mb-4 flex items-center gap-2">
+                  <h3 className={`text-sm font-bold text-slate-900 mb-4 flex items-center gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
                     <Icon icon="lucide:mail" className="text-slate-400" />
-                    Correspondence Feed
+                    {t('correspondence.correspondenceFeed')}
                   </h3>
                   <div className="space-y-4">
                     {letters.filter(l => !l.archived).map((letter) => (
@@ -611,6 +620,8 @@ export default function CorrespondenceHubPage() {
                         onView={() => handleViewLetter(letter)}
                         onReply={() => handleReply(letter)}
                         onArchive={() => handleArchive(letter.id)}
+                        t={t}
+                        isRTL={isRTL}
                       />
                     ))}
                   </div>
@@ -618,26 +629,26 @@ export default function CorrespondenceHubPage() {
 
                 {/* Policy Status */}
                 <section className="glass-card rounded-3xl p-6">
-                  <h3 className="text-sm font-bold text-slate-900 mb-4 flex items-center gap-2">
+                  <h3 className={`text-sm font-bold text-slate-900 mb-4 flex items-center gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
                     <Icon icon="lucide:scroll-text" className="text-slate-400" />
-                    Policy Review
+                    {t('correspondence.policyReview')}
                   </h3>
                   <div className="grid grid-cols-2 gap-4">
-                    <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">
+                    <div className={`bg-slate-50 p-3 rounded-xl border border-slate-100 ${isRTL ? 'text-right' : ''}`}>
                       <span className="text-[10px] font-black text-slate-400 uppercase">
-                        Current
+                        {t('correspondence.current')}
                       </span>
                       <p className="text-xl font-bold text-slate-900">84%</p>
                     </div>
-                    <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">
+                    <div className={`bg-slate-50 p-3 rounded-xl border border-slate-100 ${isRTL ? 'text-right' : ''}`}>
                       <span className="text-[10px] font-black text-rose-500 uppercase">
-                        Expired
+                        {t('correspondence.expired')}
                       </span>
                       <p className="text-xl font-bold text-rose-600">4</p>
                     </div>
                   </div>
-                  <div className="mt-4 flex items-center justify-between text-[10px] font-bold text-slate-500">
-                    <span>Next Review: InfoSec Policy</span>
+                  <div className={`mt-4 flex items-center justify-between text-[10px] font-bold text-slate-500 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                    <span>{t('correspondence.nextReview')}: InfoSec Policy</span>
                     <span className="text-blue-600">Nov 12</span>
                   </div>
                 </section>
@@ -648,33 +659,33 @@ export default function CorrespondenceHubPage() {
             <div className="col-span-12 lg:col-span-4 space-y-8">
               {/* Risk Register Summary */}
               <section className="rounded-3xl p-6 bg-slate-900 text-white">
-                <div className="flex justify-between items-center mb-6">
-                  <h2 className="text-lg font-bold font-display">Risk Heatmap</h2>
+                <div className={`flex justify-between items-center mb-6 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                  <h2 className="text-lg font-bold font-display">{t('correspondence.riskHeatmap')}</h2>
                   <Icon icon="lucide:trending-up" className="text-emerald-400 text-xl" />
                 </div>
                 <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-slate-400 uppercase tracking-widest font-black">Severity</span>
-                    <span className="text-xs text-slate-400 uppercase tracking-widest font-black">Items</span>
+                  <div className={`flex items-center justify-between ${isRTL ? 'flex-row-reverse' : ''}`}>
+                    <span className="text-xs text-slate-400 uppercase tracking-widest font-black">{t('observations.severity')}</span>
+                    <span className="text-xs text-slate-400 uppercase tracking-widest font-black">{t('common.items')}</span>
                   </div>
                   <div className="space-y-3">
-                    <div className="flex items-center gap-3">
+                    <div className={`flex items-center gap-3 ${isRTL ? 'flex-row-reverse' : ''}`}>
                       <div className="w-full h-2 bg-slate-800 rounded-full overflow-hidden">
                         <div className="h-full bg-rose-500 w-[15%]" />
                       </div>
-                      <span className="text-[10px] font-bold w-16 shrink-0">Critical ({riskCounts.critical})</span>
+                      <span className="text-[10px] font-bold w-16 shrink-0">{t('riskRegister.critical')} ({riskCounts.critical})</span>
                     </div>
-                    <div className="flex items-center gap-3">
+                    <div className={`flex items-center gap-3 ${isRTL ? 'flex-row-reverse' : ''}`}>
                       <div className="w-full h-2 bg-slate-800 rounded-full overflow-hidden">
                         <div className="h-full bg-orange-500 w-[35%]" />
                       </div>
-                      <span className="text-[10px] font-bold w-16 shrink-0">High ({riskCounts.high})</span>
+                      <span className="text-[10px] font-bold w-16 shrink-0">{t('riskRegister.high')} ({riskCounts.high})</span>
                     </div>
-                    <div className="flex items-center gap-3">
+                    <div className={`flex items-center gap-3 ${isRTL ? 'flex-row-reverse' : ''}`}>
                       <div className="w-full h-2 bg-slate-800 rounded-full overflow-hidden">
                         <div className="h-full bg-amber-500 w-[60%]" />
                       </div>
-                      <span className="text-[10px] font-bold w-16 shrink-0">Medium ({riskCounts.medium})</span>
+                      <span className="text-[10px] font-bold w-16 shrink-0">{t('riskRegister.medium')} ({riskCounts.medium})</span>
                     </div>
                   </div>
                 </div>
@@ -682,15 +693,15 @@ export default function CorrespondenceHubPage() {
                   className="w-full mt-6 py-2.5 bg-slate-800 hover:bg-slate-700 rounded-xl text-xs font-bold transition-all cursor-pointer"
                   onClick={() => setIsRiskMatrixOpen(true)}
                 >
-                  Full Risk Analysis
+                  {t('correspondence.fullRiskAnalysis')}
                 </button>
               </section>
 
               {/* Team Workload */}
               <section className="glass-card rounded-3xl p-6">
-                <div className="flex justify-between items-center mb-6">
+                <div className={`flex justify-between items-center mb-6 ${isRTL ? 'flex-row-reverse' : ''}`}>
                   <h2 className="text-sm font-bold text-slate-900 uppercase tracking-widest">
-                    Team Capacity
+                    {t('correspondence.teamCapacity')}
                   </h2>
                   <button onClick={() => showToast('Team options menu')} className="cursor-pointer">
                     <Icon
@@ -708,19 +719,19 @@ export default function CorrespondenceHubPage() {
 
               {/* SAMA Filing Deadlines */}
               <section className="glass-card rounded-3xl p-6 border-emerald-100 bg-emerald-50/20">
-                <h2 className="text-[10px] font-black text-emerald-600 uppercase tracking-widest mb-4">
-                  Upcoming Submission
+                <h2 className={`text-[10px] font-black text-emerald-600 uppercase tracking-widest mb-4 ${isRTL ? 'text-right' : ''}`}>
+                  {t('correspondence.upcomingSubmission')}
                 </h2>
-                <div className="bg-white p-4 rounded-2xl border border-emerald-100 shadow-sm">
-                  <p className="text-sm font-bold text-slate-900">Quarterly PRM Report</p>
-                  <p className="text-xs text-slate-500 mt-1">Compliance risk self-assessment</p>
-                  <div className="flex items-center justify-between mt-4 pt-4 border-t border-slate-100">
+                <div className={`bg-white p-4 rounded-2xl border border-emerald-100 shadow-sm ${isRTL ? 'text-right' : ''}`}>
+                  <p className="text-sm font-bold text-slate-900">{t('correspondence.quarterlyPrmReport')}</p>
+                  <p className="text-xs text-slate-500 mt-1">{t('correspondence.complianceRiskAssessment')}</p>
+                  <div className={`flex items-center justify-between mt-4 pt-4 border-t border-slate-100 ${isRTL ? 'flex-row-reverse' : ''}`}>
                     <span className="text-xs font-bold text-rose-500">Oct 30, 2024</span>
                     <button
                       onClick={handleReviewFile}
                       className="text-[10px] px-3 py-1 bg-emerald-600 text-white rounded-lg font-bold hover:bg-emerald-700 transition-colors cursor-pointer"
                     >
-                      Review File
+                      {t('correspondence.reviewFile')}
                     </button>
                   </div>
                 </div>
@@ -737,48 +748,48 @@ export default function CorrespondenceHubPage() {
       <Modal
         isOpen={isNewCorrespondenceOpen}
         onClose={() => setIsNewCorrespondenceOpen(false)}
-        title="New Correspondence"
-        subtitle="Create a new outgoing correspondence"
+        title={t('correspondence.newCorrespondence')}
+        subtitle={t('common.createNew')}
         size="lg"
       >
         <div className="space-y-4">
           <div>
-            <label className="text-xs font-bold text-slate-700 uppercase mb-2 block">To</label>
+            <label className={`text-xs font-bold text-slate-700 uppercase mb-2 block ${isRTL ? 'text-right' : ''}`}>{t('correspondence.to')}</label>
             <input
               type="text"
-              placeholder="Enter recipient"
-              className="w-full px-4 py-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              placeholder={t('common.enterRecipient')}
+              className={`w-full px-4 py-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 ${isRTL ? 'text-right' : ''}`}
             />
           </div>
           <div>
-            <label className="text-xs font-bold text-slate-700 uppercase mb-2 block">Subject</label>
+            <label className={`text-xs font-bold text-slate-700 uppercase mb-2 block ${isRTL ? 'text-right' : ''}`}>{t('common.subject')}</label>
             <input
               type="text"
-              placeholder="Enter subject"
-              className="w-full px-4 py-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              placeholder={t('common.enterSubject')}
+              className={`w-full px-4 py-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 ${isRTL ? 'text-right' : ''}`}
             />
           </div>
           <div>
-            <label className="text-xs font-bold text-slate-700 uppercase mb-2 block">Message</label>
+            <label className={`text-xs font-bold text-slate-700 uppercase mb-2 block ${isRTL ? 'text-right' : ''}`}>{t('correspondence.message')}</label>
             <textarea
               rows={8}
-              placeholder="Type your message..."
-              className="w-full px-4 py-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              placeholder={t('common.typeMessage')}
+              className={`w-full px-4 py-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 ${isRTL ? 'text-right' : ''}`}
             />
           </div>
-          <div className="flex gap-3 mt-6">
+          <div className={`flex gap-3 mt-6 ${isRTL ? 'flex-row-reverse' : ''}`}>
             <button
-              onClick={() => { setIsNewCorrespondenceOpen(false); showToast('Correspondence sent!'); }}
-              className="flex-1 bg-emerald-600 text-white py-3 rounded-lg font-bold hover:bg-emerald-700 transition-colors flex items-center justify-center gap-2 cursor-pointer"
+              onClick={() => { setIsNewCorrespondenceOpen(false); showToast(t('correspondence.correspondenceSent')); }}
+              className={`flex-1 bg-emerald-600 text-white py-3 rounded-lg font-bold hover:bg-emerald-700 transition-colors flex items-center justify-center gap-2 cursor-pointer ${isRTL ? 'flex-row-reverse' : ''}`}
             >
               <Icon icon="lucide:send" className="text-lg" />
-              Send
+              {t('correspondence.send')}
             </button>
             <button
               onClick={() => setIsNewCorrespondenceOpen(false)}
               className="px-6 bg-slate-100 text-slate-700 py-3 rounded-lg font-bold hover:bg-slate-200 transition-colors cursor-pointer"
             >
-              Save as Draft
+              {t('correspondence.saveAsDraft')}
             </button>
           </div>
         </div>
@@ -788,49 +799,49 @@ export default function CorrespondenceHubPage() {
       <Modal
         isOpen={isReplyComposerOpen}
         onClose={() => setIsReplyComposerOpen(false)}
-        title="Reply to Correspondence"
-        subtitle={`RE: ${selectedLetter?.ref || 'New Correspondence'}`}
+        title={t('correspondence.reply')}
+        subtitle={`RE: ${selectedLetter?.ref || t('correspondence.newCorrespondence')}`}
         size="lg"
       >
         <div className="space-y-4">
           <div>
-            <label className="text-xs font-bold text-slate-700 uppercase mb-2 block">To</label>
+            <label className={`text-xs font-bold text-slate-700 uppercase mb-2 block ${isRTL ? 'text-right' : ''}`}>{t('correspondence.to')}</label>
             <input
               type="text"
               value="SAMA - Compliance Department"
               readOnly
-              className="w-full px-4 py-3 border border-slate-200 rounded-lg text-sm bg-slate-50"
+              className={`w-full px-4 py-3 border border-slate-200 rounded-lg text-sm bg-slate-50 ${isRTL ? 'text-right' : ''}`}
             />
           </div>
           <div>
-            <label className="text-xs font-bold text-slate-700 uppercase mb-2 block">Subject</label>
+            <label className={`text-xs font-bold text-slate-700 uppercase mb-2 block ${isRTL ? 'text-right' : ''}`}>{t('common.subject')}</label>
             <input
               type="text"
-              placeholder="Enter subject"
-              className="w-full px-4 py-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              placeholder={t('common.enterSubject')}
+              className={`w-full px-4 py-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 ${isRTL ? 'text-right' : ''}`}
             />
           </div>
           <div>
-            <label className="text-xs font-bold text-slate-700 uppercase mb-2 block">Message</label>
+            <label className={`text-xs font-bold text-slate-700 uppercase mb-2 block ${isRTL ? 'text-right' : ''}`}>{t('correspondence.message')}</label>
             <textarea
               rows={8}
-              placeholder="Type your reply..."
-              className="w-full px-4 py-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              placeholder={t('common.typeReply')}
+              className={`w-full px-4 py-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 ${isRTL ? 'text-right' : ''}`}
             />
           </div>
-          <div className="flex gap-3 mt-6">
+          <div className={`flex gap-3 mt-6 ${isRTL ? 'flex-row-reverse' : ''}`}>
             <button
-              onClick={() => { setIsReplyComposerOpen(false); showToast('Reply sent successfully'); }}
-              className="flex-1 bg-emerald-600 text-white py-3 rounded-lg font-bold hover:bg-emerald-700 transition-colors flex items-center justify-center gap-2 cursor-pointer"
+              onClick={() => { setIsReplyComposerOpen(false); showToast(t('correspondence.replySentSuccess')); }}
+              className={`flex-1 bg-emerald-600 text-white py-3 rounded-lg font-bold hover:bg-emerald-700 transition-colors flex items-center justify-center gap-2 cursor-pointer ${isRTL ? 'flex-row-reverse' : ''}`}
             >
               <Icon icon="lucide:send" className="text-lg" />
-              Send Reply
+              {t('correspondence.sendReply')}
             </button>
             <button
               onClick={() => setIsReplyComposerOpen(false)}
               className="px-6 bg-slate-100 text-slate-700 py-3 rounded-lg font-bold hover:bg-slate-200 transition-colors cursor-pointer"
             >
-              Cancel
+              {t('common.cancel')}
             </button>
           </div>
         </div>
@@ -840,8 +851,8 @@ export default function CorrespondenceHubPage() {
       <Modal
         isOpen={isRiskMatrixOpen}
         onClose={() => { setIsRiskMatrixOpen(false); setSelectedCellRisks(null); }}
-        title={selectedCellRisks ? `Risks: Impact ${selectedCellRisks[0]?.impact}, ${selectedCellRisks[0]?.likelihood.charAt(0).toUpperCase() + selectedCellRisks[0]?.likelihood.slice(1)} Likelihood` : "Risk Analysis Matrix"}
-        subtitle={selectedCellRisks ? `${selectedCellRisks.length} risk(s) in this category` : "Comprehensive risk assessment by severity and likelihood"}
+        title={selectedCellRisks ? `${t('correspondence.riskHeatmap')}: ${t('correspondence.impact')} ${selectedCellRisks[0]?.impact}, ${t('correspondence.likelihood')} ${selectedCellRisks[0]?.likelihood}` : t('correspondence.riskAnalysisMatrix')}
+        subtitle={selectedCellRisks ? `${selectedCellRisks.length} ${t('common.items')}` : t('correspondence.comprehensiveRiskAssessment')}
         size="lg"
       >
         {selectedCellRisks ? (
@@ -877,7 +888,7 @@ export default function CorrespondenceHubPage() {
               onClick={() => setSelectedCellRisks(null)}
               className="w-full mt-6 py-3 bg-slate-100 text-slate-700 rounded-lg font-bold hover:bg-slate-200 transition-colors cursor-pointer"
             >
-              Back to Matrix
+              {t('correspondence.backToMatrix')}
             </button>
           </div>
         ) : (
@@ -969,12 +980,12 @@ export default function CorrespondenceHubPage() {
             </div>
 
             {/* Info Box */}
-            <div className="mt-6 bg-blue-50 p-4 rounded-lg border border-blue-200">
-              <div className="flex items-start gap-3">
+            <div className={`mt-6 bg-blue-50 p-4 rounded-lg border border-blue-200 ${isRTL ? 'text-right' : ''}`}>
+              <div className={`flex items-start gap-3 ${isRTL ? 'flex-row-reverse' : ''}`}>
                 <Icon icon="lucide:info" className="text-blue-600 text-xl shrink-0 mt-0.5" />
                 <div>
-                  <p className="text-sm font-bold text-blue-900">Interactive Matrix</p>
-                  <p className="text-xs text-blue-700 mt-1">Click on any cell to view detailed risk information. Numbers represent individual risks plotted on the matrix.</p>
+                  <p className="text-sm font-bold text-blue-900">{t('correspondence.interactiveMatrix')}</p>
+                  <p className="text-xs text-blue-700 mt-1">{t('correspondence.clickCellToView')}</p>
                 </div>
               </div>
             </div>
@@ -986,43 +997,43 @@ export default function CorrespondenceHubPage() {
       <Modal
         isOpen={isLetterDetailOpen}
         onClose={() => setIsLetterDetailOpen(false)}
-        title={selectedLetter?.title || 'Letter Details'}
+        title={selectedLetter?.title || t('correspondence.letterDetails')}
         subtitle={selectedLetter ? `REF: ${selectedLetter.ref}` : undefined}
         size="lg"
       >
         {selectedLetter && (
           <div className="space-y-4">
-            <div className="bg-slate-50 p-4 rounded-lg">
-              <p className="text-xs font-bold text-slate-500 uppercase mb-1">Status</p>
-              <p className="text-sm font-bold text-slate-900">{selectedLetter.status === 'sent' ? 'Sent' : 'Draft'}</p>
+            <div className={`bg-slate-50 p-4 rounded-lg ${isRTL ? 'text-right' : ''}`}>
+              <p className="text-xs font-bold text-slate-500 uppercase mb-1">{t('common.status')}</p>
+              <p className="text-sm font-bold text-slate-900">{selectedLetter.status === 'sent' ? t('correspondence.sentToSama') : t('common.draft')}</p>
             </div>
-            <div className="bg-slate-50 p-4 rounded-lg">
-              <p className="text-xs font-bold text-slate-500 uppercase mb-1">Date</p>
+            <div className={`bg-slate-50 p-4 rounded-lg ${isRTL ? 'text-right' : ''}`}>
+              <p className="text-xs font-bold text-slate-500 uppercase mb-1">{t('common.date')}</p>
               <p className="text-sm font-bold text-slate-900">{selectedLetter.date}</p>
             </div>
-            <div className="bg-slate-50 p-4 rounded-lg">
-              <p className="text-xs font-bold text-slate-500 uppercase mb-1">Content</p>
+            <div className={`bg-slate-50 p-4 rounded-lg ${isRTL ? 'text-right' : ''}`}>
+              <p className="text-xs font-bold text-slate-500 uppercase mb-1">{t('correspondence.content')}</p>
               <p className="text-sm text-slate-700">{selectedLetter.content}</p>
             </div>
             {selectedLetter.assignee && (
-              <div className="bg-emerald-50 p-4 rounded-lg">
-                <p className="text-xs font-bold text-emerald-600 uppercase mb-1">Assigned To</p>
+              <div className={`bg-emerald-50 p-4 rounded-lg ${isRTL ? 'text-right' : ''}`}>
+                <p className="text-xs font-bold text-emerald-600 uppercase mb-1">{t('correspondence.assignedTo')}</p>
                 <p className="text-sm font-bold text-slate-900">{selectedLetter.assignee}</p>
               </div>
             )}
-            <div className="flex gap-3 pt-4">
+            <div className={`flex gap-3 pt-4 ${isRTL ? 'flex-row-reverse' : ''}`}>
               <button
                 onClick={() => { setIsLetterDetailOpen(false); handleReply(selectedLetter); }}
-                className="flex-1 bg-emerald-600 text-white py-3 rounded-lg font-bold hover:bg-emerald-700 transition-colors flex items-center justify-center gap-2 cursor-pointer"
+                className={`flex-1 bg-emerald-600 text-white py-3 rounded-lg font-bold hover:bg-emerald-700 transition-colors flex items-center justify-center gap-2 cursor-pointer ${isRTL ? 'flex-row-reverse' : ''}`}
               >
                 <Icon icon="lucide:reply" className="text-lg" />
-                Reply
+                {t('correspondence.reply')}
               </button>
               <button
                 onClick={() => handleArchive(selectedLetter.id)}
                 className="px-6 bg-slate-100 text-slate-700 py-3 rounded-lg font-bold hover:bg-slate-200 transition-colors cursor-pointer"
               >
-                {selectedLetter.archived ? 'Unarchive' : 'Archive'}
+                {selectedLetter.archived ? t('correspondence.unarchive') : t('correspondence.archive')}
               </button>
             </div>
           </div>
@@ -1033,13 +1044,15 @@ export default function CorrespondenceHubPage() {
       <Modal
         isOpen={isAddRequirementOpen}
         onClose={() => setIsAddRequirementOpen(false)}
-        title="Add New Requirement"
-        subtitle="Create a new regulatory requirement entry"
+        title={t('correspondence.addNewRequirement')}
+        subtitle={t('correspondence.createNewEntry')}
         size="lg"
       >
         <AddRequirementForm
-          onSuccess={() => { setIsAddRequirementOpen(false); showToast('✓ Requirement added successfully!'); }}
-          onValidationError={() => showToast('⚠️ Please fill in all required fields')}
+          t={t}
+          isRTL={isRTL}
+          onSuccess={() => { setIsAddRequirementOpen(false); showToast(t('correspondence.requirementAdded')); }}
+          onValidationError={() => showToast(t('correspondence.fillRequiredFields'))}
         />
       </Modal>
     </div>
@@ -1047,7 +1060,7 @@ export default function CorrespondenceHubPage() {
 }
 
 // Add Requirement Form Component
-function AddRequirementForm({ onSuccess, onValidationError }: { onSuccess: () => void; onValidationError: () => void }) {
+function AddRequirementForm({ t, isRTL, onSuccess, onValidationError }: { t: (key: TranslationKey) => string; isRTL: boolean; onSuccess: () => void; onValidationError: () => void }) {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [showCustomCategory, setShowCustomCategory] = useState(false)
   const [formData, setFormData] = useState({
@@ -1077,56 +1090,56 @@ function AddRequirementForm({ onSuccess, onValidationError }: { onSuccess: () =>
     <>
       <div className="space-y-4">
         <div>
-          <label className="text-xs font-bold text-slate-700 uppercase mb-2 block">Requirement Name *</label>
+          <label className={`text-xs font-bold text-slate-700 uppercase mb-2 block ${isRTL ? 'text-right' : ''}`}>{t('correspondence.requirementName')} *</label>
           <input
             type="text"
             value={formData.name}
             onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
             placeholder="e.g., SAMA Circular 44321/2024 - Cybersecurity Framework"
-            className="w-full px-4 py-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+            className={`w-full px-4 py-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 ${isRTL ? 'text-right' : ''}`}
           />
         </div>
 
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label className="text-xs font-bold text-slate-700 uppercase mb-2 block">Category/Type *</label>
+            <label className={`text-xs font-bold text-slate-700 uppercase mb-2 block ${isRTL ? 'text-right' : ''}`}>{t('correspondence.category')} *</label>
             <select
               value={formData.category}
               onChange={(e) => {
                 setShowCustomCategory(e.target.value === 'custom')
                 setFormData(prev => ({ ...prev, category: e.target.value === 'custom' ? '' : e.target.value }))
               }}
-              className="w-full px-4 py-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              className={`w-full px-4 py-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 ${isRTL ? 'text-right' : ''}`}
             >
-              <option value="">Select Category</option>
-              <option value="Cybersecurity">Cybersecurity</option>
-              <option value="AML/CTF">AML/CTF</option>
-              <option value="Consumer Protection">Consumer Protection</option>
-              <option value="Risk Management">Risk Management</option>
-              <option value="Data Protection">Data Protection</option>
-              <option value="Governance">Governance</option>
-              <option value="custom">+ Add New Category</option>
+              <option value="">{t('common.selectCategory')}</option>
+              <option value="Cybersecurity">{t('correspondence.cybersecurity')}</option>
+              <option value="AML/CTF">{t('correspondence.amlCtf')}</option>
+              <option value="Consumer Protection">{t('correspondence.consumerProtection')}</option>
+              <option value="Risk Management">{t('correspondence.riskManagement')}</option>
+              <option value="Data Protection">{t('correspondence.dataProtection')}</option>
+              <option value="Governance">{t('correspondence.governance')}</option>
+              <option value="custom">{t('correspondence.addNewCategory')}</option>
             </select>
           </div>
           {showCustomCategory ? (
             <div>
-              <label className="text-xs font-bold text-slate-700 uppercase mb-2 block">New Category Name</label>
+              <label className={`text-xs font-bold text-slate-700 uppercase mb-2 block ${isRTL ? 'text-right' : ''}`}>{t('correspondence.newCategoryName')}</label>
               <input
                 type="text"
                 value={formData.category}
                 onChange={(e) => setFormData(prev => ({ ...prev, category: e.target.value }))}
-                placeholder="Enter new category"
-                className="w-full px-4 py-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                placeholder={t('common.enterCategory')}
+                className={`w-full px-4 py-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 ${isRTL ? 'text-right' : ''}`}
               />
             </div>
           ) : (
             <div>
-              <label className="text-xs font-bold text-slate-700 uppercase mb-2 block">Release Date *</label>
+              <label className={`text-xs font-bold text-slate-700 uppercase mb-2 block ${isRTL ? 'text-right' : ''}`}>{t('correspondence.releaseDate')} *</label>
               <input
                 type="date"
                 value={formData.releaseDate}
                 onChange={(e) => setFormData(prev => ({ ...prev, releaseDate: e.target.value }))}
-                className="w-full px-4 py-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                className={`w-full px-4 py-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 ${isRTL ? 'text-right' : ''}`}
               />
             </div>
           )}
@@ -1134,72 +1147,72 @@ function AddRequirementForm({ onSuccess, onValidationError }: { onSuccess: () =>
 
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label className="text-xs font-bold text-slate-700 uppercase mb-2 block">Compliance Status *</label>
+            <label className={`text-xs font-bold text-slate-700 uppercase mb-2 block ${isRTL ? 'text-right' : ''}`}>{t('correspondence.complianceStatus')} *</label>
             <select
               value={formData.status}
               onChange={(e) => setFormData(prev => ({ ...prev, status: e.target.value }))}
-              className="w-full px-4 py-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              className={`w-full px-4 py-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 ${isRTL ? 'text-right' : ''}`}
             >
-              <option value="">Select Status</option>
-              <option value="pending">Pending</option>
-              <option value="drafting">Drafting</option>
-              <option value="implementing">Implementing</option>
-              <option value="completed">Completed</option>
+              <option value="">{t('common.selectStatus')}</option>
+              <option value="pending">{t('common.pending')}</option>
+              <option value="drafting">{t('correspondence.drafting')}</option>
+              <option value="implementing">{t('correspondence.implementing')}</option>
+              <option value="completed">{t('common.completed')}</option>
             </select>
           </div>
           <div>
-            <label className="text-xs font-bold text-slate-700 uppercase mb-2 block">Due Date</label>
+            <label className={`text-xs font-bold text-slate-700 uppercase mb-2 block ${isRTL ? 'text-right' : ''}`}>{t('observations.dueDate')}</label>
             <input
               type="date"
               value={formData.dueDate}
               onChange={(e) => setFormData(prev => ({ ...prev, dueDate: e.target.value }))}
-              className="w-full px-4 py-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              className={`w-full px-4 py-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 ${isRTL ? 'text-right' : ''}`}
             />
           </div>
         </div>
 
         <div>
-          <label className="text-xs font-bold text-slate-700 uppercase mb-2 block">Description (Optional)</label>
+          <label className={`text-xs font-bold text-slate-700 uppercase mb-2 block ${isRTL ? 'text-right' : ''}`}>{t('correspondence.descriptionOptional')}</label>
           <textarea
             rows={4}
             value={formData.description}
             onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
-            placeholder="Add detailed description of the requirement..."
-            className="w-full px-4 py-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+            placeholder={t('correspondence.addDetailedDescription')}
+            className={`w-full px-4 py-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 ${isRTL ? 'text-right' : ''}`}
           />
         </div>
       </div>
 
-      <div className="mt-6 bg-blue-50 p-4 rounded-lg border border-blue-200">
-        <div className="flex items-start gap-3">
+      <div className={`mt-6 bg-blue-50 p-4 rounded-lg border border-blue-200 ${isRTL ? 'text-right' : ''}`}>
+        <div className={`flex items-start gap-3 ${isRTL ? 'flex-row-reverse' : ''}`}>
           <Icon icon="lucide:info" className="text-blue-600 text-xl shrink-0 mt-0.5" />
           <div>
-            <p className="text-sm font-bold text-blue-900">Required Fields</p>
-            <p className="text-xs text-blue-700 mt-1">Fields marked with * are required to create the requirement entry.</p>
+            <p className="text-sm font-bold text-blue-900">{t('correspondence.requiredFields')}</p>
+            <p className="text-xs text-blue-700 mt-1">{t('correspondence.requiredFieldsNote')}</p>
           </div>
         </div>
       </div>
 
-      <div className="flex gap-3 mt-6">
+      <div className={`flex gap-3 mt-6 ${isRTL ? 'flex-row-reverse' : ''}`}>
         <button
           onClick={handleSubmit}
           disabled={isSubmitting}
-          className="flex-1 bg-emerald-600 text-white py-3 rounded-lg font-bold hover:bg-emerald-700 transition-colors flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer"
+          className={`flex-1 bg-emerald-600 text-white py-3 rounded-lg font-bold hover:bg-emerald-700 transition-colors flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer ${isRTL ? 'flex-row-reverse' : ''}`}
         >
           {isSubmitting ? (
             <>
               <Icon icon="lucide:loader-2" className="text-lg animate-spin" />
-              Saving...
+              {t('common.saving')}
             </>
           ) : (
             <>
               <Icon icon="lucide:check" className="text-lg" />
-              Add Requirement
+              {t('correspondence.addRequirement')}
             </>
           )}
         </button>
         <button className="px-6 bg-slate-100 text-slate-700 py-3 rounded-lg font-bold hover:bg-slate-200 transition-colors cursor-pointer">
-          Cancel
+          {t('common.cancel')}
         </button>
       </div>
     </>
@@ -1217,6 +1230,7 @@ function MetricCard({
   progress,
   progressColor = 'bg-emerald-500',
   progressSegments,
+  isRTL = false,
 }: {
   icon: string
   iconColor: 'emerald' | 'rose' | 'blue' | 'amber'
@@ -1227,6 +1241,7 @@ function MetricCard({
   progress?: number
   progressColor?: string
   progressSegments?: { color: string; flex: number }[]
+  isRTL?: boolean
 }) {
   const iconColors = {
     emerald: 'bg-emerald-50 text-emerald-600',
@@ -1243,8 +1258,8 @@ function MetricCard({
   }
 
   return (
-    <div className="glass-card stat-card-hover p-6 rounded-2xl">
-      <div className="flex justify-between items-start mb-4">
+    <div className={`glass-card stat-card-hover p-6 rounded-2xl ${isRTL ? 'text-right' : ''}`}>
+      <div className={`flex justify-between items-start mb-4 ${isRTL ? 'flex-row-reverse' : ''}`}>
         <div className={`p-2 ${iconColors[iconColor]} rounded-lg`}>
           <Icon icon={icon} className="text-2xl" />
         </div>
@@ -1253,7 +1268,7 @@ function MetricCard({
         </span>
       </div>
       <h3 className="text-slate-500 text-xs font-bold uppercase tracking-wider mb-1">{title}</h3>
-      <div className="flex items-baseline gap-2">
+      <div className={`flex items-baseline gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
         <span className="text-2xl font-bold text-slate-900">{value}</span>
         <span className="text-xs text-slate-400">{subtitle}</span>
       </div>
@@ -1263,7 +1278,7 @@ function MetricCard({
         </div>
       )}
       {progressSegments && (
-        <div className="mt-4 flex gap-1">
+        <div className={`mt-4 flex gap-1 ${isRTL ? 'flex-row-reverse' : ''}`}>
           {progressSegments.map((segment, i) => (
             <div
               key={i}
@@ -1277,12 +1292,12 @@ function MetricCard({
   )
 }
 
-function RequirementRow({ requirement }: { requirement: Requirement }) {
+function RequirementRow({ requirement, t, isRTL }: { requirement: Requirement; t: (key: TranslationKey) => string; isRTL: boolean }) {
   const statusConfig = {
-    implementing: { bg: 'bg-amber-100', text: 'text-amber-700', label: 'Implementing' },
-    drafting: { bg: 'bg-blue-100', text: 'text-blue-700', label: 'Drafting' },
-    completed: { bg: 'bg-emerald-100', text: 'text-emerald-700', label: 'Verified' },
-    pending: { bg: 'bg-slate-100', text: 'text-slate-700', label: 'Pending' },
+    implementing: { bg: 'bg-amber-100', text: 'text-amber-700', label: t('correspondence.implementing') },
+    drafting: { bg: 'bg-blue-100', text: 'text-blue-700', label: t('correspondence.drafting') },
+    completed: { bg: 'bg-emerald-100', text: 'text-emerald-700', label: t('correspondence.verified') },
+    pending: { bg: 'bg-slate-100', text: 'text-slate-700', label: t('common.pending') },
   }
 
   const config = statusConfig[requirement.status]
@@ -1291,22 +1306,22 @@ function RequirementRow({ requirement }: { requirement: Requirement }) {
 
   return (
     <div
-      className={`flex items-center justify-between p-4 rounded-xl border ${isCompleted ? 'bg-emerald-50/50 border-emerald-100' : 'bg-slate-50 border-slate-100'}`}
+      className={`flex items-center justify-between p-4 rounded-xl border ${isCompleted ? 'bg-emerald-50/50 border-emerald-100' : 'bg-slate-50 border-slate-100'} ${isRTL ? 'flex-row-reverse' : ''}`}
     >
-      <div className="flex items-center gap-4">
+      <div className={`flex items-center gap-4 ${isRTL ? 'flex-row-reverse' : ''}`}>
         <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center border border-slate-200 shadow-sm">
           <Icon
             icon={isCompleted ? 'lucide:check-circle' : 'lucide:landmark'}
             className={isCompleted ? 'text-emerald-500' : 'text-slate-400'}
           />
         </div>
-        <div>
+        <div className={isRTL ? 'text-right' : ''}>
           <p className="text-sm font-bold text-slate-900">{requirement.name}</p>
           <p className="text-[10px] text-slate-500">{requirement.subtitle}</p>
         </div>
       </div>
-      <div className="flex items-center gap-6">
-        <div className="text-right">
+      <div className={`flex items-center gap-6 ${isRTL ? 'flex-row-reverse' : ''}`}>
+        <div className={isRTL ? 'text-left' : 'text-right'}>
           <span
             className={`text-[10px] font-black uppercase ${isDueSoon ? 'text-rose-500' : isCompleted ? 'text-emerald-600' : 'text-slate-400'}`}
           >
@@ -1331,17 +1346,21 @@ function CorrespondenceItem({
   letter,
   onView,
   onReply,
-  onArchive
+  onArchive,
+  t,
+  isRTL
 }: {
   letter: Letter
   onView: () => void
   onReply: () => void
   onArchive: () => void
+  t: (key: TranslationKey) => string
+  isRTL: boolean
 }) {
   const isSent = letter.status === 'sent'
 
   return (
-    <div className="flex gap-3">
+    <div className={`flex gap-3 ${isRTL ? 'flex-row-reverse' : ''}`}>
       <div
         className={`w-8 h-8 rounded-full ${isSent ? 'bg-blue-100' : 'bg-slate-100'} flex items-center justify-center shrink-0`}
       >
@@ -1350,7 +1369,7 @@ function CorrespondenceItem({
           className={`${isSent ? 'text-blue-600' : 'text-slate-600'} text-sm`}
         />
       </div>
-      <div className="flex-1">
+      <div className={`flex-1 ${isRTL ? 'text-right' : ''}`}>
         <p className="text-xs font-bold text-slate-900">{letter.title}</p>
         <p className="text-[10px] text-slate-500">{letter.content}</p>
         <p className="text-[9px] text-slate-400 mt-1">
@@ -1358,29 +1377,29 @@ function CorrespondenceItem({
         </p>
         {letter.assignee && (
           <p className="text-[9px] text-emerald-600 font-bold mt-1 uppercase tracking-tighter">
-            Assigned: {letter.assignee}
+            {t('correspondence.assignedTo')}: {letter.assignee}
           </p>
         )}
-        <div className="flex gap-2 mt-2">
+        <div className={`flex gap-2 mt-2 ${isRTL ? 'flex-row-reverse justify-end' : ''}`}>
           <button
             onClick={onView}
             className="text-[9px] font-bold text-emerald-600 hover:text-emerald-700 cursor-pointer"
           >
-            View
+            {t('common.view')}
           </button>
           {isSent && (
             <button
               onClick={onReply}
               className="text-[9px] font-bold text-blue-600 hover:text-blue-700 cursor-pointer"
             >
-              Reply
+              {t('correspondence.reply')}
             </button>
           )}
           <button
             onClick={onArchive}
             className="text-[9px] font-bold text-slate-500 hover:text-slate-700 cursor-pointer"
           >
-            Archive
+            {t('correspondence.archive')}
           </button>
         </div>
       </div>
@@ -1412,7 +1431,7 @@ function TeamMemberRow({
       <div className="flex-1">
         <div className="flex justify-between text-[10px] font-bold mb-1">
           <span>{member.name}</span>
-          <span className={colors.text}>{member.load}% Load</span>
+          <span className={colors.text}>{member.load}%</span>
         </div>
         <div className="h-1 bg-slate-100 rounded-full">
           <div

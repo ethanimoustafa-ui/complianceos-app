@@ -8,6 +8,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { Icon } from '@iconify/react'
 import { Button } from '@/components/ui/button'
+import { useTranslation } from '@/i18n'
 
 const signUpSchema = z.object({
   name: z.string().min(2, 'Name must be at least 2 characters'),
@@ -26,6 +27,7 @@ export default function SignUpPage() {
   const router = useRouter()
   const [showPassword, setShowPassword] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
+  const { t, isRTL } = useTranslation()
 
   const {
     register,
@@ -47,22 +49,22 @@ export default function SignUpPage() {
       <div className="w-full max-w-md">
         <div className="mb-10">
           <h1 className="text-4xl font-display font-bold text-slate-900 mb-3">
-            Create Account
+            {t('auth.createAccount')}
           </h1>
           <p className="text-base text-slate-500">
-            Get started with ComplianceOS for your organization
+            {t('auth.getStarted')}
           </p>
         </div>
 
         <form className="space-y-5" onSubmit={handleSubmit(onSubmit)}>
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-2">Full Name</label>
+            <label className="block text-sm font-medium text-slate-700 mb-2">{t('auth.fullName')}</label>
             <div className="relative">
-              <Icon icon="lucide:user" className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+              <Icon icon="lucide:user" className={`absolute ${isRTL ? 'right-4' : 'left-4'} top-1/2 -translate-y-1/2 text-slate-400`} />
               <input
                 type="text"
-                placeholder="John Doe"
-                className="w-full pl-12 pr-4 py-3.5 bg-white border border-slate-300 rounded-lg text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
+                placeholder={t('auth.fullNamePlaceholder')}
+                className={`w-full ${isRTL ? 'pr-12 pl-4' : 'pl-12 pr-4'} py-3.5 bg-white border border-slate-300 rounded-lg text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20`}
                 {...register('name')}
               />
             </div>
@@ -70,13 +72,13 @@ export default function SignUpPage() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-2">Work Email</label>
+            <label className="block text-sm font-medium text-slate-700 mb-2">{t('auth.workEmail')}</label>
             <div className="relative">
-              <Icon icon="lucide:mail" className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+              <Icon icon="lucide:mail" className={`absolute ${isRTL ? 'right-4' : 'left-4'} top-1/2 -translate-y-1/2 text-slate-400`} />
               <input
                 type="email"
-                placeholder="you@company.com"
-                className="w-full pl-12 pr-4 py-3.5 bg-white border border-slate-300 rounded-lg text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
+                placeholder={t('auth.emailPlaceholder')}
+                className={`w-full ${isRTL ? 'pr-12 pl-4' : 'pl-12 pr-4'} py-3.5 bg-white border border-slate-300 rounded-lg text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20`}
                 {...register('email')}
               />
             </div>
@@ -84,13 +86,13 @@ export default function SignUpPage() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-2">Organization</label>
+            <label className="block text-sm font-medium text-slate-700 mb-2">{t('auth.organization')}</label>
             <div className="relative">
-              <Icon icon="lucide:building" className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+              <Icon icon="lucide:building" className={`absolute ${isRTL ? 'right-4' : 'left-4'} top-1/2 -translate-y-1/2 text-slate-400`} />
               <input
                 type="text"
-                placeholder="Your Company Ltd."
-                className="w-full pl-12 pr-4 py-3.5 bg-white border border-slate-300 rounded-lg text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
+                placeholder={t('auth.organizationPlaceholder')}
+                className={`w-full ${isRTL ? 'pr-12 pl-4' : 'pl-12 pr-4'} py-3.5 bg-white border border-slate-300 rounded-lg text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20`}
                 {...register('organization')}
               />
             </div>
@@ -98,19 +100,19 @@ export default function SignUpPage() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-2">Password</label>
+            <label className="block text-sm font-medium text-slate-700 mb-2">{t('auth.password')}</label>
             <div className="relative">
-              <Icon icon="lucide:lock" className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+              <Icon icon="lucide:lock" className={`absolute ${isRTL ? 'right-4' : 'left-4'} top-1/2 -translate-y-1/2 text-slate-400`} />
               <input
                 type={showPassword ? 'text' : 'password'}
                 placeholder="••••••••"
-                className="w-full pl-12 pr-12 py-3.5 bg-white border border-slate-300 rounded-lg text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
+                className={`w-full ${isRTL ? 'pr-12 pl-12' : 'pl-12 pr-12'} py-3.5 bg-white border border-slate-300 rounded-lg text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20`}
                 {...register('password')}
               />
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                className={`absolute ${isRTL ? 'left-4' : 'right-4'} top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600`}
               >
                 <Icon icon={showPassword ? 'lucide:eye-off' : 'lucide:eye'} />
               </button>
@@ -119,13 +121,13 @@ export default function SignUpPage() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-2">Confirm Password</label>
+            <label className="block text-sm font-medium text-slate-700 mb-2">{t('auth.confirmPassword')}</label>
             <div className="relative">
-              <Icon icon="lucide:lock" className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+              <Icon icon="lucide:lock" className={`absolute ${isRTL ? 'right-4' : 'left-4'} top-1/2 -translate-y-1/2 text-slate-400`} />
               <input
                 type="password"
                 placeholder="••••••••"
-                className="w-full pl-12 pr-4 py-3.5 bg-white border border-slate-300 rounded-lg text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
+                className={`w-full ${isRTL ? 'pr-12 pl-4' : 'pl-12 pr-4'} py-3.5 bg-white border border-slate-300 rounded-lg text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20`}
                 {...register('confirmPassword')}
               />
             </div>
@@ -136,21 +138,21 @@ export default function SignUpPage() {
             {isLoading ? (
               <>
                 <Icon icon="lucide:loader-2" className="animate-spin" />
-                Creating account...
+                {t('auth.creatingAccount')}
               </>
             ) : (
               <>
-                Create Account
-                <Icon icon="lucide:arrow-right" />
+                {t('auth.createAccount')}
+                <Icon icon={isRTL ? 'lucide:arrow-left' : 'lucide:arrow-right'} />
               </>
             )}
           </Button>
 
           <div className="text-center pt-4">
             <p className="text-sm text-slate-500">
-              Already have an account?{' '}
+              {t('auth.alreadyHaveAccount')}{' '}
               <Link href="/sign-in" className="font-medium text-emerald-600 hover:text-emerald-700">
-                Sign in
+                {t('auth.signIn')}
               </Link>
             </p>
           </div>

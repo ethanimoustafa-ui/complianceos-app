@@ -4,6 +4,8 @@ import { useState, useMemo } from 'react'
 import { Icon } from '@iconify/react'
 import { cn } from '@/lib/utils'
 import type { FilterOption } from '@/components/ui/multi-select-filter'
+import { useTranslation } from '@/i18n'
+import type { TranslationKey } from '@/i18n'
 
 // Types
 type TaskType = 'audit_task' | 'submission_deadline' | 'letter_send' | 'observation_deadline'
@@ -156,6 +158,16 @@ function getSubmissionTypeLabel(type: TaskType): string {
   return labels[type]
 }
 
+function getLocalizedSubmissionTypeLabel(type: TaskType, t: (key: TranslationKey) => string): string {
+  const labels: Record<TaskType, string> = {
+    submission_deadline: t('calendar.submission'),
+    letter_send: t('calendar.letter'),
+    observation_deadline: t('calendar.observation'),
+    audit_task: t('calendar.auditTask')
+  }
+  return labels[type]
+}
+
 function getDueStatus(dateKey: string): { text: string; className: string } {
   const taskDate = new Date(dateKey)
   const today = new Date()
@@ -172,8 +184,46 @@ function getDueStatus(dateKey: string): { text: string; className: string } {
   return { text: `Due in ${diffDays}d`, className: 'text-slate-500 bg-slate-50' }
 }
 
-const MONTHS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC']
-const MONTHS_FULL = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
+// Helper functions to get localized month names
+function getMonthsShort(t: (key: TranslationKey) => string): string[] {
+  return [
+    t('calendar.monthsShort.jan'), t('calendar.monthsShort.feb'), t('calendar.monthsShort.mar'),
+    t('calendar.monthsShort.apr'), t('calendar.monthsShort.may'), t('calendar.monthsShort.jun'),
+    t('calendar.monthsShort.jul'), t('calendar.monthsShort.aug'), t('calendar.monthsShort.sep'),
+    t('calendar.monthsShort.oct'), t('calendar.monthsShort.nov'), t('calendar.monthsShort.dec'),
+  ]
+}
+
+function getMonthsFull(t: (key: TranslationKey) => string): string[] {
+  return [
+    t('calendar.monthsFull.january'), t('calendar.monthsFull.february'), t('calendar.monthsFull.march'),
+    t('calendar.monthsFull.april'), t('calendar.monthsFull.may'), t('calendar.monthsFull.june'),
+    t('calendar.monthsFull.july'), t('calendar.monthsFull.august'), t('calendar.monthsFull.september'),
+    t('calendar.monthsFull.october'), t('calendar.monthsFull.november'), t('calendar.monthsFull.december'),
+  ]
+}
+
+function getHijriMonthsShort(t: (key: TranslationKey) => string): string[] {
+  return [
+    t('calendar.hijriMonthsShort.muharram'), t('calendar.hijriMonthsShort.safar'),
+    t('calendar.hijriMonthsShort.rabiAwwal'), t('calendar.hijriMonthsShort.rabiThani'),
+    t('calendar.hijriMonthsShort.jumadaAwwal'), t('calendar.hijriMonthsShort.jumadaThani'),
+    t('calendar.hijriMonthsShort.rajab'), t('calendar.hijriMonthsShort.shaban'),
+    t('calendar.hijriMonthsShort.ramadan'), t('calendar.hijriMonthsShort.shawwal'),
+    t('calendar.hijriMonthsShort.dhuQidah'), t('calendar.hijriMonthsShort.dhuHijjah'),
+  ]
+}
+
+function getHijriMonthsFull(t: (key: TranslationKey) => string): string[] {
+  return [
+    t('calendar.hijriMonthsFull.muharram'), t('calendar.hijriMonthsFull.safar'),
+    t('calendar.hijriMonthsFull.rabiAwwal'), t('calendar.hijriMonthsFull.rabiThani'),
+    t('calendar.hijriMonthsFull.jumadaAwwal'), t('calendar.hijriMonthsFull.jumadaThani'),
+    t('calendar.hijriMonthsFull.rajab'), t('calendar.hijriMonthsFull.shaban'),
+    t('calendar.hijriMonthsFull.ramadan'), t('calendar.hijriMonthsFull.shawwal'),
+    t('calendar.hijriMonthsFull.dhuQidah'), t('calendar.hijriMonthsFull.dhuHijjah'),
+  ]
+}
 
 // Hijri calendar conversion helpers
 function toHijri(date: Date): { year: number; month: number; day: number } {
@@ -191,8 +241,7 @@ function toHijri(date: Date): { year: number; month: number; day: number } {
   return { year, month, day }
 }
 
-const HIJRI_MONTHS = ['Muharram', 'Safar', 'Rabi\' al-Awwal', 'Rabi\' al-Thani', 'Jumada al-Awwal', 'Jumada al-Thani', 'Rajab', 'Sha\'ban', 'Ramadan', 'Shawwal', 'Dhu al-Qi\'dah', 'Dhu al-Hijjah']
-const HIJRI_MONTHS_SHORT = ['MUH', 'SAF', 'RAW', 'RAT', 'JAW', 'JAT', 'RAJ', 'SHA', 'RAM', 'SHW', 'DHQ', 'DHH']
+// Note: HIJRI_MONTHS and HIJRI_MONTHS_SHORT are now generated via getHijriMonthsFull() and getHijriMonthsShort()
 
 // Saudi holidays (fixed Gregorian dates and approximate Hijri-based)
 const SAUDI_HOLIDAYS: Record<string, string> = {
@@ -230,6 +279,7 @@ const DAYS_SAUDI = ['Sat', 'Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri']
 type CalendarType = 'gregorian' | 'hijri'
 
 export default function CalendarPage() {
+  const { t, isRTL } = useTranslation()
   const [currentDate, setCurrentDate] = useState(new Date(2024, 9, 1)) // October 2024
   const [viewMode, setViewMode] = useState<ViewMode>('month')
   const [selectedDayKey, setSelectedDayKey] = useState<string | null>('2024-10-06')
@@ -260,6 +310,14 @@ export default function CalendarPage() {
   const selectedTask = selectedTaskId && selectedDayData
     ? selectedDayData.tasks.find(t => t.id === selectedTaskId)
     : null
+
+  // Task type filter options with translated labels
+  const taskTypeFilterOptionsLocalized = useMemo(() => [
+    { value: 'audit_task' as TaskType, label: t('calendar.auditTask'), color: { dot: 'bg-emerald-500', bg: 'bg-emerald-50', text: 'text-emerald-600', border: 'border-emerald-200' } },
+    { value: 'submission_deadline' as TaskType, label: t('calendar.submission'), color: { dot: 'bg-orange-500', bg: 'bg-orange-50', text: 'text-orange-600', border: 'border-orange-200' } },
+    { value: 'letter_send' as TaskType, label: t('calendar.letter'), color: { dot: 'bg-amber-500', bg: 'bg-amber-50', text: 'text-amber-600', border: 'border-amber-200' } },
+    { value: 'observation_deadline' as TaskType, label: t('calendar.observation'), color: { dot: 'bg-rose-500', bg: 'bg-rose-50', text: 'text-rose-600', border: 'border-rose-200' } },
+  ], [t])
 
   // Navigation functions
   const navigateDate = (offset: number) => {
@@ -347,15 +405,15 @@ export default function CalendarPage() {
       if (viewMode === 'year') {
         return `${hijri.year} هـ`
       }
-      return `${HIJRI_MONTHS[hijri.month - 1]} ${hijri.year} هـ`
+      return `${getHijriMonthsFull(t)[hijri.month - 1]} ${hijri.year} هـ`
     }
 
     if (viewMode === 'month') {
-      return `${MONTHS_FULL[currentDate.getMonth()]} ${currentDate.getFullYear()}`
+      return `${getMonthsFull(t)[currentDate.getMonth()]} ${currentDate.getFullYear()}`
     } else if (viewMode === 'year') {
       return `${currentDate.getFullYear()}`
     } else {
-      return `${MONTHS_FULL[currentDate.getMonth()]} ${currentDate.getFullYear()}`
+      return `${getMonthsFull(t)[currentDate.getMonth()]} ${currentDate.getFullYear()}`
     }
   }
 
@@ -375,13 +433,13 @@ export default function CalendarPage() {
         {/* Header */}
         <header className="h-20 bg-white border-b border-slate-200 px-8 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-8">
-            <div>
-              <h1 className="text-xl font-bold text-slate-900">Compliance Calendar</h1>
-              <p className="text-xs text-slate-500 font-medium tracking-wide uppercase">Enterprise Dashboard</p>
+            <div className={isRTL ? 'text-right' : ''}>
+              <h1 className="text-xl font-bold text-slate-900">{t('calendar.title')}</h1>
+              <p className="text-xs text-slate-500 font-medium tracking-wide uppercase">{t('calendar.subtitle')}</p>
             </div>
 
             {/* View Toggle */}
-            <div className="flex bg-slate-100 p-1 rounded-lg">
+            <div className={`flex bg-slate-100 p-1 rounded-lg ${isRTL ? 'flex-row-reverse' : ''}`}>
               {/* Date View button - only visible in submissions view */}
               {viewMode === 'submissions' && (
                 <button
@@ -391,7 +449,7 @@ export default function CalendarPage() {
                     submissionGroupBy === 'date' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500 hover:text-slate-900'
                   )}
                 >
-                  Date View
+                  {t('calendar.dateView')}
                 </button>
               )}
               <button
@@ -409,7 +467,7 @@ export default function CalendarPage() {
                     : 'text-slate-500 hover:text-slate-900'
                 )}
               >
-                Month View
+                {t('calendar.monthView')}
               </button>
               <button
                 onClick={() => {
@@ -426,49 +484,51 @@ export default function CalendarPage() {
                     : 'text-slate-500 hover:text-slate-900'
                 )}
               >
-                Year View
+                {t('calendar.yearView')}
               </button>
             </div>
 
             {/* Filter Toggle */}
-            <div className="flex bg-slate-100 p-1 rounded-lg ml-3">
+            <div className={`flex bg-slate-100 p-1 rounded-lg ${isRTL ? 'mr-3' : 'ml-3'} ${isRTL ? 'flex-row-reverse' : ''}`}>
               <button
                 onClick={() => changeView('month')}
                 className={cn(
                   'px-4 py-2 text-xs font-bold rounded-md transition-all flex items-center gap-1.5 cursor-pointer',
-                  viewMode !== 'submissions' ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-500 hover:text-slate-900'
+                  viewMode !== 'submissions' ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-500 hover:text-slate-900',
+                  isRTL && 'flex-row-reverse'
                 )}
               >
                 <Icon icon="lucide:layout-grid" className="text-sm" />
-                All Items
+                {t('calendar.allItems')}
               </button>
               <button
                 onClick={() => changeView('submissions')}
                 className={cn(
                   'px-4 py-2 text-xs font-bold rounded-md transition-all flex items-center gap-1.5 cursor-pointer',
-                  viewMode === 'submissions' ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-500 hover:text-slate-900'
+                  viewMode === 'submissions' ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-500 hover:text-slate-900',
+                  isRTL && 'flex-row-reverse'
                 )}
               >
                 <Icon icon="lucide:list-checks" className="text-sm" />
-                Submissions
+                {t('calendar.submissions')}
               </button>
             </div>
           </div>
 
-          <div className="flex items-center gap-4">
+          <div className={`flex items-center gap-4 ${isRTL ? 'flex-row-reverse' : ''}`}>
             {/* Date Navigation */}
-            <div className="flex items-center gap-1 bg-white border border-slate-200 p-1 rounded-lg">
+            <div className={`flex items-center gap-1 bg-white border border-slate-200 p-1 rounded-lg ${isRTL ? 'flex-row-reverse' : ''}`}>
               <button
                 onClick={() => navigateDate(-1)}
                 className="p-1.5 hover:bg-slate-50 rounded transition-colors cursor-pointer"
               >
-                <Icon icon="lucide:chevron-left" className="text-slate-600" />
+                <Icon icon={isRTL ? "lucide:chevron-right" : "lucide:chevron-left"} className="text-slate-600" />
               </button>
               <button
                 onClick={navigateToday}
                 className="px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50 rounded cursor-pointer"
               >
-                Today
+                {t('calendar.today')}
               </button>
               <button
                 onClick={() => setIsPickerOpen(true)}
@@ -481,7 +541,7 @@ export default function CalendarPage() {
                 onClick={() => navigateDate(1)}
                 className="p-1.5 hover:bg-slate-50 rounded transition-colors cursor-pointer"
               >
-                <Icon icon="lucide:chevron-right" className="text-slate-600" />
+                <Icon icon={isRTL ? "lucide:chevron-left" : "lucide:chevron-right"} className="text-slate-600" />
               </button>
             </div>
 
@@ -494,19 +554,23 @@ export default function CalendarPage() {
                     'px-4 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer flex items-center gap-2',
                     showCompletedSubmissions
                       ? 'bg-emerald-600 text-white'
-                      : 'bg-slate-100 text-slate-500 hover:text-slate-900'
+                      : 'bg-slate-100 text-slate-500 hover:text-slate-900',
+                    isRTL && 'flex-row-reverse'
                   )}
                 >
                   <Icon icon="lucide:check-circle" className="text-sm" />
-                  Show Completed
+                  {t('calendar.showCompleted')}
                 </button>
                 {submissionFilterDate && (
                   <button
                     onClick={() => setSubmissionFilterDate(null)}
-                    className="px-4 py-2 text-xs font-bold rounded-lg bg-slate-100 text-slate-500 hover:text-slate-900 transition-all cursor-pointer flex items-center gap-2"
+                    className={cn(
+                      'px-4 py-2 text-xs font-bold rounded-lg bg-slate-100 text-slate-500 hover:text-slate-900 transition-all cursor-pointer flex items-center gap-2',
+                      isRTL && 'flex-row-reverse'
+                    )}
                   >
                     <Icon icon="lucide:x" className="text-sm" />
-                    Remove Filter
+                    {t('calendar.removeFilter')}
                   </button>
                 )}
               </>
@@ -514,10 +578,13 @@ export default function CalendarPage() {
 
             <button
               onClick={() => setIsTaskModalOpen(true)}
-              className="bg-emerald-600 text-white px-5 py-2.5 rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-emerald-700 transition-colors shadow-lg shadow-emerald-100 cursor-pointer"
+              className={cn(
+                'bg-emerald-600 text-white px-5 py-2.5 rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-emerald-700 transition-colors shadow-lg shadow-emerald-100 cursor-pointer',
+                isRTL && 'flex-row-reverse'
+              )}
             >
               <Icon icon="lucide:plus" className="w-5 h-5" />
-              Create Task
+              {t('calendar.createTask')}
             </button>
           </div>
         </header>
@@ -525,12 +592,32 @@ export default function CalendarPage() {
         {/* Calendar Content */}
         <div className="flex-1 overflow-auto bg-slate-50 hide-scrollbar">
           {/* Task Type Filter - visible in all views */}
-          <div className="flex items-center justify-between p-6 pb-0">
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mr-2">
-                Filter by type:
+          <div className={`flex items-center justify-between p-6 pb-0 ${isRTL ? 'flex-row-reverse' : ''}`}>
+            <div className={`flex items-center gap-2 flex-wrap ${isRTL ? 'flex-row-reverse' : ''}`}>
+              <span className={`text-[10px] font-bold text-slate-400 uppercase tracking-widest ${isRTL ? 'ml-2' : 'mr-2'}`}>
+                {t('calendar.filterByType')}:
               </span>
-              {taskTypeFilterOptions.map((option) => {
+              {/* All button */}
+              <button
+                onClick={() => {
+                  const allTypes: TaskType[] = ['audit_task', 'submission_deadline', 'letter_send', 'observation_deadline']
+                  const allSelected = allTypes.every(type => selectedTaskTypes.has(type))
+                  if (allSelected) {
+                    setSelectedTaskTypes(new Set())
+                  } else {
+                    setSelectedTaskTypes(new Set(allTypes))
+                  }
+                }}
+                className={cn(
+                  'px-3 py-1.5 text-[10px] font-bold rounded-full border transition-all cursor-pointer',
+                  selectedTaskTypes.size === 4
+                    ? 'bg-slate-900 text-white border-slate-900'
+                    : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300'
+                )}
+              >
+                {t('common.all')}
+              </button>
+              {taskTypeFilterOptionsLocalized.map((option) => {
                 const isSelected = selectedTaskTypes.has(option.value)
                 return (
                   <button
@@ -566,44 +653,44 @@ export default function CalendarPage() {
               className="px-4 py-2 text-xs font-bold rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors flex items-center gap-2 cursor-pointer"
             >
               <Icon icon="lucide:calendar" />
-              {calendarType === 'gregorian' ? 'التقويم الهجري' : 'Gregorian'}
+              {calendarType === 'gregorian' ? t('calendar.hijriCalendar') : t('calendar.gregorianCalendar')}
             </button>
           </div>
 
           {viewMode === 'month' && <MonthView currentDate={currentDate} taskStore={taskStore} selectedDayKey={selectedDayKey} onSelectDay={selectDay} selectedTypes={selectedTaskTypes} calendarType={calendarType} />}
-          {viewMode === 'year' && <YearView currentDate={currentDate} taskStore={taskStore} onSelectMonth={(month) => { setCurrentDate(new Date(currentDate.getFullYear(), month, 1)); setViewMode('month') }} selectedTypes={selectedTaskTypes} />}
-          {viewMode === 'submissions' && <SubmissionsList taskStore={taskStore} selectedTaskId={selectedTaskId} onSelectTask={selectTask} showCompleted={showCompletedSubmissions} filterMonth={currentDate.getMonth()} filterYear={currentDate.getFullYear()} filterDate={submissionFilterDate} groupBy={submissionGroupBy} selectedTypes={selectedTaskTypes} calendarType={calendarType} />}
+          {viewMode === 'year' && <YearView currentDate={currentDate} taskStore={taskStore} onSelectMonth={(month) => { setCurrentDate(new Date(currentDate.getFullYear(), month, 1)); setViewMode('month') }} selectedTypes={selectedTaskTypes} t={t} />}
+          {viewMode === 'submissions' && <SubmissionsList taskStore={taskStore} selectedTaskId={selectedTaskId} onSelectTask={selectTask} showCompleted={showCompletedSubmissions} filterMonth={currentDate.getMonth()} filterYear={currentDate.getFullYear()} filterDate={submissionFilterDate} groupBy={submissionGroupBy} selectedTypes={selectedTaskTypes} calendarType={calendarType} t={t} isRTL={isRTL} />}
         </div>
       </main>
 
       {/* Right Drawer */}
       <aside className={cn(
-        "bg-white border-l border-slate-200 flex flex-col shadow-2xl transition-all duration-300 overflow-hidden",
+        `bg-white ${isRTL ? 'border-r' : 'border-l'} border-slate-200 flex flex-col shadow-2xl transition-all duration-300 overflow-hidden`,
         selectedDayKey ? "w-[400px]" : "w-0"
       )}>
         <div className="flex-1 flex flex-col h-full">
           {/* Drawer Header */}
           <div className="p-6 border-b border-slate-100">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-[10px] font-black text-emerald-600 uppercase tracking-[0.2em]">Task Details</span>
+            <div className={`flex items-center justify-between mb-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
+              <span className="text-[10px] font-black text-emerald-600 uppercase tracking-[0.2em]">{t('calendar.taskDetails')}</span>
               <button onClick={closeDrawer} className="text-slate-400 hover:text-slate-600 transition-colors cursor-pointer">
                 <Icon icon="lucide:x" className="text-xl" />
               </button>
             </div>
-            <h2 className="text-xl font-bold text-slate-900">
+            <h2 className={`text-xl font-bold text-slate-900 ${isRTL ? 'text-right' : ''}`}>
               {selectedDayKey ? (
                 calendarType === 'hijri' ? (
                   (() => {
                     const h = toHijri(new Date(selectedDayKey))
-                    return `${h.day} ${HIJRI_MONTHS[h.month - 1]} ${h.year} هـ`
+                    return `${h.day} ${getHijriMonthsFull(t)[h.month - 1]} ${h.year} هـ`
                   })()
                 ) : (
-                  new Date(selectedDayKey).toLocaleDateString('default', { month: 'long', day: 'numeric', year: 'numeric' })
+                  new Date(selectedDayKey).toLocaleDateString(isRTL ? 'ar-SA' : 'en-US', { month: 'long', day: 'numeric', year: 'numeric', calendar: 'gregory' })
                 )
               ) : '-'}
             </h2>
-            <p className="text-sm text-slate-500">
-              {selectedTask ? selectedTask.assignee : selectedDayData ? 'Active Compliance Cycle' : 'Select a task to view details'}
+            <p className={`text-sm text-slate-500 ${isRTL ? 'text-right' : ''}`}>
+              {selectedTask ? selectedTask.assignee : selectedDayData ? t('calendar.activeComplianceCycle') : t('calendar.selectTaskToView')}
             </p>
           </div>
 
@@ -611,28 +698,28 @@ export default function CalendarPage() {
           <div className="flex-1 overflow-y-auto hide-scrollbar p-6 space-y-8">
             {/* Task List Section */}
             <section>
-              <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4 flex items-center justify-between">
-                <span>Task Information</span>
+              <h3 className={`text-xs font-bold text-slate-400 uppercase tracking-widest mb-4 flex items-center justify-between ${isRTL ? 'flex-row-reverse' : ''}`}>
+                <span>{t('calendar.taskInformation')}</span>
                 <span className="bg-slate-100 text-slate-600 px-2 py-0.5 rounded text-[9px]">
                   {selectedDayData?.tasks.length || 0}
                 </span>
               </h3>
               <div className="space-y-3">
                 {selectedTask ? (
-                  <TaskDetailCard task={selectedTask} />
+                  <TaskDetailCard task={selectedTask} t={t} />
                 ) : selectedDayData?.tasks.map(task => (
-                  <TaskCard key={task.id} task={task} onClick={() => selectTask(task.id, selectedDayKey!)} />
+                  <TaskCard key={task.id} task={task} onClick={() => selectTask(task.id, selectedDayKey!)} t={t} />
                 ))}
                 {!selectedDayData && (
-                  <p className="text-xs text-slate-400 italic text-center py-10">Clear for today</p>
+                  <p className="text-xs text-slate-400 italic text-center py-10">{t('calendar.clearForToday')}</p>
                 )}
               </div>
             </section>
 
             {/* Progress Section */}
             <section>
-              <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">Status</h3>
-              <div className="flex items-center gap-6 bg-slate-50 p-4 rounded-xl border border-slate-100">
+              <h3 className={`text-xs font-bold text-slate-400 uppercase tracking-widest mb-4 ${isRTL ? 'text-right' : ''}`}>{t('calendar.status')}</h3>
+              <div className={`flex items-center gap-6 bg-slate-50 p-4 rounded-xl border border-slate-100 ${isRTL ? 'flex-row-reverse' : ''}`}>
                 <div className="relative w-16 h-16">
                   <svg className="w-full h-full -rotate-90" viewBox="0 0 100 100">
                     <circle className="text-slate-200 stroke-current" strokeWidth="12" fill="transparent" r="40" cx="50" cy="50" />
@@ -652,10 +739,10 @@ export default function CalendarPage() {
                     <span className="text-sm font-bold text-slate-900">{completionStats.rate}%</span>
                   </div>
                 </div>
-                <div>
-                  <p className="text-sm font-bold text-slate-900">Progress</p>
+                <div className={isRTL ? 'text-right' : ''}>
+                  <p className="text-sm font-bold text-slate-900">{t('calendar.progress')}</p>
                   <p className="text-xs text-slate-500">
-                    {completionStats.total > 0 ? `${completionStats.done} of ${completionStats.total} tasks completed.` : 'No metrics found'}
+                    {completionStats.total > 0 ? t('calendar.tasksCompleted').replace('{done}', completionStats.done.toString()).replace('{total}', completionStats.total.toString()) : t('calendar.noMetricsFound')}
                   </p>
                 </div>
               </div>
@@ -663,34 +750,37 @@ export default function CalendarPage() {
 
             {/* Team Assignment */}
             <section>
-              <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">Team Assignment</h3>
+              <h3 className={`text-xs font-bold text-slate-400 uppercase tracking-widest mb-4 ${isRTL ? 'text-right' : ''}`}>{t('calendar.teamAssignment')}</h3>
               <div className="space-y-4">
                 {selectedDayData?.team.map((member, idx) => (
-                  <div key={idx} className="flex items-center gap-3">
+                  <div key={idx} className={`flex items-center gap-3 ${isRTL ? 'flex-row-reverse' : ''}`}>
                     <img
                       src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${member.avatar}`}
                       className="w-8 h-8 rounded-full"
                       alt={member.name}
                     />
                     <div className="flex-1">
-                      <div className="flex justify-between text-[10px] mb-1">
+                      <div className={`flex justify-between text-[10px] mb-1 ${isRTL ? 'flex-row-reverse' : ''}`}>
                         <span className="font-bold">{member.name}</span>
-                        <span className="text-slate-400">{member.cap}% Load</span>
+                        <span className="text-slate-400">{member.cap}% {t('calendar.load')}</span>
                       </div>
-                      <div className="h-1 bg-slate-100 rounded-full">
+                      <div className={`h-1 bg-slate-100 rounded-full ${isRTL ? 'rotate-180' : ''}`}>
                         <div className="h-full bg-slate-900 rounded-full" style={{ width: `${member.cap}%` }} />
                       </div>
                     </div>
                   </div>
-                )) || <p className="text-xs text-slate-400 italic">Unassigned</p>}
+                )) || <p className="text-xs text-slate-400 italic">{t('calendar.unassigned')}</p>}
               </div>
             </section>
           </div>
 
           {/* Drawer Footer */}
           <div className="p-6 border-t border-slate-100">
-            <button className="w-full bg-slate-900 text-white py-3 rounded-xl font-bold text-xs uppercase tracking-widest shadow-lg hover:bg-slate-800 transition-all flex items-center justify-center gap-2 cursor-pointer">
-              Full Report <Icon icon="lucide:arrow-right" />
+            <button className={cn(
+              'w-full bg-slate-900 text-white py-3 rounded-xl font-bold text-xs uppercase tracking-widest shadow-lg hover:bg-slate-800 transition-all flex items-center justify-center gap-2 cursor-pointer',
+              isRTL && 'flex-row-reverse'
+            )}>
+              {t('calendar.fullReport')} <Icon icon={isRTL ? "lucide:arrow-left" : "lucide:arrow-right"} />
             </button>
           </div>
         </div>
@@ -710,6 +800,8 @@ export default function CalendarPage() {
           selectedDate={submissionFilterDate}
           onClearFilter={() => setSubmissionFilterDate(null)}
           calendarType={calendarType}
+          t={t}
+          isRTL={isRTL}
         />
       )}
 
@@ -717,53 +809,53 @@ export default function CalendarPage() {
       {isTaskModalOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
           <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl overflow-hidden animate-fade-in">
-            <div className="p-6 border-b border-slate-100 flex items-center justify-between">
-              <h3 className="text-lg font-bold text-slate-900">New Compliance Task</h3>
+            <div className={`p-6 border-b border-slate-100 flex items-center justify-between ${isRTL ? 'flex-row-reverse' : ''}`}>
+              <h3 className="text-lg font-bold text-slate-900">{t('calendar.newComplianceTask')}</h3>
               <button onClick={() => setIsTaskModalOpen(false)} className="text-slate-400 hover:text-slate-900 cursor-pointer">
                 <Icon icon="lucide:x" className="text-xl" />
               </button>
             </div>
             <div className="p-6 space-y-4">
               <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Task Title</label>
+                <label className={`block text-xs font-bold text-slate-500 uppercase mb-1.5 ${isRTL ? 'text-right' : ''}`}>{t('calendar.taskTitle')}</label>
                 <input
                   type="text"
                   value={newTask.title}
                   onChange={(e) => setNewTask(prev => ({ ...prev, title: e.target.value }))}
-                  placeholder="e.g. ISO 27001 Internal Audit"
-                  className="w-full px-4 py-2.5 rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+                  placeholder={t('calendar.taskTitlePlaceholder')}
+                  className={`w-full px-4 py-2.5 rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 ${isRTL ? 'text-right' : ''}`}
                 />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Date</label>
+                  <label className={`block text-xs font-bold text-slate-500 uppercase mb-1.5 ${isRTL ? 'text-right' : ''}`}>{t('calendar.date')}</label>
                   <input
                     type="date"
                     value={newTask.date}
                     onChange={(e) => setNewTask(prev => ({ ...prev, date: e.target.value }))}
-                    className="w-full px-4 py-2.5 rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                    className={`w-full px-4 py-2.5 rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 ${isRTL ? 'text-right' : ''}`}
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Priority</label>
+                  <label className={`block text-xs font-bold text-slate-500 uppercase mb-1.5 ${isRTL ? 'text-right' : ''}`}>{t('calendar.priority')}</label>
                   <select
                     value={newTask.priority}
                     onChange={(e) => setNewTask(prev => ({ ...prev, priority: e.target.value as Priority }))}
-                    className="w-full px-4 py-2.5 rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                    className={`w-full px-4 py-2.5 rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 ${isRTL ? 'text-right' : ''}`}
                   >
-                    <option value="Low">Low</option>
-                    <option value="Med">Medium</option>
-                    <option value="High">High</option>
-                    <option value="Critical">Critical</option>
+                    <option value="Low">{t('calendar.low')}</option>
+                    <option value="Med">{t('calendar.medium')}</option>
+                    <option value="High">{t('calendar.high')}</option>
+                    <option value="Critical">{t('calendar.critical')}</option>
                   </select>
                 </div>
               </div>
               <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Assigned To</label>
+                <label className={`block text-xs font-bold text-slate-500 uppercase mb-1.5 ${isRTL ? 'text-right' : ''}`}>{t('calendar.assignedTo')}</label>
                 <select
                   value={newTask.assignee}
                   onChange={(e) => setNewTask(prev => ({ ...prev, assignee: e.target.value }))}
-                  className="w-full px-4 py-2.5 rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                  className={`w-full px-4 py-2.5 rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 ${isRTL ? 'text-right' : ''}`}
                 >
                   <option value="Sarah">Sarah Connor</option>
                   <option value="Michael">Michael Scott</option>
@@ -771,18 +863,18 @@ export default function CalendarPage() {
                 </select>
               </div>
             </div>
-            <div className="p-6 bg-slate-50 flex gap-3">
+            <div className={`p-6 bg-slate-50 flex gap-3 ${isRTL ? 'flex-row-reverse' : ''}`}>
               <button
                 onClick={() => setIsTaskModalOpen(false)}
                 className="flex-1 py-2.5 text-sm font-bold text-slate-600 hover:bg-slate-200 rounded-lg transition-colors cursor-pointer"
               >
-                Cancel
+                {t('common.cancel')}
               </button>
               <button
                 onClick={submitTask}
                 className="flex-1 py-2.5 text-sm font-bold bg-emerald-600 text-white hover:bg-emerald-700 rounded-lg transition-colors shadow-lg shadow-emerald-100 cursor-pointer"
               >
-                Create Audit
+                {t('calendar.createAudit')}
               </button>
             </div>
           </div>
@@ -942,17 +1034,18 @@ function MonthView({ currentDate, taskStore, selectedDayKey, onSelectDay, select
 }
 
 // Year View Component
-function YearView({ currentDate, taskStore, onSelectMonth, selectedTypes }: {
+function YearView({ currentDate, taskStore, onSelectMonth, selectedTypes, t }: {
   currentDate: Date
   taskStore: TaskStore
   onSelectMonth: (month: number) => void
   selectedTypes: Set<TaskType>
+  t: (key: TranslationKey) => string
 }) {
   const year = currentDate.getFullYear()
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-6 p-6">
-      {MONTHS_FULL.map((monthName, m) => {
+      {getMonthsFull(t).map((monthName, m) => {
         const daysInMonth = new Date(year, m + 1, 0).getDate()
         const startOffset = (new Date(year, m, 1).getDay() + 6) % 7
 
@@ -996,7 +1089,7 @@ function YearView({ currentDate, taskStore, onSelectMonth, selectedTypes }: {
 }
 
 // Submissions List View
-function SubmissionsList({ taskStore, selectedTaskId, onSelectTask, showCompleted = false, filterMonth, filterYear, filterDate = null, groupBy = 'date', selectedTypes, calendarType = 'gregorian' }: {
+function SubmissionsList({ taskStore, selectedTaskId, onSelectTask, showCompleted = false, filterMonth, filterYear, filterDate = null, groupBy = 'date', selectedTypes, calendarType = 'gregorian', t, isRTL }: {
   taskStore: TaskStore
   selectedTaskId: string | null
   onSelectTask: (taskId: string, dateKey: string) => void
@@ -1007,6 +1100,8 @@ function SubmissionsList({ taskStore, selectedTaskId, onSelectTask, showComplete
   groupBy?: 'date' | 'month' | 'year'
   selectedTypes: Set<TaskType>
   calendarType?: CalendarType
+  t: (key: TranslationKey) => string
+  isRTL: boolean
 }) {
   // Get all tasks filtered by date or month/year, and optionally by completed status
   const allTasks: (Task & { date: string })[] = []
@@ -1060,15 +1155,16 @@ function SubmissionsList({ taskStore, selectedTaskId, onSelectTask, showComplete
   })
 
   if (allTasks.length === 0) {
+    const dateLocale = isRTL ? 'ar-SA' : 'en-US'
     const emptyLabel = filterDate
-      ? new Date(filterDate).toLocaleDateString('default', { month: 'long', day: 'numeric', year: 'numeric' })
-      : new Date(filterYear, filterMonth).toLocaleDateString('default', { month: 'long', year: 'numeric' })
+      ? new Date(filterDate).toLocaleDateString(dateLocale, { month: 'long', day: 'numeric', year: 'numeric', calendar: 'gregory' })
+      : new Date(filterYear, filterMonth).toLocaleDateString(dateLocale, { month: 'long', year: 'numeric', calendar: 'gregory' })
     return (
       <div className="flex flex-col items-center justify-center py-20 px-6">
         <div className="w-24 h-24 bg-emerald-50 rounded-full flex items-center justify-center mb-6">
           <Icon icon="lucide:check-circle" className="text-5xl text-emerald-500" />
         </div>
-        <h3 className="text-xl font-bold text-slate-900 mb-2">No submissions for {emptyLabel}</h3>
+        <h3 className="text-xl font-bold text-slate-900 mb-2">{t('calendar.noSubmissionsFor')} {emptyLabel}</h3>
         <p className="text-sm text-slate-500 text-center">
           {showCompleted ? 'No tasks found for this month.' : 'No pending tasks or submissions for this month.'}
         </p>
@@ -1078,18 +1174,19 @@ function SubmissionsList({ taskStore, selectedTaskId, onSelectTask, showComplete
 
   // Helper to format group headers based on groupBy
   const getGroupHeader = (key: string): { main: string; sub?: string } => {
+    const dateLocale = isRTL ? 'ar-SA' : 'en-US'
     if (groupBy === 'date') {
       const dateObj = new Date(key)
       if (calendarType === 'hijri') {
         const h = toHijri(dateObj)
         return {
-          main: `${h.day} ${HIJRI_MONTHS[h.month - 1]} ${h.year} هـ`,
-          sub: dateObj.toLocaleDateString('default', { weekday: 'long' })
+          main: `${h.day} ${getHijriMonthsFull(t)[h.month - 1]} ${h.year} هـ`,
+          sub: dateObj.toLocaleDateString(dateLocale, { weekday: 'long', calendar: 'gregory' })
         }
       }
       return {
-        main: dateObj.toLocaleDateString('default', { month: 'long', day: 'numeric', year: 'numeric' }),
-        sub: dateObj.toLocaleDateString('default', { weekday: 'long' })
+        main: dateObj.toLocaleDateString(dateLocale, { month: 'long', day: 'numeric', year: 'numeric', calendar: 'gregory' }),
+        sub: dateObj.toLocaleDateString(dateLocale, { weekday: 'long', calendar: 'gregory' })
       }
     } else if (groupBy === 'month') {
       // key is "2024-10"
@@ -1097,11 +1194,11 @@ function SubmissionsList({ taskStore, selectedTaskId, onSelectTask, showComplete
       if (calendarType === 'hijri') {
         const dateObj = new Date(parseInt(year), parseInt(month) - 1, 15) // mid-month
         const h = toHijri(dateObj)
-        return { main: `${HIJRI_MONTHS[h.month - 1]} ${h.year} هـ` }
+        return { main: `${getHijriMonthsFull(t)[h.month - 1]} ${h.year} هـ` }
       }
       const dateObj = new Date(parseInt(year), parseInt(month) - 1, 1)
       return {
-        main: dateObj.toLocaleDateString('default', { month: 'long', year: 'numeric' })
+        main: dateObj.toLocaleDateString(dateLocale, { month: 'long', year: 'numeric', calendar: 'gregory' })
       }
     } else {
       // key is "2024"
@@ -1133,7 +1230,7 @@ function SubmissionsList({ taskStore, selectedTaskId, onSelectTask, showComplete
                   </span>
                 )}
                 <span className="text-xs font-bold text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">
-                  {tasks.length} {tasks.length === 1 ? 'task' : 'tasks'}
+                  {tasks.length} {tasks.length === 1 ? t('calendar.taskSingular') : t('calendar.taskPlural')}
                 </span>
               </div>
             </div>
@@ -1159,7 +1256,7 @@ function SubmissionsList({ taskStore, selectedTaskId, onSelectTask, showComplete
                     <div className="flex items-center gap-3">
                       <div className={cn('w-3 h-3 rounded-full', task.status === 'completed' ? 'bg-emerald-500' : colors.dot)} />
                       <span className={cn('text-[9px] font-black uppercase tracking-wider px-2 py-1 rounded text-white', task.status === 'completed' ? 'bg-emerald-500' : colors.badge)}>
-                        {task.status === 'completed' ? 'Completed' : getSubmissionTypeLabel(task.type)}
+                        {task.status === 'completed' ? t('common.completed') : getLocalizedSubmissionTypeLabel(task.type, t)}
                       </span>
                     </div>
 
@@ -1195,8 +1292,15 @@ function SubmissionsList({ taskStore, selectedTaskId, onSelectTask, showComplete
 }
 
 // Task Card Component (for drawer)
-function TaskCard({ task, onClick }: { task: Task; onClick: () => void }) {
+function TaskCard({ task, onClick, t }: { task: Task; onClick: () => void; t: (key: TranslationKey) => string }) {
   const colors = submissionColors[task.type]
+
+  const typeLabels: Record<TaskType, string> = {
+    submission_deadline: t('calendar.submission'),
+    letter_send: t('calendar.letter'),
+    observation_deadline: t('calendar.observation'),
+    audit_task: t('calendar.auditTask')
+  }
 
   return (
     <div
@@ -1211,19 +1315,19 @@ function TaskCard({ task, onClick }: { task: Task; onClick: () => void }) {
           <div className={cn('w-1.5 h-1.5 rounded-full', colors.badge)} />
           <span className="text-xs font-bold text-slate-700">{task.name}</span>
         </div>
-        <span className="text-[9px] font-black uppercase tracking-tighter text-slate-400">{task.time || 'All Day'}</span>
+        <span className="text-[9px] font-black uppercase tracking-tighter text-slate-400">{task.time || t('calendar.allDay')}</span>
       </div>
       {task.isSubmission && (
         <div className="flex items-center gap-2 flex-wrap">
           <span className={cn('text-[8px] font-black uppercase tracking-wider px-2 py-1 rounded text-white', colors.badge)}>
-            {getSubmissionTypeLabel(task.type)}
+            {typeLabels[task.type]}
           </span>
           <span className={cn(
             'text-[8px] font-bold uppercase tracking-wider px-2 py-1 rounded',
             task.submissionStatus === 'Verified' || task.submissionStatus === 'Submitted' ? 'bg-green-100 text-green-700' :
             task.submissionStatus === 'In Progress' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-700'
           )}>
-            {task.submissionStatus || 'Pending'}
+            {task.submissionStatus || t('common.pending')}
           </span>
         </div>
       )}
@@ -1232,8 +1336,15 @@ function TaskCard({ task, onClick }: { task: Task; onClick: () => void }) {
 }
 
 // Task Detail Card (for drawer when task is selected)
-function TaskDetailCard({ task }: { task: Task }) {
+function TaskDetailCard({ task, t }: { task: Task; t: (key: TranslationKey) => string }) {
   const colors = submissionColors[task.type]
+
+  const typeLabels: Record<TaskType, string> = {
+    submission_deadline: t('calendar.submission'),
+    letter_send: t('calendar.letter'),
+    observation_deadline: t('calendar.observation'),
+    audit_task: t('calendar.auditTask')
+  }
 
   return (
     <div className={cn('flex flex-col gap-3 p-4 rounded-xl border', colors.border, colors.bg)}>
@@ -1248,7 +1359,7 @@ function TaskDetailCard({ task }: { task: Task }) {
       )}
       <div className="flex items-center gap-2 flex-wrap mt-2">
         <span className={cn('text-[9px] font-black uppercase tracking-wider px-2 py-1 rounded text-white', colors.badge)}>
-          {getSubmissionTypeLabel(task.type)}
+          {typeLabels[task.type]}
         </span>
         <span className={cn('text-[9px] font-bold uppercase tracking-wider px-2 py-1 rounded', priorityColors[task.priority])}>
           {task.priority}
@@ -1273,7 +1384,7 @@ function TaskDetailCard({ task }: { task: Task }) {
 }
 
 // Date Picker Modal
-function DatePickerModal({ currentDate, onClose, onSelectMonth, onSelectYear, onOpenMonthView, onOpenYearView, viewMode, onSelectDay, selectedDate, onClearFilter, calendarType = 'gregorian' }: {
+function DatePickerModal({ currentDate, onClose, onSelectMonth, onSelectYear, onOpenMonthView, onOpenYearView, viewMode, onSelectDay, selectedDate, onClearFilter, calendarType = 'gregorian', t, isRTL }: {
   currentDate: Date
   onClose: () => void
   onSelectMonth: (month: number) => void
@@ -1285,6 +1396,8 @@ function DatePickerModal({ currentDate, onClose, onSelectMonth, onSelectYear, on
   selectedDate?: string | null
   onClearFilter?: () => void
   calendarType?: CalendarType
+  t: (key: TranslationKey) => string
+  isRTL: boolean
 }) {
   const currentMonth = currentDate.getMonth()
   const currentYear = currentDate.getFullYear()
@@ -1298,7 +1411,7 @@ function DatePickerModal({ currentDate, onClose, onSelectMonth, onSelectYear, on
       <div className="bg-white rounded-[2rem] w-full max-w-4xl shadow-2xl overflow-hidden flex flex-col md:flex-row animate-fade-in">
         {/* Month Dial Section */}
         <div className="p-12 border-r border-slate-100 bg-slate-50 flex flex-col items-center justify-center gap-10">
-          <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest">Month Selector</h3>
+          <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest">{t('calendar.monthSelector')}</h3>
 
           {/* Radial Month Dial */}
           <div className="relative w-[320px] h-[320px] flex items-center justify-center">
@@ -1306,14 +1419,14 @@ function DatePickerModal({ currentDate, onClose, onSelectMonth, onSelectYear, on
             <div className="absolute w-24 h-24 bg-white rounded-full shadow-2xl flex flex-col items-center justify-center z-10 border-4 border-emerald-500">
               <span className="text-lg font-bold text-slate-900">
                 {calendarType === 'hijri'
-                  ? HIJRI_MONTHS_SHORT[toHijri(currentDate).month - 1]
-                  : MONTHS[currentMonth]}
+                  ? getHijriMonthsShort(t)[toHijri(currentDate).month - 1]
+                  : getMonthsShort(t)[currentMonth]}
               </span>
-              <span className="text-[8px] font-black text-emerald-600 tracking-widest uppercase">Active</span>
+              <span className="text-[8px] font-black text-emerald-600 tracking-widest uppercase">{t('calendar.active')}</span>
             </div>
 
             {/* Month items */}
-            {(calendarType === 'hijri' ? HIJRI_MONTHS_SHORT : MONTHS).map((m, i) => {
+            {(calendarType === 'hijri' ? getHijriMonthsShort(t) : getMonthsShort(t)).map((m, i) => {
               const angle = (i * 30 - 90) * (Math.PI / 180)
               const x = Math.cos(angle) * radius
               const y = Math.sin(angle) * radius
@@ -1349,9 +1462,9 @@ function DatePickerModal({ currentDate, onClose, onSelectMonth, onSelectYear, on
                       ? (() => {
                           const [y, m, d] = selectedDate.split('-').map(Number)
                           const h = toHijri(new Date(y, m - 1, d))
-                          return `${h.day} ${HIJRI_MONTHS[h.month - 1]} ${h.year} هـ`
+                          return `${h.day} ${getHijriMonthsFull(t)[h.month - 1]} ${h.year} هـ`
                         })()
-                      : new Date(selectedDate).toLocaleDateString('default', { month: 'short', day: 'numeric', year: 'numeric' })
+                      : new Date(selectedDate).toLocaleDateString(isRTL ? 'ar-SA' : 'en-US', { month: 'short', day: 'numeric', year: 'numeric', calendar: 'gregory' })
                     }
                   </div>
                 )}
@@ -1401,7 +1514,7 @@ function DatePickerModal({ currentDate, onClose, onSelectMonth, onSelectYear, on
                 onClick={() => setShowDayPicker(!showDayPicker)}
                 className="flex-1 px-6 py-3 bg-emerald-600 text-white text-xs font-bold rounded-xl hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-100 flex items-center justify-center gap-2 cursor-pointer"
               >
-                <Icon icon="lucide:calendar-days" /> {showDayPicker ? 'Hide Date Picker' : 'Open Date Picker'}
+                <Icon icon="lucide:calendar-days" /> {showDayPicker ? t('calendar.hideDatePicker') : t('calendar.openDatePicker')}
               </button>
               {selectedDate && (
                 <button
@@ -1418,7 +1531,7 @@ function DatePickerModal({ currentDate, onClose, onSelectMonth, onSelectYear, on
               onClick={() => setShowDayPicker(!showDayPicker)}
               className="w-full px-6 py-3 bg-emerald-600 text-white text-xs font-bold rounded-xl hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-100 flex items-center justify-center gap-2 cursor-pointer"
             >
-              <Icon icon="lucide:calendar-days" /> {showDayPicker ? 'Hide Calendar' : 'Open Calendar'}
+              <Icon icon="lucide:calendar-days" /> {showDayPicker ? t('calendar.hideCalendar') : t('calendar.openCalendar')}
             </button>
           )}
         </div>
@@ -1427,11 +1540,11 @@ function DatePickerModal({ currentDate, onClose, onSelectMonth, onSelectYear, on
         <div className="flex-1 p-10 flex flex-col h-[600px]">
           <div className="flex items-center justify-between mb-8 shrink-0">
             <div className="space-y-1">
-              <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest">Year Selection</h3>
+              <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest">{t('calendar.yearSelection')}</h3>
               <p className="text-[10px] text-slate-500">
                 {calendarType === 'hijri'
-                  ? 'Browse compliance archives and future schedules (1420-1530 هـ)'
-                  : 'Browse compliance archives and future schedules (2000-2100)'}
+                  ? t('calendar.browseArchivesHijri')
+                  : t('calendar.browseArchivesGregorian')}
               </p>
             </div>
             <button onClick={onClose} className="text-slate-400 hover:text-slate-900 transition-colors p-2 hover:bg-slate-100 rounded-full cursor-pointer">

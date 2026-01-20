@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { Icon } from '@iconify/react'
 import { Header } from '@/components/layout/header'
 import { Button } from '@/components/ui/button'
+import { useTranslation } from '@/i18n'
 import {
   Observation,
   ObservationSource,
@@ -132,6 +133,8 @@ const sampleObservations: Observation[] = [
 ]
 
 export default function ObservationsPage() {
+  const { t, isRTL } = useTranslation()
+
   // State for modals
   const [selectedObservation, setSelectedObservation] = useState<Observation | null>(null)
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false)
@@ -188,10 +191,10 @@ export default function ObservationsPage() {
         <div className="flex items-center gap-8">
           <div>
             <h1 className="text-xl font-bold font-display text-slate-900">
-              Observations Tracker
+              {t('observations.title')}
             </h1>
             <p className="text-xs text-slate-500 font-medium tracking-wide uppercase">
-              Audit & Remediation Management
+              {t('observations.subtitle')}
             </p>
           </div>
 
@@ -201,30 +204,30 @@ export default function ObservationsPage() {
           <div className="hidden lg:flex gap-2">
             <Link
               href="/sama-letters"
-              className="px-3 py-1.5 text-xs font-bold text-slate-600 bg-slate-50 hover:bg-slate-100 rounded-lg transition-all border border-slate-200 flex items-center gap-2"
+              className={`px-3 py-1.5 text-xs font-bold text-slate-600 bg-slate-50 hover:bg-slate-100 rounded-lg transition-all border border-slate-200 flex items-center gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}
             >
               <Icon icon="lucide:mail" className="text-emerald-500" />
-              SAMA Letters
+              {t('observations.samaLetters')}
             </Link>
             <Link
               href="/regulatory-updates"
-              className="px-3 py-1.5 text-xs font-bold text-slate-600 bg-slate-50 hover:bg-slate-100 rounded-lg transition-all border border-slate-200 flex items-center gap-2"
+              className={`px-3 py-1.5 text-xs font-bold text-slate-600 bg-slate-50 hover:bg-slate-100 rounded-lg transition-all border border-slate-200 flex items-center gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}
             >
               <Icon icon="lucide:refresh-cw" className="text-blue-500" />
-              Regulatory Updates
+              {t('observations.regulatoryUpdates')}
             </Link>
-            <span className="px-3 py-1.5 text-xs font-bold text-emerald-700 bg-emerald-50 rounded-lg border border-emerald-200 flex items-center gap-2">
+            <span className={`px-3 py-1.5 text-xs font-bold text-emerald-700 bg-emerald-50 rounded-lg border border-emerald-200 flex items-center gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
               <Icon icon="lucide:crosshair" className="text-emerald-600" />
-              Observations Tracker
+              {t('observations.title')}
             </span>
           </div>
         </div>
 
-        <div className="flex items-center gap-4">
+        <div className={`flex items-center gap-4 ${isRTL ? 'flex-row-reverse' : ''}`}>
           {/* System Health */}
           <div className="hidden md:flex items-center gap-1 bg-slate-50 border border-slate-200 p-1 rounded-lg">
-            <div className="px-4 py-1.5 text-sm font-bold text-slate-900 flex items-center gap-2">
-              <span>System Health</span>
+            <div className={`px-4 py-1.5 text-sm font-bold text-slate-900 flex items-center gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
+              <span>{t('observations.systemHealth')}</span>
               <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
             </div>
           </div>
@@ -236,7 +239,7 @@ export default function ObservationsPage() {
             className="shadow-lg shadow-emerald-100"
           >
             <Icon icon="lucide:plus" />
-            Add Observation
+            {t('observations.addObservation')}
           </Button>
         </div>
       </header>

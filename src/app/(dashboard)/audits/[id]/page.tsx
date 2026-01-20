@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Modal } from '@/components/ui/modal'
+import { useTranslation } from '@/i18n'
 
 // Types
 interface Task {
@@ -134,6 +135,7 @@ const documents = [
 ]
 
 export default function AuditDetailPage() {
+  const { t, isRTL } = useTranslation()
   const params = useParams()
   const [taskStates, setTaskStates] = useState<Record<number, boolean>>(
     tasks.reduce((acc, task) => ({ ...acc, [task.id]: task.completed }), {})
@@ -160,7 +162,7 @@ export default function AuditDetailPage() {
   const toggleTaskCompletion = (taskId: number) => {
     setTaskStates(prev => {
       const newState = !prev[taskId]
-      showToast(newState ? 'Task completed!' : 'Task marked as incomplete')
+      showToast(newState ? t('auditDetail.taskCompleted') : t('auditDetail.taskIncomplete'))
       return { ...prev, [taskId]: newState }
     })
   }
@@ -183,34 +185,34 @@ export default function AuditDetailPage() {
   }
 
   return (
-    <>
+    <div dir={isRTL ? 'rtl' : 'ltr'}>
       {/* Header */}
       <header className="h-20 bg-white border-b border-slate-200 px-8 flex items-center justify-between shrink-0">
-        <div>
-          <div className="flex items-center gap-2 text-xs font-bold text-slate-400 uppercase tracking-widest mb-0.5">
-            <Link href="/reports" className="hover:text-emerald-600 transition-colors cursor-pointer">Audits</Link>
-            <Icon icon="lucide:chevron-right" />
-            <span className="text-emerald-600">Details</span>
+        <div className={isRTL ? 'text-right' : ''}>
+          <div className={`flex items-center gap-2 text-xs font-bold text-slate-400 uppercase tracking-widest mb-0.5 ${isRTL ? 'flex-row-reverse' : ''}`}>
+            <Link href="/reports" className="hover:text-emerald-600 transition-colors cursor-pointer">{t('auditDetail.audits')}</Link>
+            <Icon icon={isRTL ? "lucide:chevron-left" : "lucide:chevron-right"} />
+            <span className="text-emerald-600">{t('auditDetail.details')}</span>
           </div>
           <h1 className="text-xl font-bold font-display text-slate-900">{auditData.title}</h1>
         </div>
 
-        <div className="flex items-center gap-4">
+        <div className={`flex items-center gap-4 ${isRTL ? 'flex-row-reverse' : ''}`}>
           <div className="relative hidden md:block">
-            <Icon icon="lucide:search" className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+            <Icon icon="lucide:search" className={`absolute ${isRTL ? 'right-3' : 'left-3'} top-1/2 -translate-y-1/2 text-slate-400`} />
             <input
               type="text"
-              placeholder="Search task..."
-              className="pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 w-64 transition-all"
+              placeholder={t('auditDetail.searchTask')}
+              className={`${isRTL ? 'pr-10 pl-4 text-right' : 'pl-10 pr-4'} py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 w-64 transition-all`}
             />
           </div>
           <Button variant="outline" onClick={() => setShowEditModal(true)}>
             <Icon icon="lucide:edit-3" />
-            Edit Audit
+            {t('auditDetail.editAudit')}
           </Button>
           <Button variant="primary" className="shadow-lg shadow-emerald-100" onClick={() => setShowShareModal(true)}>
             <Icon icon="lucide:share-2" />
-            Share Progress
+            {t('auditDetail.shareProgress')}
           </Button>
         </div>
       </header>
@@ -223,40 +225,40 @@ export default function AuditDetailPage() {
             <div className="lg:col-span-2 space-y-8">
               {/* Audit Title & Description Card */}
               <Card className="p-8">
-                <div className="flex items-start justify-between mb-4">
-                  <div>
+                <div className={`flex items-start justify-between mb-4 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                  <div className={isRTL ? 'text-right' : ''}>
                     <h2 className="text-2xl font-bold font-display text-slate-900 mb-3">{auditData.title}</h2>
                     <p className="text-slate-600 leading-relaxed max-w-2xl">{auditData.description}</p>
                   </div>
-                  <Badge variant="success" className="shrink-0 border border-emerald-100">Active Audit</Badge>
+                  <Badge variant="success" className="shrink-0 border border-emerald-100">{t('auditDetail.activeAudit')}</Badge>
                 </div>
-                <div className="flex flex-wrap gap-6 mt-6 pt-6 border-t border-slate-100">
-                  <div className="flex items-center gap-2 text-slate-500">
+                <div className={`flex flex-wrap gap-6 mt-6 pt-6 border-t border-slate-100 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                  <div className={`flex items-center gap-2 text-slate-500 ${isRTL ? 'flex-row-reverse' : ''}`}>
                     <Icon icon="lucide:calendar" className="text-lg text-emerald-500" />
-                    <span className="text-sm font-medium">Started: {auditData.startDate}</span>
+                    <span className="text-sm font-medium">{t('auditDetail.started')}: {auditData.startDate}</span>
                   </div>
-                  <div className="flex items-center gap-2 text-slate-500">
+                  <div className={`flex items-center gap-2 text-slate-500 ${isRTL ? 'flex-row-reverse' : ''}`}>
                     <Icon icon="lucide:tag" className="text-lg text-blue-500" />
-                    <span className="text-sm font-medium">Type: {auditData.type}</span>
+                    <span className="text-sm font-medium">{t('auditDetail.type')}: {auditData.type}</span>
                   </div>
-                  <div className="flex items-center gap-2 text-slate-500">
+                  <div className={`flex items-center gap-2 text-slate-500 ${isRTL ? 'flex-row-reverse' : ''}`}>
                     <Icon icon="lucide:layers" className="text-lg text-purple-500" />
-                    <span className="text-sm font-medium">Scope: {auditData.scope}</span>
+                    <span className="text-sm font-medium">{t('auditDetail.scope')}: {auditData.scope}</span>
                   </div>
                 </div>
               </Card>
 
               {/* Task Checklist */}
               <Card className="overflow-hidden">
-                <div className="p-6 border-b border-slate-100 flex items-center justify-between">
-                  <h3 className="text-sm font-bold text-slate-900">Control Checklist (A.9 & A.12)</h3>
-                  <div className="flex gap-2">
-                    <button className="p-1.5 text-slate-400 hover:text-emerald-600 transition-colors cursor-pointer" title="Filter tasks">
+                <div className={`p-6 border-b border-slate-100 flex items-center justify-between ${isRTL ? 'flex-row-reverse' : ''}`}>
+                  <h3 className="text-sm font-bold text-slate-900">{t('auditDetail.controlChecklist')}</h3>
+                  <div className={`flex gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                    <button className="p-1.5 text-slate-400 hover:text-emerald-600 transition-colors cursor-pointer" title={t('auditDetail.filterTasks')}>
                       <Icon icon="lucide:filter" />
                     </button>
                     <button
                       className="p-1.5 text-slate-400 hover:text-emerald-600 transition-colors cursor-pointer"
-                      title="Add new control task"
+                      title={t('auditDetail.addNewControlTask')}
                       onClick={() => setShowAddTaskModal(true)}
                     >
                       <Icon icon="lucide:plus-circle" />
@@ -312,11 +314,11 @@ export default function AuditDetailPage() {
                         </div>
                       </div>
                       {expandedTaskId === task.id && (
-                        <div className="bg-slate-50 px-4 pb-4">
+                        <div className={`bg-slate-50 px-4 pb-4 ${isRTL ? 'text-right' : ''}`}>
                           <div className="border-t border-slate-200 pt-3 space-y-2">
-                            <p className="text-xs text-slate-600"><span className="font-bold">Assignee:</span> {task.assignee.name}</p>
-                            <p className="text-xs text-slate-600"><span className="font-bold">Due:</span> {task.dueDate}</p>
-                            <p className="text-xs text-slate-600"><span className="font-bold">Notes:</span> {task.notes}</p>
+                            <p className="text-xs text-slate-600"><span className="font-bold">{t('auditDetail.assignee')}:</span> {task.assignee.name}</p>
+                            <p className="text-xs text-slate-600"><span className="font-bold">{t('auditDetail.dueDate')}:</span> {task.dueDate}</p>
+                            <p className="text-xs text-slate-600"><span className="font-bold">{t('common.notes')}:</span> {task.notes}</p>
                           </div>
                         </div>
                       )}
@@ -324,28 +326,28 @@ export default function AuditDetailPage() {
                   ))}
                 </div>
                 <div className="p-4 bg-slate-50/50 flex justify-center">
-                  <button className="text-xs font-bold text-emerald-600 hover:underline cursor-pointer">View 9 more tasks</button>
+                  <button className="text-xs font-bold text-emerald-600 hover:underline cursor-pointer">{t('auditDetail.viewMoreTasks').replace('{count}', '9')}</button>
                 </div>
               </Card>
 
               {/* Activity Timeline */}
               <Card className="p-6">
-                <h3 className="text-sm font-bold text-slate-900 mb-8">Audit Activity Timeline</h3>
+                <h3 className={`text-sm font-bold text-slate-900 mb-8 ${isRTL ? 'text-right' : ''}`}>{t('auditDetail.auditActivityTimeline')}</h3>
                 <div className="space-y-8 relative">
                   {timelineItems.map((item, index) => (
                     <div
                       key={item.id}
-                      className="flex gap-4 relative cursor-pointer hover:bg-slate-50/50 -mx-4 px-4 py-2 rounded-xl transition-colors"
+                      className={`flex gap-4 relative cursor-pointer hover:bg-slate-50/50 -mx-4 px-4 py-2 rounded-xl transition-colors ${isRTL ? 'flex-row-reverse' : ''}`}
                       onClick={() => handleTimelineClick(item)}
                     >
                       {/* Timeline line */}
                       {index < timelineItems.length - 1 && (
-                        <div className="absolute left-[11px] top-[24px] bottom-0 w-0.5 bg-slate-200 ml-4"></div>
+                        <div className={`absolute ${isRTL ? 'right-[11px]' : 'left-[11px]'} top-[24px] bottom-0 w-0.5 bg-slate-200 ${isRTL ? 'mr-4' : 'ml-4'}`}></div>
                       )}
                       <div className={`relative z-10 w-6 h-6 rounded-full ${item.type === 'comment' ? 'bg-slate-200 text-slate-500' : timelineStyles[item.type].bg + ' text-white'} flex items-center justify-center ring-4 ring-white shrink-0`}>
                         <Icon icon={timelineStyles[item.type].icon} className="text-sm" />
                       </div>
-                      <div className="flex-1 pb-2">
+                      <div className={`flex-1 pb-2 ${isRTL ? 'text-right' : ''}`}>
                         <p className="text-sm text-slate-900">
                           <span className="font-bold">{item.user}</span>{' '}
                           {item.action}{' '}
@@ -354,7 +356,7 @@ export default function AuditDetailPage() {
                         {item.type === 'comment' && item.detail && (
                           <p className="text-xs text-slate-600 bg-slate-50 p-3 rounded-lg mt-2 italic">{item.detail}</p>
                         )}
-                        <p className="text-xs text-slate-400 mt-1">{item.timestamp}{item.type === 'completed' && ' - Automated Evidence Captured'}{item.type === 'upload' && ' - Artifact Storage'}</p>
+                        <p className="text-xs text-slate-400 mt-1">{item.timestamp}{item.type === 'completed' && ` - ${t('auditDetail.automatedEvidenceCaptured')}`}{item.type === 'upload' && ` - ${t('auditDetail.artifactStorage')}`}</p>
                       </div>
                     </div>
                   ))}
@@ -366,24 +368,24 @@ export default function AuditDetailPage() {
             <div className="space-y-8">
               {/* Audit Metadata */}
               <Card className="overflow-hidden">
-                <div className="p-6 bg-slate-50/50 border-b border-slate-100">
-                  <h3 className="text-sm font-bold text-slate-900">Audit Overview</h3>
+                <div className={`p-6 bg-slate-50/50 border-b border-slate-100 ${isRTL ? 'text-right' : ''}`}>
+                  <h3 className="text-sm font-bold text-slate-900">{t('auditDetail.auditOverview')}</h3>
                 </div>
                 <div className="p-6 space-y-6">
-                  <div className="flex justify-between items-center">
-                    <span className="text-xs text-slate-500 uppercase font-bold tracking-wider">Status</span>
+                  <div className={`flex justify-between items-center ${isRTL ? 'flex-row-reverse' : ''}`}>
+                    <span className="text-xs text-slate-500 uppercase font-bold tracking-wider">{t('auditDetail.status')}</span>
                     <Badge variant="warning" className="border border-amber-100">{auditData.status}</Badge>
                   </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-xs text-slate-500 uppercase font-bold tracking-wider">Priority</span>
+                  <div className={`flex justify-between items-center ${isRTL ? 'flex-row-reverse' : ''}`}>
+                    <span className="text-xs text-slate-500 uppercase font-bold tracking-wider">{t('auditDetail.priority')}</span>
                     <Badge variant="danger" className="border border-rose-100">{auditData.priority}</Badge>
                   </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-xs text-slate-500 uppercase font-bold tracking-wider">Due Date</span>
+                  <div className={`flex justify-between items-center ${isRTL ? 'flex-row-reverse' : ''}`}>
+                    <span className="text-xs text-slate-500 uppercase font-bold tracking-wider">{t('auditDetail.dueDate')}</span>
                     <span className="text-sm font-bold text-slate-900">{auditData.dueDate}</span>
                   </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-xs text-slate-500 uppercase font-bold tracking-wider">Type</span>
+                  <div className={`flex justify-between items-center ${isRTL ? 'flex-row-reverse' : ''}`}>
+                    <span className="text-xs text-slate-500 uppercase font-bold tracking-wider">{t('auditDetail.type')}</span>
                     <span className="text-sm font-bold text-slate-900">{auditData.auditType}</span>
                   </div>
                 </div>
@@ -391,13 +393,13 @@ export default function AuditDetailPage() {
 
               {/* Team Members */}
               <Card>
-                <div className="p-6 border-b border-slate-100 flex items-center justify-between">
-                  <h3 className="text-sm font-bold text-slate-900">Audit Team</h3>
+                <div className={`p-6 border-b border-slate-100 flex items-center justify-between ${isRTL ? 'flex-row-reverse' : ''}`}>
+                  <h3 className="text-sm font-bold text-slate-900">{t('auditDetail.auditTeam')}</h3>
                   <button
                     className="text-emerald-600 text-xs font-bold hover:underline cursor-pointer"
                     onClick={() => setShowManageTeamModal(true)}
                   >
-                    Manage
+                    {t('auditDetail.manage')}
                   </button>
                 </div>
                 <div className="p-6 space-y-4">
@@ -433,20 +435,20 @@ export default function AuditDetailPage() {
                     </div>
                   ))}
                   <button
-                    className="w-full mt-4 py-2 border-2 border-dashed border-slate-200 rounded-xl text-slate-400 hover:border-emerald-200 hover:text-emerald-500 hover:bg-emerald-50/50 transition-all text-sm font-bold flex items-center justify-center gap-2 cursor-pointer"
+                    className={`w-full mt-4 py-2 border-2 border-dashed border-slate-200 rounded-xl text-slate-400 hover:border-emerald-200 hover:text-emerald-500 hover:bg-emerald-50/50 transition-all text-sm font-bold flex items-center justify-center gap-2 cursor-pointer ${isRTL ? 'flex-row-reverse' : ''}`}
                     onClick={() => setShowAddMemberModal(true)}
                   >
                     <Icon icon="lucide:user-plus" />
-                    Add Member
+                    {t('auditDetail.addMember')}
                   </button>
                 </div>
               </Card>
 
               {/* Related Documents */}
               <div className="bg-slate-900 rounded-2xl p-6 text-white shadow-xl">
-                <h3 className="text-sm font-bold mb-4 flex items-center gap-2">
+                <h3 className={`text-sm font-bold mb-4 flex items-center gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
                   <Icon icon="lucide:folder" className="text-emerald-400" />
-                  Quick Access Artifacts
+                  {t('auditDetail.quickAccessArtifacts')}
                 </h3>
                 <div className="space-y-3">
                   {documents.map((doc) => (
@@ -467,167 +469,167 @@ export default function AuditDetailPage() {
       </div>
 
       {/* Edit Audit Modal */}
-      <Modal isOpen={showEditModal} onClose={() => setShowEditModal(false)} title="Edit Audit Details" size="lg">
+      <Modal isOpen={showEditModal} onClose={() => setShowEditModal(false)} title={t('auditDetail.editAuditDetails')} size="lg">
         <div className="space-y-6 max-h-[60vh] overflow-y-auto hide-scrollbar">
           <div>
-            <label className="block text-sm font-bold text-slate-700 mb-2">Audit Title</label>
-            <input type="text" defaultValue={auditData.title} className="w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all" />
+            <label className={`block text-sm font-bold text-slate-700 mb-2 ${isRTL ? 'text-right' : ''}`}>{t('auditDetail.auditTitle')}</label>
+            <input type="text" defaultValue={auditData.title} className={`w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all ${isRTL ? 'text-right' : ''}`} />
           </div>
           <div>
-            <label className="block text-sm font-bold text-slate-700 mb-2">Description</label>
-            <textarea rows={4} defaultValue={auditData.description} className="w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all" />
+            <label className={`block text-sm font-bold text-slate-700 mb-2 ${isRTL ? 'text-right' : ''}`}>{t('auditDetail.description')}</label>
+            <textarea rows={4} defaultValue={auditData.description} className={`w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all ${isRTL ? 'text-right' : ''}`} />
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-bold text-slate-700 mb-2">Status</label>
-              <select defaultValue="In Progress" className="w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all">
-                <option>In Progress</option>
-                <option>Planned</option>
-                <option>Completed</option>
-                <option>On Hold</option>
+              <label className={`block text-sm font-bold text-slate-700 mb-2 ${isRTL ? 'text-right' : ''}`}>{t('auditDetail.status')}</label>
+              <select defaultValue="In Progress" className={`w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all ${isRTL ? 'text-right' : ''}`}>
+                <option>{t('auditDetail.inProgress')}</option>
+                <option>{t('auditDetail.planned')}</option>
+                <option>{t('auditDetail.completed')}</option>
+                <option>{t('auditDetail.onHold')}</option>
               </select>
             </div>
             <div>
-              <label className="block text-sm font-bold text-slate-700 mb-2">Priority</label>
-              <select defaultValue="Critical" className="w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all">
-                <option>Critical</option>
-                <option>High</option>
-                <option>Medium</option>
-                <option>Low</option>
+              <label className={`block text-sm font-bold text-slate-700 mb-2 ${isRTL ? 'text-right' : ''}`}>{t('auditDetail.priority')}</label>
+              <select defaultValue="Critical" className={`w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all ${isRTL ? 'text-right' : ''}`}>
+                <option>{t('auditDetail.critical')}</option>
+                <option>{t('auditDetail.high')}</option>
+                <option>{t('auditDetail.medium')}</option>
+                <option>{t('auditDetail.low')}</option>
               </select>
             </div>
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-bold text-slate-700 mb-2">Start Date</label>
-              <input type="date" defaultValue="2024-10-01" className="w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all" />
+              <label className={`block text-sm font-bold text-slate-700 mb-2 ${isRTL ? 'text-right' : ''}`}>{t('auditDetail.startDate')}</label>
+              <input type="date" defaultValue="2024-10-01" className={`w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all ${isRTL ? 'text-right' : ''}`} />
             </div>
             <div>
-              <label className="block text-sm font-bold text-slate-700 mb-2">Due Date</label>
-              <input type="date" defaultValue="2024-10-24" className="w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all" />
+              <label className={`block text-sm font-bold text-slate-700 mb-2 ${isRTL ? 'text-right' : ''}`}>{t('auditDetail.dueDate')}</label>
+              <input type="date" defaultValue="2024-10-24" className={`w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all ${isRTL ? 'text-right' : ''}`} />
             </div>
           </div>
           <div>
-            <label className="block text-sm font-bold text-slate-700 mb-2">Audit Type</label>
-            <select defaultValue="Internal Audit" className="w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all">
-              <option>Internal Audit</option>
-              <option>External Audit</option>
-              <option>Compliance Review</option>
-              <option>Risk Assessment</option>
+            <label className={`block text-sm font-bold text-slate-700 mb-2 ${isRTL ? 'text-right' : ''}`}>{t('auditDetail.auditType')}</label>
+            <select defaultValue="Internal Audit" className={`w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all ${isRTL ? 'text-right' : ''}`}>
+              <option>{t('auditDetail.internalAudit')}</option>
+              <option>{t('auditDetail.externalAudit')}</option>
+              <option>{t('auditDetail.complianceReview')}</option>
+              <option>{t('auditDetail.riskAssessment')}</option>
             </select>
           </div>
         </div>
-        <div className="mt-6 pt-6 border-t border-slate-100 flex justify-end gap-3">
-          <Button variant="outline" onClick={() => setShowEditModal(false)}>Cancel</Button>
-          <Button variant="primary" onClick={() => { setShowEditModal(false); showToast('Audit details updated successfully') }}>Save Changes</Button>
+        <div className={`mt-6 pt-6 border-t border-slate-100 flex justify-end gap-3 ${isRTL ? 'flex-row-reverse' : ''}`}>
+          <Button variant="outline" onClick={() => setShowEditModal(false)}>{t('common.cancel')}</Button>
+          <Button variant="primary" onClick={() => { setShowEditModal(false); showToast(t('auditDetail.auditDetailsUpdated')) }}>{t('common.saveChanges')}</Button>
         </div>
       </Modal>
 
       {/* Share Progress Modal */}
-      <Modal isOpen={showShareModal} onClose={() => setShowShareModal(false)} title="Share Audit Progress" size="md">
+      <Modal isOpen={showShareModal} onClose={() => setShowShareModal(false)} title={t('auditDetail.shareAuditProgress')} size="md">
         <div className="space-y-6">
           <div>
-            <label className="block text-sm font-bold text-slate-700 mb-2">Share with Team Members</label>
-            <div className="flex flex-wrap gap-2 mb-3">
-              <span className="px-3 py-1.5 bg-emerald-50 text-emerald-700 rounded-full text-sm font-medium flex items-center gap-2">
+            <label className={`block text-sm font-bold text-slate-700 mb-2 ${isRTL ? 'text-right' : ''}`}>{t('auditDetail.shareWithTeamMembers')}</label>
+            <div className={`flex flex-wrap gap-2 mb-3 ${isRTL ? 'flex-row-reverse' : ''}`}>
+              <span className={`px-3 py-1.5 bg-emerald-50 text-emerald-700 rounded-full text-sm font-medium flex items-center gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
                 Felix H.
                 <button className="text-emerald-600 hover:text-emerald-800"><Icon icon="lucide:x" className="text-xs" /></button>
               </span>
-              <span className="px-3 py-1.5 bg-emerald-50 text-emerald-700 rounded-full text-sm font-medium flex items-center gap-2">
+              <span className={`px-3 py-1.5 bg-emerald-50 text-emerald-700 rounded-full text-sm font-medium flex items-center gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
                 Sarah C.
                 <button className="text-emerald-600 hover:text-emerald-800"><Icon icon="lucide:x" className="text-xs" /></button>
               </span>
             </div>
-            <input type="text" placeholder="Add team member email..." className="w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all" />
+            <input type="text" placeholder={t('common.email')} className={`w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all ${isRTL ? 'text-right' : ''}`} />
           </div>
           <div>
-            <label className="block text-sm font-bold text-slate-700 mb-2">Shareable Link</label>
-            <div className="flex gap-2">
-              <input type="text" value="https://app.complianceos.com/audit/iso27001-review" readOnly className="flex-1 px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-slate-600 text-sm" />
-              <Button variant="secondary" onClick={() => showToast('Link copied to clipboard')}>
+            <label className={`block text-sm font-bold text-slate-700 mb-2 ${isRTL ? 'text-right' : ''}`}>{t('auditDetail.shareableLink')}</label>
+            <div className={`flex gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
+              <input type="text" value="https://app.complianceos.com/audit/iso27001-review" readOnly className={`flex-1 px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-slate-600 text-sm ${isRTL ? 'text-right' : ''}`} />
+              <Button variant="secondary" onClick={() => showToast(t('auditDetail.linkCopied'))}>
                 <Icon icon="lucide:copy" />
-                Copy
+                {t('auditDetail.copy')}
               </Button>
             </div>
           </div>
           <div>
-            <label className="block text-sm font-bold text-slate-700 mb-2">Include in Report</label>
+            <label className={`block text-sm font-bold text-slate-700 mb-2 ${isRTL ? 'text-right' : ''}`}>{t('auditDetail.includeInReport')}</label>
             <div className="space-y-2">
-              <label className="flex items-center gap-2 cursor-pointer">
+              <label className={`flex items-center gap-2 cursor-pointer ${isRTL ? 'flex-row-reverse' : ''}`}>
                 <input type="checkbox" defaultChecked className="w-4 h-4 text-emerald-600 rounded" />
-                <span className="text-sm text-slate-700">Task completion status</span>
+                <span className="text-sm text-slate-700">{t('auditDetail.taskCompletionStatus')}</span>
               </label>
-              <label className="flex items-center gap-2 cursor-pointer">
+              <label className={`flex items-center gap-2 cursor-pointer ${isRTL ? 'flex-row-reverse' : ''}`}>
                 <input type="checkbox" defaultChecked className="w-4 h-4 text-emerald-600 rounded" />
-                <span className="text-sm text-slate-700">Activity timeline</span>
+                <span className="text-sm text-slate-700">{t('auditDetail.activityTimeline')}</span>
               </label>
-              <label className="flex items-center gap-2 cursor-pointer">
+              <label className={`flex items-center gap-2 cursor-pointer ${isRTL ? 'flex-row-reverse' : ''}`}>
                 <input type="checkbox" className="w-4 h-4 text-emerald-600 rounded" />
-                <span className="text-sm text-slate-700">Team member details</span>
+                <span className="text-sm text-slate-700">{t('auditDetail.teamMemberDetails')}</span>
               </label>
             </div>
           </div>
         </div>
-        <div className="mt-6 pt-6 border-t border-slate-100 flex justify-end gap-3">
-          <Button variant="outline" onClick={() => setShowShareModal(false)}>Cancel</Button>
-          <Button variant="primary" onClick={() => { setShowShareModal(false); showToast('Progress report sent successfully') }}>
+        <div className={`mt-6 pt-6 border-t border-slate-100 flex justify-end gap-3 ${isRTL ? 'flex-row-reverse' : ''}`}>
+          <Button variant="outline" onClick={() => setShowShareModal(false)}>{t('common.cancel')}</Button>
+          <Button variant="primary" onClick={() => { setShowShareModal(false); showToast(t('auditDetail.progressReportSent')) }}>
             <Icon icon="lucide:send" />
-            Send Report
+            {t('auditDetail.sendReport')}
           </Button>
         </div>
       </Modal>
 
       {/* Add Task Modal */}
-      <Modal isOpen={showAddTaskModal} onClose={() => setShowAddTaskModal(false)} title="Add New Control Task" size="md">
+      <Modal isOpen={showAddTaskModal} onClose={() => setShowAddTaskModal(false)} title={t('auditDetail.addNewControlTaskTitle')} size="md">
         <div className="space-y-5">
           <div>
-            <label className="block text-sm font-bold text-slate-700 mb-2">Task Name</label>
-            <input type="text" placeholder="e.g. Monthly backup validation" className="w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500" />
+            <label className={`block text-sm font-bold text-slate-700 mb-2 ${isRTL ? 'text-right' : ''}`}>{t('auditDetail.taskName')}</label>
+            <input type="text" placeholder={t('auditDetail.taskNamePlaceholder')} className={`w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 ${isRTL ? 'text-right' : ''}`} />
           </div>
           <div>
-            <label className="block text-sm font-bold text-slate-700 mb-2">Category</label>
-            <select className="w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500">
-              <option>Access Control (A.9)</option>
-              <option>Operations Security (A.12)</option>
-              <option>Physical Security (A.11)</option>
-              <option>Asset Management (A.8)</option>
+            <label className={`block text-sm font-bold text-slate-700 mb-2 ${isRTL ? 'text-right' : ''}`}>{t('common.category')}</label>
+            <select className={`w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 ${isRTL ? 'text-right' : ''}`}>
+              <option>{t('auditDetail.accessControlA9')}</option>
+              <option>{t('auditDetail.operationsSecurityA12')}</option>
+              <option>{t('auditDetail.physicalSecurityA11')}</option>
+              <option>{t('auditDetail.assetManagementA8')}</option>
             </select>
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-bold text-slate-700 mb-2">Assignee</label>
-              <select className="w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500">
+              <label className={`block text-sm font-bold text-slate-700 mb-2 ${isRTL ? 'text-right' : ''}`}>{t('auditDetail.assignee')}</label>
+              <select className={`w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 ${isRTL ? 'text-right' : ''}`}>
                 <option>Felix H.</option>
                 <option>Sarah C.</option>
                 <option>Michael S.</option>
               </select>
             </div>
             <div>
-              <label className="block text-sm font-bold text-slate-700 mb-2">Due Date</label>
-              <input type="date" className="w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500" />
+              <label className={`block text-sm font-bold text-slate-700 mb-2 ${isRTL ? 'text-right' : ''}`}>{t('auditDetail.dueDate')}</label>
+              <input type="date" className={`w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 ${isRTL ? 'text-right' : ''}`} />
             </div>
           </div>
         </div>
-        <div className="mt-6 pt-6 border-t border-slate-100 flex justify-end gap-3">
-          <Button variant="outline" onClick={() => setShowAddTaskModal(false)}>Cancel</Button>
-          <Button variant="primary" onClick={() => { setShowAddTaskModal(false); showToast('New control task created successfully') }}>Create Task</Button>
+        <div className={`mt-6 pt-6 border-t border-slate-100 flex justify-end gap-3 ${isRTL ? 'flex-row-reverse' : ''}`}>
+          <Button variant="outline" onClick={() => setShowAddTaskModal(false)}>{t('common.cancel')}</Button>
+          <Button variant="primary" onClick={() => { setShowAddTaskModal(false); showToast(t('auditDetail.newControlTaskCreated')) }}>{t('auditDetail.createTask')}</Button>
         </div>
       </Modal>
 
       {/* Manage Team Modal */}
-      <Modal isOpen={showManageTeamModal} onClose={() => setShowManageTeamModal(false)} title="Manage Audit Team" size="md">
+      <Modal isOpen={showManageTeamModal} onClose={() => setShowManageTeamModal(false)} title={t('auditDetail.manageAuditTeam')} size="md">
         <div className="space-y-4 max-h-[400px] overflow-y-auto hide-scrollbar">
           {teamMembers.map((member) => (
-            <div key={member.id} className="flex items-center justify-between p-3 border border-slate-100 rounded-xl hover:bg-slate-50">
-              <div className="flex items-center gap-3">
+            <div key={member.id} className={`flex items-center justify-between p-3 border border-slate-100 rounded-xl hover:bg-slate-50 ${isRTL ? 'flex-row-reverse' : ''}`}>
+              <div className={`flex items-center gap-3 ${isRTL ? 'flex-row-reverse' : ''}`}>
                 <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${member.avatar}`} className="w-10 h-10 rounded-full" alt={member.name} />
-                <div>
+                <div className={isRTL ? 'text-right' : ''}>
                   <p className="text-sm font-bold text-slate-900">{member.name}</p>
                   <p className="text-xs text-slate-500">{member.role}</p>
                 </div>
               </div>
               {member.isOwner ? (
-                <span className="text-[10px] font-bold text-slate-400 bg-slate-100 px-2 py-1 rounded">OWNER</span>
+                <span className="text-[10px] font-bold text-slate-400 bg-slate-100 px-2 py-1 rounded">{t('auditDetail.owner')}</span>
               ) : (
                 <button className="text-rose-500 hover:text-rose-700 cursor-pointer">
                   <Icon icon="lucide:trash-2" />
@@ -636,104 +638,104 @@ export default function AuditDetailPage() {
             </div>
           ))}
           <button
-            className="w-full mt-6 py-3 border-2 border-dashed border-slate-200 rounded-xl text-slate-400 hover:border-emerald-200 hover:text-emerald-500 hover:bg-emerald-50/50 transition-all text-sm font-bold flex items-center justify-center gap-2 cursor-pointer"
+            className={`w-full mt-6 py-3 border-2 border-dashed border-slate-200 rounded-xl text-slate-400 hover:border-emerald-200 hover:text-emerald-500 hover:bg-emerald-50/50 transition-all text-sm font-bold flex items-center justify-center gap-2 cursor-pointer ${isRTL ? 'flex-row-reverse' : ''}`}
             onClick={() => { setShowManageTeamModal(false); setShowAddMemberModal(true) }}
           >
             <Icon icon="lucide:user-plus" />
-            Add New Member
+            {t('auditDetail.addNewMember')}
           </button>
         </div>
         <div className="mt-6 pt-6 border-t border-slate-100">
-          <Button variant="dark" className="w-full" onClick={() => setShowManageTeamModal(false)}>Done</Button>
+          <Button variant="dark" className="w-full" onClick={() => setShowManageTeamModal(false)}>{t('auditDetail.done')}</Button>
         </div>
       </Modal>
 
       {/* Add Member Modal */}
-      <Modal isOpen={showAddMemberModal} onClose={() => setShowAddMemberModal(false)} title="Add Team Member" size="md">
+      <Modal isOpen={showAddMemberModal} onClose={() => setShowAddMemberModal(false)} title={t('auditDetail.addTeamMember')} size="md">
         <div className="space-y-6">
           <div>
-            <label className="block text-sm font-bold text-slate-700 mb-2">Email Address</label>
-            <input type="email" placeholder="colleague@company.com" className="w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all" />
+            <label className={`block text-sm font-bold text-slate-700 mb-2 ${isRTL ? 'text-right' : ''}`}>{t('auditDetail.emailAddress')}</label>
+            <input type="email" placeholder={t('auditDetail.emailPlaceholder')} className={`w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all ${isRTL ? 'text-right' : ''}`} />
           </div>
           <div>
-            <label className="block text-sm font-bold text-slate-700 mb-2">Role</label>
-            <select className="w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all">
-              <option>Auditor</option>
-              <option>Security Officer</option>
-              <option>Compliance Analyst</option>
-              <option>Reviewer</option>
+            <label className={`block text-sm font-bold text-slate-700 mb-2 ${isRTL ? 'text-right' : ''}`}>{t('auditDetail.role')}</label>
+            <select className={`w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all ${isRTL ? 'text-right' : ''}`}>
+              <option>{t('auditDetail.auditor')}</option>
+              <option>{t('auditDetail.securityOfficer')}</option>
+              <option>{t('auditDetail.complianceAnalyst')}</option>
+              <option>{t('auditDetail.reviewer')}</option>
             </select>
           </div>
           <div>
-            <label className="block text-sm font-bold text-slate-700 mb-2">Permissions</label>
+            <label className={`block text-sm font-bold text-slate-700 mb-2 ${isRTL ? 'text-right' : ''}`}>{t('auditDetail.permissions')}</label>
             <div className="space-y-2">
-              <label className="flex items-center gap-2 cursor-pointer">
+              <label className={`flex items-center gap-2 cursor-pointer ${isRTL ? 'flex-row-reverse' : ''}`}>
                 <input type="checkbox" defaultChecked className="w-4 h-4 text-emerald-600 rounded" />
-                <span className="text-sm text-slate-700">View audit details</span>
+                <span className="text-sm text-slate-700">{t('auditDetail.viewAuditDetails')}</span>
               </label>
-              <label className="flex items-center gap-2 cursor-pointer">
+              <label className={`flex items-center gap-2 cursor-pointer ${isRTL ? 'flex-row-reverse' : ''}`}>
                 <input type="checkbox" defaultChecked className="w-4 h-4 text-emerald-600 rounded" />
-                <span className="text-sm text-slate-700">Edit tasks</span>
+                <span className="text-sm text-slate-700">{t('auditDetail.editTasks')}</span>
               </label>
-              <label className="flex items-center gap-2 cursor-pointer">
+              <label className={`flex items-center gap-2 cursor-pointer ${isRTL ? 'flex-row-reverse' : ''}`}>
                 <input type="checkbox" className="w-4 h-4 text-emerald-600 rounded" />
-                <span className="text-sm text-slate-700">Manage team members</span>
+                <span className="text-sm text-slate-700">{t('auditDetail.manageTeamMembers')}</span>
               </label>
             </div>
           </div>
         </div>
-        <div className="mt-6 pt-6 border-t border-slate-100 flex justify-end gap-3">
-          <Button variant="outline" onClick={() => setShowAddMemberModal(false)}>Cancel</Button>
-          <Button variant="primary" onClick={() => { setShowAddMemberModal(false); showToast('Invitation sent successfully') }}>
+        <div className={`mt-6 pt-6 border-t border-slate-100 flex justify-end gap-3 ${isRTL ? 'flex-row-reverse' : ''}`}>
+          <Button variant="outline" onClick={() => setShowAddMemberModal(false)}>{t('common.cancel')}</Button>
+          <Button variant="primary" onClick={() => { setShowAddMemberModal(false); showToast(t('auditDetail.invitationSent')) }}>
             <Icon icon="lucide:user-plus" />
-            Send Invitation
+            {t('auditDetail.sendInvitation')}
           </Button>
         </div>
       </Modal>
 
       {/* Timeline Detail Modal */}
-      <Modal isOpen={showTimelineModal} onClose={() => setShowTimelineModal(false)} title="Activity Details" size="md">
+      <Modal isOpen={showTimelineModal} onClose={() => setShowTimelineModal(false)} title={t('auditDetail.activityDetails')} size="md">
         {selectedTimeline && (
           <div className="space-y-4">
-            <div className="flex items-center gap-3">
+            <div className={`flex items-center gap-3 ${isRTL ? 'flex-row-reverse' : ''}`}>
               <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white ${selectedTimeline.type === 'comment' ? 'bg-slate-200 text-slate-500' : timelineStyles[selectedTimeline.type].bg}`}>
                 <Icon icon={timelineStyles[selectedTimeline.type].icon} className="text-xl" />
               </div>
-              <div>
+              <div className={isRTL ? 'text-right' : ''}>
                 <p className="text-lg font-bold text-slate-900">{selectedTimeline.user}</p>
                 <p className="text-sm text-slate-600">{selectedTimeline.action}</p>
                 <p className="text-xs text-slate-400 mt-1">{selectedTimeline.timestamp}</p>
               </div>
             </div>
             {selectedTimeline.detail && (
-              <p className="text-sm text-slate-600 leading-relaxed italic border-l-4 border-slate-100 pl-4">
+              <p className={`text-sm text-slate-600 leading-relaxed italic border-l-4 border-slate-100 pl-4 ${isRTL ? 'border-r-4 border-l-0 pr-4 pl-0' : ''}`}>
                 {selectedTimeline.detail}
               </p>
             )}
-            <div className="bg-slate-50 p-4 rounded-xl">
-              <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Evidence Hash</h4>
+            <div className={`bg-slate-50 p-4 rounded-xl ${isRTL ? 'text-right' : ''}`}>
+              <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">{t('auditDetail.evidenceHash')}</h4>
               <code className="text-[10px] text-slate-500 break-all bg-white p-2 block border border-slate-200 rounded">sha256:8f2a3194...e71c9b2f</code>
             </div>
           </div>
         )}
-        <div className="mt-6 pt-6 border-t border-slate-100 flex justify-end gap-3">
-          <Button variant="outline" onClick={() => setShowTimelineModal(false)}>Close</Button>
+        <div className={`mt-6 pt-6 border-t border-slate-100 flex justify-end gap-3 ${isRTL ? 'flex-row-reverse' : ''}`}>
+          <Button variant="outline" onClick={() => setShowTimelineModal(false)}>{t('common.close')}</Button>
           <Button variant="dark">
             <Icon icon="lucide:download" />
-            Download Logs
+            {t('auditDetail.downloadLogs')}
           </Button>
         </div>
       </Modal>
 
       {/* Toast Notification */}
       <div
-        className={`fixed bottom-8 left-1/2 z-[200] px-6 py-3 bg-slate-900 text-white text-sm font-medium rounded-full shadow-2xl transition-all duration-300 flex items-center gap-2 ${
-          toast.visible ? '-translate-x-1/2 -translate-y-8 opacity-100' : '-translate-x-1/2 translate-y-0 opacity-0 pointer-events-none'
+        className={`fixed bottom-8 ${isRTL ? 'right-1/2' : 'left-1/2'} z-[200] px-6 py-3 bg-slate-900 text-white text-sm font-medium rounded-full shadow-2xl transition-all duration-300 flex items-center gap-2 ${isRTL ? 'flex-row-reverse' : ''} ${
+          toast.visible ? `${isRTL ? 'translate-x-1/2' : '-translate-x-1/2'} -translate-y-8 opacity-100` : `${isRTL ? 'translate-x-1/2' : '-translate-x-1/2'} translate-y-0 opacity-0 pointer-events-none`
         }`}
       >
         <Icon icon="lucide:check-circle" className="text-emerald-400" />
         <span>{toast.message}</span>
       </div>
-    </>
+    </div>
   )
 }

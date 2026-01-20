@@ -9,6 +9,8 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Modal } from '@/components/ui/modal'
+import { useTranslation } from '@/i18n'
+import type { TranslationKey } from '@/i18n'
 
 // Types
 interface AuditFinding {
@@ -92,12 +94,20 @@ const complianceTrend = [
 ]
 
 export default function AuditsPage() {
+  const { t, isRTL } = useTranslation()
   const [activeTab, setActiveTab] = useState<'executive' | 'detailed'>('executive')
-  const [filterPeriod, setFilterPeriod] = useState('Last 12 Months')
+  const [filterPeriod, setFilterPeriod] = useState('last12Months')
   const [showFilterDropdown, setShowFilterDropdown] = useState(false)
   const [showBreakdownModal, setShowBreakdownModal] = useState(false)
   const [selectedFinding, setSelectedFinding] = useState<AuditFinding | null>(null)
   const [showDrawer, setShowDrawer] = useState(false)
+
+  const filterPeriods = [
+    { key: 'last3Months', label: t('audits.last3Months') },
+    { key: 'last6Months', label: t('audits.last6Months') },
+    { key: 'last12Months', label: t('audits.last12Months') },
+    { key: 'fiscalYear', label: t('audits.fiscalYear') },
+  ]
 
   // Log filters
   const [searchQuery, setSearchQuery] = useState('')
@@ -131,11 +141,11 @@ export default function AuditsPage() {
     <>
       <header className="h-20 bg-white border-b border-slate-200 px-8 flex items-center justify-between shrink-0">
         <div className="flex items-center gap-8">
-          <div>
-            <h1 className="text-xl font-bold font-display text-slate-900">Audit Reports</h1>
-            <p className="text-xs text-slate-500 font-medium tracking-wide uppercase">Analytics & Findings</p>
+          <div className={isRTL ? 'text-right' : ''}>
+            <h1 className="text-xl font-bold font-display text-slate-900">{t('audits.pageTitle')}</h1>
+            <p className="text-xs text-slate-500 font-medium tracking-wide uppercase">{t('audits.pageSubtitle')}</p>
           </div>
-          <div className="flex bg-slate-100 p-1 rounded-lg">
+          <div className={`flex bg-slate-100 p-1 rounded-lg ${isRTL ? 'flex-row-reverse' : ''}`}>
             <button
               onClick={() => setActiveTab('executive')}
               className={`px-4 py-2 text-xs font-bold rounded-md transition-all cursor-pointer ${
@@ -144,7 +154,7 @@ export default function AuditsPage() {
                   : 'text-slate-500 hover:text-slate-900'
               }`}
             >
-              Executive View
+              {t('audits.executiveView')}
             </button>
             <button
               onClick={() => setActiveTab('detailed')}
@@ -154,37 +164,37 @@ export default function AuditsPage() {
                   : 'text-slate-500 hover:text-slate-900'
               }`}
             >
-              Detailed Logs
+              {t('audits.detailedLogs')}
             </button>
           </div>
         </div>
 
-        <div className="flex items-center gap-4">
+        <div className={`flex items-center gap-4 ${isRTL ? 'flex-row-reverse' : ''}`}>
           <div className="relative">
             <button
               onClick={() => setShowFilterDropdown(!showFilterDropdown)}
-              className="px-4 py-2 text-sm font-bold text-slate-900 hover:bg-slate-50 transition-colors flex items-center gap-2 border border-slate-200 rounded-lg cursor-pointer"
+              className={`px-4 py-2 text-sm font-bold text-slate-900 hover:bg-slate-50 transition-colors flex items-center gap-2 border border-slate-200 rounded-lg cursor-pointer ${isRTL ? 'flex-row-reverse' : ''}`}
             >
               <Icon icon="lucide:filter" className="text-slate-400" />
-              <span>{filterPeriod}</span>
+              <span>{filterPeriods.find(p => p.key === filterPeriod)?.label}</span>
               <Icon icon="lucide:chevron-down" className={`text-slate-400 transition-transform ${showFilterDropdown ? 'rotate-180' : ''}`} />
             </button>
             {showFilterDropdown && (
-              <div className="absolute right-0 mt-2 w-48 bg-white border border-slate-200 rounded-xl shadow-xl z-50 overflow-hidden">
-                {['Last 3 Months', 'Last 6 Months', 'Last 12 Months', 'Fiscal Year 2023'].map((period) => (
+              <div className={`absolute ${isRTL ? 'left-0' : 'right-0'} mt-2 w-48 bg-white border border-slate-200 rounded-xl shadow-xl z-50 overflow-hidden`}>
+                {filterPeriods.map((period) => (
                   <button
-                    key={period}
+                    key={period.key}
                     onClick={() => {
-                      setFilterPeriod(period)
+                      setFilterPeriod(period.key)
                       setShowFilterDropdown(false)
                     }}
-                    className={`w-full text-left px-4 py-3 text-sm transition-colors font-medium border-b border-slate-100 last:border-b-0 cursor-pointer ${
-                      filterPeriod === period
+                    className={`w-full ${isRTL ? 'text-right' : 'text-left'} px-4 py-3 text-sm transition-colors font-medium border-b border-slate-100 last:border-b-0 cursor-pointer ${
+                      filterPeriod === period.key
                         ? 'text-emerald-600 bg-emerald-50/30 font-bold'
                         : 'text-slate-700 hover:bg-slate-50'
                     }`}
                   >
-                    {period}
+                    {period.label}
                   </button>
                 ))}
               </div>
@@ -192,45 +202,49 @@ export default function AuditsPage() {
           </div>
           <Button variant="primary" className="shadow-lg shadow-emerald-100">
             <Icon icon="lucide:download" />
-            Export CSV
+            {t('common.exportCsv')}
           </Button>
         </div>
       </header>
 
       <div className="flex-1 overflow-auto hide-scrollbar p-8 space-y-8">
         {/* Analytics Overview */}
-        <section className="grid grid-cols-1 md:grid-cols-4 gap-6">
+        <section className={`grid grid-cols-1 md:grid-cols-4 gap-6 ${isRTL ? 'direction-rtl' : ''}`}>
           <StatCard
             icon="lucide:activity"
             iconColor="emerald"
-            label="Compliance Score"
+            label={t('audits.complianceScore')}
             value="94.2%"
-            sublabel="Healthy"
-            badge="+12% vs LY"
+            sublabel={t('audits.healthy')}
+            badge={`+12% ${t('audits.vsLastYear')}`}
             badgeColor="emerald"
+            isRTL={isRTL}
           />
           <StatCard
             icon="lucide:alert-triangle"
             iconColor="rose"
-            label="Open Findings"
+            label={t('audits.openFindings')}
             value="08"
-            sublabel="Requiring Action"
-            badge="High Risk"
+            sublabel={t('audits.requiringAction')}
+            badge={t('audits.highRisk')}
             badgeColor="rose"
+            isRTL={isRTL}
           />
           <StatCard
             icon="lucide:check-circle"
             iconColor="blue"
-            label="Audits Passed"
+            label={t('audits.auditsPassed')}
             value="24"
-            sublabel="Current Year"
+            sublabel={t('audits.currentYear')}
+            isRTL={isRTL}
           />
           <StatCard
             icon="lucide:clock"
             iconColor="slate"
-            label="MTTR"
+            label={t('audits.mttr')}
             value="4.2d"
-            sublabel="Time to Resolve"
+            sublabel={t('audits.timeToResolve')}
+            isRTL={isRTL}
           />
         </section>
 
@@ -238,19 +252,19 @@ export default function AuditsPage() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Trend Chart */}
           <Card className="lg:col-span-2 p-8">
-            <div className="flex items-center justify-between mb-8">
-              <div>
-                <h2 className="text-lg font-bold font-display text-slate-900">Compliance Trend</h2>
-                <p className="text-xs text-slate-500">Historical performance for the selected period</p>
+            <div className={`flex items-center justify-between mb-8 ${isRTL ? 'flex-row-reverse' : ''}`}>
+              <div className={isRTL ? 'text-right' : ''}>
+                <h2 className="text-lg font-bold font-display text-slate-900">{t('audits.complianceTrend')}</h2>
+                <p className="text-xs text-slate-500">{t('audits.historicalPerformance')}</p>
               </div>
-              <div className="flex gap-4">
-                <div className="flex items-center gap-1.5">
+              <div className={`flex gap-4 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                <div className={`flex items-center gap-1.5 ${isRTL ? 'flex-row-reverse' : ''}`}>
                   <div className="w-2 h-2 rounded-full bg-slate-100"></div>
-                  <span className="text-[10px] font-bold text-slate-400 uppercase">Target</span>
+                  <span className="text-[10px] font-bold text-slate-400 uppercase">{t('audits.target')}</span>
                 </div>
-                <div className="flex items-center gap-1.5">
+                <div className={`flex items-center gap-1.5 ${isRTL ? 'flex-row-reverse' : ''}`}>
                   <div className="w-2 h-2 rounded-full bg-emerald-500"></div>
-                  <span className="text-[10px] font-bold text-slate-400 uppercase">Actual</span>
+                  <span className="text-[10px] font-bold text-slate-400 uppercase">{t('audits.actual')}</span>
                 </div>
               </div>
             </div>
@@ -274,7 +288,7 @@ export default function AuditsPage() {
 
           {/* Risk Distribution */}
           <Card className="p-8 flex flex-col">
-            <h2 className="text-lg font-bold font-display text-slate-900 mb-6">Risk Distribution</h2>
+            <h2 className={`text-lg font-bold font-display text-slate-900 mb-6 ${isRTL ? 'text-right' : ''}`}>{t('audits.riskDistribution')}</h2>
             <div className="space-y-6 flex-1">
               {riskDistribution.map((item) => (
                 <div key={item.label} className="space-y-2">
@@ -290,9 +304,9 @@ export default function AuditsPage() {
             </div>
             <button
               onClick={() => setShowBreakdownModal(true)}
-              className="w-full mt-8 py-3 text-xs font-bold text-emerald-600 hover:text-emerald-700 transition-colors bg-emerald-50 rounded-xl group flex items-center justify-center gap-2 cursor-pointer"
+              className={`w-full mt-8 py-3 text-xs font-bold text-emerald-600 hover:text-emerald-700 transition-colors bg-emerald-50 rounded-xl group flex items-center justify-center gap-2 cursor-pointer ${isRTL ? 'flex-row-reverse' : ''}`}
             >
-              View Full Breakdown
+              {t('audits.viewFullBreakdown')}
               <Icon icon="lucide:external-link" className="group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
             </button>
           </Card>
@@ -303,6 +317,8 @@ export default function AuditsPage() {
           <ExecutiveView
             findings={auditFindings}
             onFindingClick={handleFindingClick}
+            t={t}
+            isRTL={isRTL}
           />
         ) : (
           <DetailedLogsView
@@ -318,119 +334,121 @@ export default function AuditsPage() {
             clearFilters={clearFilters}
             expandedLogId={expandedLogId}
             setExpandedLogId={setExpandedLogId}
+            t={t}
+            isRTL={isRTL}
           />
         )}
       </div>
 
       {/* Risk Breakdown Modal */}
-      <Modal isOpen={showBreakdownModal} onClose={() => setShowBreakdownModal(false)} title="Detailed Risk Breakdown" size="lg">
+      <Modal isOpen={showBreakdownModal} onClose={() => setShowBreakdownModal(false)} title={t('audits.detailedRiskBreakdown')} size="lg">
         <div className="space-y-6">
-          <p className="text-xs text-slate-500">Comprehensive analysis across all security vectors</p>
+          <p className={`text-xs text-slate-500 ${isRTL ? 'text-right' : ''}`}>{t('audits.comprehensiveAnalysis')}</p>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
             <div className="space-y-6">
-              <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Primary Vectors</h3>
+              <h3 className={`text-[10px] font-black text-slate-400 uppercase tracking-widest ${isRTL ? 'text-right' : ''}`}>{t('audits.primaryVectors')}</h3>
               <div className="space-y-4">
-                <RiskBreakdownItem label="Cloud Infrastructure" percentage={42.5} color="emerald" description="Includes VPC, IAM, and Storage buckets" />
-                <RiskBreakdownItem label="User Management" percentage={28.1} color="amber" description="MFA compliance and orphan accounts" />
-                <RiskBreakdownItem label="Data Encryption" percentage={15.4} color="blue" description="At-rest and in-transit coverage" />
+                <RiskBreakdownItem label={t('audits.cloudInfrastructure')} percentage={42.5} color="emerald" description={t('audits.includesVpcIam')} isRTL={isRTL} />
+                <RiskBreakdownItem label={t('audits.userManagement')} percentage={28.1} color="amber" description={t('audits.mfaComplianceOrphan')} isRTL={isRTL} />
+                <RiskBreakdownItem label={t('audits.dataEncryption')} percentage={15.4} color="blue" description={t('audits.atRestInTransit')} isRTL={isRTL} />
               </div>
             </div>
             <div className="space-y-6">
-              <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Risk Trend Analysis</h3>
+              <h3 className={`text-[10px] font-black text-slate-400 uppercase tracking-widest ${isRTL ? 'text-right' : ''}`}>{t('audits.riskTrendAnalysis')}</h3>
               <div className="p-6 bg-slate-50 rounded-2xl border border-slate-100">
-                <div className="flex items-center gap-4 mb-4">
+                <div className={`flex items-center gap-4 mb-4 ${isRTL ? 'flex-row-reverse' : ''}`}>
                   <div className="p-3 bg-rose-100 text-rose-600 rounded-xl">
                     <Icon icon="lucide:trending-up" className="text-2xl" />
                   </div>
-                  <div>
-                    <p className="text-xs font-bold text-slate-900">Trend Increase</p>
-                    <p className="text-[10px] text-slate-500">+4.2% since last month</p>
+                  <div className={isRTL ? 'text-right' : ''}>
+                    <p className="text-xs font-bold text-slate-900">{t('audits.trendIncrease')}</p>
+                    <p className="text-[10px] text-slate-500">+4.2% {t('audits.sinceLast')}</p>
                   </div>
                 </div>
-                <p className="text-xs text-slate-600 leading-relaxed">
-                  Risk concentration has shifted from Infrastructure to Application Security due to recent CI/CD pipeline modifications.
+                <p className={`text-xs text-slate-600 leading-relaxed ${isRTL ? 'text-right' : ''}`}>
+                  {t('audits.trendDescription')}
                 </p>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="p-4 bg-white border border-slate-100 rounded-xl shadow-sm">
-                  <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">Worst Performer</p>
-                  <p className="text-sm font-black text-rose-600">Mobile App v2</p>
+                  <p className={`text-[10px] font-bold text-slate-400 uppercase mb-1 ${isRTL ? 'text-right' : ''}`}>{t('audits.worstPerformer')}</p>
+                  <p className={`text-sm font-black text-rose-600 ${isRTL ? 'text-right' : ''}`}>Mobile App v2</p>
                 </div>
                 <div className="p-4 bg-white border border-slate-100 rounded-xl shadow-sm">
-                  <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">Best Performer</p>
-                  <p className="text-sm font-black text-emerald-600">Core API</p>
+                  <p className={`text-[10px] font-bold text-slate-400 uppercase mb-1 ${isRTL ? 'text-right' : ''}`}>{t('audits.bestPerformer')}</p>
+                  <p className={`text-sm font-black text-emerald-600 ${isRTL ? 'text-right' : ''}`}>Core API</p>
                 </div>
               </div>
             </div>
           </div>
         </div>
-        <div className="mt-6 pt-6 border-t border-slate-100 flex gap-3">
-          <Button variant="outline" onClick={() => setShowBreakdownModal(false)}>Dismiss</Button>
+        <div className={`mt-6 pt-6 border-t border-slate-100 flex gap-3 ${isRTL ? 'flex-row-reverse' : ''}`}>
+          <Button variant="outline" onClick={() => setShowBreakdownModal(false)}>{t('audits.dismiss')}</Button>
           <Button variant="primary" className="flex-1">
             <Icon icon="lucide:file-text" />
-            Generate Detailed Report PDF
+            {t('audits.generateDetailedReport')}
           </Button>
         </div>
       </Modal>
 
       {/* Finding Detail Drawer */}
-      <div className={`fixed top-0 right-0 h-full w-[400px] bg-white border-l border-slate-200 shadow-2xl z-50 transition-transform duration-300 ${showDrawer ? 'translate-x-0' : 'translate-x-full'}`}>
+      <div className={`fixed top-0 ${isRTL ? 'left-0 border-r' : 'right-0 border-l'} h-full w-[400px] bg-white border-slate-200 shadow-2xl z-50 transition-transform duration-300 ${showDrawer ? 'translate-x-0' : isRTL ? '-translate-x-full' : 'translate-x-full'}`}>
         {selectedFinding && (
           <div className="flex flex-col h-full">
             <div className="p-8 border-b border-slate-100">
-              <div className="flex items-center justify-between mb-4">
-                <span className="text-[10px] font-black text-emerald-600 uppercase tracking-[0.2em]">Finding Detail</span>
+              <div className={`flex items-center justify-between mb-4 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                <span className="text-[10px] font-black text-emerald-600 uppercase tracking-[0.2em]">{t('audits.findingDetail')}</span>
                 <button onClick={() => setShowDrawer(false)} className="text-slate-400 hover:text-slate-600 transition-colors cursor-pointer">
                   <Icon icon="lucide:x" className="text-xl" />
                 </button>
               </div>
-              <h2 className="text-2xl font-bold font-display text-slate-900">{selectedFinding.id}</h2>
-              <p className="text-sm text-slate-500">Access Control Review Analysis</p>
+              <h2 className={`text-2xl font-bold font-display text-slate-900 ${isRTL ? 'text-right' : ''}`}>{selectedFinding.id}</h2>
+              <p className={`text-sm text-slate-500 ${isRTL ? 'text-right' : ''}`}>{t('audits.accessControlReviewAnalysis')}</p>
             </div>
 
             <div className="flex-1 overflow-y-auto hide-scrollbar p-8 space-y-10">
               <section>
-                <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">Issue Summary</h3>
-                <p className="text-sm text-slate-600 leading-relaxed">
-                  Several administrative accounts were found without Multi-Factor Authentication (MFA) enabled. This violates section A.9 of ISO 27001 standards regarding user access management.
+                <h3 className={`text-xs font-bold text-slate-400 uppercase tracking-widest mb-4 ${isRTL ? 'text-right' : ''}`}>{t('audits.issueSummary')}</h3>
+                <p className={`text-sm text-slate-600 leading-relaxed ${isRTL ? 'text-right' : ''}`}>
+                  {t('audits.issueSummaryText')}
                 </p>
                 <div className="mt-4 p-4 bg-rose-50 border border-rose-100 rounded-xl">
-                  <div className="flex items-center gap-2 text-rose-700 font-bold text-xs mb-2">
+                  <div className={`flex items-center gap-2 text-rose-700 font-bold text-xs mb-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
                     <Icon icon="lucide:alert-circle" />
-                    Priority Action Required
+                    {t('audits.priorityActionRequired')}
                   </div>
-                  <p className="text-[11px] text-rose-600">Mandatory fix required within 48 hours to avoid non-compliance certification risks.</p>
+                  <p className={`text-[11px] text-rose-600 ${isRTL ? 'text-right' : ''}`}>{t('audits.mandatoryFixRequired')}</p>
                 </div>
               </section>
 
               <section>
-                <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">Remediation Plan</h3>
+                <h3 className={`text-xs font-bold text-slate-400 uppercase tracking-widest mb-4 ${isRTL ? 'text-right' : ''}`}>{t('audits.remediationPlan')}</h3>
                 <div className="space-y-4">
-                  <div className="flex gap-4">
+                  <div className={`flex gap-4 ${isRTL ? 'flex-row-reverse' : ''}`}>
                     <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-[10px] font-bold shrink-0">01</div>
-                    <div>
-                      <p className="text-xs font-bold text-slate-900">Identify Users</p>
-                      <p className="text-[10px] text-slate-500">Generate list of all admin roles without MFA.</p>
+                    <div className={isRTL ? 'text-right' : ''}>
+                      <p className="text-xs font-bold text-slate-900">{t('audits.identifyUsers')}</p>
+                      <p className="text-[10px] text-slate-500">{t('audits.identifyUsersDesc')}</p>
                     </div>
                   </div>
-                  <div className="flex gap-4">
+                  <div className={`flex gap-4 ${isRTL ? 'flex-row-reverse' : ''}`}>
                     <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-[10px] font-bold shrink-0">02</div>
-                    <div>
-                      <p className="text-xs font-bold text-slate-900">Enforce Policy</p>
-                      <p className="text-[10px] text-slate-500">Update IAM policies to require MFA for all console access.</p>
+                    <div className={isRTL ? 'text-right' : ''}>
+                      <p className="text-xs font-bold text-slate-900">{t('audits.enforcePolicy')}</p>
+                      <p className="text-[10px] text-slate-500">{t('audits.enforcePolicyDesc')}</p>
                     </div>
                   </div>
                 </div>
               </section>
 
               <section>
-                <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">Evidence Artifacts</h3>
+                <h3 className={`text-xs font-bold text-slate-400 uppercase tracking-widest mb-4 ${isRTL ? 'text-right' : ''}`}>{t('audits.evidenceArtifacts')}</h3>
                 <div className="grid grid-cols-2 gap-3">
-                  <div className="p-3 border border-slate-100 rounded-lg flex items-center gap-2 hover:bg-slate-50 cursor-pointer transition-colors">
+                  <div className={`p-3 border border-slate-100 rounded-lg flex items-center gap-2 hover:bg-slate-50 cursor-pointer transition-colors ${isRTL ? 'flex-row-reverse' : ''}`}>
                     <Icon icon="lucide:file" className="text-emerald-500" />
                     <span className="text-[10px] font-bold truncate">iam_log_v2.pdf</span>
                   </div>
-                  <div className="p-3 border border-slate-100 rounded-lg flex items-center gap-2 hover:bg-slate-50 cursor-pointer transition-colors">
+                  <div className={`p-3 border border-slate-100 rounded-lg flex items-center gap-2 hover:bg-slate-50 cursor-pointer transition-colors ${isRTL ? 'flex-row-reverse' : ''}`}>
                     <Icon icon="lucide:image" className="text-blue-500" />
                     <span className="text-[10px] font-bold truncate">screenshot.png</span>
                   </div>
@@ -439,10 +457,10 @@ export default function AuditsPage() {
             </div>
 
             <div className="p-8 border-t border-slate-100">
-              <div className="flex gap-3">
-                <Button variant="secondary" className="flex-1">Share Report</Button>
+              <div className={`flex gap-3 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                <Button variant="secondary" className="flex-1">{t('audits.shareReport')}</Button>
                 <Button variant="dark" className="flex-1">
-                  Edit Finding <Icon icon="lucide:edit-3" />
+                  {t('audits.editFinding')} <Icon icon="lucide:edit-3" />
                 </Button>
               </div>
             </div>
@@ -463,6 +481,7 @@ function StatCard({
   sublabel,
   badge,
   badgeColor,
+  isRTL = false,
 }: {
   icon: string
   iconColor: 'emerald' | 'rose' | 'blue' | 'slate'
@@ -471,6 +490,7 @@ function StatCard({
   sublabel: string
   badge?: string
   badgeColor?: 'emerald' | 'rose'
+  isRTL?: boolean
 }) {
   const iconColorClasses = {
     emerald: 'bg-emerald-50 text-emerald-600',
@@ -485,7 +505,7 @@ function StatCard({
 
   return (
     <Card className="p-6 hover:shadow-md transition-shadow">
-      <div className="flex justify-between items-start mb-4">
+      <div className={`flex justify-between items-start mb-4 ${isRTL ? 'flex-row-reverse' : ''}`}>
         <div className={`p-2 ${iconColorClasses[iconColor]} rounded-lg`}>
           <Icon icon={icon} className="text-xl" />
         </div>
@@ -493,8 +513,8 @@ function StatCard({
           <span className={`text-[10px] font-black ${badgeColorClasses[badgeColor]}`}>{badge}</span>
         )}
       </div>
-      <h3 className="text-slate-500 text-xs font-bold uppercase tracking-widest mb-1">{label}</h3>
-      <div className="flex items-baseline gap-2">
+      <h3 className={`text-slate-500 text-xs font-bold uppercase tracking-widest mb-1 ${isRTL ? 'text-right' : ''}`}>{label}</h3>
+      <div className={`flex items-baseline gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
         <span className="text-3xl font-black font-display text-slate-900">{value}</span>
         <span className="text-xs text-slate-400 font-medium">{sublabel}</span>
       </div>
@@ -505,10 +525,14 @@ function StatCard({
 // Executive View Component
 function ExecutiveView({
   findings,
-  onFindingClick
+  onFindingClick,
+  t,
+  isRTL = false,
 }: {
   findings: AuditFinding[]
   onFindingClick: (finding: AuditFinding) => void
+  t: (key: TranslationKey) => string
+  isRTL?: boolean
 }) {
   const severityStyles = {
     critical: 'bg-rose-100 text-rose-700',
@@ -516,29 +540,29 @@ function ExecutiveView({
     low: 'bg-emerald-100 text-emerald-700',
   }
   const statusStyles = {
-    remediation: { dot: 'bg-amber-500', text: 'Remediation' },
-    resolved: { dot: 'bg-emerald-500', text: 'Resolved' },
-    verified: { dot: 'bg-emerald-500', text: 'Verified' },
+    remediation: { dot: 'bg-amber-500', key: 'remediation' },
+    resolved: { dot: 'bg-emerald-500', key: 'resolved' },
+    verified: { dot: 'bg-emerald-500', key: 'verified' },
   }
 
   return (
     <Card className="overflow-hidden">
-      <div className="px-8 py-6 border-b border-slate-100 flex items-center justify-between">
-        <h2 className="text-lg font-bold font-display text-slate-900">Recent Audit Findings</h2>
-        <div className="flex gap-2">
-          <span className="bg-rose-50 text-rose-600 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest">4 Critical</span>
-          <span className="bg-slate-100 text-slate-600 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest">12 Total</span>
+      <div className={`px-8 py-6 border-b border-slate-100 flex items-center justify-between ${isRTL ? 'flex-row-reverse' : ''}`}>
+        <h2 className="text-lg font-bold font-display text-slate-900">{t('audits.recentAuditFindings')}</h2>
+        <div className={`flex gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
+          <span className="bg-rose-50 text-rose-600 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest">4 {t('audits.critical')}</span>
+          <span className="bg-slate-100 text-slate-600 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest">12 {t('audits.total')}</span>
         </div>
       </div>
       <div className="overflow-x-auto">
-        <table className="w-full text-left border-collapse">
+        <table className={`w-full border-collapse ${isRTL ? 'text-right' : 'text-left'}`}>
           <thead>
             <tr className="bg-slate-50 border-b border-slate-100">
-              <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">ID</th>
-              <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Audit Name</th>
-              <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Severity</th>
-              <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Owner</th>
-              <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Status</th>
+              <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">{t('audits.id')}</th>
+              <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">{t('audits.auditName')}</th>
+              <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">{t('audits.severity')}</th>
+              <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">{t('audits.owner')}</th>
+              <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">{t('audits.status')}</th>
               <th className="px-8 py-4"></th>
             </tr>
           </thead>
@@ -562,7 +586,7 @@ function ExecutiveView({
                   </span>
                 </td>
                 <td className="px-8 py-5">
-                  <div className="flex items-center gap-2">
+                  <div className={`flex items-center gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
                     <img
                       src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${finding.owner.avatar}`}
                       className="w-6 h-6 rounded-full"
@@ -572,15 +596,15 @@ function ExecutiveView({
                   </div>
                 </td>
                 <td className="px-8 py-5">
-                  <div className="flex items-center gap-1.5">
+                  <div className={`flex items-center gap-1.5 ${isRTL ? 'flex-row-reverse' : ''}`}>
                     <div className={`w-1.5 h-1.5 rounded-full ${statusStyles[finding.status].dot}`}></div>
-                    <span className="text-xs font-bold text-slate-600">{statusStyles[finding.status].text}</span>
+                    <span className="text-xs font-bold text-slate-600">{t(`audits.${statusStyles[finding.status].key}` as TranslationKey)}</span>
                   </div>
                 </td>
-                <td className="px-8 py-5 text-right">
-                  <div className="flex items-center justify-end text-emerald-600 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <span className="text-xs font-bold">Details</span>
-                    <Icon icon="lucide:chevron-right" />
+                <td className={`px-8 py-5 ${isRTL ? 'text-left' : 'text-right'}`}>
+                  <div className={`flex items-center ${isRTL ? 'justify-start flex-row-reverse' : 'justify-end'} text-emerald-600 opacity-0 group-hover:opacity-100 transition-opacity`}>
+                    <span className="text-xs font-bold">{t('audits.details')}</span>
+                    <Icon icon={isRTL ? "lucide:chevron-left" : "lucide:chevron-right"} />
                   </div>
                 </td>
               </tr>
@@ -590,7 +614,7 @@ function ExecutiveView({
       </div>
       <div className="px-8 py-4 bg-slate-50/50 flex justify-center border-t border-slate-100">
         <button className="text-[10px] font-black text-slate-400 uppercase tracking-widest hover:text-slate-900 transition-colors cursor-pointer">
-          Load More Findings
+          {t('audits.loadMoreFindings')}
         </button>
       </div>
     </Card>
@@ -611,6 +635,8 @@ function DetailedLogsView({
   clearFilters,
   expandedLogId,
   setExpandedLogId,
+  t,
+  isRTL = false,
 }: {
   logs: AuditLog[]
   searchQuery: string
@@ -624,6 +650,8 @@ function DetailedLogsView({
   clearFilters: () => void
   expandedLogId: number | null
   setExpandedLogId: (id: number | null) => void
+  t: (key: TranslationKey) => string
+  isRTL?: boolean
 }) {
   const statusStyles = {
     completed: { bg: 'bg-emerald-100', text: 'text-emerald-700', dot: 'bg-emerald-500' },
@@ -641,92 +669,92 @@ function DetailedLogsView({
       <Card className="p-6">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <div>
-            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 block">Search Activity</label>
+            <label className={`text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 block ${isRTL ? 'text-right' : ''}`}>{t('audits.searchActivity')}</label>
             <div className="relative">
               <input
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search by audit name, action..."
-                className="w-full px-4 py-2 pl-10 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all"
+                placeholder={t('audits.searchByAuditAction')}
+                className={`w-full px-4 py-2 ${isRTL ? 'pr-10 text-right' : 'pl-10'} border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all`}
               />
-              <Icon icon="lucide:search" className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <Icon icon="lucide:search" className={`absolute ${isRTL ? 'right-3' : 'left-3'} top-1/2 -translate-y-1/2 text-slate-400`} />
             </div>
           </div>
           <div>
-            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 block">Action Type</label>
+            <label className={`text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 block ${isRTL ? 'text-right' : ''}`}>{t('audits.actionType')}</label>
             <select
               value={actionTypeFilter}
               onChange={(e) => setActionTypeFilter(e.target.value)}
-              className="w-full px-4 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all"
+              className={`w-full px-4 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all ${isRTL ? 'text-right' : ''}`}
             >
-              <option value="all">All Actions</option>
+              <option value="all">{t('audits.allActions')}</option>
               {actionTypes.map((type) => (
                 <option key={type} value={type}>{type}</option>
               ))}
             </select>
           </div>
           <div>
-            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 block">Audit Name</label>
+            <label className={`text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 block ${isRTL ? 'text-right' : ''}`}>{t('audits.auditName')}</label>
             <select
               value={auditNameFilter}
               onChange={(e) => setAuditNameFilter(e.target.value)}
-              className="w-full px-4 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all"
+              className={`w-full px-4 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all ${isRTL ? 'text-right' : ''}`}
             >
-              <option value="all">All Audits</option>
+              <option value="all">{t('audits.allAudits')}</option>
               {auditNames.map((name) => (
                 <option key={name} value={name}>{name}</option>
               ))}
             </select>
           </div>
           <div>
-            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 block">Date Range</label>
+            <label className={`text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 block ${isRTL ? 'text-right' : ''}`}>{t('audits.dateRange')}</label>
             <select
               value={dateRangeFilter}
               onChange={(e) => setDateRangeFilter(e.target.value)}
-              className="w-full px-4 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all"
+              className={`w-full px-4 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all ${isRTL ? 'text-right' : ''}`}
             >
-              <option value="today">Today</option>
-              <option value="week">Last 7 Days</option>
-              <option value="month">Last 30 Days</option>
-              <option value="all">All Time</option>
+              <option value="today">{t('audits.today')}</option>
+              <option value="week">{t('audits.last7Days')}</option>
+              <option value="month">{t('audits.last30Days')}</option>
+              <option value="all">{t('audits.allTime')}</option>
             </select>
           </div>
         </div>
-        <div className="mt-4 flex gap-2 items-center">
+        <div className={`mt-4 flex gap-2 items-center ${isRTL ? 'flex-row-reverse' : ''}`}>
           <Button variant="secondary" size="sm" onClick={clearFilters}>
-            Clear Filters
+            {t('audits.clearFilters')}
           </Button>
-          <span className="text-xs text-slate-500">Showing {logs.length} activity logs</span>
+          <span className="text-xs text-slate-500">{t('audits.showingActivityLogs').replace('{count}', logs.length.toString())}</span>
         </div>
       </Card>
 
       {/* Audit Activity Logs Table */}
       <Card className="overflow-hidden">
-        <div className="px-8 py-6 border-b border-slate-100 flex items-center justify-between">
-          <div>
-            <h2 className="text-lg font-bold font-display text-slate-900">Audit Activity Logs</h2>
-            <p className="text-xs text-slate-500">Comprehensive timeline of all audit-related actions</p>
+        <div className={`px-8 py-6 border-b border-slate-100 flex items-center justify-between ${isRTL ? 'flex-row-reverse' : ''}`}>
+          <div className={isRTL ? 'text-right' : ''}>
+            <h2 className="text-lg font-bold font-display text-slate-900">{t('audits.auditActivityLogs')}</h2>
+            <p className="text-xs text-slate-500">{t('audits.comprehensiveTimeline')}</p>
           </div>
-          <Badge variant="success" size="sm">Live Tracking</Badge>
+          <Badge variant="success" size="sm">{t('audits.liveTracking')}</Badge>
         </div>
         <div className="overflow-x-auto">
           <div className="max-h-[700px] overflow-y-auto hide-scrollbar">
-            <table className="w-full text-left border-collapse">
+            <table className={`w-full border-collapse ${isRTL ? 'text-right' : 'text-left'}`}>
               <thead className="sticky top-0 bg-slate-50 z-10">
                 <tr className="border-b border-slate-100">
                   <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest cursor-pointer hover:bg-slate-100 transition-colors">
-                    Timestamp <Icon icon="lucide:arrow-up-down" className="text-[10px] inline ml-1 opacity-30" />
+                    {t('audits.timestamp')} <Icon icon="lucide:arrow-up-down" className={`text-[10px] inline ${isRTL ? 'mr-1' : 'ml-1'} opacity-30`} />
                   </th>
                   <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest cursor-pointer hover:bg-slate-100 transition-colors">
-                    Audit Name <Icon icon="lucide:arrow-up-down" className="text-[10px] inline ml-1 opacity-30" />
+                    {t('audits.auditName')} <Icon icon="lucide:arrow-up-down" className={`text-[10px] inline ${isRTL ? 'mr-1' : 'ml-1'} opacity-30`} />
                   </th>
                   <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest cursor-pointer hover:bg-slate-100 transition-colors">
-                    Action Type <Icon icon="lucide:arrow-up-down" className="text-[10px] inline ml-1 opacity-30" />
+                    {t('audits.actionType')} <Icon icon="lucide:arrow-up-down" className={`text-[10px] inline ${isRTL ? 'mr-1' : 'ml-1'} opacity-30`} />
                   </th>
-                  <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Description</th>
+                  <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">{t('audits.description')}</th>
                   <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest cursor-pointer hover:bg-slate-100 transition-colors">
-                    Status <Icon icon="lucide:arrow-up-down" className="text-[10px] inline ml-1 opacity-30" />
+                    {t('audits.status')} <Icon icon="lucide:arrow-up-down" className={`text-[10px] inline ${isRTL ? 'mr-1' : 'ml-1'} opacity-30`} />
                   </th>
                 </tr>
               </thead>
@@ -758,33 +786,33 @@ function DetailedLogsView({
                         <td colSpan={5} className="px-6 py-0">
                           <div className="bg-slate-50 rounded-lg p-6 space-y-4 mb-2">
                             <div className="grid grid-cols-4 gap-4">
-                              <div>
-                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">User</p>
-                                <div className="flex items-center gap-2">
+                              <div className={isRTL ? 'text-right' : ''}>
+                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">{t('audits.user')}</p>
+                                <div className={`flex items-center gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
                                   <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${log.user}`} className="w-6 h-6 rounded-full" alt="User" />
                                   <span className="text-sm font-bold text-slate-900">{log.user}</span>
                                 </div>
                               </div>
-                              <div>
-                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Action ID</p>
+                              <div className={isRTL ? 'text-right' : ''}>
+                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">{t('audits.actionId')}</p>
                                 <p className="text-sm font-mono text-slate-900">ACT-{1000 + log.id}</p>
                               </div>
-                              <div>
-                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Duration</p>
-                                <p className="text-sm text-slate-900">{Math.floor(Math.random() * 5) + 1} minutes</p>
+                              <div className={isRTL ? 'text-right' : ''}>
+                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">{t('audits.duration')}</p>
+                                <p className="text-sm text-slate-900">{Math.floor(Math.random() * 5) + 1} {t('audits.minutes')}</p>
                               </div>
-                              <div>
-                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Related Docs</p>
-                                <p className="text-sm text-slate-900">{Math.floor(Math.random() * 3) + 1} files</p>
+                              <div className={isRTL ? 'text-right' : ''}>
+                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">{t('audits.relatedDocs')}</p>
+                                <p className="text-sm text-slate-900">{Math.floor(Math.random() * 3) + 1} {t('audits.files')}</p>
                               </div>
                             </div>
-                            <div>
-                              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Full Context</p>
+                            <div className={isRTL ? 'text-right' : ''}>
+                              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">{t('audits.fullContext')}</p>
                               <p className="text-xs text-slate-600 leading-relaxed">{log.description}. This action was performed as part of the {log.audit} audit process and has been logged for compliance tracking purposes.</p>
                             </div>
-                            <div className="flex gap-2 pt-2">
-                              <Button variant="outline" size="sm">View Audit Details</Button>
-                              <Button variant="primary" size="sm">Export Log Entry</Button>
+                            <div className={`flex gap-2 pt-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                              <Button variant="outline" size="sm">{t('audits.viewAuditDetails')}</Button>
+                              <Button variant="primary" size="sm">{t('audits.exportLogEntry')}</Button>
                             </div>
                           </div>
                         </td>
@@ -796,9 +824,9 @@ function DetailedLogsView({
             </table>
           </div>
         </div>
-        <div className="px-8 py-4 bg-slate-50/50 flex justify-between items-center border-t border-slate-100">
-          <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Showing {logs.length} activity entries</span>
-          <button className="text-[10px] font-black text-slate-400 uppercase tracking-widest hover:text-slate-900 transition-colors cursor-pointer">Load More Logs</button>
+        <div className={`px-8 py-4 bg-slate-50/50 flex justify-between items-center border-t border-slate-100 ${isRTL ? 'flex-row-reverse' : ''}`}>
+          <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{t('audits.showingActivityEntries').replace('{count}', logs.length.toString())}</span>
+          <button className="text-[10px] font-black text-slate-400 uppercase tracking-widest hover:text-slate-900 transition-colors cursor-pointer">{t('audits.loadMoreLogs')}</button>
         </div>
       </Card>
     </div>
@@ -811,11 +839,13 @@ function RiskBreakdownItem({
   percentage,
   color,
   description,
+  isRTL = false,
 }: {
   label: string
   percentage: number
   color: 'emerald' | 'amber' | 'blue'
   description: string
+  isRTL?: boolean
 }) {
   const colorClasses = {
     emerald: 'text-emerald-600 bg-emerald-500',
@@ -825,14 +855,14 @@ function RiskBreakdownItem({
 
   return (
     <div className="flex flex-col gap-1">
-      <div className="flex justify-between items-center">
+      <div className={`flex justify-between items-center ${isRTL ? 'flex-row-reverse' : ''}`}>
         <span className="text-sm font-bold text-slate-700">{label}</span>
         <span className={`text-xs font-bold ${colorClasses[color].split(' ')[0]}`}>{percentage}%</span>
       </div>
       <div className="h-2 bg-slate-100 rounded-full">
-        <div className={`h-full ${colorClasses[color].split(' ')[1]} rounded-full`} style={{ width: `${percentage}%` }}></div>
+        <div className={`h-full ${colorClasses[color].split(' ')[1]} rounded-full ${isRTL ? 'mr-auto' : 'ml-0'}`} style={{ width: `${percentage}%` }}></div>
       </div>
-      <p className="text-[10px] text-slate-400">{description}</p>
+      <p className={`text-[10px] text-slate-400 ${isRTL ? 'text-right' : ''}`}>{description}</p>
     </div>
   )
 }

@@ -9,6 +9,7 @@ import { z } from 'zod'
 import { Icon } from '@iconify/react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { useTranslation } from '@/i18n'
 
 const signInSchema = z.object({
   email: z.string().email('Please enter a valid email'),
@@ -21,6 +22,7 @@ export default function SignInPage() {
   const router = useRouter()
   const [showPassword, setShowPassword] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
+  const { t, isRTL } = useTranslation()
 
   const {
     register,
@@ -47,10 +49,10 @@ export default function SignInPage() {
           {/* Welcome Text */}
           <div className="mb-10 animate-fade-in">
             <h1 className="text-4xl font-display font-bold text-slate-900 mb-3">
-              Welcome Back
+              {t('auth.welcomeBack')}
             </h1>
             <p className="text-base text-slate-500">
-              Enter your credentials to access ComplianceOS
+              {t('auth.enterCredentials')}
             </p>
           </div>
 
@@ -59,7 +61,7 @@ export default function SignInPage() {
             {/* Email Field */}
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-2">
-                Email Address
+                {t('auth.emailAddress')}
               </label>
               <div className="relative">
                 <Icon
@@ -81,7 +83,7 @@ export default function SignInPage() {
             {/* Password Field */}
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-2">
-                Password
+                {t('auth.password')}
               </label>
               <div className="relative">
                 <Icon
@@ -115,14 +117,14 @@ export default function SignInPage() {
                   className="w-4 h-4 text-emerald-600 border-slate-300 rounded focus:ring-emerald-500 cursor-pointer"
                 />
                 <span className="text-sm text-slate-600 group-hover:text-slate-900 transition-colors">
-                  Remember me
+                  {t('auth.rememberMe')}
                 </span>
               </label>
               <Link
                 href="/forgot-password"
                 className="text-sm font-medium text-emerald-600 hover:text-emerald-700 transition-colors"
               >
-                Forgot password?
+                {t('auth.forgotPassword')}
               </Link>
             </div>
 
@@ -136,11 +138,11 @@ export default function SignInPage() {
               {isLoading ? (
                 <>
                   <Icon icon="lucide:loader-2" className="animate-spin" />
-                  Signing in...
+                  {t('auth.signingIn')}
                 </>
               ) : (
                 <>
-                  Sign In
+                  {t('auth.signIn')}
                   <Icon icon="lucide:arrow-right" />
                 </>
               )}
@@ -149,12 +151,12 @@ export default function SignInPage() {
             {/* Sign Up Link */}
             <div className="text-center pt-4">
               <p className="text-sm text-slate-500">
-                Don't have an account?{' '}
+                {t('auth.dontHaveAccount')}{' '}
                 <Link
                   href="/sign-up"
                   className="font-medium text-emerald-600 hover:text-emerald-700 transition-colors"
                 >
-                  Sign up
+                  {t('auth.signUp')}
                 </Link>
               </p>
             </div>
@@ -167,18 +169,18 @@ export default function SignInPage() {
                 <div className="w-full border-t border-slate-200" />
               </div>
               <div className="relative flex justify-center text-sm">
-                <span className="px-4 bg-white text-slate-500">Or continue with</span>
+                <span className="px-4 bg-white text-slate-500">{t('auth.orContinueWith')}</span>
               </div>
             </div>
 
             <div className="mt-6 grid grid-cols-2 gap-4">
               <Button variant="outline" type="button" className="py-3">
                 <Icon icon="flat-color-icons:google" className="text-xl" />
-                Google
+                {t('auth.google')}
               </Button>
               <Button variant="outline" type="button" className="py-3">
                 <Icon icon="logos:microsoft-icon" className="text-xl" />
-                Microsoft
+                {t('auth.microsoft')}
               </Button>
             </div>
           </div>
@@ -193,27 +195,27 @@ export default function SignInPage() {
             <div className="space-y-8">
               <FeatureCard
                 icon="lucide:shield-check"
-                title="Secure & Compliant"
-                description="Enterprise-grade security with SOC 2 Type II certification and end-to-end encryption"
+                title={t('auth.secureCompliant')}
+                description={t('auth.secureCompliantDescription')}
               />
               <FeatureCard
                 icon="lucide:zap"
-                title="Real-Time Insights"
-                description="Monitor compliance metrics and audit trails with live dashboards and notifications"
+                title={t('auth.realTimeInsights')}
+                description={t('auth.realTimeInsightsDescription')}
                 className="ml-12"
               />
               <FeatureCard
                 icon="lucide:users"
-                title="Team Collaboration"
-                description="Seamless workflows with role-based access and automated task assignments"
+                title={t('auth.teamCollaboration')}
+                description={t('auth.teamCollaborationDescription')}
               />
             </div>
 
             {/* Stats */}
             <div className="mt-12 grid grid-cols-3 gap-6">
-              <StatItem value="500+" label="Companies" />
-              <StatItem value="99.9%" label="Uptime" />
-              <StatItem value="24/7" label="Support" />
+              <StatItem value="500+" label={t('auth.companies')} />
+              <StatItem value="99.9%" label={t('auth.uptime')} />
+              <StatItem value="24/7" label={t('auth.support')} />
             </div>
           </div>
         </div>

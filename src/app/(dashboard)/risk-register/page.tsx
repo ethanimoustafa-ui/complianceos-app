@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge'
 import { Modal } from '@/components/ui/modal'
 import { Drawer } from '@/components/ui/drawer'
 import { cn } from '@/lib/utils'
+import { useTranslation } from '@/i18n'
 
 // Types
 type RiskCategory = 'operational' | 'financial' | 'compliance' | 'strategic' | 'reputational'
@@ -195,6 +196,7 @@ function getRiskDotColor(score: number): string {
 }
 
 export default function RiskRegisterPage() {
+  const { t, isRTL } = useTranslation()
   const [risks] = useState<Risk[]>(mockRisks)
   const [selectedRisk, setSelectedRisk] = useState<Risk | null>(null)
   const [isDrawerOpen, setIsDrawerOpen] = useState(false)
@@ -202,6 +204,41 @@ export default function RiskRegisterPage() {
   const [filterCategory, setFilterCategory] = useState<RiskCategory | 'all'>('all')
   const [filterStatus, setFilterStatus] = useState<RiskStatus | 'all'>('all')
   const [searchTerm, setSearchTerm] = useState('')
+
+  // Translated category config
+  const categoryLabels: Record<RiskCategory, string> = {
+    operational: t('riskRegister.operational'),
+    financial: t('riskRegister.financial'),
+    compliance: t('riskRegister.compliance'),
+    strategic: t('riskRegister.strategic'),
+    reputational: t('riskRegister.reputational'),
+  }
+
+  // Translated status config
+  const statusLabels: Record<RiskStatus, string> = {
+    open: t('riskRegister.open'),
+    mitigating: t('riskRegister.mitigating'),
+    accepted: t('riskRegister.accepted'),
+    closed: t('riskRegister.closed'),
+  }
+
+  // Translated likelihood labels
+  const translatedLikelihoodLabels = [
+    t('riskRegister.rare'),
+    t('riskRegister.unlikely'),
+    t('riskRegister.possible'),
+    t('riskRegister.likely'),
+    t('riskRegister.almostCertain'),
+  ]
+
+  // Translated impact labels
+  const translatedImpactLabels = [
+    t('riskRegister.negligible'),
+    t('riskRegister.minor'),
+    t('riskRegister.moderate'),
+    t('riskRegister.major'),
+    t('riskRegister.catastrophic'),
+  ]
 
   // Filter risks
   const filteredRisks = risks.filter((risk) => {
@@ -231,14 +268,14 @@ export default function RiskRegisterPage() {
   return (
     <div className="p-8">
       {/* Header */}
-      <div className="flex items-center justify-between mb-8">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900">Risk Register</h1>
-          <p className="text-slate-500 mt-1">Manage and monitor organizational risks</p>
+      <div className={`flex items-center justify-between mb-8 ${isRTL ? 'flex-row-reverse' : ''}`}>
+        <div className={isRTL ? 'text-right' : ''}>
+          <h1 className="text-2xl font-bold text-slate-900">{t('riskRegister.title')}</h1>
+          <p className="text-slate-500 mt-1">{t('riskRegister.subtitle')}</p>
         </div>
         <Button onClick={() => setIsAddModalOpen(true)}>
           <Icon icon="lucide:plus" className="w-4 h-4" />
-          Add Risk
+          {t('riskRegister.addRisk')}
         </Button>
       </div>
 
@@ -246,13 +283,13 @@ export default function RiskRegisterPage() {
       <div className="grid grid-cols-4 gap-6 mb-8">
         <Card className="stat-card">
           <CardContent className="pt-6">
-            <div className="flex items-center gap-4">
+            <div className={`flex items-center gap-4 ${isRTL ? 'flex-row-reverse' : ''}`}>
               <div className="w-12 h-12 bg-slate-100 rounded-xl flex items-center justify-center">
                 <Icon icon="lucide:alert-triangle" className="text-2xl text-slate-600" />
               </div>
-              <div>
+              <div className={isRTL ? 'text-right' : ''}>
                 <p className="text-2xl font-bold text-slate-900">{totalRisks}</p>
-                <p className="text-sm text-slate-500">Total Risks</p>
+                <p className="text-sm text-slate-500">{t('riskRegister.totalRisks')}</p>
               </div>
             </div>
           </CardContent>
@@ -260,13 +297,13 @@ export default function RiskRegisterPage() {
 
         <Card className="stat-card">
           <CardContent className="pt-6">
-            <div className="flex items-center gap-4">
+            <div className={`flex items-center gap-4 ${isRTL ? 'flex-row-reverse' : ''}`}>
               <div className="w-12 h-12 bg-rose-100 rounded-xl flex items-center justify-center">
                 <Icon icon="lucide:alert-octagon" className="text-2xl text-rose-600" />
               </div>
-              <div>
+              <div className={isRTL ? 'text-right' : ''}>
                 <p className="text-2xl font-bold text-slate-900">{criticalRisks}</p>
-                <p className="text-sm text-slate-500">Critical Risks</p>
+                <p className="text-sm text-slate-500">{t('riskRegister.criticalRisks')}</p>
               </div>
             </div>
           </CardContent>
@@ -274,13 +311,13 @@ export default function RiskRegisterPage() {
 
         <Card className="stat-card">
           <CardContent className="pt-6">
-            <div className="flex items-center gap-4">
+            <div className={`flex items-center gap-4 ${isRTL ? 'flex-row-reverse' : ''}`}>
               <div className="w-12 h-12 bg-amber-100 rounded-xl flex items-center justify-center">
                 <Icon icon="lucide:circle-dot" className="text-2xl text-amber-600" />
               </div>
-              <div>
+              <div className={isRTL ? 'text-right' : ''}>
                 <p className="text-2xl font-bold text-slate-900">{openRisks}</p>
-                <p className="text-sm text-slate-500">Open Risks</p>
+                <p className="text-sm text-slate-500">{t('riskRegister.openRisks')}</p>
               </div>
             </div>
           </CardContent>
@@ -288,13 +325,13 @@ export default function RiskRegisterPage() {
 
         <Card className="stat-card">
           <CardContent className="pt-6">
-            <div className="flex items-center gap-4">
+            <div className={`flex items-center gap-4 ${isRTL ? 'flex-row-reverse' : ''}`}>
               <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
                 <Icon icon="lucide:gauge" className="text-2xl text-blue-600" />
               </div>
-              <div>
+              <div className={isRTL ? 'text-right' : ''}>
                 <p className="text-2xl font-bold text-slate-900">{avgScore}</p>
-                <p className="text-sm text-slate-500">Avg Risk Score</p>
+                <p className="text-sm text-slate-500">{t('riskRegister.avgRiskScore')}</p>
               </div>
             </div>
           </CardContent>
@@ -306,56 +343,56 @@ export default function RiskRegisterPage() {
         <div className="col-span-7">
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
+              <CardTitle className={`flex items-center gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
                 <Icon icon="lucide:grid-3x3" className="text-slate-400" />
-                Risk Matrix (5x5)
+                {t('riskRegister.riskMatrix')}
               </CardTitle>
             </CardHeader>
             <CardContent>
               {/* Legend */}
-              <div className="mb-6 flex items-center gap-4 justify-center">
-                <div className="flex items-center gap-2">
+              <div className={`mb-6 flex items-center gap-4 justify-center ${isRTL ? 'flex-row-reverse' : ''}`}>
+                <div className={`flex items-center gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
                   <div className="w-4 h-4 bg-rose-500 rounded" />
-                  <span className="text-xs font-bold text-slate-600">Critical (20-25)</span>
+                  <span className="text-xs font-bold text-slate-600">{t('riskRegister.critical')} (20-25)</span>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className={`flex items-center gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
                   <div className="w-4 h-4 bg-orange-500 rounded" />
-                  <span className="text-xs font-bold text-slate-600">High (12-19)</span>
+                  <span className="text-xs font-bold text-slate-600">{t('riskRegister.high')} (12-19)</span>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className={`flex items-center gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
                   <div className="w-4 h-4 bg-amber-400 rounded" />
-                  <span className="text-xs font-bold text-slate-600">Medium (6-11)</span>
+                  <span className="text-xs font-bold text-slate-600">{t('riskRegister.medium')} (6-11)</span>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className={`flex items-center gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
                   <div className="w-4 h-4 bg-emerald-400 rounded" />
-                  <span className="text-xs font-bold text-slate-600">Low (1-5)</span>
+                  <span className="text-xs font-bold text-slate-600">{t('riskRegister.low')} (1-5)</span>
                 </div>
               </div>
 
               {/* Matrix */}
               <div className="bg-slate-50 p-6 rounded-xl border border-slate-200">
                 <div className="flex items-center justify-center mb-4">
-                  <div className="text-sm font-bold text-slate-600">Likelihood →</div>
+                  <div className="text-sm font-bold text-slate-600">{t('riskRegister.likelihood')} {isRTL ? '←' : '→'}</div>
                 </div>
 
                 <div className="grid grid-cols-6 gap-2 mb-2">
                   <div />
                   {[1, 2, 3, 4, 5].map((l) => (
                     <div key={l} className="text-[10px] font-bold text-slate-600 text-center">
-                      {likelihoodLabels[l - 1]}
+                      {translatedLikelihoodLabels[l - 1]}
                     </div>
                   ))}
                 </div>
 
                 <div className="relative">
-                  <div className="absolute left-0 top-1/2 -translate-y-1/2 -rotate-90 origin-center whitespace-nowrap text-sm font-bold text-slate-600 -translate-x-6">
-                    Impact ↑
+                  <div className={`absolute ${isRTL ? 'right-0 translate-x-6' : 'left-0 -translate-x-6'} top-1/2 -translate-y-1/2 ${isRTL ? 'rotate-90' : '-rotate-90'} origin-center whitespace-nowrap text-sm font-bold text-slate-600`}>
+                    {t('riskRegister.impact')} {isRTL ? '↓' : '↑'}
                   </div>
-                  <div className="space-y-2 ml-4">
+                  <div className={`space-y-2 ${isRTL ? 'mr-4' : 'ml-4'}`}>
                     {[5, 4, 3, 2, 1].map((impact) => (
                       <div key={impact} className="grid grid-cols-6 gap-2">
-                        <div className="flex items-center justify-end pr-2 text-[10px] font-bold text-slate-600">
-                          {impactLabels[impact - 1]}
+                        <div className={`flex items-center ${isRTL ? 'justify-start pl-2' : 'justify-end pr-2'} text-[10px] font-bold text-slate-600`}>
+                          {translatedImpactLabels[impact - 1]}
                         </div>
                         {[1, 2, 3, 4, 5].map((likelihood) => {
                           const cellRisks = getRisksForCell(likelihood, impact)
@@ -403,40 +440,40 @@ export default function RiskRegisterPage() {
         <div className="col-span-5">
           <Card className="h-full">
             <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle className="flex items-center gap-2">
+              <div className={`flex items-center justify-between ${isRTL ? 'flex-row-reverse' : ''}`}>
+                <CardTitle className={`flex items-center gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
                   <Icon icon="lucide:list" className="text-slate-400" />
-                  Risk Items
+                  {t('riskRegister.riskItems')}
                 </CardTitle>
-                <span className="text-sm text-slate-500">{filteredRisks.length} risks</span>
+                <span className="text-sm text-slate-500">{filteredRisks.length} {t('riskRegister.risks')}</span>
               </div>
               {/* Filters */}
-              <div className="flex gap-3 mt-4">
+              <div className={`flex gap-3 mt-4 ${isRTL ? 'flex-row-reverse' : ''}`}>
                 <input
                   type="text"
-                  placeholder="Search..."
+                  placeholder={t('riskRegister.search')}
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="flex-1 px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  className={`flex-1 px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 ${isRTL ? 'text-right' : ''}`}
                 />
                 <select
                   value={filterCategory}
                   onChange={(e) => setFilterCategory(e.target.value as RiskCategory | 'all')}
-                  className="px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  className={`px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 ${isRTL ? 'text-right' : ''}`}
                 >
-                  <option value="all">All Categories</option>
-                  {Object.entries(categoryConfig).map(([key, val]) => (
-                    <option key={key} value={key}>{val.label}</option>
+                  <option value="all">{t('riskRegister.allCategories')}</option>
+                  {Object.entries(categoryConfig).map(([key]) => (
+                    <option key={key} value={key}>{categoryLabels[key as RiskCategory]}</option>
                   ))}
                 </select>
                 <select
                   value={filterStatus}
                   onChange={(e) => setFilterStatus(e.target.value as RiskStatus | 'all')}
-                  className="px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  className={`px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 ${isRTL ? 'text-right' : ''}`}
                 >
-                  <option value="all">All Status</option>
-                  {Object.entries(statusConfig).map(([key, val]) => (
-                    <option key={key} value={key}>{val.label}</option>
+                  <option value="all">{t('riskRegister.allStatus')}</option>
+                  {Object.entries(statusConfig).map(([key]) => (
+                    <option key={key} value={key}>{statusLabels[key as RiskStatus]}</option>
                   ))}
                 </select>
               </div>
@@ -452,22 +489,22 @@ export default function RiskRegisterPage() {
                       onClick={() => handleRiskClick(risk)}
                       className="p-4 border border-slate-200 rounded-xl hover:border-emerald-300 hover:shadow-sm cursor-pointer transition-all"
                     >
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 mb-1">
+                      <div className={`flex items-start justify-between gap-3 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                        <div className={`flex-1 min-w-0 ${isRTL ? 'text-right' : ''}`}>
+                          <div className={`flex items-center gap-2 mb-1 ${isRTL ? 'flex-row-reverse' : ''}`}>
                             <span className="text-xs font-mono text-slate-400">{risk.id}</span>
                             <Badge className={statusConfig[risk.status].color}>
-                              {statusConfig[risk.status].label}
+                              {statusLabels[risk.status]}
                             </Badge>
                           </div>
                           <p className="font-semibold text-slate-900 truncate">{risk.name}</p>
-                          <div className="flex items-center gap-3 mt-2">
+                          <div className={`flex items-center gap-3 mt-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
                             <Badge className={categoryConfig[risk.category].color}>
-                              <Icon icon={categoryConfig[risk.category].icon} className="w-3 h-3 mr-1" />
-                              {categoryConfig[risk.category].label}
+                              <Icon icon={categoryConfig[risk.category].icon} className={`w-3 h-3 ${isRTL ? 'ml-1' : 'mr-1'}`} />
+                              {categoryLabels[risk.category]}
                             </Badge>
                             <span className={cn('text-xs font-bold', level.color)}>
-                              Score: {score}
+                              {t('riskRegister.score')}: {score}
                             </span>
                           </div>
                         </div>
@@ -477,13 +514,13 @@ export default function RiskRegisterPage() {
                       </div>
                       {risk.status === 'mitigating' && (
                         <div className="mt-3">
-                          <div className="flex items-center justify-between text-xs text-slate-500 mb-1">
-                            <span>Mitigation Progress</span>
+                          <div className={`flex items-center justify-between text-xs text-slate-500 mb-1 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                            <span>{t('riskRegister.mitigationProgress')}</span>
                             <span>{risk.mitigationProgress}%</span>
                           </div>
                           <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
                             <div
-                              className="h-full bg-emerald-500 rounded-full transition-all"
+                              className={`h-full bg-emerald-500 rounded-full transition-all ${isRTL ? 'mr-auto' : ''}`}
                               style={{ width: `${risk.mitigationProgress}%` }}
                             />
                           </div>
@@ -502,17 +539,17 @@ export default function RiskRegisterPage() {
       <Drawer
         isOpen={isDrawerOpen}
         onClose={() => setIsDrawerOpen(false)}
-        title="Risk Details"
+        title={t('riskRegister.riskDetails')}
         size="lg"
       >
         {selectedRisk && (
           <div className="space-y-6">
             {/* Header */}
-            <div>
-              <div className="flex items-center gap-2 mb-2">
+            <div className={isRTL ? 'text-right' : ''}>
+              <div className={`flex items-center gap-2 mb-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
                 <span className="text-sm font-mono text-slate-400">{selectedRisk.id}</span>
                 <Badge className={statusConfig[selectedRisk.status].color}>
-                  {statusConfig[selectedRisk.status].label}
+                  {statusLabels[selectedRisk.status]}
                 </Badge>
               </div>
               <h2 className="text-xl font-bold text-slate-900">{selectedRisk.name}</h2>
@@ -523,17 +560,17 @@ export default function RiskRegisterPage() {
             <div className="bg-slate-50 p-4 rounded-xl">
               <div className="grid grid-cols-3 gap-4 text-center">
                 <div>
-                  <p className="text-xs text-slate-500 mb-1">Likelihood</p>
+                  <p className="text-xs text-slate-500 mb-1">{t('riskRegister.likelihood')}</p>
                   <p className="text-lg font-bold text-slate-900">{selectedRisk.likelihood}</p>
-                  <p className="text-xs text-slate-400">{likelihoodLabels[selectedRisk.likelihood - 1]}</p>
+                  <p className="text-xs text-slate-400">{translatedLikelihoodLabels[selectedRisk.likelihood - 1]}</p>
                 </div>
                 <div>
-                  <p className="text-xs text-slate-500 mb-1">Impact</p>
+                  <p className="text-xs text-slate-500 mb-1">{t('riskRegister.impact')}</p>
                   <p className="text-lg font-bold text-slate-900">{selectedRisk.impact}</p>
-                  <p className="text-xs text-slate-400">{impactLabels[selectedRisk.impact - 1]}</p>
+                  <p className="text-xs text-slate-400">{translatedImpactLabels[selectedRisk.impact - 1]}</p>
                 </div>
                 <div>
-                  <p className="text-xs text-slate-500 mb-1">Risk Score</p>
+                  <p className="text-xs text-slate-500 mb-1">{t('riskRegister.riskScore')}</p>
                   <p className={cn('text-2xl font-bold', getRiskLevel(getRiskScore(selectedRisk.likelihood, selectedRisk.impact)).color)}>
                     {getRiskScore(selectedRisk.likelihood, selectedRisk.impact)}
                   </p>
@@ -544,22 +581,22 @@ export default function RiskRegisterPage() {
 
             {/* Category & Owner */}
             <div className="grid grid-cols-2 gap-4">
-              <div>
-                <p className="text-xs text-slate-500 mb-2">Category</p>
+              <div className={isRTL ? 'text-right' : ''}>
+                <p className="text-xs text-slate-500 mb-2">{t('riskRegister.category')}</p>
                 <Badge className={cn('px-3 py-1.5', categoryConfig[selectedRisk.category].color)}>
-                  <Icon icon={categoryConfig[selectedRisk.category].icon} className="w-4 h-4 mr-2" />
-                  {categoryConfig[selectedRisk.category].label}
+                  <Icon icon={categoryConfig[selectedRisk.category].icon} className={`w-4 h-4 ${isRTL ? 'ml-2' : 'mr-2'}`} />
+                  {categoryLabels[selectedRisk.category]}
                 </Badge>
               </div>
-              <div>
-                <p className="text-xs text-slate-500 mb-2">Risk Owner</p>
-                <div className="flex items-center gap-3">
+              <div className={isRTL ? 'text-right' : ''}>
+                <p className="text-xs text-slate-500 mb-2">{t('riskRegister.riskOwner')}</p>
+                <div className={`flex items-center gap-3 ${isRTL ? 'flex-row-reverse' : ''}`}>
                   <img
                     src={selectedRisk.owner.avatar}
                     alt={selectedRisk.owner.name}
                     className="w-8 h-8 rounded-full"
                   />
-                  <div>
+                  <div className={isRTL ? 'text-right' : ''}>
                     <p className="text-sm font-semibold text-slate-900">{selectedRisk.owner.name}</p>
                     <p className="text-xs text-slate-500">{selectedRisk.owner.department}</p>
                   </div>
@@ -569,19 +606,19 @@ export default function RiskRegisterPage() {
 
             {/* Mitigation Plan */}
             {selectedRisk.mitigationPlan && (
-              <div>
-                <p className="text-xs text-slate-500 mb-2">Mitigation Plan</p>
+              <div className={isRTL ? 'text-right' : ''}>
+                <p className="text-xs text-slate-500 mb-2">{t('riskRegister.mitigationPlan')}</p>
                 <div className="p-4 bg-slate-50 rounded-xl">
                   <p className="text-sm text-slate-700">{selectedRisk.mitigationPlan}</p>
                   {selectedRisk.status === 'mitigating' && (
                     <div className="mt-4">
-                      <div className="flex items-center justify-between text-xs text-slate-500 mb-2">
-                        <span>Progress</span>
+                      <div className={`flex items-center justify-between text-xs text-slate-500 mb-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                        <span>{t('riskRegister.progress')}</span>
                         <span className="font-semibold text-emerald-600">{selectedRisk.mitigationProgress}%</span>
                       </div>
                       <div className="w-full h-2 bg-slate-200 rounded-full overflow-hidden">
                         <div
-                          className="h-full bg-emerald-500 rounded-full transition-all"
+                          className={`h-full bg-emerald-500 rounded-full transition-all ${isRTL ? 'mr-auto' : ''}`}
                           style={{ width: `${selectedRisk.mitigationProgress}%` }}
                         />
                       </div>
@@ -592,14 +629,14 @@ export default function RiskRegisterPage() {
             )}
 
             {/* Actions */}
-            <div className="flex gap-3 pt-4 border-t border-slate-100">
+            <div className={`flex gap-3 pt-4 border-t border-slate-100 ${isRTL ? 'flex-row-reverse' : ''}`}>
               <Button variant="outline" className="flex-1">
                 <Icon icon="lucide:edit" className="w-4 h-4" />
-                Edit Risk
+                {t('riskRegister.editRisk')}
               </Button>
               <Button variant="outline" className="flex-1">
                 <Icon icon="lucide:history" className="w-4 h-4" />
-                View History
+                {t('riskRegister.viewHistory')}
               </Button>
             </div>
           </div>
@@ -610,38 +647,38 @@ export default function RiskRegisterPage() {
       <Modal
         isOpen={isAddModalOpen}
         onClose={() => setIsAddModalOpen(false)}
-        title="Add New Risk"
+        title={t('riskRegister.addNewRisk')}
         size="lg"
       >
         <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Risk Name</label>
+          <div className={isRTL ? 'text-right' : ''}>
+            <label className="block text-sm font-medium text-slate-700 mb-1">{t('riskRegister.riskName')}</label>
             <input
               type="text"
-              placeholder="Enter risk name"
-              className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              placeholder={t('riskRegister.enterRiskName')}
+              className={`w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 ${isRTL ? 'text-right' : ''}`}
             />
           </div>
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Description</label>
+          <div className={isRTL ? 'text-right' : ''}>
+            <label className="block text-sm font-medium text-slate-700 mb-1">{t('riskRegister.description')}</label>
             <textarea
-              placeholder="Describe the risk..."
+              placeholder={t('riskRegister.describeRisk')}
               rows={3}
-              className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-none"
+              className={`w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-none ${isRTL ? 'text-right' : ''}`}
             />
           </div>
           <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Category</label>
-              <select className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500">
-                {Object.entries(categoryConfig).map(([key, val]) => (
-                  <option key={key} value={key}>{val.label}</option>
+            <div className={isRTL ? 'text-right' : ''}>
+              <label className="block text-sm font-medium text-slate-700 mb-1">{t('riskRegister.category')}</label>
+              <select className={`w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 ${isRTL ? 'text-right' : ''}`}>
+                {Object.entries(categoryConfig).map(([key]) => (
+                  <option key={key} value={key}>{categoryLabels[key as RiskCategory]}</option>
                 ))}
               </select>
             </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Risk Owner</label>
-              <select className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500">
+            <div className={isRTL ? 'text-right' : ''}>
+              <label className="block text-sm font-medium text-slate-700 mb-1">{t('riskRegister.riskOwner')}</label>
+              <select className={`w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 ${isRTL ? 'text-right' : ''}`}>
                 <option>Sarah Chen</option>
                 <option>Ahmed Al-Rashid</option>
                 <option>Maria Lopez</option>
@@ -649,37 +686,37 @@ export default function RiskRegisterPage() {
             </div>
           </div>
           <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Likelihood (1-5)</label>
-              <select className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500">
+            <div className={isRTL ? 'text-right' : ''}>
+              <label className="block text-sm font-medium text-slate-700 mb-1">{t('riskRegister.likelihood15')}</label>
+              <select className={`w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 ${isRTL ? 'text-right' : ''}`}>
                 {[1, 2, 3, 4, 5].map((n) => (
-                  <option key={n} value={n}>{n} - {likelihoodLabels[n - 1]}</option>
+                  <option key={n} value={n}>{n} - {translatedLikelihoodLabels[n - 1]}</option>
                 ))}
               </select>
             </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Impact (1-5)</label>
-              <select className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500">
+            <div className={isRTL ? 'text-right' : ''}>
+              <label className="block text-sm font-medium text-slate-700 mb-1">{t('riskRegister.impact15')}</label>
+              <select className={`w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 ${isRTL ? 'text-right' : ''}`}>
                 {[1, 2, 3, 4, 5].map((n) => (
-                  <option key={n} value={n}>{n} - {impactLabels[n - 1]}</option>
+                  <option key={n} value={n}>{n} - {translatedImpactLabels[n - 1]}</option>
                 ))}
               </select>
             </div>
           </div>
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Mitigation Plan</label>
+          <div className={isRTL ? 'text-right' : ''}>
+            <label className="block text-sm font-medium text-slate-700 mb-1">{t('riskRegister.mitigationPlan')}</label>
             <textarea
-              placeholder="Describe the mitigation strategy..."
+              placeholder={t('riskRegister.describeMitigation')}
               rows={2}
-              className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-none"
+              className={`w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-none ${isRTL ? 'text-right' : ''}`}
             />
           </div>
-          <div className="flex gap-3 pt-4">
+          <div className={`flex gap-3 pt-4 ${isRTL ? 'flex-row-reverse' : ''}`}>
             <Button variant="outline" onClick={() => setIsAddModalOpen(false)} className="flex-1">
-              Cancel
+              {t('common.cancel')}
             </Button>
             <Button onClick={() => setIsAddModalOpen(false)} className="flex-1">
-              Add Risk
+              {t('riskRegister.addRisk')}
             </Button>
           </div>
         </div>

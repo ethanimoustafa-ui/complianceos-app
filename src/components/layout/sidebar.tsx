@@ -6,14 +6,15 @@ import { usePathname, useRouter } from 'next/navigation'
 import { Icon } from '@iconify/react'
 import { cn } from '@/lib/utils'
 import { Modal } from '@/components/ui/modal'
+import { useTranslation } from '@/i18n'
 
 const navigation = [
-  { name: 'Dashboard', href: '/dashboard', icon: 'lucide:layout-grid' },
-  { name: 'Calendar', href: '/calendar', icon: 'lucide:calendar' },
-  { name: 'Correspondence', href: '/correspondence', icon: 'lucide:mail' },
-  { name: 'Reports', href: '/reports', icon: 'lucide:file-text' },
-  { name: 'Team', href: '/team', icon: 'lucide:users' },
-  { name: 'Settings', href: '/settings', icon: 'lucide:settings' },
+  { nameKey: 'navigation.dashboard', href: '/dashboard', icon: 'lucide:layout-grid' },
+  { nameKey: 'navigation.calendar', href: '/calendar', icon: 'lucide:calendar' },
+  { nameKey: 'navigation.correspondence', href: '/correspondence', icon: 'lucide:mail' },
+  { nameKey: 'navigation.reports', href: '/reports', icon: 'lucide:file-text' },
+  { nameKey: 'navigation.team', href: '/team', icon: 'lucide:users' },
+  { nameKey: 'navigation.settings', href: '/settings', icon: 'lucide:settings' },
 ]
 
 // Types
@@ -55,6 +56,7 @@ export function Sidebar() {
   const pathname = usePathname()
   const router = useRouter()
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const { t, isRTL } = useTranslation()
 
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false)
   const [isProfileOpen, setIsProfileOpen] = useState(false)
@@ -82,12 +84,12 @@ export function Sidebar() {
 
   const handleMarkAllRead = () => {
     setNotifications(prev => prev.map(n => ({ ...n, unread: false })))
-    showToast('All notifications marked as read')
+    showToast(t('sidebar.markAllRead'))
   }
 
   const handleSignOut = () => {
-    if (confirm('Are you sure you want to sign out?')) {
-      showToast('Signing out...')
+    if (confirm(t('sidebar.signOut') + '?')) {
+      showToast(t('sidebar.signingOut'))
       setTimeout(() => {
         router.push('/sign-in')
       }, 1500)
@@ -95,7 +97,7 @@ export function Sidebar() {
   }
 
   const handleProfileUpdate = () => {
-    showToast('Profile updated successfully!')
+    showToast(t('sidebar.profileUpdated'))
     setIsProfileOpen(false)
     setShowAvatarPicker(false)
   }
@@ -128,9 +130,10 @@ export function Sidebar() {
         <nav className="flex-1 flex flex-col gap-4">
           {navigation.map((item) => {
             const isActive = pathname === item.href || pathname.startsWith(item.href + '/')
+            const name = t(item.nameKey as any)
             return (
               <Link
-                key={item.name}
+                key={item.nameKey}
                 href={item.href}
                 className={cn(
                   'flex items-center justify-center w-12 h-12 rounded-xl transition-all',
@@ -138,7 +141,7 @@ export function Sidebar() {
                     ? 'bg-emerald-500/20 text-emerald-400'
                     : 'text-slate-400 hover:text-emerald-400 hover:bg-slate-800'
                 )}
-                title={item.name}
+                title={name}
               >
                 <Icon icon={item.icon} className="text-2xl" />
               </Link>
@@ -152,7 +155,7 @@ export function Sidebar() {
           <button
             onClick={() => setIsNotificationsOpen(true)}
             className="relative w-12 h-12 flex items-center justify-center rounded-xl text-slate-400 hover:text-emerald-400 hover:bg-slate-800 transition-all cursor-pointer"
-            title="Notifications"
+            title={t('sidebar.notifications')}
           >
             <Icon icon="lucide:bell" className="text-2xl" />
             {unreadCount > 0 && (
@@ -165,18 +168,18 @@ export function Sidebar() {
 
           {/* Messages */}
           <button
-            onClick={() => showToast('Chat feature coming soon')}
+            onClick={() => showToast(t('sidebar.chatFeatureSoon'))}
             className="w-12 h-12 flex items-center justify-center rounded-xl text-slate-400 hover:text-emerald-400 hover:bg-slate-800 transition-all cursor-pointer"
-            title="Messages"
+            title={t('sidebar.messages')}
           >
             <Icon icon="lucide:message-square" className="text-2xl" />
           </button>
 
           {/* Help Center */}
           <button
-            onClick={() => showToast('Help center opening...')}
+            onClick={() => showToast(t('sidebar.helpCenterOpening'))}
             className="w-12 h-12 flex items-center justify-center rounded-xl text-slate-400 hover:text-emerald-400 hover:bg-slate-800 transition-all cursor-pointer"
-            title="Help Center"
+            title={t('sidebar.helpCenter')}
           >
             <Icon icon="lucide:help-circle" className="text-2xl" />
           </button>
@@ -188,7 +191,7 @@ export function Sidebar() {
           <button
             onClick={handleSignOut}
             className="w-12 h-12 flex items-center justify-center rounded-xl text-slate-400 hover:text-rose-400 hover:bg-slate-800 transition-all cursor-pointer"
-            title="Sign Out"
+            title={t('sidebar.signOut')}
           >
             <Icon icon="lucide:log-out" className="text-2xl" />
           </button>
@@ -197,7 +200,7 @@ export function Sidebar() {
           <button
             onClick={() => setIsProfileOpen(true)}
             className="focus:outline-none cursor-pointer"
-            title="Edit Profile"
+            title={t('sidebar.editProfile')}
           >
             <img
               src={avatarSrc}
@@ -212,8 +215,8 @@ export function Sidebar() {
       <Modal
         isOpen={isNotificationsOpen}
         onClose={() => setIsNotificationsOpen(false)}
-        title="Notifications"
-        subtitle={`${unreadCount} unread`}
+        title={t('sidebar.notifications')}
+        subtitle={`${unreadCount} ${t('sidebar.unread')}`}
         size="lg"
       >
         <div className="space-y-3 max-h-[400px] overflow-y-auto hide-scrollbar">
@@ -245,7 +248,7 @@ export function Sidebar() {
           onClick={handleMarkAllRead}
           className="w-full mt-6 py-3 bg-slate-100 text-slate-700 rounded-lg font-bold hover:bg-slate-200 transition-colors cursor-pointer"
         >
-          Mark All as Read
+          {t('sidebar.markAllRead')}
         </button>
       </Modal>
 
@@ -256,8 +259,8 @@ export function Sidebar() {
           setIsProfileOpen(false)
           setShowAvatarPicker(false)
         }}
-        title="Edit Profile"
-        subtitle="Update your personal information and avatar"
+        title={t('sidebar.editProfile')}
+        subtitle=""
         size="lg"
       >
         <div className="space-y-6">
@@ -290,7 +293,7 @@ export function Sidebar() {
                 className="text-sm font-bold text-emerald-600 hover:text-emerald-700 flex items-center gap-2 cursor-pointer"
               >
                 <Icon icon="lucide:upload" className="text-lg" />
-                Upload Photo
+                {t('sidebar.uploadPhoto')}
               </button>
               <button
                 type="button"
@@ -298,7 +301,7 @@ export function Sidebar() {
                 className="text-sm font-bold text-blue-600 hover:text-blue-700 flex items-center gap-2 cursor-pointer"
               >
                 <Icon icon="lucide:grid-3x3" className="text-lg" />
-                Choose Avatar
+                {t('sidebar.chooseAvatar')}
               </button>
             </div>
 
@@ -329,7 +332,7 @@ export function Sidebar() {
           {/* Personal Info */}
           <div>
             <label className="text-xs font-bold text-slate-700 uppercase mb-2 block">
-              Full Name
+              {t('sidebar.fullName')}
             </label>
             <input
               type="text"
@@ -341,7 +344,7 @@ export function Sidebar() {
 
           <div>
             <label className="text-xs font-bold text-slate-700 uppercase mb-2 block">
-              Email Address
+              {t('sidebar.emailAddress')}
             </label>
             <input
               type="email"
@@ -354,7 +357,7 @@ export function Sidebar() {
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="text-xs font-bold text-slate-700 uppercase mb-2 block">
-                Department
+                {t('sidebar.department')}
               </label>
               <select
                 value={profileData.department}
@@ -370,7 +373,7 @@ export function Sidebar() {
             </div>
             <div>
               <label className="text-xs font-bold text-slate-700 uppercase mb-2 block">
-                Role
+                {t('sidebar.role')}
               </label>
               <select
                 value={profileData.role}
@@ -388,7 +391,7 @@ export function Sidebar() {
 
           <div>
             <label className="text-xs font-bold text-slate-700 uppercase mb-2 block">
-              Phone Number
+              {t('sidebar.phoneNumber')}
             </label>
             <input
               type="tel"
@@ -405,7 +408,7 @@ export function Sidebar() {
               className="flex-1 bg-emerald-600 text-white py-3 rounded-lg font-bold hover:bg-emerald-700 transition-colors flex items-center justify-center gap-2 cursor-pointer"
             >
               <Icon icon="lucide:check" className="text-lg" />
-              Save Changes
+              {t('common.saveChanges')}
             </button>
             <button
               onClick={() => {
@@ -414,7 +417,7 @@ export function Sidebar() {
               }}
               className="px-6 bg-slate-100 text-slate-700 py-3 rounded-lg font-bold hover:bg-slate-200 transition-colors cursor-pointer"
             >
-              Cancel
+              {t('common.cancel')}
             </button>
           </div>
         </div>

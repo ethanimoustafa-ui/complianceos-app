@@ -6,7 +6,8 @@
       "Bash(git log:*)",
       "Bash(ls:*)",
       "Bash(npx tsc:*)",
-      "Bash(npm run build)"
+      "Bash(npm run build)",
+      "Bash(test:*)"
     ],
     "deny": [],
     "ask": []
