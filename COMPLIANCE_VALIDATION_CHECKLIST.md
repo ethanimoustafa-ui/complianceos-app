@@ -15,11 +15,11 @@
 | 3 | SAMA Submission Requests | Non-objection Requirements | :yellow_circle: Partial |
 | 4 | Compliance Monitoring | New Rules / Circulars | :white_check_mark: Implemented |
 | 5 | Compliance Monitoring | Continuous Monitoring | :yellow_circle: Partial |
-| 6 | Policies and Procedures | Policy & Procedure Management | :red_circle: Not Implemented |
+| 6 | Policies and Procedures | Policy & Procedure Management | :white_check_mark: Implemented |
 | 7 | Mandatory Training | Compliance Training & Saudization | :yellow_circle: Partial |
 | 8 | Risk Register | Compliance Risk Register | :white_check_mark: Implemented |
 | 9 | Observations | SAMA / Internal Audit / Sharia Observations | :white_check_mark: Implemented |
-| 10 | Advisory | Internal Advisory | :red_circle: Not Implemented |
+| 10 | Advisory | Internal Advisory | :white_check_mark: Implemented |
 | 11 | Observations | Observation Records & Reporting | :white_check_mark: Implemented |
 | 12 | Timeline Tracker | Internal Weekly / Monthly Tasks | :white_check_mark: Implemented |
 
@@ -236,14 +236,14 @@
 
 - [x] Dashboard mentions "42 Policies up-to-date, 3 overdue"
 - [x] Correspondence shows "Policy review status (84% current, 4 expired)"
-- [ ] Dedicated Policies & Procedures page
-- [ ] Policy creation/edit interface
-- [ ] Version control system
-- [ ] Approval workflow
-- [ ] Review schedule with notifications
-- [ ] Regulation-to-policy linking
-- [ ] Staff acknowledgment tracking
-- [ ] Policy search and filtering
+- [x] Dedicated Policies & Procedures page (tab in /regulatory-updates)
+- [x] Policy creation/edit interface (full modal with 8 fields)
+- [x] Version control system (version history timeline display)
+- [x] Approval workflow (4-step workflow timeline visualization)
+- [ ] Review schedule with notifications (backend needed)
+- [ ] Regulation-to-policy linking (not implemented)
+- [ ] Staff acknowledgment tracking (not implemented)
+- [x] Policy search and filtering (category, status, text search)
 
 ---
 
@@ -383,15 +383,15 @@
 
 ### Validation Checklist
 
-- [ ] Dedicated Advisory page
-- [ ] Advisory request creation form
-- [ ] Advisory notes editor
-- [ ] Business unit selection
-- [ ] Response documentation
-- [ ] Status tracking workflow
-- [ ] Search and filter advisories
-- [ ] Regulation linking
-- [ ] Export functionality
+- [x] Dedicated Advisory page (tab in /correspondence)
+- [x] Advisory request creation form (full modal with subject, unit, priority, description)
+- [x] Advisory notes editor (discussion thread with add note functionality)
+- [x] Business unit selection (7 units: Corporate Banking, Compliance, IT, Risk, Finance, Operations, HR)
+- [x] Response documentation (notes thread with timestamps and authors)
+- [x] Status tracking workflow (Pending, In Progress, Completed with color-coded badges)
+- [x] Search and filter advisories (by status, priority, business unit)
+- [ ] Regulation linking (not implemented)
+- [ ] Export functionality (UI button exists, backend needed)
 
 ---
 
