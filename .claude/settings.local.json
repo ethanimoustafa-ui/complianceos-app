@@ -9,7 +9,9 @@
       "Bash(npm run build)",
       "Bash(test:*)",
       "Bash(cat:*)",
-      "Bash(head:*)"
+      "Bash(head:*)",
+      "Bash(node -e:*)",
+      "Bash(wc:*)"
     ],
     "deny": [],
     "ask": []

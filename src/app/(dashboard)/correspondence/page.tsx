@@ -11,6 +11,9 @@ import { cn } from '@/lib/utils'
 import { useTranslation } from '@/i18n'
 import type { TranslationKey } from '@/i18n'
 
+// Tab type
+type TabValue = 'correspondence' | 'advisory'
+
 // Types
 interface Letter {
   id: number
@@ -21,6 +24,32 @@ interface Letter {
   status: 'sent' | 'draft' | 'received'
   archived: boolean
   assignee?: string
+}
+
+// Advisory types
+type AdvisoryStatus = 'pending' | 'in_progress' | 'completed'
+type AdvisoryPriority = 'low' | 'medium' | 'high'
+type BusinessUnit = 'corporate_banking' | 'compliance' | 'it' | 'risk_management' | 'finance' | 'operations' | 'hr'
+
+interface AdvisoryNote {
+  id: number
+  author: string
+  content: string
+  timestamp: string
+}
+
+interface AdvisoryRequest {
+  id: number
+  ref: string
+  subject: string
+  description: string
+  businessUnit: BusinessUnit
+  status: AdvisoryStatus
+  priority: AdvisoryPriority
+  requestedBy: string
+  requestedDate: string
+  assignedTo?: string
+  notes: AdvisoryNote[]
 }
 
 interface Requirement {
@@ -141,6 +170,81 @@ const risks: Risk[] = [
   { id: 15, name: 'Minor Policy Deviation', severity: 'low', likelihood: 'medium', impact: 2, probability: 3 },
 ]
 
+// Advisory mock data
+const advisoryRequests: AdvisoryRequest[] = [
+  {
+    id: 1,
+    ref: 'ADV-2024-001',
+    subject: 'Investment Product Compliance Query',
+    description: 'Need clarification on compliance requirements for new structured investment product targeting retail customers.',
+    businessUnit: 'corporate_banking',
+    status: 'in_progress',
+    priority: 'high',
+    requestedBy: 'Ahmed Al-Rashid',
+    requestedDate: '2024-10-15',
+    assignedTo: 'Sarah Connor',
+    notes: [
+      { id: 1, author: 'Sarah Connor', content: 'Reviewed initial documentation. Scheduling meeting with product team.', timestamp: '2024-10-16 09:30' },
+      { id: 2, author: 'Ahmed Al-Rashid', content: 'Product launch target is Q1 2025. Need preliminary assessment by end of month.', timestamp: '2024-10-16 14:15' },
+    ]
+  },
+  {
+    id: 2,
+    ref: 'ADV-2024-002',
+    subject: 'AML Training Requirements',
+    description: 'Request for updated AML training curriculum review and approval for 2025 compliance training program.',
+    businessUnit: 'compliance',
+    status: 'completed',
+    priority: 'medium',
+    requestedBy: 'Fatima Hassan',
+    requestedDate: '2024-09-28',
+    assignedTo: 'Michael Scott',
+    notes: [
+      { id: 1, author: 'Michael Scott', content: 'Training curriculum reviewed and approved. Meets all SAMA requirements.', timestamp: '2024-10-05 11:00' },
+      { id: 2, author: 'Fatima Hassan', content: 'Thank you. Will proceed with rollout.', timestamp: '2024-10-05 15:30' },
+    ]
+  },
+  {
+    id: 3,
+    ref: 'ADV-2024-003',
+    subject: 'Data Retention Policy Question',
+    description: 'Clarification needed on data retention periods for customer transaction logs under new PDPL requirements.',
+    businessUnit: 'it',
+    status: 'pending',
+    priority: 'low',
+    requestedBy: 'Omar Khalil',
+    requestedDate: '2024-10-18',
+    notes: []
+  },
+  {
+    id: 4,
+    ref: 'ADV-2024-004',
+    subject: 'Third-Party Due Diligence',
+    description: 'Urgent review required for new fintech partnership. Need compliance assessment before contract signing.',
+    businessUnit: 'risk_management',
+    status: 'in_progress',
+    priority: 'high',
+    requestedBy: 'Layla Mahmoud',
+    requestedDate: '2024-10-14',
+    assignedTo: 'Sarah Connor',
+    notes: [
+      { id: 1, author: 'Sarah Connor', content: 'Initial risk assessment completed. Awaiting additional documentation from vendor.', timestamp: '2024-10-15 16:45' },
+    ]
+  },
+  {
+    id: 5,
+    ref: 'ADV-2024-005',
+    subject: 'Regulatory Reporting Timeline',
+    description: 'Need guidance on submission deadlines for Q4 regulatory reports to SAMA.',
+    businessUnit: 'finance',
+    status: 'pending',
+    priority: 'medium',
+    requestedBy: 'Khalid Al-Otaibi',
+    requestedDate: '2024-10-17',
+    notes: []
+  },
+]
+
 // Toast component
 function Toast({ message, onClose }: { message: string; onClose: () => void }) {
   useEffect(() => {
@@ -158,6 +262,10 @@ function Toast({ message, onClose }: { message: string; onClose: () => void }) {
 
 export default function CorrespondenceHubPage() {
   const { t, isRTL } = useTranslation()
+
+  // Tab state
+  const [activeTab, setActiveTab] = useState<TabValue>('correspondence')
+
   const [letters, setLetters] = useState<Letter[]>(initialLetters)
   const [isNewCorrespondenceOpen, setIsNewCorrespondenceOpen] = useState(false)
   const [isRiskMatrixOpen, setIsRiskMatrixOpen] = useState(false)
@@ -168,6 +276,15 @@ export default function CorrespondenceHubPage() {
   const [selectedLetter, setSelectedLetter] = useState<Letter | null>(null)
   const [selectedCellRisks, setSelectedCellRisks] = useState<Risk[] | null>(null)
   const [toastMessage, setToastMessage] = useState<string | null>(null)
+
+  // Advisory states
+  const [isNewAdvisoryOpen, setIsNewAdvisoryOpen] = useState(false)
+  const [isAdvisoryDetailOpen, setIsAdvisoryDetailOpen] = useState(false)
+  const [selectedAdvisory, setSelectedAdvisory] = useState<AdvisoryRequest | null>(null)
+  const [advisorySearchTerm, setAdvisorySearchTerm] = useState('')
+  const [advisoryStatusFilter, setAdvisoryStatusFilter] = useState<AdvisoryStatus | ''>('')
+  const [advisoryPriorityFilter, setAdvisoryPriorityFilter] = useState<AdvisoryPriority | ''>('')
+  const [advisoryBusinessUnitFilter, setAdvisoryBusinessUnitFilter] = useState<BusinessUnit | ''>('')
 
   // Registry view filters
   const [searchTerm, setSearchTerm] = useState('')
@@ -251,6 +368,46 @@ export default function CorrespondenceHubPage() {
   })
 
   const uniqueCategories = [...new Set(fullRequirements.map(r => r.category))]
+
+  // Filter advisory requests
+  const filteredAdvisory = advisoryRequests.filter(req => {
+    const matchesSearch = req.subject.toLowerCase().includes(advisorySearchTerm.toLowerCase()) ||
+                          req.description.toLowerCase().includes(advisorySearchTerm.toLowerCase())
+    const matchesStatus = !advisoryStatusFilter || req.status === advisoryStatusFilter
+    const matchesPriority = !advisoryPriorityFilter || req.priority === advisoryPriorityFilter
+    const matchesBusinessUnit = !advisoryBusinessUnitFilter || req.businessUnit === advisoryBusinessUnitFilter
+    return matchesSearch && matchesStatus && matchesPriority && matchesBusinessUnit
+  })
+
+  // Advisory status config
+  const advisoryStatusConfig: Record<AdvisoryStatus, { bg: string; text: string; labelKey: string }> = {
+    pending: { bg: 'bg-slate-100', text: 'text-slate-700', labelKey: 'common.pending' },
+    in_progress: { bg: 'bg-blue-100', text: 'text-blue-700', labelKey: 'advisory.inProgress' },
+    completed: { bg: 'bg-emerald-100', text: 'text-emerald-700', labelKey: 'common.completed' },
+  }
+
+  // Advisory priority config
+  const advisoryPriorityConfig: Record<AdvisoryPriority, { bg: string; text: string; labelKey: string }> = {
+    low: { bg: 'bg-slate-100', text: 'text-slate-600', labelKey: 'advisory.low' },
+    medium: { bg: 'bg-amber-100', text: 'text-amber-700', labelKey: 'advisory.medium' },
+    high: { bg: 'bg-rose-100', text: 'text-rose-700', labelKey: 'advisory.high' },
+  }
+
+  // Business unit labels
+  const businessUnitLabels: Record<BusinessUnit, string> = {
+    corporate_banking: 'advisory.corporateBanking',
+    compliance: 'advisory.compliance',
+    it: 'advisory.it',
+    risk_management: 'advisory.riskManagement',
+    finance: 'advisory.finance',
+    operations: 'advisory.operations',
+    hr: 'advisory.hr',
+  }
+
+  const handleViewAdvisory = (advisory: AdvisoryRequest) => {
+    setSelectedAdvisory(advisory)
+    setIsAdvisoryDetailOpen(true)
+  }
 
   // Registry View
   if (isRegistryViewOpen) {
@@ -492,27 +649,54 @@ export default function CorrespondenceHubPage() {
               {t('navigation.observations')}
             </Link>
           </div>
+
+          <div className="h-8 w-px bg-slate-200 mx-2" />
+
+          {/* Tab Toggle */}
+          <div className={`flex bg-slate-100 p-1 rounded-lg ${isRTL ? 'flex-row-reverse' : ''}`}>
+            <button
+              onClick={() => setActiveTab('correspondence')}
+              className={cn(
+                'px-4 py-1.5 text-sm font-bold rounded-md transition-all cursor-pointer flex items-center gap-2',
+                activeTab === 'correspondence'
+                  ? 'bg-white text-slate-900 shadow-sm'
+                  : 'text-slate-500 hover:text-slate-700',
+                isRTL ? 'flex-row-reverse' : ''
+              )}
+            >
+              <Icon icon="lucide:mail" className="text-base" />
+              {t('correspondence.tabs.correspondence' as TranslationKey)}
+            </button>
+            <button
+              onClick={() => setActiveTab('advisory')}
+              className={cn(
+                'px-4 py-1.5 text-sm font-bold rounded-md transition-all cursor-pointer flex items-center gap-2',
+                activeTab === 'advisory'
+                  ? 'bg-white text-slate-900 shadow-sm'
+                  : 'text-slate-500 hover:text-slate-700',
+                isRTL ? 'flex-row-reverse' : ''
+              )}
+            >
+              <Icon icon="lucide:message-circle-question" className="text-base" />
+              {t('correspondence.tabs.advisory' as TranslationKey)}
+            </button>
+          </div>
         </div>
 
         <div className={`flex items-center gap-4 ${isRTL ? 'flex-row-reverse' : ''}`}>
-          <div className={`flex items-center gap-1 bg-slate-50 border border-slate-200 p-1 rounded-lg ${isRTL ? 'flex-row-reverse' : ''}`}>
-            <div className={`px-4 py-1.5 text-sm font-bold text-slate-900 flex items-center gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
-              <span>{t('common.livePulse')}</span>
-              <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-            </div>
-          </div>
-
           <button
-            onClick={() => setIsNewCorrespondenceOpen(true)}
+            onClick={() => activeTab === 'correspondence' ? setIsNewCorrespondenceOpen(true) : setIsNewAdvisoryOpen(true)}
             className={`bg-emerald-600 text-white px-5 py-2.5 rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-emerald-700 transition-colors shadow-lg shadow-emerald-100 cursor-pointer ${isRTL ? 'flex-row-reverse' : ''}`}
           >
             <Icon icon="lucide:plus" />
-            {t('correspondence.newCorrespondence')}
+            {activeTab === 'correspondence' ? t('correspondence.newCorrespondence') : t('advisory.newRequest' as TranslationKey)}
           </button>
         </div>
       </header>
 
       <div className="flex-1 overflow-auto hide-scrollbar bg-slate-50 p-8">
+        {/* Correspondence Tab Content */}
+        {activeTab === 'correspondence' && (
         <div className="space-y-8">
 
           {/* Metrics Strip */}
@@ -739,6 +923,179 @@ export default function CorrespondenceHubPage() {
             </div>
           </div>
         </div>
+        )}
+
+        {/* Advisory Tab Content */}
+        {activeTab === 'advisory' && (
+          <div className="space-y-6">
+            {/* Advisory Header */}
+            <div className={`flex justify-between items-center ${isRTL ? 'flex-row-reverse' : ''}`}>
+              <div className={isRTL ? 'text-right' : ''}>
+                <h2 className="text-lg font-bold font-display text-slate-900">{t('advisory.title' as TranslationKey)}</h2>
+                <p className="text-sm text-slate-500">{t('advisory.subtitle' as TranslationKey)}</p>
+              </div>
+              <div className={`flex gap-3 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                <span className="text-xs font-bold text-slate-500">
+                  {filteredAdvisory.length} {t('advisory.requests' as TranslationKey)}
+                </span>
+              </div>
+            </div>
+
+            {/* Advisory Filters */}
+            <div className="glass-card rounded-2xl p-6">
+              <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+                <div className="md:col-span-2">
+                  <label className={`text-xs font-bold text-slate-700 uppercase mb-2 block ${isRTL ? 'text-right' : ''}`}>
+                    {t('common.search')}
+                  </label>
+                  <div className="relative">
+                    <Icon icon="lucide:search" className={`absolute ${isRTL ? 'right-3' : 'left-3'} top-1/2 -translate-y-1/2 text-slate-400 text-lg`} />
+                    <input
+                      type="text"
+                      value={advisorySearchTerm}
+                      onChange={(e) => setAdvisorySearchTerm(e.target.value)}
+                      placeholder={t('advisory.searchPlaceholder' as TranslationKey)}
+                      className={`w-full ${isRTL ? 'pr-10 pl-4 text-right' : 'pl-10 pr-4'} py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500`}
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className={`text-xs font-bold text-slate-700 uppercase mb-2 block ${isRTL ? 'text-right' : ''}`}>
+                    {t('common.status')}
+                  </label>
+                  <select
+                    value={advisoryStatusFilter}
+                    onChange={(e) => setAdvisoryStatusFilter(e.target.value as AdvisoryStatus | '')}
+                    className={`w-full px-4 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 ${isRTL ? 'text-right' : ''}`}
+                  >
+                    <option value="">{t('correspondence.allStatuses')}</option>
+                    <option value="pending">{t('common.pending')}</option>
+                    <option value="in_progress">{t('advisory.inProgress' as TranslationKey)}</option>
+                    <option value="completed">{t('common.completed')}</option>
+                  </select>
+                </div>
+                <div>
+                  <label className={`text-xs font-bold text-slate-700 uppercase mb-2 block ${isRTL ? 'text-right' : ''}`}>
+                    {t('advisory.priority' as TranslationKey)}
+                  </label>
+                  <select
+                    value={advisoryPriorityFilter}
+                    onChange={(e) => setAdvisoryPriorityFilter(e.target.value as AdvisoryPriority | '')}
+                    className={`w-full px-4 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 ${isRTL ? 'text-right' : ''}`}
+                  >
+                    <option value="">{t('advisory.allPriorities' as TranslationKey)}</option>
+                    <option value="low">{t('advisory.low' as TranslationKey)}</option>
+                    <option value="medium">{t('advisory.medium' as TranslationKey)}</option>
+                    <option value="high">{t('advisory.high' as TranslationKey)}</option>
+                  </select>
+                </div>
+                <div>
+                  <label className={`text-xs font-bold text-slate-700 uppercase mb-2 block ${isRTL ? 'text-right' : ''}`}>
+                    {t('advisory.businessUnit' as TranslationKey)}
+                  </label>
+                  <select
+                    value={advisoryBusinessUnitFilter}
+                    onChange={(e) => setAdvisoryBusinessUnitFilter(e.target.value as BusinessUnit | '')}
+                    className={`w-full px-4 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 ${isRTL ? 'text-right' : ''}`}
+                  >
+                    <option value="">{t('advisory.allUnits' as TranslationKey)}</option>
+                    <option value="corporate_banking">{t('advisory.corporateBanking' as TranslationKey)}</option>
+                    <option value="compliance">{t('advisory.compliance' as TranslationKey)}</option>
+                    <option value="it">{t('advisory.it' as TranslationKey)}</option>
+                    <option value="risk_management">{t('advisory.riskManagement' as TranslationKey)}</option>
+                    <option value="finance">{t('advisory.finance' as TranslationKey)}</option>
+                    <option value="operations">{t('advisory.operations' as TranslationKey)}</option>
+                    <option value="hr">{t('advisory.hr' as TranslationKey)}</option>
+                  </select>
+                </div>
+              </div>
+              {(advisorySearchTerm || advisoryStatusFilter || advisoryPriorityFilter || advisoryBusinessUnitFilter) && (
+                <div className={`flex gap-3 mt-4 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                  <button
+                    onClick={() => {
+                      setAdvisorySearchTerm('')
+                      setAdvisoryStatusFilter('')
+                      setAdvisoryPriorityFilter('')
+                      setAdvisoryBusinessUnitFilter('')
+                    }}
+                    className={`px-4 py-2 text-sm font-bold text-slate-600 hover:text-slate-900 transition-colors flex items-center gap-1 cursor-pointer ${isRTL ? 'flex-row-reverse' : ''}`}
+                  >
+                    <Icon icon="lucide:x" className="text-lg" />
+                    {t('correspondence.clearFilters')}
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Advisory Requests List */}
+            <div className="space-y-4">
+              {filteredAdvisory.map((advisory) => {
+                const statusConfig = advisoryStatusConfig[advisory.status]
+                const priorityConfig = advisoryPriorityConfig[advisory.priority]
+                return (
+                  <div
+                    key={advisory.id}
+                    className="glass-card rounded-2xl p-6 hover:shadow-lg transition-all cursor-pointer"
+                    onClick={() => handleViewAdvisory(advisory)}
+                  >
+                    <div className={`flex justify-between items-start ${isRTL ? 'flex-row-reverse' : ''}`}>
+                      <div className={`flex-1 ${isRTL ? 'text-right' : ''}`}>
+                        <div className={`flex items-center gap-3 mb-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                          <span className="text-xs font-bold text-slate-400">{advisory.ref}</span>
+                          <span className={`px-2 py-0.5 text-[10px] font-bold rounded-full ${statusConfig.bg} ${statusConfig.text}`}>
+                            {t(statusConfig.labelKey as TranslationKey)}
+                          </span>
+                          <span className={`px-2 py-0.5 text-[10px] font-bold rounded-full ${priorityConfig.bg} ${priorityConfig.text}`}>
+                            {t(priorityConfig.labelKey as TranslationKey)}
+                          </span>
+                        </div>
+                        <h3 className="text-base font-bold text-slate-900 mb-1">{advisory.subject}</h3>
+                        <p className="text-sm text-slate-500 line-clamp-2">{advisory.description}</p>
+                        <div className={`flex items-center gap-4 mt-3 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                          <span className={`text-xs text-slate-500 flex items-center gap-1 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                            <Icon icon="lucide:building-2" className="text-slate-400" />
+                            {t(businessUnitLabels[advisory.businessUnit] as TranslationKey)}
+                          </span>
+                          <span className={`text-xs text-slate-500 flex items-center gap-1 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                            <Icon icon="lucide:user" className="text-slate-400" />
+                            {advisory.requestedBy}
+                          </span>
+                          <span className={`text-xs text-slate-500 flex items-center gap-1 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                            <Icon icon="lucide:calendar" className="text-slate-400" />
+                            {advisory.requestedDate}
+                          </span>
+                          {advisory.notes.length > 0 && (
+                            <span className={`text-xs text-blue-600 flex items-center gap-1 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                              <Icon icon="lucide:message-circle" className="text-blue-500" />
+                              {advisory.notes.length} {t('advisory.notes' as TranslationKey)}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <div className={`flex items-center gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                        {advisory.assignedTo && (
+                          <div className={`flex items-center gap-2 bg-emerald-50 px-3 py-1.5 rounded-lg ${isRTL ? 'flex-row-reverse' : ''}`}>
+                            <Icon icon="lucide:user-check" className="text-emerald-600 text-sm" />
+                            <span className="text-xs font-bold text-emerald-700">{advisory.assignedTo}</span>
+                          </div>
+                        )}
+                        <Icon icon={isRTL ? 'lucide:chevron-left' : 'lucide:chevron-right'} className="text-slate-400 text-xl" />
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
+
+              {filteredAdvisory.length === 0 && (
+                <div className="glass-card rounded-2xl p-12 text-center">
+                  <Icon icon="lucide:inbox" className="text-5xl text-slate-300 mx-auto mb-4" />
+                  <p className="text-slate-500 font-bold">{t('advisory.noRequests' as TranslationKey)}</p>
+                  <p className="text-sm text-slate-400 mt-1">{t('advisory.noRequestsDescription' as TranslationKey)}</p>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Toast */}
@@ -1065,6 +1422,198 @@ export default function CorrespondenceHubPage() {
           onSuccess={() => { setIsAddRequirementOpen(false); showToast(t('correspondence.requirementAdded')); }}
           onValidationError={() => showToast(t('correspondence.fillRequiredFields'))}
         />
+      </Modal>
+
+      {/* New Advisory Request Modal */}
+      <Modal
+        isOpen={isNewAdvisoryOpen}
+        onClose={() => setIsNewAdvisoryOpen(false)}
+        title={t('advisory.newRequest' as TranslationKey)}
+        subtitle={t('advisory.createNewRequest' as TranslationKey)}
+        size="lg"
+      >
+        <div className="space-y-4">
+          <div>
+            <label className={`text-xs font-bold text-slate-700 uppercase mb-2 block ${isRTL ? 'text-right' : ''}`}>
+              {t('common.subject')} *
+            </label>
+            <input
+              type="text"
+              placeholder={t('advisory.subjectPlaceholder' as TranslationKey)}
+              className={`w-full px-4 py-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 ${isRTL ? 'text-right' : ''}`}
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className={`text-xs font-bold text-slate-700 uppercase mb-2 block ${isRTL ? 'text-right' : ''}`}>
+                {t('advisory.businessUnit' as TranslationKey)} *
+              </label>
+              <select className={`w-full px-4 py-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 ${isRTL ? 'text-right' : ''}`}>
+                <option value="">{t('advisory.selectUnit' as TranslationKey)}</option>
+                <option value="corporate_banking">{t('advisory.corporateBanking' as TranslationKey)}</option>
+                <option value="compliance">{t('advisory.compliance' as TranslationKey)}</option>
+                <option value="it">{t('advisory.it' as TranslationKey)}</option>
+                <option value="risk_management">{t('advisory.riskManagement' as TranslationKey)}</option>
+                <option value="finance">{t('advisory.finance' as TranslationKey)}</option>
+                <option value="operations">{t('advisory.operations' as TranslationKey)}</option>
+                <option value="hr">{t('advisory.hr' as TranslationKey)}</option>
+              </select>
+            </div>
+            <div>
+              <label className={`text-xs font-bold text-slate-700 uppercase mb-2 block ${isRTL ? 'text-right' : ''}`}>
+                {t('advisory.priority' as TranslationKey)} *
+              </label>
+              <select className={`w-full px-4 py-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 ${isRTL ? 'text-right' : ''}`}>
+                <option value="">{t('advisory.selectPriority' as TranslationKey)}</option>
+                <option value="low">{t('advisory.low' as TranslationKey)}</option>
+                <option value="medium">{t('advisory.medium' as TranslationKey)}</option>
+                <option value="high">{t('advisory.high' as TranslationKey)}</option>
+              </select>
+            </div>
+          </div>
+          <div>
+            <label className={`text-xs font-bold text-slate-700 uppercase mb-2 block ${isRTL ? 'text-right' : ''}`}>
+              {t('advisory.description' as TranslationKey)} *
+            </label>
+            <textarea
+              rows={4}
+              placeholder={t('advisory.descriptionPlaceholder' as TranslationKey)}
+              className={`w-full px-4 py-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 ${isRTL ? 'text-right' : ''}`}
+            />
+          </div>
+          <div className={`flex gap-3 mt-6 ${isRTL ? 'flex-row-reverse' : ''}`}>
+            <button
+              onClick={() => { setIsNewAdvisoryOpen(false); showToast(t('advisory.requestSubmitted' as TranslationKey)); }}
+              className={`flex-1 bg-emerald-600 text-white py-3 rounded-lg font-bold hover:bg-emerald-700 transition-colors flex items-center justify-center gap-2 cursor-pointer ${isRTL ? 'flex-row-reverse' : ''}`}
+            >
+              <Icon icon="lucide:send" className="text-lg" />
+              {t('advisory.submitRequest' as TranslationKey)}
+            </button>
+            <button
+              onClick={() => setIsNewAdvisoryOpen(false)}
+              className="px-6 bg-slate-100 text-slate-700 py-3 rounded-lg font-bold hover:bg-slate-200 transition-colors cursor-pointer"
+            >
+              {t('common.cancel')}
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Advisory Detail Modal */}
+      <Modal
+        isOpen={isAdvisoryDetailOpen}
+        onClose={() => setIsAdvisoryDetailOpen(false)}
+        title={selectedAdvisory?.subject || t('advisory.requestDetails' as TranslationKey)}
+        subtitle={selectedAdvisory ? `REF: ${selectedAdvisory.ref}` : undefined}
+        size="lg"
+      >
+        {selectedAdvisory && (
+          <div className="space-y-6">
+            {/* Status and Priority */}
+            <div className={`flex gap-3 ${isRTL ? 'flex-row-reverse' : ''}`}>
+              <span className={`px-3 py-1 text-xs font-bold rounded-full ${advisoryStatusConfig[selectedAdvisory.status].bg} ${advisoryStatusConfig[selectedAdvisory.status].text}`}>
+                {t(advisoryStatusConfig[selectedAdvisory.status].labelKey as TranslationKey)}
+              </span>
+              <span className={`px-3 py-1 text-xs font-bold rounded-full ${advisoryPriorityConfig[selectedAdvisory.priority].bg} ${advisoryPriorityConfig[selectedAdvisory.priority].text}`}>
+                {t(advisoryPriorityConfig[selectedAdvisory.priority].labelKey as TranslationKey)} {t('advisory.priority' as TranslationKey)}
+              </span>
+            </div>
+
+            {/* Details */}
+            <div className="grid grid-cols-2 gap-4">
+              <div className={`bg-slate-50 p-4 rounded-lg ${isRTL ? 'text-right' : ''}`}>
+                <p className="text-xs font-bold text-slate-500 uppercase mb-1">{t('advisory.businessUnit' as TranslationKey)}</p>
+                <p className="text-sm font-bold text-slate-900">{t(businessUnitLabels[selectedAdvisory.businessUnit] as TranslationKey)}</p>
+              </div>
+              <div className={`bg-slate-50 p-4 rounded-lg ${isRTL ? 'text-right' : ''}`}>
+                <p className="text-xs font-bold text-slate-500 uppercase mb-1">{t('advisory.requestedBy' as TranslationKey)}</p>
+                <p className="text-sm font-bold text-slate-900">{selectedAdvisory.requestedBy}</p>
+              </div>
+              <div className={`bg-slate-50 p-4 rounded-lg ${isRTL ? 'text-right' : ''}`}>
+                <p className="text-xs font-bold text-slate-500 uppercase mb-1">{t('advisory.requestDate' as TranslationKey)}</p>
+                <p className="text-sm font-bold text-slate-900">{selectedAdvisory.requestedDate}</p>
+              </div>
+              {selectedAdvisory.assignedTo && (
+                <div className={`bg-emerald-50 p-4 rounded-lg ${isRTL ? 'text-right' : ''}`}>
+                  <p className="text-xs font-bold text-emerald-600 uppercase mb-1">{t('advisory.assignedTo' as TranslationKey)}</p>
+                  <p className="text-sm font-bold text-slate-900">{selectedAdvisory.assignedTo}</p>
+                </div>
+              )}
+            </div>
+
+            {/* Description */}
+            <div className={`bg-slate-50 p-4 rounded-lg ${isRTL ? 'text-right' : ''}`}>
+              <p className="text-xs font-bold text-slate-500 uppercase mb-2">{t('advisory.description' as TranslationKey)}</p>
+              <p className="text-sm text-slate-700">{selectedAdvisory.description}</p>
+            </div>
+
+            {/* Notes Thread */}
+            <div>
+              <h4 className={`text-sm font-bold text-slate-900 mb-3 flex items-center gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                <Icon icon="lucide:message-circle" className="text-slate-400" />
+                {t('advisory.discussionThread' as TranslationKey)} ({selectedAdvisory.notes.length})
+              </h4>
+              {selectedAdvisory.notes.length > 0 ? (
+                <div className="space-y-3 max-h-48 overflow-y-auto">
+                  {selectedAdvisory.notes.map((note) => (
+                    <div key={note.id} className={`bg-slate-50 p-4 rounded-lg border-l-4 border-emerald-500 ${isRTL ? 'text-right border-l-0 border-r-4' : ''}`}>
+                      <div className={`flex justify-between items-start mb-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                        <span className="text-xs font-bold text-slate-900">{note.author}</span>
+                        <span className="text-[10px] text-slate-400">{note.timestamp}</span>
+                      </div>
+                      <p className="text-sm text-slate-600">{note.content}</p>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className={`text-sm text-slate-400 ${isRTL ? 'text-right' : ''}`}>{t('advisory.noNotes' as TranslationKey)}</p>
+              )}
+
+              {/* Add Note */}
+              <div className="mt-4">
+                <textarea
+                  rows={2}
+                  placeholder={t('advisory.addNotePlaceholder' as TranslationKey)}
+                  className={`w-full px-4 py-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 ${isRTL ? 'text-right' : ''}`}
+                />
+                <button
+                  onClick={() => showToast(t('advisory.noteAdded' as TranslationKey))}
+                  className={`mt-2 px-4 py-2 bg-slate-100 text-slate-700 text-sm font-bold rounded-lg hover:bg-slate-200 transition-colors cursor-pointer flex items-center gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}
+                >
+                  <Icon icon="lucide:plus" />
+                  {t('advisory.addNote' as TranslationKey)}
+                </button>
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className={`flex gap-3 pt-4 border-t border-slate-200 ${isRTL ? 'flex-row-reverse' : ''}`}>
+              {selectedAdvisory.status !== 'completed' && (
+                <>
+                  <button
+                    onClick={() => { setIsAdvisoryDetailOpen(false); showToast(t('advisory.statusUpdated' as TranslationKey)); }}
+                    className={`flex-1 bg-emerald-600 text-white py-3 rounded-lg font-bold hover:bg-emerald-700 transition-colors flex items-center justify-center gap-2 cursor-pointer ${isRTL ? 'flex-row-reverse' : ''}`}
+                  >
+                    <Icon icon="lucide:check-circle" className="text-lg" />
+                    {t('advisory.markComplete' as TranslationKey)}
+                  </button>
+                  <button
+                    onClick={() => showToast(t('advisory.assignmentUpdated' as TranslationKey))}
+                    className="px-6 bg-blue-100 text-blue-700 py-3 rounded-lg font-bold hover:bg-blue-200 transition-colors cursor-pointer"
+                  >
+                    {t('advisory.reassign' as TranslationKey)}
+                  </button>
+                </>
+              )}
+              <button
+                onClick={() => setIsAdvisoryDetailOpen(false)}
+                className="px-6 bg-slate-100 text-slate-700 py-3 rounded-lg font-bold hover:bg-slate-200 transition-colors cursor-pointer"
+              >
+                {t('common.close' as TranslationKey)}
+              </button>
+            </div>
+          </div>
+        )}
       </Modal>
     </div>
   )

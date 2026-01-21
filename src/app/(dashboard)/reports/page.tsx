@@ -12,8 +12,33 @@ import { MultiSelectFilter, FilterOption } from '@/components/ui/multi-select-fi
 import { cn } from '@/lib/utils'
 import { useTranslation } from '@/i18n'
 
+import type { TranslationKey } from '@/i18n'
+
 // Tab type for header switching
-type TabValue = 'audits' | 'executive' | 'detailed'
+type TabValue = 'audits' | 'executive' | 'detailed' | 'risks'
+
+// Risk Register types
+type RiskCategory = 'operational' | 'financial' | 'compliance' | 'strategic' | 'reputational'
+type RiskStatus = 'open' | 'mitigating' | 'accepted' | 'closed'
+
+interface RiskRegisterItem {
+  id: string
+  name: string
+  description: string
+  category: RiskCategory
+  likelihood: 1 | 2 | 3 | 4 | 5
+  impact: 1 | 2 | 3 | 4 | 5
+  owner: {
+    name: string
+    avatar: string
+    department: string
+  }
+  status: RiskStatus
+  mitigationPlan?: string
+  mitigationProgress: number
+  createdAt: Date
+  updatedAt: Date
+}
 
 // Audit type definitions
 type AuditSource = 'sama_inspection' | 'internal_audit' | 'sharia_audit'
@@ -148,6 +173,165 @@ const auditCategoryColors: Record<AuditCategory, { dot: string; bg: string; text
   operational_compliance: { dot: 'bg-amber-500', bg: 'bg-amber-50', text: 'text-amber-600', border: 'border-amber-200' },
   hr_compliance: { dot: 'bg-pink-500', bg: 'bg-pink-50', text: 'text-pink-600', border: 'border-pink-200' },
   sharia_compliance: { dot: 'bg-violet-500', bg: 'bg-violet-50', text: 'text-violet-600', border: 'border-violet-200' },
+}
+
+// Risk Register configs
+const riskCategoryConfig: Record<RiskCategory, { label: string; icon: string; color: string }> = {
+  operational: { label: 'Operational', icon: 'lucide:settings', color: 'bg-blue-100 text-blue-700' },
+  financial: { label: 'Financial', icon: 'lucide:dollar-sign', color: 'bg-emerald-100 text-emerald-700' },
+  compliance: { label: 'Compliance', icon: 'lucide:shield', color: 'bg-purple-100 text-purple-700' },
+  strategic: { label: 'Strategic', icon: 'lucide:target', color: 'bg-amber-100 text-amber-700' },
+  reputational: { label: 'Reputational', icon: 'lucide:users', color: 'bg-rose-100 text-rose-700' },
+}
+
+const riskStatusConfig: Record<RiskStatus, { label: string; color: string }> = {
+  open: { label: 'Open', color: 'bg-rose-100 text-rose-700' },
+  mitigating: { label: 'Mitigating', color: 'bg-amber-100 text-amber-700' },
+  accepted: { label: 'Accepted', color: 'bg-blue-100 text-blue-700' },
+  closed: { label: 'Closed', color: 'bg-emerald-100 text-emerald-700' },
+}
+
+// Risk Register mock data
+const mockRiskRegister: RiskRegisterItem[] = [
+  {
+    id: 'RSK-001',
+    name: 'Data Breach - Customer Records',
+    description: 'Potential unauthorized access to customer personal and financial data through system vulnerabilities.',
+    category: 'compliance',
+    likelihood: 4,
+    impact: 5,
+    owner: { name: 'Sarah Chen', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Sarah', department: 'IT Security' },
+    status: 'mitigating',
+    mitigationPlan: 'Implementing enhanced encryption and access controls',
+    mitigationProgress: 65,
+    createdAt: new Date('2024-01-15'),
+    updatedAt: new Date('2024-01-20'),
+  },
+  {
+    id: 'RSK-002',
+    name: 'SAMA Regulatory Non-Compliance',
+    description: 'Risk of non-compliance with SAMA cybersecurity framework requirements.',
+    category: 'compliance',
+    likelihood: 3,
+    impact: 5,
+    owner: { name: 'Ahmed Al-Rashid', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Ahmed', department: 'Compliance' },
+    status: 'open',
+    mitigationPlan: 'Gap assessment and remediation roadmap in progress',
+    mitigationProgress: 30,
+    createdAt: new Date('2024-01-10'),
+    updatedAt: new Date('2024-01-18'),
+  },
+  {
+    id: 'RSK-003',
+    name: 'Third-Party Vendor Failure',
+    description: 'Critical vendor service disruption affecting core business operations.',
+    category: 'operational',
+    likelihood: 3,
+    impact: 4,
+    owner: { name: 'Maria Lopez', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Maria', department: 'Procurement' },
+    status: 'mitigating',
+    mitigationPlan: 'Developing alternative vendor relationships',
+    mitigationProgress: 45,
+    createdAt: new Date('2024-01-08'),
+    updatedAt: new Date('2024-01-19'),
+  },
+  {
+    id: 'RSK-004',
+    name: 'Market Risk - Interest Rate Fluctuation',
+    description: 'Exposure to interest rate changes affecting investment portfolio.',
+    category: 'financial',
+    likelihood: 4,
+    impact: 3,
+    owner: { name: 'John Smith', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=John', department: 'Treasury' },
+    status: 'accepted',
+    mitigationPlan: 'Hedging strategy implemented',
+    mitigationProgress: 100,
+    createdAt: new Date('2024-01-05'),
+    updatedAt: new Date('2024-01-15'),
+  },
+  {
+    id: 'RSK-005',
+    name: 'Cyber Attack - Ransomware',
+    description: 'Potential ransomware attack targeting critical infrastructure.',
+    category: 'operational',
+    likelihood: 4,
+    impact: 4,
+    owner: { name: 'Sarah Chen', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Sarah', department: 'IT Security' },
+    status: 'mitigating',
+    mitigationPlan: 'Enhanced backup and recovery procedures',
+    mitigationProgress: 80,
+    createdAt: new Date('2024-01-12'),
+    updatedAt: new Date('2024-01-21'),
+  },
+  {
+    id: 'RSK-006',
+    name: 'Reputational Damage - Social Media',
+    description: 'Negative publicity from social media incidents or customer complaints.',
+    category: 'reputational',
+    likelihood: 3,
+    impact: 3,
+    owner: { name: 'Emma Wilson', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Emma', department: 'Marketing' },
+    status: 'open',
+    mitigationPlan: 'Social media monitoring and response protocol',
+    mitigationProgress: 20,
+    createdAt: new Date('2024-01-14'),
+    updatedAt: new Date('2024-01-16'),
+  },
+  {
+    id: 'RSK-007',
+    name: 'Key Person Dependency',
+    description: 'Over-reliance on specific individuals for critical business functions.',
+    category: 'strategic',
+    likelihood: 3,
+    impact: 4,
+    owner: { name: 'David Kim', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=David', department: 'HR' },
+    status: 'mitigating',
+    mitigationPlan: 'Knowledge transfer and succession planning',
+    mitigationProgress: 55,
+    createdAt: new Date('2024-01-06'),
+    updatedAt: new Date('2024-01-17'),
+  },
+  {
+    id: 'RSK-008',
+    name: 'Documentation Quality Issues',
+    description: 'Inadequate documentation of policies and procedures.',
+    category: 'operational',
+    likelihood: 4,
+    impact: 2,
+    owner: { name: 'Ahmed Al-Rashid', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Ahmed', department: 'Compliance' },
+    status: 'closed',
+    mitigationPlan: 'Documentation standards and review process implemented',
+    mitigationProgress: 100,
+    createdAt: new Date('2024-01-02'),
+    updatedAt: new Date('2024-01-20'),
+  },
+]
+
+// Risk helper functions
+function getRiskScore(likelihood: number, impact: number): number {
+  return likelihood * impact
+}
+
+function getRiskLevel(score: number): { label: string; color: string; bgColor: string } {
+  if (score >= 20) return { label: 'Critical', color: 'text-rose-700', bgColor: 'bg-rose-500' }
+  if (score >= 12) return { label: 'High', color: 'text-orange-700', bgColor: 'bg-orange-500' }
+  if (score >= 6) return { label: 'Medium', color: 'text-amber-700', bgColor: 'bg-amber-400' }
+  return { label: 'Low', color: 'text-emerald-700', bgColor: 'bg-emerald-400' }
+}
+
+function getMatrixCellColor(likelihood: number, impact: number): string {
+  const score = likelihood * impact
+  if (score >= 20) return 'bg-rose-500/20 border-rose-500 hover:bg-rose-500/30'
+  if (score >= 12) return 'bg-orange-500/20 border-orange-500 hover:bg-orange-500/30'
+  if (score >= 6) return 'bg-amber-400/20 border-amber-400 hover:bg-amber-400/30'
+  return 'bg-emerald-400/20 border-emerald-400 hover:bg-emerald-400/30'
+}
+
+function getRiskDotColor(score: number): string {
+  if (score >= 20) return 'bg-rose-500'
+  if (score >= 12) return 'bg-orange-500'
+  if (score >= 6) return 'bg-amber-400'
+  return 'bg-emerald-400'
 }
 
 // Mock data
@@ -472,6 +656,25 @@ export default function ReportsPage() {
     new Set(['security_compliance', 'financial_compliance', 'regulatory_compliance', 'operational_compliance', 'hr_compliance', 'sharia_compliance'])
   )
 
+  // Risk Register tab states
+  const [riskSearchTerm, setRiskSearchTerm] = useState('')
+  const [riskCategoryFilter, setRiskCategoryFilter] = useState<RiskCategory | ''>('')
+  const [riskStatusFilter, setRiskStatusFilter] = useState<RiskStatus | ''>('')
+  const [selectedRisk, setSelectedRisk] = useState<RiskRegisterItem | null>(null)
+  const [isRiskDrawerOpen, setIsRiskDrawerOpen] = useState(false)
+  const [showAddRiskModal, setShowAddRiskModal] = useState(false)
+
+  // Filter risks
+  const filteredRisks = useMemo(() => {
+    return mockRiskRegister.filter(risk => {
+      const matchesSearch = risk.name.toLowerCase().includes(riskSearchTerm.toLowerCase()) ||
+                            risk.description.toLowerCase().includes(riskSearchTerm.toLowerCase())
+      const matchesCategory = !riskCategoryFilter || risk.category === riskCategoryFilter
+      const matchesStatus = !riskStatusFilter || risk.status === riskStatusFilter
+      return matchesSearch && matchesCategory && matchesStatus
+    })
+  }, [riskSearchTerm, riskCategoryFilter, riskStatusFilter])
+
   // Filtered audits based on selected filters
   const filteredAudits = useMemo(() => {
     return audits.filter(audit =>
@@ -713,11 +916,45 @@ export default function ReportsPage() {
             >
               {t('reports.auditsLogs')}
             </button>
+            <button
+              onClick={() => setActiveTab('risks')}
+              className={cn(
+                'px-4 py-2 text-xs font-bold rounded-md transition-all cursor-pointer',
+                activeTab === 'risks'
+                  ? 'bg-white shadow-sm text-slate-900'
+                  : 'text-slate-500 hover:text-slate-900'
+              )}
+            >
+              {t('reports.tabs.risks' as TranslationKey)}
+            </button>
           </div>
         </div>
         {/* Right side controls - conditional based on activeTab */}
         <div className={`flex items-center gap-4 ${isRTL ? 'flex-row-reverse' : ''}`}>
-          {activeTab === 'audits' ? (
+          {activeTab === 'risks' ? (
+            <>
+              <div className="relative hidden md:block">
+                <Icon icon="lucide:search" className={`absolute ${isRTL ? 'right-3' : 'left-3'} top-1/2 -translate-y-1/2 text-slate-400`} />
+                <input
+                  type="text"
+                  placeholder={t('reports.searchRisks' as TranslationKey)}
+                  value={riskSearchTerm}
+                  onChange={(e) => setRiskSearchTerm(e.target.value)}
+                  className={`${isRTL ? 'pr-10 pl-4' : 'pl-10 pr-4'} py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 w-64 transition-all`}
+                />
+              </div>
+              <button
+                className="p-2.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-all cursor-pointer"
+                title={t('reports.exportReports')}
+              >
+                <Icon icon="lucide:download-cloud" className="text-lg" />
+              </button>
+              <Button className="shadow-lg shadow-emerald-100" onClick={() => setShowAddRiskModal(true)}>
+                <Icon icon="lucide:plus" />
+                {t('reports.addRisk' as TranslationKey)}
+              </Button>
+            </>
+          ) : activeTab === 'audits' ? (
             <>
               <div className="relative hidden md:block">
                 <Icon icon="lucide:search" className={`absolute ${isRTL ? 'right-3' : 'left-3'} top-1/2 -translate-y-1/2 text-slate-400`} />
@@ -1524,6 +1761,268 @@ export default function ReportsPage() {
           </Card>
           </div>
         )}
+
+        {/* Risk Register Tab */}
+        {activeTab === 'risks' && (
+          <div className="p-8 space-y-8">
+            {/* Risk Stats */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+              <Card className="p-6">
+                <div className={`flex items-center gap-4 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                  <div className="p-3 bg-rose-50 rounded-xl">
+                    <Icon icon="lucide:alert-triangle" className="text-2xl text-rose-600" />
+                  </div>
+                  <div className={isRTL ? 'text-right' : ''}>
+                    <p className="text-2xl font-bold text-slate-900">{mockRiskRegister.filter(r => r.status === 'open').length}</p>
+                    <p className="text-xs text-slate-500 font-bold uppercase">{t('reports.openRisks' as TranslationKey)}</p>
+                  </div>
+                </div>
+              </Card>
+              <Card className="p-6">
+                <div className={`flex items-center gap-4 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                  <div className="p-3 bg-amber-50 rounded-xl">
+                    <Icon icon="lucide:clock" className="text-2xl text-amber-600" />
+                  </div>
+                  <div className={isRTL ? 'text-right' : ''}>
+                    <p className="text-2xl font-bold text-slate-900">{mockRiskRegister.filter(r => r.status === 'mitigating').length}</p>
+                    <p className="text-xs text-slate-500 font-bold uppercase">{t('reports.mitigating' as TranslationKey)}</p>
+                  </div>
+                </div>
+              </Card>
+              <Card className="p-6">
+                <div className={`flex items-center gap-4 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                  <div className="p-3 bg-blue-50 rounded-xl">
+                    <Icon icon="lucide:check-circle" className="text-2xl text-blue-600" />
+                  </div>
+                  <div className={isRTL ? 'text-right' : ''}>
+                    <p className="text-2xl font-bold text-slate-900">{mockRiskRegister.filter(r => r.status === 'accepted').length}</p>
+                    <p className="text-xs text-slate-500 font-bold uppercase">{t('reports.accepted' as TranslationKey)}</p>
+                  </div>
+                </div>
+              </Card>
+              <Card className="p-6">
+                <div className={`flex items-center gap-4 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                  <div className="p-3 bg-emerald-50 rounded-xl">
+                    <Icon icon="lucide:shield-check" className="text-2xl text-emerald-600" />
+                  </div>
+                  <div className={isRTL ? 'text-right' : ''}>
+                    <p className="text-2xl font-bold text-slate-900">{mockRiskRegister.filter(r => r.status === 'closed').length}</p>
+                    <p className="text-xs text-slate-500 font-bold uppercase">{t('reports.closed' as TranslationKey)}</p>
+                  </div>
+                </div>
+              </Card>
+            </div>
+
+            {/* Risk Matrix and List */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+              {/* 5x5 Risk Matrix */}
+              <Card className="p-6">
+                <CardHeader className="p-0 mb-6">
+                  <CardTitle className={`text-sm font-bold text-slate-900 flex items-center gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                    <Icon icon="lucide:grid-3x3" className="text-slate-400" />
+                    {t('reports.riskMatrix' as TranslationKey)}
+                  </CardTitle>
+                </CardHeader>
+                <div className="relative">
+                  {/* Y-axis label */}
+                  <div className={`absolute ${isRTL ? '-right-6' : '-left-6'} top-1/2 -translate-y-1/2 -rotate-90 text-[10px] font-bold text-slate-400 uppercase tracking-widest whitespace-nowrap`}>
+                    {t('reports.impact' as TranslationKey)}
+                  </div>
+                  {/* Matrix Grid */}
+                  <div className="pl-4">
+                    <div className="grid grid-cols-5 gap-1">
+                      {[5, 4, 3, 2, 1].map(impact => (
+                        [1, 2, 3, 4, 5].map(likelihood => {
+                          const risksInCell = mockRiskRegister.filter(r => r.likelihood === likelihood && r.impact === impact)
+                          return (
+                            <button
+                              key={`${impact}-${likelihood}`}
+                              className={cn(
+                                'aspect-square rounded-lg border-2 flex items-center justify-center transition-all cursor-pointer',
+                                getMatrixCellColor(likelihood, impact)
+                              )}
+                              onClick={() => {
+                                if (risksInCell.length > 0) {
+                                  setSelectedRisk(risksInCell[0])
+                                  setIsRiskDrawerOpen(true)
+                                }
+                              }}
+                            >
+                              {risksInCell.length > 0 && (
+                                <div className={cn('w-6 h-6 rounded-full flex items-center justify-center text-white text-xs font-bold', getRiskDotColor(getRiskScore(likelihood, impact)))}>
+                                  {risksInCell.length}
+                                </div>
+                              )}
+                            </button>
+                          )
+                        })
+                      ))}
+                    </div>
+                    {/* X-axis label */}
+                    <div className={`text-center mt-3 text-[10px] font-bold text-slate-400 uppercase tracking-widest`}>
+                      {t('reports.likelihood' as TranslationKey)}
+                    </div>
+                  </div>
+                  {/* Legend */}
+                  <div className={`flex justify-center gap-4 mt-4 pt-4 border-t border-slate-100 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                    <div className={`flex items-center gap-1 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                      <div className="w-3 h-3 rounded bg-rose-500" />
+                      <span className="text-[10px] font-bold text-slate-500">{t('reports.critical' as TranslationKey)}</span>
+                    </div>
+                    <div className={`flex items-center gap-1 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                      <div className="w-3 h-3 rounded bg-orange-500" />
+                      <span className="text-[10px] font-bold text-slate-500">{t('reports.high' as TranslationKey)}</span>
+                    </div>
+                    <div className={`flex items-center gap-1 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                      <div className="w-3 h-3 rounded bg-amber-400" />
+                      <span className="text-[10px] font-bold text-slate-500">{t('reports.medium' as TranslationKey)}</span>
+                    </div>
+                    <div className={`flex items-center gap-1 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                      <div className="w-3 h-3 rounded bg-emerald-400" />
+                      <span className="text-[10px] font-bold text-slate-500">{t('reports.low' as TranslationKey)}</span>
+                    </div>
+                  </div>
+                </div>
+              </Card>
+
+              {/* Category Distribution */}
+              <Card className="p-6">
+                <CardHeader className="p-0 mb-6">
+                  <CardTitle className={`text-sm font-bold text-slate-900 flex items-center gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                    <Icon icon="lucide:pie-chart" className="text-slate-400" />
+                    {t('reports.risksByCategory' as TranslationKey)}
+                  </CardTitle>
+                </CardHeader>
+                <div className="space-y-4">
+                  {(['operational', 'financial', 'compliance', 'strategic', 'reputational'] as RiskCategory[]).map(category => {
+                    const count = mockRiskRegister.filter(r => r.category === category).length
+                    const percentage = (count / mockRiskRegister.length) * 100
+                    const config = riskCategoryConfig[category]
+                    return (
+                      <div key={category}>
+                        <div className={`flex justify-between items-center mb-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                          <div className={`flex items-center gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                            <Icon icon={config.icon} className="text-slate-400" />
+                            <span className="text-sm font-bold text-slate-700">{config.label}</span>
+                          </div>
+                          <span className="text-xs font-bold text-slate-500">{count} ({percentage.toFixed(0)}%)</span>
+                        </div>
+                        <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+                          <div className={cn('h-full rounded-full', config.color.split(' ')[0])} style={{ width: `${percentage}%` }} />
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </Card>
+            </div>
+
+            {/* Risk List */}
+            <Card>
+              <CardHeader className={`flex items-center justify-between ${isRTL ? 'flex-row-reverse' : ''}`}>
+                <CardTitle className="text-sm font-bold text-slate-900">{t('reports.riskList' as TranslationKey)}</CardTitle>
+                <div className={`flex items-center gap-3 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                  <select
+                    value={riskCategoryFilter}
+                    onChange={(e) => setRiskCategoryFilter(e.target.value as RiskCategory | '')}
+                    className={`px-3 py-1.5 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 ${isRTL ? 'text-right' : ''}`}
+                  >
+                    <option value="">{t('reports.allCategories' as TranslationKey)}</option>
+                    <option value="operational">{t('reports.operational' as TranslationKey)}</option>
+                    <option value="financial">{t('reports.financial' as TranslationKey)}</option>
+                    <option value="compliance">{t('reports.compliance' as TranslationKey)}</option>
+                    <option value="strategic">{t('reports.strategic' as TranslationKey)}</option>
+                    <option value="reputational">{t('reports.reputational' as TranslationKey)}</option>
+                  </select>
+                  <select
+                    value={riskStatusFilter}
+                    onChange={(e) => setRiskStatusFilter(e.target.value as RiskStatus | '')}
+                    className={`px-3 py-1.5 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 ${isRTL ? 'text-right' : ''}`}
+                  >
+                    <option value="">{t('reports.allStatuses' as TranslationKey)}</option>
+                    <option value="open">{t('reports.open' as TranslationKey)}</option>
+                    <option value="mitigating">{t('reports.mitigating' as TranslationKey)}</option>
+                    <option value="accepted">{t('reports.accepted' as TranslationKey)}</option>
+                    <option value="closed">{t('reports.closed' as TranslationKey)}</option>
+                  </select>
+                </div>
+              </CardHeader>
+              <CardContent className="p-0">
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead className="bg-slate-50 border-y border-slate-100">
+                      <tr>
+                        <th className={`px-6 py-3 text-[10px] font-black text-slate-400 uppercase tracking-wider ${isRTL ? 'text-right' : 'text-left'}`}>{t('reports.risk' as TranslationKey)}</th>
+                        <th className={`px-6 py-3 text-[10px] font-black text-slate-400 uppercase tracking-wider ${isRTL ? 'text-right' : 'text-left'}`}>{t('reports.category' as TranslationKey)}</th>
+                        <th className={`px-6 py-3 text-[10px] font-black text-slate-400 uppercase tracking-wider ${isRTL ? 'text-right' : 'text-left'}`}>{t('reports.score' as TranslationKey)}</th>
+                        <th className={`px-6 py-3 text-[10px] font-black text-slate-400 uppercase tracking-wider ${isRTL ? 'text-right' : 'text-left'}`}>{t('common.status')}</th>
+                        <th className={`px-6 py-3 text-[10px] font-black text-slate-400 uppercase tracking-wider ${isRTL ? 'text-right' : 'text-left'}`}>{t('reports.owner' as TranslationKey)}</th>
+                        <th className={`px-6 py-3 text-[10px] font-black text-slate-400 uppercase tracking-wider ${isRTL ? 'text-right' : 'text-left'}`}>{t('common.actions')}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredRisks.map(risk => {
+                        const score = getRiskScore(risk.likelihood, risk.impact)
+                        const level = getRiskLevel(score)
+                        const categoryConfig = riskCategoryConfig[risk.category]
+                        const statusConf = riskStatusConfig[risk.status]
+                        return (
+                          <tr key={risk.id} className="border-b border-slate-50 hover:bg-slate-50 transition-colors">
+                            <td className="px-6 py-4">
+                              <div className={isRTL ? 'text-right' : ''}>
+                                <span className="text-xs font-bold text-slate-400">{risk.id}</span>
+                                <p className="text-sm font-bold text-slate-900">{risk.name}</p>
+                                <p className="text-xs text-slate-500 line-clamp-1">{risk.description}</p>
+                              </div>
+                            </td>
+                            <td className="px-6 py-4">
+                              <span className={cn('text-xs font-bold px-2.5 py-1 rounded-full flex items-center gap-1 w-fit', categoryConfig.color)}>
+                                <Icon icon={categoryConfig.icon} className="text-xs" />
+                                {categoryConfig.label}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4">
+                              <div className={`flex items-center gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                                <div className={cn('w-3 h-3 rounded', level.bgColor)} />
+                                <span className={cn('text-sm font-bold', level.color)}>{score}</span>
+                                <span className="text-xs text-slate-400">({level.label})</span>
+                              </div>
+                            </td>
+                            <td className="px-6 py-4">
+                              <span className={cn('text-xs font-bold px-2.5 py-1 rounded-full', statusConf.color)}>
+                                {statusConf.label}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4">
+                              <div className={`flex items-center gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                                <img src={risk.owner.avatar} className="w-7 h-7 rounded-full border border-slate-200" alt={risk.owner.name} />
+                                <div className={isRTL ? 'text-right' : ''}>
+                                  <p className="text-xs font-bold text-slate-700">{risk.owner.name}</p>
+                                  <p className="text-[10px] text-slate-400">{risk.owner.department}</p>
+                                </div>
+                              </div>
+                            </td>
+                            <td className="px-6 py-4">
+                              <button
+                                onClick={() => {
+                                  setSelectedRisk(risk)
+                                  setIsRiskDrawerOpen(true)
+                                }}
+                                className="text-emerald-600 hover:text-emerald-700 p-2 hover:bg-emerald-50 rounded-lg transition-all cursor-pointer"
+                              >
+                                <Icon icon="lucide:eye" className="text-lg" />
+                              </button>
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
       </div>
 
       {/* Risk Breakdown Modal - matches prototype 03 */}
@@ -1822,6 +2321,213 @@ export default function ReportsPage() {
           </div>
         )}
       </Drawer>
+
+      {/* Risk Detail Drawer */}
+      <Drawer
+        isOpen={isRiskDrawerOpen}
+        onClose={() => setIsRiskDrawerOpen(false)}
+        title={selectedRisk?.name || t('reports.riskDetails' as TranslationKey)}
+        hideBackdrop
+      >
+        {selectedRisk && (() => {
+          const score = getRiskScore(selectedRisk.likelihood, selectedRisk.impact)
+          const level = getRiskLevel(score)
+          const categoryConfig = riskCategoryConfig[selectedRisk.category]
+          const statusConf = riskStatusConfig[selectedRisk.status]
+          return (
+            <div className="space-y-6">
+              {/* Risk Score */}
+              <div className={`flex items-center justify-between ${isRTL ? 'flex-row-reverse' : ''}`}>
+                <div className={`flex items-center gap-3 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                  <div className={cn('w-12 h-12 rounded-xl flex items-center justify-center text-white font-bold text-lg', level.bgColor)}>
+                    {score}
+                  </div>
+                  <div className={isRTL ? 'text-right' : ''}>
+                    <p className="text-xs font-bold text-slate-400 uppercase">{t('reports.riskScore' as TranslationKey)}</p>
+                    <p className={cn('text-sm font-bold', level.color)}>{level.label} {t('reports.risk' as TranslationKey)}</p>
+                  </div>
+                </div>
+                <span className={cn('px-3 py-1 text-xs font-bold rounded-full', statusConf.color)}>
+                  {statusConf.label}
+                </span>
+              </div>
+
+              {/* Category */}
+              <div className={`p-4 bg-slate-50 rounded-xl ${isRTL ? 'text-right' : ''}`}>
+                <p className="text-xs font-bold text-slate-400 uppercase mb-2">{t('reports.category' as TranslationKey)}</p>
+                <span className={cn('text-xs font-bold px-3 py-1.5 rounded-full inline-flex items-center gap-1', categoryConfig.color)}>
+                  <Icon icon={categoryConfig.icon} />
+                  {categoryConfig.label}
+                </span>
+              </div>
+
+              {/* Likelihood & Impact */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className={`p-4 bg-slate-50 rounded-xl ${isRTL ? 'text-right' : ''}`}>
+                  <p className="text-xs font-bold text-slate-400 uppercase mb-1">{t('reports.likelihood' as TranslationKey)}</p>
+                  <p className="text-lg font-bold text-slate-900">{selectedRisk.likelihood}/5</p>
+                </div>
+                <div className={`p-4 bg-slate-50 rounded-xl ${isRTL ? 'text-right' : ''}`}>
+                  <p className="text-xs font-bold text-slate-400 uppercase mb-1">{t('reports.impact' as TranslationKey)}</p>
+                  <p className="text-lg font-bold text-slate-900">{selectedRisk.impact}/5</p>
+                </div>
+              </div>
+
+              {/* Description */}
+              <div className={isRTL ? 'text-right' : ''}>
+                <p className="text-xs font-bold text-slate-400 uppercase mb-2">{t('reports.description' as TranslationKey)}</p>
+                <p className="text-sm text-slate-600">{selectedRisk.description}</p>
+              </div>
+
+              {/* Owner */}
+              <div className={`p-4 bg-slate-50 rounded-xl flex items-center gap-3 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                <img src={selectedRisk.owner.avatar} className="w-10 h-10 rounded-full border-2 border-white" alt={selectedRisk.owner.name} />
+                <div className={isRTL ? 'text-right' : ''}>
+                  <p className="text-xs font-bold text-slate-400 uppercase">{t('reports.owner' as TranslationKey)}</p>
+                  <p className="text-sm font-bold text-slate-900">{selectedRisk.owner.name}</p>
+                  <p className="text-xs text-slate-500">{selectedRisk.owner.department}</p>
+                </div>
+              </div>
+
+              {/* Mitigation Plan */}
+              {selectedRisk.mitigationPlan && (
+                <div className={isRTL ? 'text-right' : ''}>
+                  <p className="text-xs font-bold text-slate-400 uppercase mb-2">{t('reports.mitigationPlan' as TranslationKey)}</p>
+                  <p className="text-sm text-slate-600">{selectedRisk.mitigationPlan}</p>
+                  <div className="mt-3">
+                    <div className={`flex justify-between items-center mb-1 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                      <span className="text-xs font-bold text-slate-500">{t('reports.progress' as TranslationKey)}</span>
+                      <span className="text-xs font-bold text-emerald-600">{selectedRisk.mitigationProgress}%</span>
+                    </div>
+                    <div className="h-2 bg-slate-200 rounded-full overflow-hidden">
+                      <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${selectedRisk.mitigationProgress}%` }} />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Actions */}
+              <div className={`pt-4 border-t border-slate-100 flex gap-3 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                <button className="flex-1 bg-slate-100 text-slate-700 py-3 rounded-xl font-bold text-xs hover:bg-slate-200 transition-all cursor-pointer">
+                  {t('reports.exportRisk' as TranslationKey)}
+                </button>
+                <button className="flex-1 bg-emerald-600 text-white py-3 rounded-xl font-bold text-xs hover:bg-emerald-700 transition-all cursor-pointer">
+                  {t('reports.editRisk' as TranslationKey)}
+                </button>
+              </div>
+            </div>
+          )
+        })()}
+      </Drawer>
+
+      {/* Add Risk Modal */}
+      <Modal
+        isOpen={showAddRiskModal}
+        onClose={() => setShowAddRiskModal(false)}
+        title={t('reports.addNewRisk' as TranslationKey)}
+        subtitle={t('reports.createNewRiskEntry' as TranslationKey)}
+        size="lg"
+      >
+        <div className="space-y-4">
+          <div>
+            <label className={`text-xs font-bold text-slate-700 uppercase mb-2 block ${isRTL ? 'text-right' : ''}`}>
+              {t('reports.riskName' as TranslationKey)} *
+            </label>
+            <input
+              type="text"
+              placeholder={t('reports.enterRiskName' as TranslationKey)}
+              className={`w-full px-4 py-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 ${isRTL ? 'text-right' : ''}`}
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className={`text-xs font-bold text-slate-700 uppercase mb-2 block ${isRTL ? 'text-right' : ''}`}>
+                {t('reports.category' as TranslationKey)} *
+              </label>
+              <select className={`w-full px-4 py-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 ${isRTL ? 'text-right' : ''}`}>
+                <option value="">{t('reports.selectCategory' as TranslationKey)}</option>
+                <option value="operational">{t('reports.operational' as TranslationKey)}</option>
+                <option value="financial">{t('reports.financial' as TranslationKey)}</option>
+                <option value="compliance">{t('reports.compliance' as TranslationKey)}</option>
+                <option value="strategic">{t('reports.strategic' as TranslationKey)}</option>
+                <option value="reputational">{t('reports.reputational' as TranslationKey)}</option>
+              </select>
+            </div>
+            <div>
+              <label className={`text-xs font-bold text-slate-700 uppercase mb-2 block ${isRTL ? 'text-right' : ''}`}>
+                {t('reports.owner' as TranslationKey)} *
+              </label>
+              <select className={`w-full px-4 py-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 ${isRTL ? 'text-right' : ''}`}>
+                <option value="">{t('reports.selectOwner' as TranslationKey)}</option>
+                <option value="sarah">Sarah Chen - IT Security</option>
+                <option value="ahmed">Ahmed Al-Rashid - Compliance</option>
+                <option value="maria">Maria Lopez - Procurement</option>
+              </select>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className={`text-xs font-bold text-slate-700 uppercase mb-2 block ${isRTL ? 'text-right' : ''}`}>
+                {t('reports.likelihood' as TranslationKey)} *
+              </label>
+              <select className={`w-full px-4 py-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 ${isRTL ? 'text-right' : ''}`}>
+                <option value="1">1 - Rare</option>
+                <option value="2">2 - Unlikely</option>
+                <option value="3">3 - Possible</option>
+                <option value="4">4 - Likely</option>
+                <option value="5">5 - Almost Certain</option>
+              </select>
+            </div>
+            <div>
+              <label className={`text-xs font-bold text-slate-700 uppercase mb-2 block ${isRTL ? 'text-right' : ''}`}>
+                {t('reports.impact' as TranslationKey)} *
+              </label>
+              <select className={`w-full px-4 py-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 ${isRTL ? 'text-right' : ''}`}>
+                <option value="1">1 - Negligible</option>
+                <option value="2">2 - Minor</option>
+                <option value="3">3 - Moderate</option>
+                <option value="4">4 - Major</option>
+                <option value="5">5 - Catastrophic</option>
+              </select>
+            </div>
+          </div>
+          <div>
+            <label className={`text-xs font-bold text-slate-700 uppercase mb-2 block ${isRTL ? 'text-right' : ''}`}>
+              {t('reports.description' as TranslationKey)} *
+            </label>
+            <textarea
+              rows={3}
+              placeholder={t('reports.enterRiskDescription' as TranslationKey)}
+              className={`w-full px-4 py-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 ${isRTL ? 'text-right' : ''}`}
+            />
+          </div>
+          <div>
+            <label className={`text-xs font-bold text-slate-700 uppercase mb-2 block ${isRTL ? 'text-right' : ''}`}>
+              {t('reports.mitigationPlan' as TranslationKey)}
+            </label>
+            <textarea
+              rows={2}
+              placeholder={t('reports.enterMitigationPlan' as TranslationKey)}
+              className={`w-full px-4 py-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 ${isRTL ? 'text-right' : ''}`}
+            />
+          </div>
+          <div className={`flex gap-3 mt-6 ${isRTL ? 'flex-row-reverse' : ''}`}>
+            <Button
+              className="flex-1"
+              onClick={() => setShowAddRiskModal(false)}
+            >
+              <Icon icon="lucide:plus" />
+              {t('reports.createRisk' as TranslationKey)}
+            </Button>
+            <button
+              onClick={() => setShowAddRiskModal(false)}
+              className="px-6 bg-slate-100 text-slate-700 py-3 rounded-lg font-bold hover:bg-slate-200 transition-colors cursor-pointer"
+            >
+              {t('common.cancel')}
+            </button>
+          </div>
+        </div>
+      </Modal>
     </div>
   )
 }

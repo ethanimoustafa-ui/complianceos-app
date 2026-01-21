@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { Icon } from '@iconify/react'
 import { Card, CardHeader, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -9,6 +9,43 @@ import { Input } from '@/components/ui/input'
 import { Modal } from '@/components/ui/modal'
 import { cn } from '@/lib/utils'
 import { useTranslation } from '@/i18n'
+import type { TranslationKey } from '@/i18n'
+
+// Tab type
+type TabValue = 'directory' | 'logs' | 'training'
+
+// Training types
+type TrainingStatus = 'completed' | 'in_progress' | 'not_started' | 'overdue'
+type TrainingCategory = 'compliance' | 'aml' | 'cybersecurity' | 'sharia' | 'risk'
+
+interface EmployeeTraining {
+  id: number
+  name: string
+  email: string
+  department: string
+  isSaudi: boolean
+  courses: CourseProgress[]
+  overallProgress: number
+}
+
+interface CourseProgress {
+  id: number
+  name: string
+  category: TrainingCategory
+  status: TrainingStatus
+  completedDate?: string
+  dueDate: string
+  score?: number
+}
+
+interface DepartmentTraining {
+  name: string
+  employees: number
+  completed: number
+  inProgress: number
+  overdue: number
+  progress: number
+}
 
 // Types
 interface TeamMember {
@@ -139,11 +176,200 @@ const trainingModules = [
   { nameKey: 'team.auditProcedures' as const, completed: 18, total: 18 },
 ]
 
+// Training Tab Mock Data
+const employeeTrainingData: EmployeeTraining[] = [
+  {
+    id: 1,
+    name: 'Ahmed Al-Rashid',
+    email: 'ahmed.r@complianceos.io',
+    department: 'Compliance',
+    isSaudi: true,
+    overallProgress: 100,
+    courses: [
+      { id: 1, name: 'AML Fundamentals', category: 'aml', status: 'completed', completedDate: '2024-09-15', dueDate: '2024-09-30', score: 92 },
+      { id: 2, name: 'Cybersecurity Awareness', category: 'cybersecurity', status: 'completed', completedDate: '2024-08-20', dueDate: '2024-08-31', score: 88 },
+      { id: 3, name: 'Sharia Compliance Basics', category: 'sharia', status: 'completed', completedDate: '2024-07-10', dueDate: '2024-07-31', score: 95 },
+    ]
+  },
+  {
+    id: 2,
+    name: 'Sarah Connor',
+    email: 'sarah.c@complianceos.io',
+    department: 'Risk Management',
+    isSaudi: false,
+    overallProgress: 85,
+    courses: [
+      { id: 1, name: 'AML Fundamentals', category: 'aml', status: 'completed', completedDate: '2024-09-10', dueDate: '2024-09-30', score: 90 },
+      { id: 2, name: 'Risk Assessment Methods', category: 'risk', status: 'in_progress', dueDate: '2024-11-15' },
+      { id: 3, name: 'Compliance Framework', category: 'compliance', status: 'completed', completedDate: '2024-08-15', dueDate: '2024-08-31', score: 87 },
+    ]
+  },
+  {
+    id: 3,
+    name: 'Fatima Hassan',
+    email: 'fatima.h@complianceos.io',
+    department: 'Compliance',
+    isSaudi: true,
+    overallProgress: 67,
+    courses: [
+      { id: 1, name: 'AML Fundamentals', category: 'aml', status: 'completed', completedDate: '2024-09-20', dueDate: '2024-09-30', score: 85 },
+      { id: 2, name: 'Cybersecurity Awareness', category: 'cybersecurity', status: 'in_progress', dueDate: '2024-11-30' },
+      { id: 3, name: 'Sharia Compliance Basics', category: 'sharia', status: 'not_started', dueDate: '2024-12-15' },
+    ]
+  },
+  {
+    id: 4,
+    name: 'Michael Scott',
+    email: 'm.scott@complianceos.io',
+    department: 'IT',
+    isSaudi: false,
+    overallProgress: 50,
+    courses: [
+      { id: 1, name: 'Cybersecurity Awareness', category: 'cybersecurity', status: 'completed', completedDate: '2024-09-05', dueDate: '2024-09-15', score: 82 },
+      { id: 2, name: 'Data Privacy Essentials', category: 'compliance', status: 'overdue', dueDate: '2024-10-01' },
+      { id: 3, name: 'Risk Assessment Methods', category: 'risk', status: 'not_started', dueDate: '2024-12-01' },
+    ]
+  },
+  {
+    id: 5,
+    name: 'Khalid Al-Otaibi',
+    email: 'khalid.o@complianceos.io',
+    department: 'Finance',
+    isSaudi: true,
+    overallProgress: 100,
+    courses: [
+      { id: 1, name: 'AML Fundamentals', category: 'aml', status: 'completed', completedDate: '2024-08-28', dueDate: '2024-09-30', score: 94 },
+      { id: 2, name: 'Financial Crime Prevention', category: 'aml', status: 'completed', completedDate: '2024-09-18', dueDate: '2024-10-15', score: 91 },
+    ]
+  },
+  {
+    id: 6,
+    name: 'Omar Khalil',
+    email: 'omar.k@complianceos.io',
+    department: 'IT',
+    isSaudi: false,
+    overallProgress: 33,
+    courses: [
+      { id: 1, name: 'Cybersecurity Awareness', category: 'cybersecurity', status: 'completed', completedDate: '2024-09-12', dueDate: '2024-09-30', score: 79 },
+      { id: 2, name: 'Data Privacy Essentials', category: 'compliance', status: 'overdue', dueDate: '2024-10-15' },
+      { id: 3, name: 'Information Security Policy', category: 'cybersecurity', status: 'not_started', dueDate: '2024-12-20' },
+    ]
+  },
+  {
+    id: 7,
+    name: 'Layla Mahmoud',
+    email: 'layla.m@complianceos.io',
+    department: 'Risk Management',
+    isSaudi: true,
+    overallProgress: 75,
+    courses: [
+      { id: 1, name: 'Risk Assessment Methods', category: 'risk', status: 'completed', completedDate: '2024-09-08', dueDate: '2024-09-30', score: 88 },
+      { id: 2, name: 'Operational Risk Management', category: 'risk', status: 'in_progress', dueDate: '2024-11-20' },
+      { id: 3, name: 'Compliance Framework', category: 'compliance', status: 'completed', completedDate: '2024-08-25', dueDate: '2024-09-15', score: 86 },
+    ]
+  },
+  {
+    id: 8,
+    name: 'David Wallace',
+    email: 'd.wallace@complianceos.io',
+    department: 'Operations',
+    isSaudi: false,
+    overallProgress: 0,
+    courses: [
+      { id: 1, name: 'AML Fundamentals', category: 'aml', status: 'overdue', dueDate: '2024-10-01' },
+      { id: 2, name: 'Compliance Framework', category: 'compliance', status: 'not_started', dueDate: '2024-11-30' },
+    ]
+  },
+  {
+    id: 9,
+    name: 'Nora Al-Saud',
+    email: 'nora.s@complianceos.io',
+    department: 'Compliance',
+    isSaudi: true,
+    overallProgress: 100,
+    courses: [
+      { id: 1, name: 'AML Fundamentals', category: 'aml', status: 'completed', completedDate: '2024-08-15', dueDate: '2024-09-30', score: 96 },
+      { id: 2, name: 'Sharia Compliance Basics', category: 'sharia', status: 'completed', completedDate: '2024-09-01', dueDate: '2024-09-30', score: 98 },
+      { id: 3, name: 'Compliance Framework', category: 'compliance', status: 'completed', completedDate: '2024-09-20', dueDate: '2024-10-15', score: 94 },
+    ]
+  },
+  {
+    id: 10,
+    name: 'Kelly Kapoor',
+    email: 'k.kapoor@complianceos.io',
+    department: 'Finance',
+    isSaudi: false,
+    overallProgress: 67,
+    courses: [
+      { id: 1, name: 'Financial Crime Prevention', category: 'aml', status: 'completed', completedDate: '2024-09-25', dueDate: '2024-10-15', score: 83 },
+      { id: 2, name: 'AML Fundamentals', category: 'aml', status: 'in_progress', dueDate: '2024-11-15' },
+      { id: 3, name: 'Risk Assessment Methods', category: 'risk', status: 'not_started', dueDate: '2024-12-01' },
+    ]
+  },
+]
+
+const departmentTrainingData: DepartmentTraining[] = [
+  { name: 'Compliance', employees: 3, completed: 8, inProgress: 1, overdue: 0, progress: 89 },
+  { name: 'Risk Management', employees: 2, completed: 4, inProgress: 2, overdue: 0, progress: 80 },
+  { name: 'Finance', employees: 2, completed: 3, inProgress: 1, overdue: 0, progress: 75 },
+  { name: 'IT', employees: 2, completed: 2, inProgress: 0, overdue: 2, progress: 42 },
+  { name: 'Operations', employees: 1, completed: 0, inProgress: 0, overdue: 1, progress: 0 },
+]
+
+// Saudization metrics
+const saudizationMetrics = {
+  target: 42,
+  actual: 38.2,
+  totalEmployees: 10,
+  saudiEmployees: 5,
+}
+
+// Toast component
+function Toast({ message, onClose }: { message: string; onClose: () => void }) {
+  useEffect(() => {
+    const timer = setTimeout(onClose, 3000)
+    return () => clearTimeout(timer)
+  }, [onClose])
+
+  return (
+    <div className="fixed bottom-8 right-8 bg-emerald-600 text-white px-6 py-4 rounded-lg shadow-2xl flex items-center gap-3 z-[60] animate-toast">
+      <Icon icon="lucide:check-circle" className="text-2xl" />
+      <span className="font-bold">{message}</span>
+    </div>
+  )
+}
+
 export default function TeamManagementPage() {
   const { t, isRTL } = useTranslation()
-  const [activeTab, setActiveTab] = useState<'directory' | 'logs'>('directory')
+  const [activeTab, setActiveTab] = useState<TabValue>('directory')
   const [selectedMember, setSelectedMember] = useState<TeamMember | null>(teamMembers[0])
   const [expandedLogs, setExpandedLogs] = useState<number[]>([])
+
+  // Training tab states
+  const [selectedEmployee, setSelectedEmployee] = useState<EmployeeTraining | null>(null)
+  const [isEmployeeDetailOpen, setIsEmployeeDetailOpen] = useState(false)
+  const [trainingDeptFilter, setTrainingDeptFilter] = useState('')
+  const [trainingStatusFilter, setTrainingStatusFilter] = useState<TrainingStatus | ''>('')
+  const [toastMessage, setToastMessage] = useState<string | null>(null)
+
+  const showToast = useCallback((message: string) => {
+    setToastMessage(message)
+  }, [])
+
+  // Training status config
+  const trainingStatusConfig: Record<TrainingStatus, { bg: string; text: string; labelKey: string }> = {
+    completed: { bg: 'bg-emerald-100', text: 'text-emerald-700', labelKey: 'training.completed' },
+    in_progress: { bg: 'bg-blue-100', text: 'text-blue-700', labelKey: 'training.inProgress' },
+    not_started: { bg: 'bg-slate-100', text: 'text-slate-600', labelKey: 'training.notStarted' },
+    overdue: { bg: 'bg-rose-100', text: 'text-rose-700', labelKey: 'training.overdue' },
+  }
+
+  // Filter employees for training tab
+  const filteredEmployeeTraining = employeeTrainingData.filter(emp => {
+    const matchesDept = !trainingDeptFilter || emp.department === trainingDeptFilter
+    const matchesStatus = !trainingStatusFilter || emp.courses.some(c => c.status === trainingStatusFilter)
+    return matchesDept && matchesStatus
+  })
   const [isDrawerOpen, setIsDrawerOpen] = useState(true)
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
@@ -234,6 +460,16 @@ export default function TeamManagementPage() {
               }`}
             >
               {t('team.userLogs')}
+            </button>
+            <button
+              onClick={() => setActiveTab('training')}
+              className={`px-4 py-2 text-xs font-bold rounded-md transition-all cursor-pointer ${
+                activeTab === 'training'
+                  ? 'bg-white shadow-sm text-slate-900'
+                  : 'text-slate-500 hover:text-slate-900'
+              }`}
+            >
+              {t('team.tabs.training' as TranslationKey)}
             </button>
           </div>
         </div>
@@ -660,6 +896,304 @@ export default function TeamManagementPage() {
               </Card>
             </div>
           )}
+
+          {/* Training Tab Content */}
+          {activeTab === 'training' && (
+            <div className="flex-1 overflow-auto hide-scrollbar bg-slate-50 p-8">
+              {/* Training Overview Stats */}
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+                <div className="glass-card p-6 rounded-2xl">
+                  <div className={`flex items-center gap-4 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                    <div className="p-3 bg-emerald-50 rounded-xl">
+                      <Icon icon="lucide:graduation-cap" className="text-2xl text-emerald-600" />
+                    </div>
+                    <div className={isRTL ? 'text-right' : ''}>
+                      <p className="text-2xl font-bold text-slate-900">73%</p>
+                      <p className="text-xs text-slate-500 font-bold uppercase">{t('training.overallCompletion' as TranslationKey)}</p>
+                    </div>
+                  </div>
+                </div>
+                <div className="glass-card p-6 rounded-2xl">
+                  <div className={`flex items-center gap-4 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                    <div className="p-3 bg-blue-50 rounded-xl">
+                      <Icon icon="lucide:book-open" className="text-2xl text-blue-600" />
+                    </div>
+                    <div className={isRTL ? 'text-right' : ''}>
+                      <p className="text-2xl font-bold text-slate-900">28</p>
+                      <p className="text-xs text-slate-500 font-bold uppercase">{t('training.coursesAssigned' as TranslationKey)}</p>
+                    </div>
+                  </div>
+                </div>
+                <div className="glass-card p-6 rounded-2xl">
+                  <div className={`flex items-center gap-4 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                    <div className="p-3 bg-rose-50 rounded-xl">
+                      <Icon icon="lucide:alert-triangle" className="text-2xl text-rose-600" />
+                    </div>
+                    <div className={isRTL ? 'text-right' : ''}>
+                      <p className="text-2xl font-bold text-rose-600">4</p>
+                      <p className="text-xs text-slate-500 font-bold uppercase">{t('training.overdueCourses' as TranslationKey)}</p>
+                    </div>
+                  </div>
+                </div>
+                <div className="glass-card p-6 rounded-2xl">
+                  <div className={`flex items-center gap-4 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                    <div className="p-3 bg-amber-50 rounded-xl">
+                      <Icon icon="lucide:clock" className="text-2xl text-amber-600" />
+                    </div>
+                    <div className={isRTL ? 'text-right' : ''}>
+                      <p className="text-2xl font-bold text-slate-900">5</p>
+                      <p className="text-xs text-slate-500 font-bold uppercase">{t('training.inProgressCourses' as TranslationKey)}</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Department Progress & Saudization */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+                {/* Department Progress */}
+                <Card className="p-6">
+                  <h3 className={`text-sm font-bold text-slate-900 mb-6 flex items-center gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                    <Icon icon="lucide:building-2" className="text-slate-400" />
+                    {t('training.departmentProgress' as TranslationKey)}
+                  </h3>
+                  <div className="space-y-4">
+                    {departmentTrainingData.map((dept) => (
+                      <div key={dept.name}>
+                        <div className={`flex justify-between items-center mb-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                          <span className="text-sm font-bold text-slate-700">{dept.name}</span>
+                          <div className={`flex items-center gap-3 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                            <span className="text-xs text-emerald-600 font-bold">{dept.completed} {t('training.completed' as TranslationKey)}</span>
+                            {dept.overdue > 0 && (
+                              <span className="text-xs text-rose-600 font-bold">{dept.overdue} {t('training.overdue' as TranslationKey)}</span>
+                            )}
+                            <span className="text-xs font-bold text-slate-500">{dept.progress}%</span>
+                          </div>
+                        </div>
+                        <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+                          <div
+                            className={`h-full rounded-full ${dept.progress >= 80 ? 'bg-emerald-500' : dept.progress >= 50 ? 'bg-amber-500' : 'bg-rose-500'}`}
+                            style={{ width: `${dept.progress}%` }}
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </Card>
+
+                {/* Saudization Metrics */}
+                <Card className="p-6">
+                  <h3 className={`text-sm font-bold text-slate-900 mb-6 flex items-center gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                    <Icon icon="lucide:flag" className="text-slate-400" />
+                    {t('training.saudizationMetrics' as TranslationKey)}
+                  </h3>
+                  <div className={`flex items-center gap-8 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                    {/* Circular Progress */}
+                    <div className="relative w-32 h-32">
+                      <svg className="w-32 h-32 -rotate-90" viewBox="0 0 100 100">
+                        <circle
+                          cx="50"
+                          cy="50"
+                          r="40"
+                          fill="none"
+                          stroke="#f1f5f9"
+                          strokeWidth="12"
+                        />
+                        <circle
+                          cx="50"
+                          cy="50"
+                          r="40"
+                          fill="none"
+                          stroke={saudizationMetrics.actual >= saudizationMetrics.target ? '#10b981' : '#f59e0b'}
+                          strokeWidth="12"
+                          strokeLinecap="round"
+                          strokeDasharray={`${(saudizationMetrics.actual / 100) * 251.2} 251.2`}
+                        />
+                      </svg>
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <div className="text-center">
+                          <p className="text-2xl font-bold text-slate-900">{saudizationMetrics.actual}%</p>
+                          <p className="text-[10px] text-slate-500 uppercase font-bold">{t('training.actual' as TranslationKey)}</p>
+                        </div>
+                      </div>
+                    </div>
+                    <div className={`flex-1 space-y-4 ${isRTL ? 'text-right' : ''}`}>
+                      <div>
+                        <p className="text-xs text-slate-500 font-bold uppercase">{t('training.target' as TranslationKey)}</p>
+                        <p className="text-xl font-bold text-slate-900">{saudizationMetrics.target}%</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-slate-500 font-bold uppercase">{t('training.gap' as TranslationKey)}</p>
+                        <p className={`text-xl font-bold ${saudizationMetrics.actual >= saudizationMetrics.target ? 'text-emerald-600' : 'text-rose-600'}`}>
+                          {saudizationMetrics.actual >= saudizationMetrics.target ? '+' : ''}{(saudizationMetrics.actual - saudizationMetrics.target).toFixed(1)}%
+                        </p>
+                      </div>
+                      <div className={`flex gap-4 pt-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                        <div className={`flex items-center gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                          <Icon icon="lucide:users" className="text-emerald-600" />
+                          <span className="text-sm font-bold text-slate-700">{saudizationMetrics.saudiEmployees} {t('training.saudi' as TranslationKey)}</span>
+                        </div>
+                        <div className={`flex items-center gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                          <Icon icon="lucide:users" className="text-slate-400" />
+                          <span className="text-sm font-bold text-slate-500">{saudizationMetrics.totalEmployees - saudizationMetrics.saudiEmployees} {t('training.nonSaudi' as TranslationKey)}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </Card>
+              </div>
+
+              {/* Employee Training Records */}
+              <Card className="overflow-hidden">
+                <CardHeader className={`flex items-center justify-between ${isRTL ? 'flex-row-reverse' : ''}`}>
+                  <h3 className="text-sm font-bold text-slate-900">{t('training.employeeRecords' as TranslationKey)}</h3>
+                  <div className={`flex items-center gap-4 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                    <select
+                      value={trainingDeptFilter}
+                      onChange={(e) => setTrainingDeptFilter(e.target.value)}
+                      className={`px-3 py-1.5 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 ${isRTL ? 'text-right' : ''}`}
+                    >
+                      <option value="">{t('training.allDepartments' as TranslationKey)}</option>
+                      <option value="Compliance">{t('training.compliance' as TranslationKey)}</option>
+                      <option value="Risk Management">{t('training.riskManagement' as TranslationKey)}</option>
+                      <option value="Finance">{t('training.finance' as TranslationKey)}</option>
+                      <option value="IT">{t('training.it' as TranslationKey)}</option>
+                      <option value="Operations">{t('training.operations' as TranslationKey)}</option>
+                    </select>
+                    <select
+                      value={trainingStatusFilter}
+                      onChange={(e) => setTrainingStatusFilter(e.target.value as TrainingStatus | '')}
+                      className={`px-3 py-1.5 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 ${isRTL ? 'text-right' : ''}`}
+                    >
+                      <option value="">{t('training.allStatuses' as TranslationKey)}</option>
+                      <option value="completed">{t('training.completed' as TranslationKey)}</option>
+                      <option value="in_progress">{t('training.inProgress' as TranslationKey)}</option>
+                      <option value="overdue">{t('training.overdue' as TranslationKey)}</option>
+                      <option value="not_started">{t('training.notStarted' as TranslationKey)}</option>
+                    </select>
+                    <button
+                      onClick={() => showToast(t('training.exportingReport' as TranslationKey))}
+                      className="p-2 hover:bg-slate-50 rounded-lg text-slate-400 cursor-pointer"
+                    >
+                      <Icon icon="lucide:download" />
+                    </button>
+                  </div>
+                </CardHeader>
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead className="bg-slate-50 border-y border-slate-100">
+                      <tr>
+                        <th className={`px-6 py-3 text-[10px] font-black text-slate-400 uppercase tracking-wider ${isRTL ? 'text-right' : 'text-left'}`}>
+                          {t('training.employee' as TranslationKey)}
+                        </th>
+                        <th className={`px-6 py-3 text-[10px] font-black text-slate-400 uppercase tracking-wider ${isRTL ? 'text-right' : 'text-left'}`}>
+                          {t('training.department' as TranslationKey)}
+                        </th>
+                        <th className={`px-6 py-3 text-[10px] font-black text-slate-400 uppercase tracking-wider ${isRTL ? 'text-right' : 'text-left'}`}>
+                          {t('training.nationality' as TranslationKey)}
+                        </th>
+                        <th className={`px-6 py-3 text-[10px] font-black text-slate-400 uppercase tracking-wider ${isRTL ? 'text-right' : 'text-left'}`}>
+                          {t('training.progress' as TranslationKey)}
+                        </th>
+                        <th className={`px-6 py-3 text-[10px] font-black text-slate-400 uppercase tracking-wider ${isRTL ? 'text-right' : 'text-left'}`}>
+                          {t('training.courses' as TranslationKey)}
+                        </th>
+                        <th className={`px-6 py-3 text-[10px] font-black text-slate-400 uppercase tracking-wider ${isRTL ? 'text-right' : 'text-left'}`}>
+                          {t('common.actions')}
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredEmployeeTraining.map((employee) => {
+                        const completedCourses = employee.courses.filter(c => c.status === 'completed').length
+                        const overdueCourses = employee.courses.filter(c => c.status === 'overdue').length
+                        return (
+                          <tr key={employee.id} className="border-b border-slate-50 hover:bg-slate-50 transition-colors">
+                            <td className="px-6 py-4">
+                              <div className={`flex items-center gap-3 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                                <img
+                                  src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${employee.name}`}
+                                  className="w-10 h-10 rounded-full border-2 border-slate-100"
+                                  alt={employee.name}
+                                />
+                                <div className={isRTL ? 'text-right' : ''}>
+                                  <p className="text-sm font-bold text-slate-900">{employee.name}</p>
+                                  <p className="text-xs text-slate-500">{employee.email}</p>
+                                </div>
+                              </div>
+                            </td>
+                            <td className="px-6 py-4">
+                              <span className="text-xs font-bold text-slate-600 bg-slate-100 px-3 py-1 rounded-full">
+                                {employee.department}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4">
+                              {employee.isSaudi ? (
+                                <span className="text-xs font-bold text-emerald-700 bg-emerald-100 px-3 py-1 rounded-full flex items-center gap-1 w-fit">
+                                  <Icon icon="lucide:flag" className="text-xs" />
+                                  {t('training.saudi' as TranslationKey)}
+                                </span>
+                              ) : (
+                                <span className="text-xs font-bold text-slate-600 bg-slate-100 px-3 py-1 rounded-full">
+                                  {t('training.nonSaudi' as TranslationKey)}
+                                </span>
+                              )}
+                            </td>
+                            <td className="px-6 py-4">
+                              <div className="w-24">
+                                <div className={`flex justify-between items-center mb-1 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                                  <span className={`text-xs font-bold ${employee.overallProgress === 100 ? 'text-emerald-600' : employee.overallProgress >= 50 ? 'text-amber-600' : 'text-rose-600'}`}>
+                                    {employee.overallProgress}%
+                                  </span>
+                                </div>
+                                <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                                  <div
+                                    className={`h-full rounded-full ${employee.overallProgress === 100 ? 'bg-emerald-500' : employee.overallProgress >= 50 ? 'bg-amber-500' : 'bg-rose-500'}`}
+                                    style={{ width: `${employee.overallProgress}%` }}
+                                  />
+                                </div>
+                              </div>
+                            </td>
+                            <td className="px-6 py-4">
+                              <div className={`flex items-center gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                                <span className="text-xs font-bold text-emerald-600">{completedCourses} {t('training.done' as TranslationKey)}</span>
+                                {overdueCourses > 0 && (
+                                  <span className="text-xs font-bold text-rose-600">{overdueCourses} {t('training.overdue' as TranslationKey)}</span>
+                                )}
+                                <span className="text-xs text-slate-400">/ {employee.courses.length}</span>
+                              </div>
+                            </td>
+                            <td className="px-6 py-4">
+                              <button
+                                onClick={() => {
+                                  setSelectedEmployee(employee)
+                                  setIsEmployeeDetailOpen(true)
+                                }}
+                                className="text-emerald-600 hover:text-emerald-700 p-2 hover:bg-emerald-50 rounded-lg transition-all cursor-pointer"
+                              >
+                                <Icon icon="lucide:eye" className="text-lg" />
+                              </button>
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+                <div className={`px-6 py-4 bg-slate-50 border-t border-slate-100 flex items-center justify-between ${isRTL ? 'flex-row-reverse' : ''}`}>
+                  <p className="text-xs text-slate-500 font-medium">
+                    {t('training.showingEmployees' as TranslationKey).replace('{count}', filteredEmployeeTraining.length.toString()).replace('{total}', employeeTrainingData.length.toString())}
+                  </p>
+                  <button
+                    onClick={() => showToast(t('training.exportingReport' as TranslationKey))}
+                    className={`px-3 py-1.5 text-xs font-bold text-slate-600 hover:text-slate-900 hover:bg-slate-200 rounded transition-colors flex items-center gap-1 cursor-pointer ${isRTL ? 'flex-row-reverse' : ''}`}
+                  >
+                    <Icon icon="lucide:download" />
+                    {t('training.exportReport' as TranslationKey)}
+                  </button>
+                </div>
+              </Card>
+            </div>
+          )}
         </div>
 
         {/* Member Detail Drawer */}
@@ -851,6 +1385,123 @@ export default function TeamManagementPage() {
           </div>
         </div>
       </Modal>
+
+      {/* Employee Training Detail Modal */}
+      <Modal
+        isOpen={isEmployeeDetailOpen}
+        onClose={() => setIsEmployeeDetailOpen(false)}
+        title={selectedEmployee?.name || t('training.employeeDetails' as TranslationKey)}
+        subtitle={selectedEmployee?.department}
+        size="lg"
+      >
+        {selectedEmployee && (
+          <div className="space-y-6">
+            {/* Employee Info */}
+            <div className={`flex items-center gap-4 p-4 bg-slate-50 rounded-xl ${isRTL ? 'flex-row-reverse' : ''}`}>
+              <img
+                src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${selectedEmployee.name}`}
+                className="w-16 h-16 rounded-full border-4 border-white"
+                alt={selectedEmployee.name}
+              />
+              <div className={`flex-1 ${isRTL ? 'text-right' : ''}`}>
+                <h3 className="text-lg font-bold text-slate-900">{selectedEmployee.name}</h3>
+                <p className="text-sm text-slate-500">{selectedEmployee.email}</p>
+                <div className={`flex items-center gap-3 mt-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                  <span className="text-xs font-bold text-slate-600 bg-slate-200 px-3 py-1 rounded-full">
+                    {selectedEmployee.department}
+                  </span>
+                  {selectedEmployee.isSaudi && (
+                    <span className="text-xs font-bold text-emerald-700 bg-emerald-100 px-3 py-1 rounded-full flex items-center gap-1">
+                      <Icon icon="lucide:flag" className="text-xs" />
+                      {t('training.saudi' as TranslationKey)}
+                    </span>
+                  )}
+                </div>
+              </div>
+              <div className="text-center">
+                <div className="relative w-16 h-16">
+                  <svg className="w-16 h-16 -rotate-90" viewBox="0 0 100 100">
+                    <circle cx="50" cy="50" r="40" fill="none" stroke="#f1f5f9" strokeWidth="10" />
+                    <circle
+                      cx="50" cy="50" r="40" fill="none"
+                      stroke={selectedEmployee.overallProgress === 100 ? '#10b981' : selectedEmployee.overallProgress >= 50 ? '#f59e0b' : '#ef4444'}
+                      strokeWidth="10" strokeLinecap="round"
+                      strokeDasharray={`${(selectedEmployee.overallProgress / 100) * 251.2} 251.2`}
+                    />
+                  </svg>
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <span className="text-sm font-bold text-slate-900">{selectedEmployee.overallProgress}%</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Courses List */}
+            <div>
+              <h4 className={`text-sm font-bold text-slate-900 mb-4 ${isRTL ? 'text-right' : ''}`}>
+                {t('training.assignedCourses' as TranslationKey)} ({selectedEmployee.courses.length})
+              </h4>
+              <div className="space-y-3">
+                {selectedEmployee.courses.map((course) => {
+                  const statusConfig = trainingStatusConfig[course.status]
+                  return (
+                    <div key={course.id} className={`p-4 border rounded-xl ${course.status === 'overdue' ? 'border-rose-200 bg-rose-50/50' : 'border-slate-200'}`}>
+                      <div className={`flex justify-between items-start ${isRTL ? 'flex-row-reverse' : ''}`}>
+                        <div className={isRTL ? 'text-right' : ''}>
+                          <h5 className="text-sm font-bold text-slate-900">{course.name}</h5>
+                          <p className="text-xs text-slate-500 capitalize">{t(`training.category.${course.category}` as TranslationKey)}</p>
+                        </div>
+                        <span className={`px-2 py-1 text-[10px] font-bold rounded-full ${statusConfig.bg} ${statusConfig.text}`}>
+                          {t(statusConfig.labelKey as TranslationKey)}
+                        </span>
+                      </div>
+                      <div className={`flex items-center gap-4 mt-3 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                        <span className={`text-xs text-slate-500 flex items-center gap-1 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                          <Icon icon="lucide:calendar" className="text-slate-400" />
+                          {t('training.dueDate' as TranslationKey)}: {course.dueDate}
+                        </span>
+                        {course.completedDate && (
+                          <span className={`text-xs text-emerald-600 flex items-center gap-1 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                            <Icon icon="lucide:check-circle" className="text-emerald-500" />
+                            {t('training.completedOn' as TranslationKey)}: {course.completedDate}
+                          </span>
+                        )}
+                        {course.score && (
+                          <span className={`text-xs text-blue-600 flex items-center gap-1 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                            <Icon icon="lucide:trophy" className="text-blue-500" />
+                            {t('training.score' as TranslationKey)}: {course.score}%
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className={`flex gap-3 pt-4 border-t border-slate-200 ${isRTL ? 'flex-row-reverse' : ''}`}>
+              <button
+                onClick={() => showToast(t('training.reminderSent' as TranslationKey))}
+                className={`flex-1 bg-amber-100 text-amber-700 py-3 rounded-lg font-bold hover:bg-amber-200 transition-colors flex items-center justify-center gap-2 cursor-pointer ${isRTL ? 'flex-row-reverse' : ''}`}
+              >
+                <Icon icon="lucide:bell" className="text-lg" />
+                {t('training.sendReminder' as TranslationKey)}
+              </button>
+              <button
+                onClick={() => showToast(t('training.reportGenerated' as TranslationKey))}
+                className={`flex-1 bg-slate-100 text-slate-700 py-3 rounded-lg font-bold hover:bg-slate-200 transition-colors flex items-center justify-center gap-2 cursor-pointer ${isRTL ? 'flex-row-reverse' : ''}`}
+              >
+                <Icon icon="lucide:file-text" className="text-lg" />
+                {t('training.generateReport' as TranslationKey)}
+              </button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      {/* Toast */}
+      {toastMessage && <Toast message={toastMessage} onClose={() => setToastMessage(null)} />}
     </>
   )
 }
