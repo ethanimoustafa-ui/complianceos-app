@@ -395,6 +395,15 @@ function RuleCard({ rule, onClick, t, isRTL }: { rule: Rule; onClick: () => void
     low: t('regulatoryUpdates.low'),
   }
 
+  const departmentLabels: Record<string, string> = {
+    'FINANCE': t('regulatoryUpdates.finance'),
+    'RISK': t('regulatoryUpdates.risk'),
+    'IT': t('regulatoryUpdates.itCyber'),
+    'SECURITY': t('regulatoryUpdates.security'),
+    'COMPLIANCE': t('regulatoryUpdates.compliance'),
+    'LEGAL': t('regulatoryUpdates.legal'),
+  }
+
   const style = priorityStyles[rule.priority]
   const isCompleted = rule.status === 'completed'
   const isOverdue = rule.status === 'overdue'
@@ -424,7 +433,7 @@ function RuleCard({ rule, onClick, t, isRTL }: { rule: Rule; onClick: () => void
                   key={dept}
                   className="px-2 py-0.5 bg-slate-100 text-slate-600 text-[10px] font-bold rounded"
                 >
-                  {dept}
+                  {departmentLabels[dept] || dept}
                 </span>
               ))}
             </div>

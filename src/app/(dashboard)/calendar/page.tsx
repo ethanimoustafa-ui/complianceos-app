@@ -13,6 +13,7 @@ type TaskStatus = 'pending' | 'completed' | 'in_progress'
 type SubmissionStatus = 'Not Started' | 'In Progress' | 'Verified' | 'Submitted'
 type Priority = 'Low' | 'Med' | 'High' | 'Critical'
 type ViewMode = 'month' | 'year' | 'submissions'
+type RecurringFrequency = 'annual' | 'semi-annual' | 'quarterly' | 'monthly'
 
 interface Task {
   id: string
@@ -26,6 +27,8 @@ interface Task {
   submissionStatus?: SubmissionStatus
   assignee: string
   relatedAuditId?: string | null
+  recurringFrequency?: RecurringFrequency
+  isRecurring?: boolean
 }
 
 interface TeamMember {
@@ -302,7 +305,9 @@ export default function CalendarPage() {
     title: '',
     date: '',
     priority: 'Low' as Priority,
-    assignee: 'Sarah'
+    assignee: 'Sarah',
+    isRecurring: false,
+    recurringFrequency: undefined as RecurringFrequency | undefined
   })
 
   // Get day data for selected day
@@ -347,6 +352,45 @@ export default function CalendarPage() {
     setSelectedDayKey(dateKey)
   }
 
+  // Generate recurring dates based on frequency
+  const generateRecurringDates = (startDate: string, frequency: RecurringFrequency): string[] => {
+    const dates: string[] = [startDate]
+    const start = new Date(startDate)
+
+    let monthsToAdd: number
+    switch (frequency) {
+      case 'annual':
+        monthsToAdd = 12
+        break
+      case 'semi-annual':
+        monthsToAdd = 6
+        break
+      case 'quarterly':
+        monthsToAdd = 3
+        break
+      case 'monthly':
+        monthsToAdd = 1
+        break
+      default:
+        return dates
+    }
+
+    // Generate dates for next 12 months
+    const endDate = new Date(start)
+    endDate.setFullYear(endDate.getFullYear() + 1)
+
+    let current = new Date(start)
+    while (true) {
+      current = new Date(current)
+      current.setMonth(current.getMonth() + monthsToAdd)
+      if (current > endDate) break
+      const dateKey = `${current.getFullYear()}-${String(current.getMonth() + 1).padStart(2, '0')}-${String(current.getDate()).padStart(2, '0')}`
+      dates.push(dateKey)
+    }
+
+    return dates
+  }
+
   // Submit new task
   const submitTask = () => {
     if (!newTask.title || !newTask.date) {
@@ -354,42 +398,52 @@ export default function CalendarPage() {
       return
     }
 
-    const newTaskId = 't' + Date.now()
-    const dateKey = newTask.date
+    // Generate dates for recurring tasks
+    const datesToCreate = newTask.isRecurring && newTask.recurringFrequency
+      ? generateRecurringDates(newTask.date, newTask.recurringFrequency)
+      : [newTask.date]
 
     setTaskStore(prev => {
       const updated = { ...prev }
-      if (!updated[dateKey]) {
-        updated[dateKey] = { tasks: [], team: [] }
-      }
-      updated[dateKey] = {
-        ...updated[dateKey],
-        tasks: [
-          ...updated[dateKey].tasks,
-          {
-            id: newTaskId,
-            name: newTask.title,
-            description: '',
-            status: 'pending',
-            priority: newTask.priority,
-            time: '09:00',
-            type: 'audit_task',
-            isSubmission: false,
-            assignee: newTask.assignee,
-            relatedAuditId: null
-          }
-        ],
-        team: [
-          ...updated[dateKey].team,
-          { name: newTask.assignee, cap: 20, avatar: newTask.assignee }
-        ]
-      }
+
+      datesToCreate.forEach((dateKey, index) => {
+        const newTaskId = 't' + Date.now() + '_' + index
+
+        if (!updated[dateKey]) {
+          updated[dateKey] = { tasks: [], team: [] }
+        }
+        updated[dateKey] = {
+          ...updated[dateKey],
+          tasks: [
+            ...updated[dateKey].tasks,
+            {
+              id: newTaskId,
+              name: newTask.title,
+              description: '',
+              status: 'pending',
+              priority: newTask.priority,
+              time: '09:00',
+              type: 'audit_task',
+              isSubmission: false,
+              assignee: newTask.assignee,
+              relatedAuditId: null,
+              isRecurring: newTask.isRecurring,
+              recurringFrequency: newTask.recurringFrequency
+            }
+          ],
+          team: [
+            ...updated[dateKey].team,
+            { name: newTask.assignee, cap: 20, avatar: newTask.assignee }
+          ]
+        }
+      })
+
       return updated
     })
 
-    setNewTask({ title: '', date: '', priority: 'Low', assignee: 'Sarah' })
+    setNewTask({ title: '', date: '', priority: 'Low', assignee: 'Sarah', isRecurring: false, recurringFrequency: undefined })
     setIsTaskModalOpen(false)
-    selectDay(dateKey)
+    selectDay(newTask.date)
   }
 
   // Close drawer
@@ -861,6 +915,39 @@ export default function CalendarPage() {
                   <option value="Michael">Michael Scott</option>
                   <option value="Felix">Felix Henderson</option>
                 </select>
+              </div>
+
+              {/* Recurring Task Section */}
+              <div className="pt-4 border-t border-slate-200">
+                <label className={`flex items-center gap-3 cursor-pointer ${isRTL ? 'flex-row-reverse' : ''}`}>
+                  <input
+                    type="checkbox"
+                    checked={newTask.isRecurring}
+                    onChange={(e) => setNewTask(prev => ({
+                      ...prev,
+                      isRecurring: e.target.checked,
+                      recurringFrequency: e.target.checked ? 'monthly' : undefined
+                    }))}
+                    className="w-4 h-4 accent-emerald-600 rounded"
+                  />
+                  <span className="text-sm font-medium text-slate-700">{t('calendar.makeRecurring')}</span>
+                </label>
+
+                {newTask.isRecurring && (
+                  <div className="mt-4">
+                    <label className={`block text-xs font-bold text-slate-500 uppercase mb-1.5 ${isRTL ? 'text-right' : ''}`}>{t('calendar.recurringFrequency')}</label>
+                    <select
+                      value={newTask.recurringFrequency || 'monthly'}
+                      onChange={(e) => setNewTask(prev => ({ ...prev, recurringFrequency: e.target.value as RecurringFrequency }))}
+                      className={`w-full px-4 py-2.5 rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 ${isRTL ? 'text-right' : ''}`}
+                    >
+                      <option value="monthly">{t('calendar.monthly')}</option>
+                      <option value="quarterly">{t('calendar.quarterly')}</option>
+                      <option value="semi-annual">{t('calendar.semiAnnual')}</option>
+                      <option value="annual">{t('calendar.annual')}</option>
+                    </select>
+                  </div>
+                )}
               </div>
             </div>
             <div className={`p-6 bg-slate-50 flex gap-3 ${isRTL ? 'flex-row-reverse' : ''}`}>

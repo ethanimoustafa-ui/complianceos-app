@@ -30,7 +30,7 @@ interface UserLog {
   timestamp: string
   user: string
   action: 'sign_in' | 'sign_out' | 'session_timeout' | 'password_change' | 'profile_update' | 'permission_change' | 'mfa_enabled' | 'failed_login'
-  details: string
+  detailsKey: string
   ipAddress: string
   device: string
   location: string
@@ -115,28 +115,28 @@ const teamMembers: TeamMember[] = [
 ]
 
 const userLogs: UserLog[] = [
-  { id: 1, timestamp: '2024-01-15 14:32:18', user: 'Sarah Connor', action: 'sign_in', details: 'Signed in via SSO', ipAddress: '192.168.1.45', device: 'Chrome on MacOS', location: 'San Francisco, CA', status: 'success' },
-  { id: 2, timestamp: '2024-01-15 14:28:45', user: 'Michael Scott', action: 'session_timeout', details: 'Session expired after 30 min inactivity', ipAddress: '192.168.1.102', device: 'Firefox on Windows', location: 'New York, NY', status: 'info' },
-  { id: 3, timestamp: '2024-01-15 13:55:12', user: 'David Wallace', action: 'password_change', details: 'Password updated successfully', ipAddress: '192.168.1.88', device: 'Safari on iOS', location: 'Chicago, IL', status: 'success' },
-  { id: 4, timestamp: '2024-01-15 13:42:30', user: 'Kelly Kapoor', action: 'sign_out', details: 'User signed out manually', ipAddress: '192.168.1.76', device: 'Chrome on Windows', location: 'Los Angeles, CA', status: 'success' },
-  { id: 5, timestamp: '2024-01-15 12:18:09', user: 'John Smith', action: 'mfa_enabled', details: 'Enabled two-factor authentication', ipAddress: '192.168.1.201', device: 'Edge on Windows', location: 'Seattle, WA', status: 'success' },
-  { id: 6, timestamp: '2024-01-15 11:45:22', user: 'Jane Doe', action: 'profile_update', details: 'Updated profile picture and bio', ipAddress: '192.168.1.55', device: 'Chrome on MacOS', location: 'Austin, TX', status: 'success' },
-  { id: 7, timestamp: '2024-01-15 11:20:33', user: 'Sarah Connor', action: 'permission_change', details: 'Granted document approval access', ipAddress: '192.168.1.45', device: 'Chrome on MacOS', location: 'San Francisco, CA', status: 'success' },
-  { id: 8, timestamp: '2024-01-15 10:55:47', user: 'Michael Scott', action: 'failed_login', details: 'Invalid password attempt (2 of 3)', ipAddress: '192.168.1.102', device: 'Firefox on Windows', location: 'New York, NY', status: 'warning' },
-  { id: 9, timestamp: '2024-01-15 10:12:18', user: 'David Wallace', action: 'sign_in', details: 'Signed in with password', ipAddress: '192.168.1.88', device: 'Safari on iOS', location: 'Chicago, IL', status: 'success' },
-  { id: 10, timestamp: '2024-01-15 09:38:55', user: 'Kelly Kapoor', action: 'sign_in', details: 'Signed in via Google OAuth', ipAddress: '192.168.1.76', device: 'Chrome on Windows', location: 'Los Angeles, CA', status: 'success' },
-  { id: 11, timestamp: '2024-01-14 16:45:12', user: 'John Smith', action: 'sign_out', details: 'User signed out manually', ipAddress: '192.168.1.201', device: 'Edge on Windows', location: 'Seattle, WA', status: 'success' },
-  { id: 12, timestamp: '2024-01-14 15:22:30', user: 'Jane Doe', action: 'failed_login', details: 'Account temporarily locked after 3 failed attempts', ipAddress: '10.0.0.55', device: 'Unknown Browser', location: 'Unknown', status: 'failed' },
-  { id: 13, timestamp: '2024-01-14 14:18:45', user: 'Sarah Connor', action: 'session_timeout', details: 'Session expired after 30 min inactivity', ipAddress: '192.168.1.45', device: 'Chrome on MacOS', location: 'San Francisco, CA', status: 'info' },
-  { id: 14, timestamp: '2024-01-14 13:55:09', user: 'Michael Scott', action: 'profile_update', details: 'Updated email notification preferences', ipAddress: '192.168.1.102', device: 'Firefox on Windows', location: 'New York, NY', status: 'success' },
-  { id: 15, timestamp: '2024-01-14 12:42:33', user: 'David Wallace', action: 'permission_change', details: 'Admin access revoked', ipAddress: '192.168.1.88', device: 'Safari on iOS', location: 'Chicago, IL', status: 'warning' },
+  { id: 1, timestamp: '2024-01-15 14:32:18', user: 'Sarah Connor', action: 'sign_in', detailsKey: 'team.signedInViaSso', ipAddress: '192.168.1.45', device: 'Chrome on MacOS', location: 'San Francisco, CA', status: 'success' },
+  { id: 2, timestamp: '2024-01-15 14:28:45', user: 'Michael Scott', action: 'session_timeout', detailsKey: 'team.sessionExpiredInactivity', ipAddress: '192.168.1.102', device: 'Firefox on Windows', location: 'New York, NY', status: 'info' },
+  { id: 3, timestamp: '2024-01-15 13:55:12', user: 'David Wallace', action: 'password_change', detailsKey: 'team.passwordUpdatedSuccessfully', ipAddress: '192.168.1.88', device: 'Safari on iOS', location: 'Chicago, IL', status: 'success' },
+  { id: 4, timestamp: '2024-01-15 13:42:30', user: 'Kelly Kapoor', action: 'sign_out', detailsKey: 'team.userSignedOutManually', ipAddress: '192.168.1.76', device: 'Chrome on Windows', location: 'Los Angeles, CA', status: 'success' },
+  { id: 5, timestamp: '2024-01-15 12:18:09', user: 'John Smith', action: 'mfa_enabled', detailsKey: 'team.enabledTwoFactorAuth', ipAddress: '192.168.1.201', device: 'Edge on Windows', location: 'Seattle, WA', status: 'success' },
+  { id: 6, timestamp: '2024-01-15 11:45:22', user: 'Jane Doe', action: 'profile_update', detailsKey: 'team.updatedProfilePictureBio', ipAddress: '192.168.1.55', device: 'Chrome on MacOS', location: 'Austin, TX', status: 'success' },
+  { id: 7, timestamp: '2024-01-15 11:20:33', user: 'Sarah Connor', action: 'permission_change', detailsKey: 'team.grantedDocumentApprovalAccess', ipAddress: '192.168.1.45', device: 'Chrome on MacOS', location: 'San Francisco, CA', status: 'success' },
+  { id: 8, timestamp: '2024-01-15 10:55:47', user: 'Michael Scott', action: 'failed_login', detailsKey: 'team.invalidPasswordAttempt', ipAddress: '192.168.1.102', device: 'Firefox on Windows', location: 'New York, NY', status: 'warning' },
+  { id: 9, timestamp: '2024-01-15 10:12:18', user: 'David Wallace', action: 'sign_in', detailsKey: 'team.signedInWithPassword', ipAddress: '192.168.1.88', device: 'Safari on iOS', location: 'Chicago, IL', status: 'success' },
+  { id: 10, timestamp: '2024-01-15 09:38:55', user: 'Kelly Kapoor', action: 'sign_in', detailsKey: 'team.signedInViaGoogleOauth', ipAddress: '192.168.1.76', device: 'Chrome on Windows', location: 'Los Angeles, CA', status: 'success' },
+  { id: 11, timestamp: '2024-01-14 16:45:12', user: 'John Smith', action: 'sign_out', detailsKey: 'team.userSignedOutManually', ipAddress: '192.168.1.201', device: 'Edge on Windows', location: 'Seattle, WA', status: 'success' },
+  { id: 12, timestamp: '2024-01-14 15:22:30', user: 'Jane Doe', action: 'failed_login', detailsKey: 'team.accountLockedFailedAttempts', ipAddress: '10.0.0.55', device: 'Unknown Browser', location: 'Unknown', status: 'failed' },
+  { id: 13, timestamp: '2024-01-14 14:18:45', user: 'Sarah Connor', action: 'session_timeout', detailsKey: 'team.sessionExpiredInactivity', ipAddress: '192.168.1.45', device: 'Chrome on MacOS', location: 'San Francisco, CA', status: 'info' },
+  { id: 14, timestamp: '2024-01-14 13:55:09', user: 'Michael Scott', action: 'profile_update', detailsKey: 'team.updatedEmailNotificationPreferences', ipAddress: '192.168.1.102', device: 'Firefox on Windows', location: 'New York, NY', status: 'success' },
+  { id: 15, timestamp: '2024-01-14 12:42:33', user: 'David Wallace', action: 'permission_change', detailsKey: 'team.adminAccessRevoked', ipAddress: '192.168.1.88', device: 'Safari on iOS', location: 'Chicago, IL', status: 'warning' },
 ]
 
 const trainingModules = [
-  { name: 'Compliance Fundamentals', completed: 16, total: 18 },
-  { name: 'Data Privacy (GDPR)', completed: 14, total: 18 },
-  { name: 'Risk Assessment', completed: 12, total: 18 },
-  { name: 'Audit Procedures', completed: 18, total: 18 },
+  { nameKey: 'team.complianceFundamentals' as const, completed: 16, total: 18 },
+  { nameKey: 'team.dataPrivacyGdpr' as const, completed: 14, total: 18 },
+  { nameKey: 'team.riskAssessment' as const, completed: 12, total: 18 },
+  { nameKey: 'team.auditProcedures' as const, completed: 18, total: 18 },
 ]
 
 export default function TeamManagementPage() {
@@ -180,9 +180,10 @@ export default function TeamManagementPage() {
   }
 
   const filteredLogs = userLogs.filter((log) => {
+    const translatedDetails = t(log.detailsKey as Parameters<typeof t>[0])
     const matchSearch = !logSearch ||
       log.user.toLowerCase().includes(logSearch.toLowerCase()) ||
-      log.details.toLowerCase().includes(logSearch.toLowerCase()) ||
+      translatedDetails.toLowerCase().includes(logSearch.toLowerCase()) ||
       log.device.toLowerCase().includes(logSearch.toLowerCase()) ||
       log.location.toLowerCase().includes(logSearch.toLowerCase())
     const matchUser = !filterUser || log.user === filterUser
@@ -207,8 +208,8 @@ export default function TeamManagementPage() {
   return (
     <>
       {/* Header with Tabs */}
-      <header className={`h-20 bg-white border-b border-slate-200 px-8 flex items-center justify-between shrink-0 ${isRTL ? 'flex-row-reverse' : ''}`}>
-        <div className={`flex items-center gap-8 ${isRTL ? 'flex-row-reverse' : ''}`}>
+      <header className="h-20 bg-white border-b border-slate-200 px-8 flex items-center justify-between shrink-0">
+        <div className="flex items-center gap-8">
           <div className={isRTL ? 'text-right' : ''}>
             <h1 className="text-xl font-bold text-slate-900">{t('team.title')}</h1>
             <p className="text-xs text-slate-500 font-medium tracking-wide uppercase">{t('team.subtitle')}</p>
@@ -323,7 +324,7 @@ export default function TeamManagementPage() {
                       {trainingModules.map((module, index) => (
                         <TrainingProgressBar
                           key={index}
-                          label={module.name}
+                          label={t(module.nameKey)}
                           completed={module.completed}
                           total={module.total}
                           isRTL={isRTL}
@@ -582,7 +583,7 @@ export default function TeamManagementPage() {
                               </div>
                             </td>
                             <td className="px-6 py-4 text-xs text-slate-500 max-w-xs truncate">
-                              {log.details}
+                              {t(log.detailsKey as Parameters<typeof t>[0])}
                             </td>
                             <td className="px-6 py-4">
                               <LogStatusIndicator status={log.status} label={statusTranslations[log.status]} isRTL={isRTL} />
@@ -626,7 +627,7 @@ export default function TeamManagementPage() {
                                   </div>
                                   <div className={`mt-4 pt-4 border-t border-slate-100 ${isRTL ? 'text-right' : ''}`}>
                                     <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">{t('team.fullContext')}</p>
-                                    <p className="text-sm text-slate-700 leading-relaxed">{log.details}</p>
+                                    <p className="text-sm text-slate-700 leading-relaxed">{t(log.detailsKey as Parameters<typeof t>[0])}</p>
                                     <p className="text-xs text-slate-500 mt-2">{t('team.ipAddress')}: {log.ipAddress}</p>
                                   </div>
                                   <div className={`flex gap-3 mt-4 pt-4 border-t border-slate-100 ${isRTL ? 'flex-row-reverse' : ''}`}>

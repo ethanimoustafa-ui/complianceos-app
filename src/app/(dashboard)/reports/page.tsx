@@ -614,6 +614,26 @@ export default function ReportsPage() {
     low: t('reports.low'),
   }
 
+  // Month labels for chart localization
+  const monthLabels: Record<string, string> = {
+    'Jan': t('calendar.monthsShort.jan'),
+    'Feb': t('calendar.monthsShort.feb'),
+    'Mar': t('calendar.monthsShort.mar'),
+    'Apr': t('calendar.monthsShort.apr'),
+    'May': t('calendar.monthsShort.may'),
+    'Jun': t('calendar.monthsShort.jun'),
+    'Jul': t('calendar.monthsShort.jul'),
+    'Aug': t('calendar.monthsShort.aug'),
+    'Sep': t('calendar.monthsShort.sep'),
+    'Oct': t('calendar.monthsShort.oct'),
+    'Nov': t('calendar.monthsShort.nov'),
+    'Dec': t('calendar.monthsShort.dec'),
+    'Q1': t('reports.q1'),
+    'Q2': t('reports.q2'),
+    'Q3': t('reports.q3'),
+    'Q4': t('reports.q4'),
+  }
+
   const riskDistributionLabels: Record<string, string> = {
     'Data Privacy': t('reports.dataPrivacy'),
     'Internal Access': t('reports.internalAccess'),
@@ -648,8 +668,8 @@ export default function ReportsPage() {
   return (
     <div className={`flex flex-col h-full ${isRTL ? 'rtl' : ''}`}>
       {/* Unified Header with 3-Tab Toggle */}
-      <header className={`h-20 bg-white border-b border-slate-200 px-8 flex items-center justify-between shrink-0 ${isRTL ? 'flex-row-reverse' : ''}`}>
-        <div className={`flex items-center gap-8 ${isRTL ? 'flex-row-reverse' : ''}`}>
+      <header className="h-20 bg-white border-b border-slate-200 px-8 flex items-center justify-between shrink-0">
+        <div className="flex items-center gap-8">
           <div className={isRTL ? 'text-right' : ''}>
             <h1 className="text-xl font-bold font-display text-slate-900">
               {activeTab === 'audits' ? t('reports.auditManagement') : t('reports.auditReports')}
@@ -1116,7 +1136,7 @@ export default function ReportsPage() {
                         'text-[9px] font-bold text-slate-400',
                         idx === currentTrend.length - 1 && 'text-slate-600'
                       )}>
-                        {data.month.toUpperCase()}
+                        {monthLabels[data.month] || data.month}
                       </span>
                     </div>
                   ))}
@@ -1669,14 +1689,26 @@ export default function ReportsPage() {
               />
             </div>
           </div>
-          <div>
-            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 block">{t('reports.leadAuditor')}</label>
-            <select className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500">
-              <option>Felix Henderson</option>
-              <option>Sarah Connor</option>
-              <option>Michael Scott</option>
-              <option>Ahmed Al-Rashid</option>
-            </select>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 block">{t('reports.frequency')}</label>
+              <select className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500">
+                <option value="annual">{t('reports.annual')}</option>
+                <option value="semi_annual">{t('reports.semiAnnual')}</option>
+                <option value="quarterly">{t('reports.quarterly')}</option>
+                <option value="monthly">{t('reports.monthly')}</option>
+                <option value="ad_hoc">{t('reports.adHoc')}</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 block">{t('reports.leadAuditor')}</label>
+              <select className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500">
+                <option>Felix Henderson</option>
+                <option>Sarah Connor</option>
+                <option>Michael Scott</option>
+                <option>Ahmed Al-Rashid</option>
+              </select>
+            </div>
           </div>
           <div>
             <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 block">{t('reports.descriptionLabel')}</label>

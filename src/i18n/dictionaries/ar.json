@@ -94,6 +94,8 @@
     "subtitle": "مصفوفة الامتثال على مستوى المنظمة",
     "criticalActionRequired": "إجراء حرج مطلوب",
     "trendAlert": "تنبيه الاتجاه",
+    "samaOverdueMessage": "تقديم ساما #TX-901 متأخر بيومين.",
+    "saudizationGapMessage": "زادت فجوة هدف السعودة بنسبة 0.2٪ هذا الشهر.",
     "resolveNow": "حل الآن",
     "viewDetails": "عرض التفاصيل",
     "policyReviewStatus": "حالة مراجعة السياسات",
@@ -262,7 +264,13 @@
     "allDay": "طوال اليوم",
     "taskSingular": "مهمة",
     "taskPlural": "مهام",
-    "noSubmissionsFor": "لا توجد إيداعات لـ"
+    "noSubmissionsFor": "لا توجد إيداعات لـ",
+    "makeRecurring": "جعل هذه متكررة",
+    "recurringFrequency": "التكرار",
+    "annual": "سنوي",
+    "semiAnnual": "نصف سنوي",
+    "quarterly": "ربع سنوي",
+    "monthly": "شهري"
   },
   "samaLetters": {
     "title": "خطابات ساما",
@@ -356,8 +364,25 @@
     "enterTemplateName": "أدخل اسم القالب...",
     "describeTemplatePurpose": "وصف الغرض من هذا القالب...",
     "saving": "جاري الحفظ...",
+    "createdDate": "تاريخ الإنشاء",
     "english": "English",
-    "arabic": "العربية"
+    "arabic": "العربية",
+    "templateKeyFunctionAppointment": "تعيين وظيفة رئيسية",
+    "templateKeyFunctionDesc": "توظيف المناصب الرئيسية أو إطلاق منتجات جديدة.",
+    "templateProductLaunchRequest": "طلب إطلاق منتج",
+    "templateProductLaunchDesc": "طلب الموافقة على إطلاق منتجات مالية جديدة.",
+    "templateCircularClarification": "توضيح تعميم",
+    "templateCircularClarificationDesc": "طلب توضيح حول القواعد والتعاميم.",
+    "templateRegulatoryInterpretation": "تفسير تنظيمي",
+    "templateRegulatoryInterpretationDesc": "طلب تفسير متطلبات تنظيمية محددة.",
+    "templateQuarterlyAmlReport": "تقرير مكافحة غسل الأموال الربع سنوي",
+    "templateQuarterlyAmlDesc": "تقديم التقارير الدورية وبيانات الامتثال.",
+    "templateAnnualComplianceReport": "تقرير الامتثال السنوي",
+    "templateAnnualComplianceDesc": "تقديم تقييم الامتثال السنوي لساما.",
+    "templateIncidentNotification": "إشعار الحوادث",
+    "templateIncidentNotificationDesc": "الإبلاغ عن الانقطاعات والاختراقات أو التغييرات الهيكلية.",
+    "templateSystemOutageReport": "تقرير انقطاع النظام",
+    "templateSystemOutageDesc": "الإبلاغ عن انقطاعات النظام الحرجة التي تؤثر على الخدمات المصرفية."
   },
   "observations": {
     "title": "متتبع الملاحظات",
@@ -731,7 +756,20 @@
     "complianceFundamentals": "أساسيات الامتثال",
     "dataPrivacyGdpr": "خصوصية البيانات (GDPR)",
     "riskAssessment": "تقييم المخاطر",
-    "auditProcedures": "إجراءات التدقيق"
+    "auditProcedures": "إجراءات التدقيق",
+    "signedInViaSso": "تسجيل الدخول عبر SSO",
+    "sessionExpiredInactivity": "انتهت الجلسة بعد 30 دقيقة من عدم النشاط",
+    "passwordUpdatedSuccessfully": "تم تحديث كلمة المرور بنجاح",
+    "userSignedOutManually": "قام المستخدم بتسجيل الخروج يدوياً",
+    "enabledTwoFactorAuth": "تم تفعيل المصادقة الثنائية",
+    "updatedProfilePictureBio": "تم تحديث صورة الملف الشخصي والسيرة الذاتية",
+    "grantedDocumentApprovalAccess": "تم منح صلاحية الموافقة على المستندات",
+    "invalidPasswordAttempt": "محاولة كلمة مرور غير صحيحة (2 من 3)",
+    "signedInWithPassword": "تسجيل الدخول بكلمة المرور",
+    "signedInViaGoogleOauth": "تسجيل الدخول عبر Google OAuth",
+    "accountLockedFailedAttempts": "تم قفل الحساب مؤقتاً بعد 3 محاولات فاشلة",
+    "updatedEmailNotificationPreferences": "تم تحديث تفضيلات إشعارات البريد الإلكتروني",
+    "adminAccessRevoked": "تم إلغاء صلاحية المسؤول"
   },
   "settings": {
     "title": "الإعدادات",
@@ -854,7 +892,10 @@
     "administrator": "مدير النظام",
     "timesUsedLabel": "مرات الاستخدام",
     "audits": "تدقيقات",
-    "standardDescription": "قالب التقييم الذاتي القياسي للتحقق من الامتثال لضوابط الأمن السيبراني الأساسية NCA."
+    "standardDescription": "قالب التقييم الذاتي القياسي للتحقق من الامتثال لضوابط الأمن السيبراني الأساسية NCA.",
+    "editTemplate": "تعديل القالب",
+    "deleteTemplate": "حذف القالب",
+    "createdBy": "أنشئ بواسطة"
   },
   "auth": {
     "welcomeBack": "مرحباً بعودتك",
@@ -862,6 +903,7 @@
     "emailAddress": "البريد الإلكتروني",
     "emailPlaceholder": "you@company.com",
     "password": "كلمة المرور",
+    "passwordPlaceholder": "••••••••",
     "rememberMe": "تذكرني",
     "forgotPassword": "نسيت كلمة المرور؟",
     "signIn": "تسجيل الدخول",
@@ -908,7 +950,19 @@
     "passwordMinError": "يجب أن تكون كلمة المرور 8 أحرف على الأقل",
     "nameMinError": "يجب أن يكون الاسم حرفين على الأقل",
     "organizationRequired": "اسم المنظمة مطلوب",
-    "passwordsDontMatch": "كلمات المرور غير متطابقة"
+    "passwordsDontMatch": "كلمات المرور غير متطابقة",
+    "allRightsReserved": "جميع الحقوق محفوظة."
+  },
+  "verification": {
+    "checkEmail": "تحقق من بريدك الإلكتروني",
+    "verificationSent": "لقد أرسلنا رابط التحقق إلى",
+    "didntReceive": "لم تستلم البريد؟",
+    "resend": "إعادة إرسال",
+    "sending": "جاري الإرسال...",
+    "emailResent": "تم إعادة إرسال بريد التحقق!",
+    "emailVerified": "تم التحقق من البريد!",
+    "accountVerified": "تم التحقق من حسابك بنجاح.",
+    "continueSetup": "المتابعة للإعداد"
   },
   "onboarding": {
     "setup": "إعداد التسجيل",
@@ -965,6 +1019,11 @@
     "gcpDescription": "مزامنة مشاريع وأصول GCP",
     "githubName": "GitHub Enterprise",
     "githubDescription": "مراقبة الوصول للمستودعات والسياسات"
+  },
+  "welcome": {
+    "title": "ComplianceOS",
+    "tagline": "نظام إدارة الامتثال الحديث",
+    "enterDashboard": "الدخول إلى لوحة التحكم"
   },
   "profile": {
     "compliance": "الامتثال",
@@ -1039,6 +1098,10 @@
     "last6Months": "آخر 6 أشهر",
     "last12Months": "آخر 12 شهر",
     "fiscalYear2025": "السنة المالية 2025",
+    "q1": "ر1",
+    "q2": "ر2",
+    "q3": "ر3",
+    "q4": "ر4",
     "vsLY": "مقارنة بالعام الماضي",
     "healthy": "صحي",
     "openFindings": "النتائج المفتوحة",
@@ -1195,6 +1258,7 @@
     "openFindings": "النتائج المفتوحة",
     "urgent": "عاجل",
     "saudizationRate": "معدل السعودة",
+    "target": "الهدف: {{value}}",
     "onTarget": "في المسار",
     "mandatoryTraining": "التدريب الإلزامي",
     "employeesCertified": "موظفين معتمدين",
@@ -1220,6 +1284,16 @@
     "backToMatrix": "العودة للمصفوفة",
     "likelihood": "الاحتمالية",
     "impact": "التأثير",
+    "critical": "حرج",
+    "high": "مرتفع",
+    "medium": "متوسط",
+    "low": "منخفض",
+    "veryLow": "منخفض جداً",
+    "critical5": "حرج (5)",
+    "high4": "مرتفع (4)",
+    "medium3": "متوسط (3)",
+    "low2": "منخفض (2)",
+    "veryLow1": "منخفض جداً (1)",
     "criticalImpact": "حرج (5)",
     "highImpact": "عالي (4)",
     "mediumImpact": "متوسط (3)",

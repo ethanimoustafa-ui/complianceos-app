@@ -7,7 +7,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Modal } from '@/components/ui/modal'
-import { useTranslation } from '@/i18n'
+import { useTranslation, TranslationKey, InterpolationParams } from '@/i18n'
 
 export default function SettingsPage() {
   const { t, language, setLanguage, isRTL } = useTranslation()
@@ -81,9 +81,9 @@ export default function SettingsPage() {
           <section>
             <div className="flex items-center justify-between mb-6">
               <div>
-                <h2 className="text-lg font-bold text-slate-900 font-display">Compliance Frameworks</h2>
+                <h2 className="text-lg font-bold text-slate-900 font-display">{t('settings.complianceFrameworks')}</h2>
                 <p className="text-sm text-slate-500">
-                  Manage NCA, SAMA, and NDMO regulatory frameworks for your entity.
+                  {t('settings.manageFrameworks')}
                 </p>
               </div>
               <button
@@ -91,7 +91,7 @@ export default function SettingsPage() {
                 className="text-sm font-bold text-emerald-600 hover:text-emerald-700 flex items-center gap-1 cursor-pointer"
               >
                 <Icon icon="lucide:plus-circle" />
-                Add Standard
+                {t('settings.addStandard')}
               </button>
             </div>
 
@@ -99,26 +99,29 @@ export default function SettingsPage() {
               <FrameworkCard
                 icon="lucide:shield-check"
                 iconColor="blue"
-                title="NCA ECC-1:2018"
-                description="Essential Cybersecurity Controls by the National Cybersecurity Authority."
+                title={t('settings.ncaEcc')}
+                description={t('settings.ncaEccDescription')}
                 isActive={true}
                 onConfigure={handleConfigureFramework}
+                t={t}
               />
               <FrameworkCard
                 icon="lucide:landmark"
                 iconColor="indigo"
-                title="SAMA CSF"
-                description="Saudi Central Bank Cyber Security Framework for financial entities."
+                title={t('settings.samaCsf')}
+                description={t('settings.samaCsfDescription')}
                 isActive={true}
                 onConfigure={handleConfigureFramework}
+                t={t}
               />
               <FrameworkCard
                 icon="lucide:user-check"
                 iconColor="amber"
-                title="NDMO PDPL"
-                description="Personal Data Protection Law by the National Data Management Office."
+                title={t('settings.ndmoPdpl')}
+                description={t('settings.ndmoPdplDescription')}
                 isActive={false}
                 onConfigure={handleConfigureFramework}
+                t={t}
               />
             </div>
           </section>
@@ -127,28 +130,28 @@ export default function SettingsPage() {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
             {/* Notifications Section */}
             <section className="bg-white p-8 rounded-2xl border border-slate-200 shadow-sm">
-              <h2 className="text-lg font-bold text-slate-900 font-display mb-1">Notifications</h2>
+              <h2 className="text-lg font-bold text-slate-900 font-display mb-1">{t('settings.notifications')}</h2>
               <p className="text-sm text-slate-500 mb-6">
-                Manage how you receive alerts and audit updates.
+                {t('settings.manageAlerts')}
               </p>
 
               <div className="space-y-6">
                 <NotificationToggle
                   icon="lucide:mail"
-                  title="Email Digests"
-                  description="Weekly summary of audit performance"
+                  title={t('settings.emailDigests')}
+                  description={t('settings.emailDigestsDescription')}
                   defaultOn={true}
                 />
                 <NotificationToggle
                   icon="lucide:bell"
-                  title="Critical Alerts"
-                  description="Instant push notifications for failures"
+                  title={t('settings.criticalAlerts')}
+                  description={t('settings.criticalAlertsDescription')}
                   defaultOn={true}
                 />
                 <NotificationToggle
                   icon="lucide:message-square"
-                  title="Slack Integration"
-                  description="Real-time activity in #compliance-feed"
+                  title={t('settings.slackIntegration')}
+                  description={t('settings.slackIntegrationDescription')}
                   defaultOn={false}
                 />
               </div>
@@ -156,8 +159,8 @@ export default function SettingsPage() {
 
             {/* Connected Apps Section */}
             <section className="bg-white p-8 rounded-2xl border border-slate-200 shadow-sm">
-              <h2 className="text-lg font-bold text-slate-900 font-display mb-1">Connected Apps</h2>
-              <p className="text-sm text-slate-500 mb-6">Sync data across your enterprise stack.</p>
+              <h2 className="text-lg font-bold text-slate-900 font-display mb-1">{t('settings.connectedApps')}</h2>
+              <p className="text-sm text-slate-500 mb-6">{t('settings.syncData')}</p>
 
               <div className="grid grid-cols-2 gap-4">
                 <IntegrationCard name="Jira" icon="logos:jira" connected={true} onConnect={handleConnectIntegration} />
@@ -169,7 +172,7 @@ export default function SettingsPage() {
                 onClick={() => setIsMarketplaceModalOpen(true)}
                 className="w-full mt-6 py-3 border-2 border-dashed border-slate-200 rounded-xl text-xs font-bold text-slate-400 hover:border-emerald-400 hover:text-emerald-600 transition-all cursor-pointer"
               >
-                View Marketplace
+                {t('settings.viewMarketplace')}
               </button>
             </section>
           </div>
@@ -178,12 +181,12 @@ export default function SettingsPage() {
           <section className="bg-white p-8 rounded-2xl border border-slate-200 shadow-sm">
             <div className="flex items-center justify-between mb-6">
               <div>
-                <h2 className="text-lg font-bold text-slate-900 font-display">User Preferences</h2>
-                <p className="text-sm text-slate-500">Customize your workspace settings.</p>
+                <h2 className="text-lg font-bold text-slate-900 font-display">{t('settings.userPreferences')}</h2>
+                <p className="text-sm text-slate-500">{t('settings.customizeWorkspace')}</p>
               </div>
               <Button variant="outline" onClick={() => setIsProfileModalOpen(true)}>
                 <Icon icon="lucide:user" />
-                Edit Profile
+                {t('sidebar.editProfile')}
               </Button>
             </div>
 
@@ -191,17 +194,17 @@ export default function SettingsPage() {
               <div className="space-y-4">
                 <div>
                   <label className="text-xs font-bold text-slate-700 uppercase mb-2 block">
-                    Default Dashboard View
+                    {t('settings.defaultDashboardView')}
                   </label>
                   <select className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:outline-none text-sm">
-                    <option>Executive Overview</option>
-                    <option>Compliance Matrix</option>
-                    <option>Risk Dashboard</option>
+                    <option>{t('settings.executiveOverview')}</option>
+                    <option>{t('settings.complianceMatrix')}</option>
+                    <option>{t('settings.riskDashboard')}</option>
                   </select>
                 </div>
                 <div>
                   <label className="text-xs font-bold text-slate-700 uppercase mb-2 block">
-                    Time Zone
+                    {t('settings.timeZone')}
                   </label>
                   <select className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:outline-none text-sm">
                     <option>Asia/Riyadh (UTC+3)</option>
@@ -226,7 +229,7 @@ export default function SettingsPage() {
                 </div>
                 <div>
                   <label className="text-xs font-bold text-slate-700 uppercase mb-2 block">
-                    Date Format
+                    {t('settings.dateFormat')}
                   </label>
                   <select className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:outline-none text-sm">
                     <option>DD/MM/YYYY</option>
@@ -242,12 +245,12 @@ export default function SettingsPage() {
           <section className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
             <div className="p-8 border-b border-slate-100 flex items-center justify-between">
               <div>
-                <h2 className="text-lg font-bold text-slate-900 font-display">Audit Templates</h2>
-                <p className="text-sm text-slate-500">Standardize your compliance checks across teams.</p>
+                <h2 className="text-lg font-bold text-slate-900 font-display">{t('settings.auditTemplates')}</h2>
+                <p className="text-sm text-slate-500">{t('settings.standardizeChecks')}</p>
               </div>
               <Button variant="dark" onClick={() => setIsNewTemplateModalOpen(true)}>
                 <Icon icon="lucide:plus" />
-                New Template
+                {t('settings.newTemplate')}
               </Button>
             </div>
             <div className="overflow-x-auto">
@@ -255,40 +258,40 @@ export default function SettingsPage() {
                 <thead>
                   <tr className="bg-slate-50">
                     <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                      Template Name
+                      {t('settings.templateNameCol')}
                     </th>
                     <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                      Category
+                      {t('settings.categoryCol')}
                     </th>
                     <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                      Last Modified
+                      {t('settings.lastModifiedCol')}
                     </th>
                     <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                      Usage
+                      {t('settings.usageCol')}
                     </th>
                     <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">
-                      Actions
+                      {t('settings.actionsCol')}
                     </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   <TemplateRow
                     name="NCA ECC Self-Assessment"
-                    category="Technical Control"
+                    category={t('settings.technicalControl')}
                     lastModified="Oct 12, 2024"
                     usage={75}
                     onEdit={handleEditTemplate}
                   />
                   <TemplateRow
                     name="PDPL Data Mapping Review"
-                    category="Legal/Privacy"
+                    category={t('settings.legalPrivacy')}
                     lastModified="Sep 28, 2024"
                     usage={22}
                     onEdit={handleEditTemplate}
                   />
                   <TemplateRow
                     name="SAMA Quarterly Report"
-                    category="Financial Compliance"
+                    category={t('settings.financialCompliance')}
                     lastModified="Oct 05, 2024"
                     usage={88}
                     onEdit={handleEditTemplate}
@@ -304,7 +307,7 @@ export default function SettingsPage() {
       <Modal
         isOpen={isProfileModalOpen}
         onClose={() => setIsProfileModalOpen(false)}
-        title="Profile Settings"
+        title={t('settings.profileSettings')}
         size="md"
       >
         <div className="space-y-4">
@@ -320,30 +323,30 @@ export default function SettingsPage() {
               </button>
             </div>
             <button className="text-xs font-bold text-emerald-600 hover:text-emerald-700 transition-colors cursor-pointer">
-              Change Avatar
+              {t('sidebar.changeAvatar')}
             </button>
           </div>
-          <Input label="Full Name" defaultValue="Felix Anderson" />
-          <Input label="Email Address" type="email" defaultValue="felix@complianceos.io" />
+          <Input label={t('sidebar.fullName')} defaultValue="Felix Anderson" />
+          <Input label={t('sidebar.emailAddress')} type="email" defaultValue="felix@complianceos.io" />
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">Role</label>
+            <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('sidebar.role')}</label>
             <select className="flex h-11 w-full rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm text-slate-900 transition-colors hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent">
-              <option>Compliance Manager</option>
-              <option>Auditor</option>
-              <option>Administrator</option>
+              <option>{t('settings.complianceManager')}</option>
+              <option>{t('settings.auditor')}</option>
+              <option>{t('settings.administrator')}</option>
             </select>
           </div>
-          <Input label="Department" defaultValue="Risk & Compliance" />
+          <Input label={t('sidebar.department')} defaultValue="Risk & Compliance" />
           <div className="flex gap-3 pt-4">
             <Button
               variant="outline"
               className="flex-1"
               onClick={() => setIsProfileModalOpen(false)}
             >
-              Cancel
+              {t('common.cancel')}
             </Button>
             <Button variant="primary" className="flex-1" onClick={() => setIsProfileModalOpen(false)}>
-              Save Changes
+              {t('common.saveChanges')}
             </Button>
           </div>
         </div>
@@ -353,34 +356,34 @@ export default function SettingsPage() {
       <Modal
         isOpen={isAddStandardModalOpen}
         onClose={() => setIsAddStandardModalOpen(false)}
-        title="Add Compliance Standard"
-        subtitle="Add a new regulatory framework to your compliance program"
+        title={t('settings.addComplianceStandard')}
+        subtitle={t('settings.addNewFramework')}
         size="md"
       >
         <div className="space-y-4">
-          <Input label="Framework Name" placeholder="e.g., ISO 27001:2022" />
+          <Input label={t('settings.frameworkName')} placeholder={t('settings.frameworkNamePlaceholder')} />
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">Framework Type</label>
+            <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('settings.frameworkType')}</label>
             <select className="flex h-11 w-full rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm text-slate-900 transition-colors hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent">
-              <option>NCA Framework</option>
-              <option>SAMA Framework</option>
-              <option>NDMO Framework</option>
-              <option>International Standard</option>
-              <option>Custom Framework</option>
+              <option>{t('settings.ncaFramework')}</option>
+              <option>{t('settings.samaFramework')}</option>
+              <option>{t('settings.ndmoFramework')}</option>
+              <option>{t('settings.internationalStandard')}</option>
+              <option>{t('settings.customFramework')}</option>
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">Description</label>
+            <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('audits.description')}</label>
             <textarea
               rows={3}
-              placeholder="Brief description of the framework..."
+              placeholder={t('settings.briefDescription')}
               className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent resize-none"
             />
           </div>
           <div className="flex items-center justify-between p-4 bg-slate-50 rounded-xl">
             <div>
-              <p className="text-sm font-bold text-slate-900">Auto-sync Controls</p>
-              <p className="text-xs text-slate-500">Automatically update when framework changes</p>
+              <p className="text-sm font-bold text-slate-900">{t('settings.autoSyncControls')}</p>
+              <p className="text-xs text-slate-500">{t('settings.autoSyncDescription')}</p>
             </div>
             <button className="w-9 h-5 rounded-full relative transition-colors bg-emerald-500 cursor-pointer">
               <span className="absolute top-0.5 left-4 w-4 h-4 bg-white rounded-full shadow" />
@@ -388,11 +391,11 @@ export default function SettingsPage() {
           </div>
           <div className="flex gap-3 pt-4">
             <Button variant="outline" className="flex-1" onClick={() => setIsAddStandardModalOpen(false)}>
-              Cancel
+              {t('common.cancel')}
             </Button>
             <Button variant="primary" className="flex-1" onClick={() => setIsAddStandardModalOpen(false)}>
               <Icon icon="lucide:plus" />
-              Add Standard
+              {t('settings.addStandard')}
             </Button>
           </div>
         </div>
@@ -402,8 +405,8 @@ export default function SettingsPage() {
       <Modal
         isOpen={isMarketplaceModalOpen}
         onClose={() => setIsMarketplaceModalOpen(false)}
-        title="Integration Marketplace"
-        subtitle="Connect your favorite tools to ComplianceOS"
+        title={t('settings.integrationMarketplace')}
+        subtitle={t('settings.connectFavoriteTools')}
         size="lg"
       >
         <div className="space-y-6">
@@ -411,36 +414,36 @@ export default function SettingsPage() {
             <Icon icon="lucide:search" className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
               type="text"
-              placeholder="Search integrations..."
+              placeholder={t('settings.searchIntegrations')}
               className="w-full pl-10 pr-4 py-3 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
             />
           </div>
 
           <div>
-            <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-4">Communication</h3>
+            <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-4">{t('settings.communication')}</h3>
             <div className="grid grid-cols-2 gap-4">
-              <MarketplaceItem name="Slack" icon="logos:slack-icon" description="Real-time notifications" />
-              <MarketplaceItem name="Microsoft Teams" icon="logos:microsoft-teams" description="Team collaboration" />
+              <MarketplaceItem name="Slack" icon="logos:slack-icon" description={t('settings.realTimeNotifications')} />
+              <MarketplaceItem name="Microsoft Teams" icon="logos:microsoft-teams" description={t('settings.teamCollaboration')} />
             </div>
           </div>
 
           <div>
-            <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-4">Storage</h3>
+            <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-4">{t('settings.storage')}</h3>
             <div className="grid grid-cols-2 gap-4">
-              <MarketplaceItem name="Google Drive" icon="logos:google-drive" description="Document storage" />
-              <MarketplaceItem name="Dropbox" icon="logos:dropbox" description="File sync" />
-              <MarketplaceItem name="OneDrive" icon="logos:microsoft-onedrive" description="Cloud storage" />
-              <MarketplaceItem name="Box" icon="logos:box" description="Enterprise content" />
+              <MarketplaceItem name="Google Drive" icon="logos:google-drive" description={t('settings.documentStorage')} />
+              <MarketplaceItem name="Dropbox" icon="logos:dropbox" description={t('settings.fileSync')} />
+              <MarketplaceItem name="OneDrive" icon="logos:microsoft-onedrive" description={t('settings.cloudStorage')} />
+              <MarketplaceItem name="Box" icon="logos:box" description={t('settings.enterpriseContent')} />
             </div>
           </div>
 
           <div>
-            <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-4">Development</h3>
+            <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-4">{t('settings.development')}</h3>
             <div className="grid grid-cols-2 gap-4">
-              <MarketplaceItem name="GitHub" icon="logos:github-icon" description="Code repository" />
-              <MarketplaceItem name="GitLab" icon="logos:gitlab" description="DevOps platform" />
-              <MarketplaceItem name="Jira" icon="logos:jira" description="Issue tracking" />
-              <MarketplaceItem name="Confluence" icon="logos:confluence" description="Documentation" />
+              <MarketplaceItem name="GitHub" icon="logos:github-icon" description={t('settings.codeRepository')} />
+              <MarketplaceItem name="GitLab" icon="logos:gitlab" description={t('settings.devOpsPlatform')} />
+              <MarketplaceItem name="Jira" icon="logos:jira" description={t('settings.issueTracking')} />
+              <MarketplaceItem name="Confluence" icon="logos:confluence" description={t('settings.documentation')} />
             </div>
           </div>
         </div>
@@ -450,46 +453,46 @@ export default function SettingsPage() {
       <Modal
         isOpen={isNewTemplateModalOpen}
         onClose={() => setIsNewTemplateModalOpen(false)}
-        title="Create New Template"
-        subtitle="Build a reusable audit template"
+        title={t('settings.createNewTemplate')}
+        subtitle={t('settings.buildReusableTemplate')}
         size="md"
       >
         <div className="space-y-4">
-          <Input label="Template Name" placeholder="e.g., Monthly Security Review" />
+          <Input label={t('settings.templateNameLabel')} placeholder={t('settings.templateNamePlaceholder')} />
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">Category</label>
+            <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('settings.categoryCol')}</label>
             <select className="flex h-11 w-full rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm text-slate-900 transition-colors hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent">
-              <option>Technical Control</option>
-              <option>Legal/Privacy</option>
-              <option>Financial Compliance</option>
-              <option>Operational</option>
-              <option>Custom</option>
+              <option>{t('settings.technicalControl')}</option>
+              <option>{t('settings.legalPrivacy')}</option>
+              <option>{t('settings.financialCompliance')}</option>
+              <option>{t('settings.operational')}</option>
+              <option>{t('settings.custom')}</option>
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">Associated Framework</label>
+            <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('settings.associatedFramework')}</label>
             <select className="flex h-11 w-full rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm text-slate-900 transition-colors hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent">
-              <option>NCA ECC-1:2018</option>
-              <option>SAMA CSF</option>
-              <option>NDMO PDPL</option>
-              <option>Multiple Frameworks</option>
+              <option>{t('settings.ncaEcc')}</option>
+              <option>{t('settings.samaCsf')}</option>
+              <option>{t('settings.ndmoPdpl')}</option>
+              <option>{t('settings.multipleFrameworks')}</option>
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">Description</label>
+            <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('audits.description')}</label>
             <textarea
               rows={3}
-              placeholder="Describe the purpose and scope of this template..."
+              placeholder={t('settings.describePurposeScope')}
               className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent resize-none"
             />
           </div>
           <div className="flex gap-3 pt-4">
             <Button variant="outline" className="flex-1" onClick={() => setIsNewTemplateModalOpen(false)}>
-              Cancel
+              {t('common.cancel')}
             </Button>
             <Button variant="primary" className="flex-1" onClick={() => setIsNewTemplateModalOpen(false)}>
               <Icon icon="lucide:plus" />
-              Create Template
+              {t('settings.newTemplate')}
             </Button>
           </div>
         </div>
@@ -499,8 +502,8 @@ export default function SettingsPage() {
       <Modal
         isOpen={isConfigureFrameworkModalOpen}
         onClose={() => setIsConfigureFrameworkModalOpen(false)}
-        title={`Configure ${selectedFramework?.title || 'Framework'}`}
-        subtitle="Adjust framework settings and thresholds"
+        title={`${t('settings.configureFramework')} ${selectedFramework?.title || ''}`}
+        subtitle={t('settings.adjustFrameworkSettings')}
         size="md"
       >
         <div className="space-y-4">
@@ -510,8 +513,8 @@ export default function SettingsPage() {
 
           <div className="flex items-center justify-between p-4 border border-slate-200 rounded-xl">
             <div>
-              <p className="text-sm font-bold text-slate-900">Framework Status</p>
-              <p className="text-xs text-slate-500">Enable or disable this framework</p>
+              <p className="text-sm font-bold text-slate-900">{t('settings.frameworkStatus')}</p>
+              <p className="text-xs text-slate-500">{t('settings.enableDisableFramework')}</p>
             </div>
             <button className="w-9 h-5 rounded-full relative transition-colors bg-emerald-500 cursor-pointer">
               <span className="absolute top-0.5 left-4 w-4 h-4 bg-white rounded-full shadow" />
@@ -519,30 +522,30 @@ export default function SettingsPage() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">Sync Frequency</label>
+            <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('settings.syncFrequency')}</label>
             <select className="flex h-11 w-full rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm text-slate-900 transition-colors hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent">
-              <option>Real-time</option>
-              <option>Hourly</option>
-              <option>Daily</option>
-              <option>Weekly</option>
-              <option>Manual</option>
+              <option>{t('settings.realTime')}</option>
+              <option>{t('settings.hourly')}</option>
+              <option>{t('settings.daily')}</option>
+              <option>{t('settings.weekly')}</option>
+              <option>{t('settings.manual')}</option>
             </select>
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">Compliance Threshold</label>
+            <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('settings.complianceThreshold')}</label>
             <select className="flex h-11 w-full rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm text-slate-900 transition-colors hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent">
-              <option>90% (Strict)</option>
-              <option>80% (Standard)</option>
-              <option>70% (Relaxed)</option>
-              <option>Custom</option>
+              <option>{t('settings.strict90')}</option>
+              <option>{t('settings.standard80')}</option>
+              <option>{t('settings.relaxed70')}</option>
+              <option>{t('settings.custom')}</option>
             </select>
           </div>
 
           <div className="flex items-center justify-between p-4 border border-slate-200 rounded-xl">
             <div>
-              <p className="text-sm font-bold text-slate-900">Alert on Non-Compliance</p>
-              <p className="text-xs text-slate-500">Send notifications when threshold is breached</p>
+              <p className="text-sm font-bold text-slate-900">{t('settings.alertOnNonCompliance')}</p>
+              <p className="text-xs text-slate-500">{t('settings.alertDescription')}</p>
             </div>
             <button className="w-9 h-5 rounded-full relative transition-colors bg-emerald-500 cursor-pointer">
               <span className="absolute top-0.5 left-4 w-4 h-4 bg-white rounded-full shadow" />
@@ -551,10 +554,10 @@ export default function SettingsPage() {
 
           <div className="flex gap-3 pt-4">
             <Button variant="outline" className="flex-1" onClick={() => setIsConfigureFrameworkModalOpen(false)}>
-              Cancel
+              {t('common.cancel')}
             </Button>
             <Button variant="primary" className="flex-1" onClick={() => setIsConfigureFrameworkModalOpen(false)}>
-              Save Settings
+              {t('settings.saveSettings')}
             </Button>
           </div>
         </div>
@@ -564,8 +567,8 @@ export default function SettingsPage() {
       <Modal
         isOpen={isConnectIntegrationModalOpen}
         onClose={() => setIsConnectIntegrationModalOpen(false)}
-        title={`Connect ${selectedIntegration?.name || 'Integration'}`}
-        subtitle="Authorize ComplianceOS to access your account"
+        title={`${t('settings.connectIntegration')} ${selectedIntegration?.name || ''}`}
+        subtitle={t('settings.authorizeAccess')}
         size="md"
       >
         <div className="space-y-6">
@@ -576,36 +579,36 @@ export default function SettingsPage() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">Connection Method</label>
+            <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('settings.connectionMethod')}</label>
             <select className="flex h-11 w-full rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm text-slate-900 transition-colors hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent">
-              <option>OAuth 2.0 (Recommended)</option>
-              <option>API Key</option>
-              <option>Personal Access Token</option>
+              <option>{t('settings.oauth2Recommended')}</option>
+              <option>{t('settings.apiKey')}</option>
+              <option>{t('settings.personalAccessToken')}</option>
             </select>
           </div>
 
           <div>
-            <h3 className="text-sm font-medium text-slate-700 mb-3">Permissions Required</h3>
+            <h3 className="text-sm font-medium text-slate-700 mb-3">{t('settings.permissionsRequired')}</h3>
             <div className="space-y-2">
               <label className="flex items-center gap-3 p-3 border border-slate-200 rounded-xl cursor-pointer hover:bg-slate-50">
                 <input type="checkbox" defaultChecked className="accent-emerald-600 w-4 h-4" />
                 <div>
-                  <p className="text-sm font-medium text-slate-900">Read Access</p>
-                  <p className="text-xs text-slate-500">View data and documents</p>
+                  <p className="text-sm font-medium text-slate-900">{t('settings.readAccess')}</p>
+                  <p className="text-xs text-slate-500">{t('settings.readAccessDescription')}</p>
                 </div>
               </label>
               <label className="flex items-center gap-3 p-3 border border-slate-200 rounded-xl cursor-pointer hover:bg-slate-50">
                 <input type="checkbox" defaultChecked className="accent-emerald-600 w-4 h-4" />
                 <div>
-                  <p className="text-sm font-medium text-slate-900">Write Access</p>
-                  <p className="text-xs text-slate-500">Create and modify data</p>
+                  <p className="text-sm font-medium text-slate-900">{t('settings.writeAccess')}</p>
+                  <p className="text-xs text-slate-500">{t('settings.writeAccessDescription')}</p>
                 </div>
               </label>
               <label className="flex items-center gap-3 p-3 border border-slate-200 rounded-xl cursor-pointer hover:bg-slate-50">
                 <input type="checkbox" className="accent-emerald-600 w-4 h-4" />
                 <div>
-                  <p className="text-sm font-medium text-slate-900">Admin Access</p>
-                  <p className="text-xs text-slate-500">Manage workspace settings</p>
+                  <p className="text-sm font-medium text-slate-900">{t('settings.adminAccess')}</p>
+                  <p className="text-xs text-slate-500">{t('settings.adminAccessDescription')}</p>
                 </div>
               </label>
             </div>
@@ -613,11 +616,11 @@ export default function SettingsPage() {
 
           <div className="flex gap-3 pt-4">
             <Button variant="outline" className="flex-1" onClick={() => setIsConnectIntegrationModalOpen(false)}>
-              Cancel
+              {t('common.cancel')}
             </Button>
             <Button variant="primary" className="flex-1" onClick={() => setIsConnectIntegrationModalOpen(false)}>
               <Icon icon="lucide:link" />
-              Connect
+              {t('settings.connect')}
             </Button>
           </div>
         </div>
@@ -627,61 +630,61 @@ export default function SettingsPage() {
       <Modal
         isOpen={isEditTemplateModalOpen}
         onClose={() => setIsEditTemplateModalOpen(false)}
-        title="Edit Template"
+        title={t('settings.editTemplate')}
         subtitle={selectedTemplate?.name}
         size="md"
       >
         <div className="space-y-4">
-          <Input label="Template Name" defaultValue={selectedTemplate?.name} />
+          <Input label={t('settings.templateNameLabel')} defaultValue={selectedTemplate?.name} />
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">Category</label>
+            <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('settings.categoryCol')}</label>
             <select
               defaultValue={selectedTemplate?.category}
               className="flex h-11 w-full rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm text-slate-900 transition-colors hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
             >
-              <option>Technical Control</option>
-              <option>Legal/Privacy</option>
-              <option>Financial Compliance</option>
-              <option>Operational</option>
+              <option>{t('settings.technicalControl')}</option>
+              <option>{t('settings.legalPrivacy')}</option>
+              <option>{t('settings.financialCompliance')}</option>
+              <option>{t('settings.operational')}</option>
             </select>
           </div>
 
           <div className="p-4 bg-slate-50 rounded-xl space-y-2">
             <div className="flex justify-between text-sm">
-              <span className="text-slate-500">Last Modified</span>
+              <span className="text-slate-500">{t('settings.lastModifiedCol')}</span>
               <span className="font-medium text-slate-900">Oct 12, 2024</span>
             </div>
             <div className="flex justify-between text-sm">
-              <span className="text-slate-500">Created By</span>
+              <span className="text-slate-500">{t('settings.createdBy')}</span>
               <span className="font-medium text-slate-900">Felix Anderson</span>
             </div>
             <div className="flex justify-between text-sm">
-              <span className="text-slate-500">Times Used</span>
-              <span className="font-medium text-slate-900">24 audits</span>
+              <span className="text-slate-500">{t('settings.timesUsedLabel')}</span>
+              <span className="font-medium text-slate-900">24 {t('settings.audits')}</span>
             </div>
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">Description</label>
+            <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('audits.description')}</label>
             <textarea
               rows={3}
-              defaultValue="Standard self-assessment template for NCA Essential Cybersecurity Controls compliance verification."
+              defaultValue={t('settings.standardDescription')}
               className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent resize-none"
             />
           </div>
 
           <div className="flex gap-3 pt-4">
             <Button variant="outline" onClick={() => setIsEditTemplateModalOpen(false)}>
-              Cancel
+              {t('common.cancel')}
             </Button>
             <button
               onClick={() => setIsEditTemplateModalOpen(false)}
               className="px-4 py-2 text-sm font-bold text-rose-600 hover:text-rose-700 hover:bg-rose-50 rounded-xl transition-colors cursor-pointer"
             >
-              Delete Template
+              {t('settings.deleteTemplate')}
             </button>
             <Button variant="primary" className="flex-1" onClick={() => setIsEditTemplateModalOpen(false)}>
-              Save Changes
+              {t('common.saveChanges')}
             </Button>
           </div>
         </div>
@@ -698,6 +701,7 @@ function FrameworkCard({
   description,
   isActive,
   onConfigure,
+  t,
 }: {
   icon: string
   iconColor: 'blue' | 'indigo' | 'amber'
@@ -705,6 +709,7 @@ function FrameworkCard({
   description: string
   isActive: boolean
   onConfigure: (title: string, description: string) => void
+  t: (key: TranslationKey, params?: InterpolationParams) => string
 }) {
   const [active, setActive] = useState(isActive)
 
@@ -737,13 +742,13 @@ function FrameworkCard({
       <p className="text-xs text-slate-500 mt-1 mb-4">{description}</p>
       <div className="flex items-center justify-between pt-4 border-t border-slate-50">
         <span className={`text-[10px] font-black ${active ? 'text-emerald-600' : 'text-slate-400'}`}>
-          {active ? 'ACTIVE' : 'DISABLED'}
+          {active ? t('common.active') : t('settings.disabled')}
         </span>
         <button
           onClick={() => onConfigure(title, description)}
           className={`text-xs font-bold cursor-pointer ${active ? 'text-slate-400 hover:text-slate-900' : 'text-emerald-600'}`}
         >
-          {active ? 'Configure' : 'Enable Now'} &rarr;
+          {active ? t('settings.configure') : t('settings.enableNow')} &rarr;
         </button>
       </div>
     </div>

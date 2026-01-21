@@ -469,7 +469,7 @@ export default function CorrespondenceHubPage() {
 
           <div className="h-8 w-px bg-slate-200 mx-2" />
 
-          <div className={`flex gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
+          <div className="flex gap-2">
             <Link
               href="/sama-letters"
               className={`px-3 py-1.5 text-xs font-bold text-slate-600 bg-slate-50 hover:bg-slate-100 rounded-lg transition-all border border-slate-200 flex items-center gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}
@@ -547,7 +547,7 @@ export default function CorrespondenceHubPage() {
               label={t('correspondence.onTarget')}
               title={t('correspondence.saudizationRate')}
               value="42.8%"
-              subtitle="Target: 40%"
+              subtitle={t('correspondence.target', { value: '40%' })}
               progress={85}
               progressColor="bg-blue-500"
               isRTL={isRTL}
@@ -872,8 +872,8 @@ export default function CorrespondenceHubPage() {
                       <div className="flex-1">
                         <p className="text-sm font-bold text-slate-900">{risk.name}</p>
                         <div className="flex gap-2 mt-2">
-                          <span className="text-[10px] font-bold uppercase px-2 py-0.5 bg-white rounded-full">{risk.severity}</span>
-                          <span className="text-[10px] font-bold uppercase px-2 py-0.5 bg-white rounded-full">Impact: {risk.impact}</span>
+                          <span className="text-[10px] font-bold uppercase px-2 py-0.5 bg-white rounded-full">{t(`correspondence.${risk.severity}`)}</span>
+                          <span className="text-[10px] font-bold uppercase px-2 py-0.5 bg-white rounded-full">{t('correspondence.impact')}: {risk.impact}</span>
                         </div>
                       </div>
                       <button className="text-slate-600 hover:text-slate-900 cursor-pointer">
@@ -898,85 +898,96 @@ export default function CorrespondenceHubPage() {
             <div className="mb-6 flex items-center gap-4 justify-center pb-4">
               <div className="flex items-center gap-2">
                 <div className="w-4 h-4 bg-rose-500 rounded" />
-                <span className="text-xs font-bold text-slate-600">Critical ({riskCounts.critical})</span>
+                <span className="text-xs font-bold text-slate-600">{t('correspondence.critical')} ({riskCounts.critical})</span>
               </div>
               <div className="flex items-center gap-2">
                 <div className="w-4 h-4 bg-orange-500 rounded" />
-                <span className="text-xs font-bold text-slate-600">High ({riskCounts.high})</span>
+                <span className="text-xs font-bold text-slate-600">{t('correspondence.high')} ({riskCounts.high})</span>
               </div>
               <div className="flex items-center gap-2">
                 <div className="w-4 h-4 bg-amber-400 rounded" />
-                <span className="text-xs font-bold text-slate-600">Medium ({riskCounts.medium})</span>
+                <span className="text-xs font-bold text-slate-600">{t('correspondence.medium')} ({riskCounts.medium})</span>
               </div>
               <div className="flex items-center gap-2">
                 <div className="w-4 h-4 bg-blue-400 rounded" />
-                <span className="text-xs font-bold text-slate-600">Low ({riskCounts.low})</span>
+                <span className="text-xs font-bold text-slate-600">{t('correspondence.low')} ({riskCounts.low})</span>
               </div>
             </div>
 
             {/* Matrix */}
             <div className="bg-slate-50 p-8 rounded-xl border border-slate-200">
               <div className="flex items-center justify-center mb-4">
-                <span className="text-sm font-bold text-slate-600">Likelihood &rarr;</span>
+                <span className="text-sm font-bold text-slate-600">{t('correspondence.likelihood')} {isRTL ? '←' : '→'}</span>
               </div>
 
               {/* Header Row */}
-              <div className="grid grid-cols-[120px_1fr_1fr_1fr] gap-6 mb-4">
-                <div />
-                <div className="text-xs font-bold text-slate-600 text-center">Low</div>
-                <div className="text-xs font-bold text-slate-600 text-center">Medium</div>
-                <div className="text-xs font-bold text-slate-600 text-center">High</div>
-              </div>
-
-              {/* Matrix Rows */}
-              <div className="relative">
-                <div className="impact-label-vertical">Impact &rarr;</div>
-                <div className="space-y-3">
-                  {[5, 4, 3, 2, 1].map(impact => {
-                    const impactLabels: Record<number, string> = {
-                      5: 'Critical (5)',
-                      4: 'High (4)',
-                      3: 'Medium (3)',
-                      2: 'Low (2)',
-                      1: 'Very Low (1)'
-                    }
-                    return (
-                      <div key={impact} className="grid grid-cols-[120px_1fr_1fr_1fr] gap-6">
-                        <div className="flex items-center justify-end pr-4 text-xs font-bold text-slate-600">
-                          {impactLabels[impact]}
+              {(() => {
+                const likelihoodColumns = isRTL
+                  ? ['high', 'medium', 'low'] as const
+                  : ['low', 'medium', 'high'] as const;
+                return (
+                  <>
+                    <div className="grid grid-cols-[120px_1fr_1fr_1fr] gap-6 mb-4">
+                      <div />
+                      {likelihoodColumns.map(col => (
+                        <div key={col} className="text-xs font-bold text-slate-600 text-center">
+                          {t(`correspondence.${col}` as const)}
                         </div>
-                        {(['low', 'medium', 'high'] as const).map(likelihood => {
-                          const cellRisks = getRisksForCell(impact, likelihood)
-                          const cellStyle = getCellStyle(impact, likelihood)
-                          const dotColor = getCellDotColor(impact, likelihood)
+                      ))}
+                    </div>
+
+                    {/* Matrix Rows */}
+                    <div className="relative">
+                      <div className="impact-label-vertical">{t('correspondence.impact')} {isRTL ? '←' : '→'}</div>
+                      <div className="space-y-3">
+                        {[5, 4, 3, 2, 1].map(impact => {
+                          const impactLabels: Record<number, string> = {
+                            5: t('correspondence.critical5'),
+                            4: t('correspondence.high4'),
+                            3: t('correspondence.medium3'),
+                            2: t('correspondence.low2'),
+                            1: t('correspondence.veryLow1')
+                          }
                           return (
-                            <div
-                              key={likelihood}
-                              onClick={() => handleCellClick(impact, likelihood)}
-                              className="risk-matrix-cell rounded-lg p-4 flex flex-wrap gap-2 cursor-pointer border-2 transition-all hover:scale-105 hover:shadow-lg"
-                              style={{ height: '110px', backgroundColor: cellStyle.bg, borderColor: cellStyle.border }}
-                            >
-                              {cellRisks.map((risk, idx) => (
-                                <div
-                                  key={risk.id}
-                                  className="risk-dot w-6 h-6 rounded-full flex items-center justify-center text-white text-[10px] font-bold"
-                                  style={{ backgroundColor: dotColor }}
-                                  title={risk.name}
-                                >
-                                  {idx + 1}
-                                </div>
-                              ))}
-                              {cellRisks.length === 0 && (
-                                <span className="text-xs text-slate-400 text-center w-full">-</span>
-                              )}
+                            <div key={impact} className="grid grid-cols-[120px_1fr_1fr_1fr] gap-6">
+                              <div className="flex items-center justify-end pr-4 text-xs font-bold text-slate-600">
+                                {impactLabels[impact]}
+                              </div>
+                              {likelihoodColumns.map(likelihood => {
+                                const cellRisks = getRisksForCell(impact, likelihood)
+                                const cellStyle = getCellStyle(impact, likelihood)
+                                const dotColor = getCellDotColor(impact, likelihood)
+                                return (
+                                  <div
+                                    key={likelihood}
+                                    onClick={() => handleCellClick(impact, likelihood)}
+                                    className="risk-matrix-cell rounded-lg p-4 flex flex-wrap gap-2 cursor-pointer border-2 transition-all hover:scale-105 hover:shadow-lg"
+                                    style={{ height: '110px', backgroundColor: cellStyle.bg, borderColor: cellStyle.border }}
+                                  >
+                                    {cellRisks.map((risk, idx) => (
+                                      <div
+                                        key={risk.id}
+                                        className="risk-dot w-6 h-6 rounded-full flex items-center justify-center text-white text-[10px] font-bold"
+                                        style={{ backgroundColor: dotColor }}
+                                        title={risk.name}
+                                      >
+                                        {idx + 1}
+                                      </div>
+                                    ))}
+                                    {cellRisks.length === 0 && (
+                                      <span className="text-xs text-slate-400 text-center w-full">-</span>
+                                    )}
+                                  </div>
+                                )
+                              })}
                             </div>
                           )
                         })}
                       </div>
-                    )
-                  })}
-                </div>
-              </div>
+                    </div>
+                  </>
+                );
+              })()}
             </div>
 
             {/* Info Box */}

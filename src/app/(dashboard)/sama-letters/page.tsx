@@ -255,6 +255,36 @@ function Toast({ message, onClose }: { message: string; onClose: () => void }) {
 
 export default function SAMALettersPage() {
   const { t, isRTL } = useTranslation()
+
+  // Helper to get translated template name and description based on template ID
+  const getTranslatedTemplateName = useCallback((templateId: string, originalName: string) => {
+    const nameMap: Record<string, string> = {
+      'tmpl-001': t('samaLetters.templateKeyFunctionAppointment'),
+      'tmpl-002': t('samaLetters.templateProductLaunchRequest'),
+      'tmpl-003': t('samaLetters.templateCircularClarification'),
+      'tmpl-004': t('samaLetters.templateRegulatoryInterpretation'),
+      'tmpl-005': t('samaLetters.templateQuarterlyAmlReport'),
+      'tmpl-006': t('samaLetters.templateAnnualComplianceReport'),
+      'tmpl-007': t('samaLetters.templateIncidentNotification'),
+      'tmpl-008': t('samaLetters.templateSystemOutageReport'),
+    }
+    return nameMap[templateId] || originalName
+  }, [t])
+
+  const getTranslatedTemplateDescription = useCallback((templateId: string, originalDescription: string) => {
+    const descMap: Record<string, string> = {
+      'tmpl-001': t('samaLetters.templateKeyFunctionDesc'),
+      'tmpl-002': t('samaLetters.templateProductLaunchDesc'),
+      'tmpl-003': t('samaLetters.templateCircularClarificationDesc'),
+      'tmpl-004': t('samaLetters.templateRegulatoryInterpretationDesc'),
+      'tmpl-005': t('samaLetters.templateQuarterlyAmlDesc'),
+      'tmpl-006': t('samaLetters.templateAnnualComplianceDesc'),
+      'tmpl-007': t('samaLetters.templateIncidentNotificationDesc'),
+      'tmpl-008': t('samaLetters.templateSystemOutageDesc'),
+    }
+    return descMap[templateId] || originalDescription
+  }, [t])
+
   const [view, setView] = useState<'dashboard' | 'detail'>('dashboard')
   const [selectedLetter, setSelectedLetter] = useState<Letter | null>(null)
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
@@ -442,9 +472,9 @@ export default function SAMALettersPage() {
             </p>
           </div>
 
-          <div className="h-8 w-px bg-slate-200 mx-2" />
+          <div className="hidden lg:block h-8 w-px bg-slate-200 mx-2" />
 
-          <div className={`flex gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
+          <div className="hidden lg:flex gap-2">
             <Link
               href="/sama-letters"
               className={`px-3 py-1.5 text-xs font-bold text-emerald-700 bg-emerald-50 rounded-lg transition-all border border-emerald-100 flex items-center gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}
@@ -470,7 +500,7 @@ export default function SAMALettersPage() {
         </div>
 
         <div className={`flex items-center gap-4 ${isRTL ? 'flex-row-reverse' : ''}`}>
-          <div className={`flex items-center gap-1 bg-slate-50 border border-slate-200 p-1 rounded-lg ${isRTL ? 'flex-row-reverse' : ''}`}>
+          <div className={`hidden md:flex items-center gap-1 bg-slate-50 border border-slate-200 p-1 rounded-lg ${isRTL ? 'flex-row-reverse' : ''}`}>
             <div className={`px-4 py-1.5 text-sm font-bold text-slate-900 flex items-center gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
               <span>{t('common.livePulse')}</span>
               <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
@@ -581,13 +611,13 @@ export default function SAMALettersPage() {
                 <table className="w-full">
                   <thead className="bg-slate-50/50 text-slate-500 uppercase text-[10px] font-bold tracking-widest border-b border-slate-100">
                     <tr>
-                      <th className="px-6 py-4 text-left">Template Name</th>
-                      <th className="px-6 py-4 text-left">Type</th>
-                      <th className="px-6 py-4 text-left">Description</th>
-                      <th className="px-6 py-4 text-left">Status</th>
-                      <th className="px-6 py-4 text-left">Last Modified</th>
-                      <th className="px-6 py-4 text-center">Usage</th>
-                      <th className="px-6 py-4 text-right">Actions</th>
+                      <th className={`px-6 py-4 ${isRTL ? 'text-right' : 'text-left'}`}>{t('samaLetters.templateName')}</th>
+                      <th className={`px-6 py-4 ${isRTL ? 'text-right' : 'text-left'}`}>{t('common.type')}</th>
+                      <th className={`px-6 py-4 ${isRTL ? 'text-right' : 'text-left'}`}>{t('common.description')}</th>
+                      <th className={`px-6 py-4 ${isRTL ? 'text-right' : 'text-left'}`}>{t('common.status')}</th>
+                      <th className={`px-6 py-4 ${isRTL ? 'text-right' : 'text-left'}`}>{t('samaLetters.lastModified')}</th>
+                      <th className="px-6 py-4 text-center">{t('samaLetters.usageCount')}</th>
+                      <th className={`px-6 py-4 ${isRTL ? 'text-left' : 'text-right'}`}>{t('common.actions')}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
@@ -598,7 +628,7 @@ export default function SAMALettersPage() {
                             <div className="w-12 h-12 bg-slate-100 rounded-full flex items-center justify-center">
                               <Icon icon="lucide:file-x" className="text-2xl text-slate-400" />
                             </div>
-                            <p className="text-sm text-slate-500">No templates found matching your criteria</p>
+                            <p className="text-sm text-slate-500">{t('samaLetters.noTemplatesFound')}</p>
                             <button
                               onClick={() => {
                                 setTemplateSearch('')
@@ -607,7 +637,7 @@ export default function SAMALettersPage() {
                               }}
                               className="text-xs font-bold text-emerald-600 hover:underline cursor-pointer"
                             >
-                              Clear filters
+                              {t('common.clearFilters')}
                             </button>
                           </div>
                         </td>
@@ -628,16 +658,19 @@ export default function SAMALettersPage() {
                               }`}>
                                 <Icon icon={template.icon} className="text-lg" />
                               </div>
-                              <span className="text-sm font-bold text-slate-900">{template.name}</span>
+                              <span className="text-sm font-bold text-slate-900">{getTranslatedTemplateName(template.id, template.name)}</span>
                             </div>
                           </td>
                           <td className="px-6 py-4">
                             <span className={`px-2 py-1 text-[10px] font-bold rounded-md ${getTypeBadgeColor(template.type)}`}>
-                              {template.type}
+                              {template.type === 'Non-Objection' ? t('samaLetters.nonObjection') :
+                               template.type === 'Inquiry' ? t('samaLetters.inquiry') :
+                               template.type === 'Submission' ? t('samaLetters.submission') :
+                               t('samaLetters.notification')}
                             </span>
                           </td>
                           <td className="px-6 py-4">
-                            <p className="text-sm text-slate-500 truncate max-w-xs">{template.description}</p>
+                            <p className="text-sm text-slate-500 truncate max-w-xs">{getTranslatedTemplateDescription(template.id, template.description)}</p>
                           </td>
                           <td className="px-6 py-4">
                             <span className={`flex items-center gap-1.5 text-xs font-bold ${
@@ -646,13 +679,13 @@ export default function SAMALettersPage() {
                               <span className={`w-1.5 h-1.5 rounded-full ${
                                 template.status === 'Active' ? 'bg-emerald-600' : 'bg-amber-600'
                               }`} />
-                              {template.status}
+                              {template.status === 'Active' ? t('common.active') : t('common.draft')}
                             </span>
                           </td>
                           <td className="px-6 py-4 text-sm text-slate-400">{template.lastModified}</td>
                           <td className="px-6 py-4 text-center">
                             <span className="text-sm font-bold text-slate-900">{template.usageCount}</span>
-                            <span className="text-xs text-slate-400 ml-1">uses</span>
+                            <span className={`text-xs text-slate-400 ${isRTL ? 'mr-1' : 'ml-1'}`}>{t('samaLetters.uses')}</span>
                           </td>
                           <td className="px-6 py-4">
                             <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -745,16 +778,26 @@ export default function SAMALettersPage() {
                 </button>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                {templateTypeCards.map((template) => (
-                  <TemplateCard
-                    key={template.type}
-                    type={template.type}
-                    icon={template.icon}
-                    color={template.color}
-                    description={template.description}
-                    onClick={() => handleOpenCreateModal(template.type)}
-                  />
-                ))}
+                {templateTypeCards.map((template) => {
+                  const translatedDesc = template.type === 'Non-Objection' ? t('samaLetters.hiringKeyPositions') :
+                                         template.type === 'Inquiry' ? t('samaLetters.seekingClarification') :
+                                         template.type === 'Submission' ? t('samaLetters.filingPeriodicReports') :
+                                         t('samaLetters.reportingOutages')
+                  const translatedType = template.type === 'Non-Objection' ? t('samaLetters.nonObjection') :
+                                         template.type === 'Inquiry' ? t('samaLetters.inquiry') :
+                                         template.type === 'Submission' ? t('samaLetters.submission') :
+                                         t('samaLetters.notification')
+                  return (
+                    <TemplateCard
+                      key={template.type}
+                      type={translatedType}
+                      icon={template.icon}
+                      color={template.color}
+                      description={translatedDesc}
+                      onClick={() => handleOpenCreateModal(template.type)}
+                    />
+                  )
+                })}
               </div>
             </div>
 
@@ -1172,9 +1215,12 @@ export default function SAMALettersPage() {
                   <Icon icon={selectedTemplate.icon} className="text-2xl" />
                 </div>
                 <div>
-                  <h2 className="text-xl font-bold text-slate-900 font-display">{selectedTemplate.name}</h2>
+                  <h2 className="text-xl font-bold text-slate-900 font-display">{getTranslatedTemplateName(selectedTemplate.id, selectedTemplate.name)}</h2>
                   <span className={`px-2 py-1 text-[10px] font-bold rounded-md ${getTypeBadgeColor(selectedTemplate.type)}`}>
-                    {selectedTemplate.type}
+                    {selectedTemplate.type === 'Non-Objection' ? t('samaLetters.nonObjection') :
+                     selectedTemplate.type === 'Inquiry' ? t('samaLetters.inquiry') :
+                     selectedTemplate.type === 'Submission' ? t('samaLetters.submission') :
+                     t('samaLetters.notification')}
                   </span>
                 </div>
               </div>
@@ -1192,15 +1238,15 @@ export default function SAMALettersPage() {
             <div className="space-y-6">
               <div>
                 <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-2">
-                  Description
+                  {t('common.description')}
                 </label>
-                <p className="text-sm text-slate-600">{selectedTemplate.description}</p>
+                <p className="text-sm text-slate-600">{getTranslatedTemplateDescription(selectedTemplate.id, selectedTemplate.description)}</p>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="bg-slate-50 rounded-xl p-4">
                   <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-1">
-                    Status
+                    {t('common.status')}
                   </label>
                   <span className={`flex items-center gap-1.5 text-sm font-bold ${
                     selectedTemplate.status === 'Active' ? 'text-emerald-600' : 'text-amber-600'
@@ -1208,34 +1254,34 @@ export default function SAMALettersPage() {
                     <span className={`w-2 h-2 rounded-full ${
                       selectedTemplate.status === 'Active' ? 'bg-emerald-600' : 'bg-amber-600'
                     }`} />
-                    {selectedTemplate.status}
+                    {selectedTemplate.status === 'Active' ? t('common.active') : t('common.draft')}
                   </span>
                 </div>
                 <div className="bg-slate-50 rounded-xl p-4">
                   <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-1">
-                    Usage Count
+                    {t('samaLetters.usageCount')}
                   </label>
-                  <span className="text-sm font-bold text-slate-900">{selectedTemplate.usageCount} times used</span>
+                  <span className="text-sm font-bold text-slate-900">{selectedTemplate.usageCount} {t('samaLetters.timesUsed')}</span>
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="bg-slate-50 rounded-xl p-4">
                   <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-1">
-                    Created Date
+                    {t('samaLetters.createdDate')}
                   </label>
                   <span className="text-sm text-slate-600">{selectedTemplate.createdDate}</span>
                 </div>
                 <div className="bg-slate-50 rounded-xl p-4">
                   <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-1">
-                    Last Modified
+                    {t('samaLetters.lastModified')}
                   </label>
                   <span className="text-sm text-slate-600">{selectedTemplate.lastModified}</span>
                 </div>
               </div>
             </div>
 
-            <div className="mt-8 flex justify-end">
+            <div className={`mt-8 flex ${isRTL ? 'justify-start' : 'justify-end'}`}>
               <button
                 onClick={() => {
                   setIsViewTemplateModalOpen(false)
@@ -1243,7 +1289,7 @@ export default function SAMALettersPage() {
                 }}
                 className="px-6 py-2.5 bg-slate-100 text-slate-600 rounded-xl text-sm font-bold hover:bg-slate-200 transition-colors cursor-pointer"
               >
-                Close
+                {t('common.close')}
               </button>
             </div>
           </div>
@@ -1284,11 +1330,11 @@ export default function SAMALettersPage() {
               <Icon icon="lucide:alert-triangle" className="text-3xl text-rose-600" />
             </div>
           </div>
-          <h2 className="text-xl font-bold text-slate-900 text-center mb-2">Delete Template</h2>
+          <h2 className="text-xl font-bold text-slate-900 text-center mb-2">{t('samaLetters.deleteTemplate')}</h2>
           <p className="text-sm text-slate-500 text-center mb-6">
-            Are you sure you want to delete <strong>{selectedTemplate?.name}</strong>? This action cannot be undone.
+            {t('samaLetters.deleteTemplateConfirm')} <strong>{selectedTemplate?.name}</strong>? {t('samaLetters.actionCannotBeUndone')}
           </p>
-          <div className="flex gap-3">
+          <div className={`flex gap-3 ${isRTL ? 'flex-row-reverse' : ''}`}>
             <button
               onClick={() => {
                 setIsDeleteConfirmOpen(false)
@@ -1296,13 +1342,13 @@ export default function SAMALettersPage() {
               }}
               className="flex-1 px-4 py-2.5 bg-slate-100 text-slate-600 rounded-xl text-sm font-bold hover:bg-slate-200 transition-colors cursor-pointer"
             >
-              Cancel
+              {t('common.cancel')}
             </button>
             <button
               onClick={handleConfirmDelete}
               className="flex-1 px-4 py-2.5 bg-rose-600 text-white rounded-xl text-sm font-bold hover:bg-rose-700 transition-colors cursor-pointer"
             >
-              Delete Template
+              {t('samaLetters.deleteTemplate')}
             </button>
           </div>
         </div>
@@ -1380,7 +1426,7 @@ function TemplateCard({
   description,
   onClick,
 }: {
-  type: LetterType
+  type: string
   icon: string
   color: string
   description: string
@@ -1419,6 +1465,7 @@ function CreateLetterForm({
   onClose: () => void
   onSuccess: () => void
 }) {
+  const { t, isRTL } = useTranslation()
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [priority, setPriority] = useState<'Standard' | 'Urgent'>('Standard')
 
@@ -1445,13 +1492,13 @@ function CreateLetterForm({
 
   return (
     <div className="p-8">
-      <div className="flex justify-between items-start mb-8">
-        <div>
+      <div className={`flex justify-between items-start mb-8 ${isRTL ? 'flex-row-reverse' : ''}`}>
+        <div className={isRTL ? 'text-right' : ''}>
           <h2 className="text-2xl font-bold text-slate-900 font-display">
-            Draft Official Correspondence
+            {t('samaLetters.draftOfficialCorrespondence')}
           </h2>
           <p className="text-sm text-slate-500 mt-1">
-            Reference assigned:{' '}
+            {t('samaLetters.referenceAssigned')}:{' '}
             <span className="font-mono font-bold text-emerald-600">
               {getRefPrefix(selectedType)}-2026-001
             </span>
@@ -1469,46 +1516,46 @@ function CreateLetterForm({
         <div className="space-y-4">
           <div>
             <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-2">
-              Letter Type
+              {t('samaLetters.letterType')}
             </label>
             <select
               value={selectedType}
               onChange={(e) => onTypeChange(e.target.value as LetterType)}
               className="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-sm font-medium focus:ring-2 focus:ring-emerald-500 outline-none"
             >
-              <option value="Non-Objection">Non-Objection</option>
-              <option value="Inquiry">Inquiry</option>
-              <option value="Submission">Submission</option>
-              <option value="Notification">Notification</option>
+              <option value="Non-Objection">{t('samaLetters.nonObjection')}</option>
+              <option value="Inquiry">{t('samaLetters.inquiry')}</option>
+              <option value="Submission">{t('samaLetters.submission')}</option>
+              <option value="Notification">{t('samaLetters.notification')}</option>
             </select>
           </div>
           <div>
             <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-2">
-              Sub-Category
+              {t('samaLetters.subCategory')}
             </label>
             <select className="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-sm font-medium focus:ring-2 focus:ring-emerald-500 outline-none">
-              <option>Key Function Appointment</option>
-              <option>Product Launch</option>
-              <option>Equity Participation</option>
+              <option value="key-function">{t('samaLetters.keyFunctionAppointment')}</option>
+              <option value="product-launch">{t('samaLetters.productLaunch')}</option>
+              <option value="equity-participation">{t('samaLetters.equityParticipation')}</option>
             </select>
           </div>
         </div>
         <div className="space-y-4">
           <div>
             <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-2">
-              Target Department (SAMA)
+              {t('samaLetters.targetDepartmentSama')}
             </label>
             <select className="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-sm font-medium focus:ring-2 focus:ring-emerald-500 outline-none">
-              <option>Banking Supervision</option>
-              <option>Payment Systems</option>
-              <option>Compliance & AML</option>
+              <option value="banking-supervision">{t('samaLetters.bankingSupervision')}</option>
+              <option value="payment-systems">{t('samaLetters.paymentSystems')}</option>
+              <option value="compliance-aml">{t('samaLetters.complianceAml')}</option>
             </select>
           </div>
           <div>
             <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-2">
-              Priority
+              {t('calendar.priority')}
             </label>
-            <div className="flex gap-2">
+            <div className={`flex gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
               <button
                 type="button"
                 onClick={() => setPriority('Standard')}
@@ -1518,7 +1565,7 @@ function CreateLetterForm({
                     : 'bg-slate-50 border-2 border-transparent text-slate-500 hover:bg-slate-100'
                 }`}
               >
-                Standard
+                {t('calendar.standard')}
               </button>
               <button
                 type="button"
@@ -1529,7 +1576,7 @@ function CreateLetterForm({
                     : 'bg-slate-50 border-2 border-transparent text-slate-500 hover:bg-slate-100'
                 }`}
               >
-                Urgent
+                {t('calendar.urgent')}
               </button>
             </div>
           </div>
@@ -1541,15 +1588,15 @@ function CreateLetterForm({
         {/* English Side */}
         <div>
           <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-2">
-            Subject (English)
+            {t('samaLetters.subjectEnglish')}
           </label>
           <input
             type="text"
-            placeholder="Enter English subject..."
+            placeholder={t('samaLetters.enterEnglishSubject')}
             className="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-sm font-medium focus:ring-2 focus:ring-emerald-500 outline-none mb-4"
           />
           <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-2">
-            Content (English)
+            {t('samaLetters.contentEnglish')}
           </label>
           <div className="min-h-[200px] w-full bg-slate-50 border border-slate-100 rounded-xl p-4">
             <div className="flex gap-2 border-b border-slate-200 pb-2 mb-3">
@@ -1564,7 +1611,7 @@ function CreateLetterForm({
               </button>
             </div>
             <textarea
-              placeholder="Type your message here..."
+              placeholder={t('samaLetters.typeMessageHere')}
               className="w-full h-32 bg-transparent resize-none text-sm text-slate-400 focus:outline-none"
             />
           </div>
@@ -1576,18 +1623,18 @@ function CreateLetterForm({
             className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-2"
             style={{ fontFamily: 'Inter, sans-serif' }}
           >
-            الموضوع (عربي)
+            {t('samaLetters.subjectArabic')}
           </label>
           <input
             type="text"
-            placeholder="أدخل الموضوع بالعربي..."
+            placeholder={t('samaLetters.enterArabicSubject')}
             className="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-lg font-medium focus:ring-2 focus:ring-emerald-500 outline-none mb-4"
           />
           <label
             className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-2"
             style={{ fontFamily: 'Inter, sans-serif' }}
           >
-            المحتوى (عربي)
+            {t('samaLetters.contentArabic')}
           </label>
           <div className="min-h-[200px] w-full bg-slate-50 border border-slate-100 rounded-xl p-4">
             <div className="flex gap-2 border-b border-slate-200 pb-2 mb-3">
@@ -1602,37 +1649,37 @@ function CreateLetterForm({
               </button>
             </div>
             <textarea
-              placeholder="اكتب نص الرسالة هنا..."
+              placeholder={t('samaLetters.typeMessageHere')}
               className="w-full h-32 bg-transparent resize-none text-lg text-slate-400 focus:outline-none"
             />
           </div>
         </div>
       </div>
 
-      <div className="flex justify-between items-center">
-        <button className="flex items-center gap-2 text-sm font-bold text-slate-500 hover:text-slate-900 transition-colors cursor-pointer">
+      <div className={`flex justify-between items-center ${isRTL ? 'flex-row-reverse' : ''}`}>
+        <button className={`flex items-center gap-2 text-sm font-bold text-slate-500 hover:text-slate-900 transition-colors cursor-pointer ${isRTL ? 'flex-row-reverse' : ''}`}>
           <Icon icon="lucide:paperclip" />
-          Manage Attachments (0)
+          {t('samaLetters.manageAttachments')} (0)
         </button>
-        <div className="flex gap-3">
+        <div className={`flex gap-3 ${isRTL ? 'flex-row-reverse' : ''}`}>
           <button
             onClick={onClose}
             className="px-6 py-3 bg-slate-100 text-slate-600 rounded-xl text-sm font-bold hover:bg-slate-200 transition-colors cursor-pointer"
           >
-            Save as Draft
+            {t('samaLetters.saveAsDraft')}
           </button>
           <button
             onClick={handleSubmit}
             disabled={isSubmitting}
-            className="px-8 py-3 bg-emerald-600 text-white rounded-xl text-sm font-bold hover:bg-emerald-700 transition-colors shadow-lg shadow-emerald-100 disabled:opacity-50 flex items-center gap-2 cursor-pointer"
+            className={`px-8 py-3 bg-emerald-600 text-white rounded-xl text-sm font-bold hover:bg-emerald-700 transition-colors shadow-lg shadow-emerald-100 disabled:opacity-50 flex items-center gap-2 cursor-pointer ${isRTL ? 'flex-row-reverse' : ''}`}
           >
             {isSubmitting ? (
               <>
                 <Icon icon="lucide:loader-2" className="animate-spin" />
-                Processing...
+                {t('samaLetters.processing')}
               </>
             ) : (
-              'Send for Approval'
+              t('samaLetters.sendForApproval')
             )}
           </button>
         </div>
@@ -1651,6 +1698,7 @@ function TemplateEditForm({
   onClose: () => void
   onSave: (data: Partial<LetterTemplate>) => void
 }) {
+  const { t, isRTL } = useTranslation()
   const [name, setName] = useState(template?.name || '')
   const [type, setType] = useState<LetterType>(template?.type || 'Non-Objection')
   const [description, setDescription] = useState(template?.description || '')
@@ -1673,14 +1721,14 @@ function TemplateEditForm({
   }
 
   return (
-    <div className="p-8">
-      <div className="flex justify-between items-start mb-8">
-        <div>
+    <div className={`p-8 ${isRTL ? 'rtl' : ''}`}>
+      <div className={`flex justify-between items-start mb-8 ${isRTL ? 'flex-row-reverse' : ''}`}>
+        <div className={isRTL ? 'text-right' : ''}>
           <h2 className="text-2xl font-bold text-slate-900 font-display">
-            {isCreateMode ? 'Create New Template' : 'Edit Template'}
+            {isCreateMode ? t('samaLetters.createNewTemplate') : t('samaLetters.editTemplate')}
           </h2>
           <p className="text-sm text-slate-500 mt-1">
-            {isCreateMode ? 'Add a new letter template to the databank' : `Editing: ${template?.name}`}
+            {isCreateMode ? t('samaLetters.addNewTemplateToDatabank') : `${t('samaLetters.editing')}: ${template?.name}`}
           </p>
         </div>
         <button
@@ -1693,101 +1741,101 @@ function TemplateEditForm({
 
       <div className="space-y-6">
         <div>
-          <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-2">
-            Template Name
+          <label className={`text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-2 ${isRTL ? 'text-right' : ''}`}>
+            {t('samaLetters.templateName')}
           </label>
           <input
             type="text"
             value={name}
             onChange={(e) => setName(e.target.value)}
-            placeholder="Enter template name..."
-            className="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-sm font-medium focus:ring-2 focus:ring-emerald-500 outline-none"
+            placeholder={t('samaLetters.enterTemplateName')}
+            className={`w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-sm font-medium focus:ring-2 focus:ring-emerald-500 outline-none ${isRTL ? 'text-right' : ''}`}
           />
         </div>
 
         <div>
-          <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-2">
-            Letter Type
+          <label className={`text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-2 ${isRTL ? 'text-right' : ''}`}>
+            {t('samaLetters.letterType')}
           </label>
           <select
             value={type}
             onChange={(e) => setType(e.target.value as LetterType)}
-            className="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-sm font-medium focus:ring-2 focus:ring-emerald-500 outline-none"
+            className={`w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-sm font-medium focus:ring-2 focus:ring-emerald-500 outline-none ${isRTL ? 'text-right' : ''}`}
           >
-            <option value="Non-Objection">Non-Objection</option>
-            <option value="Inquiry">Inquiry</option>
-            <option value="Submission">Submission</option>
-            <option value="Notification">Notification</option>
+            <option value="Non-Objection">{t('samaLetters.nonObjection')}</option>
+            <option value="Inquiry">{t('samaLetters.inquiry')}</option>
+            <option value="Submission">{t('samaLetters.submission')}</option>
+            <option value="Notification">{t('samaLetters.notification')}</option>
           </select>
         </div>
 
         <div>
-          <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-2">
-            Description
+          <label className={`text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-2 ${isRTL ? 'text-right' : ''}`}>
+            {t('common.description')}
           </label>
           <textarea
             value={description}
             onChange={(e) => setDescription(e.target.value)}
-            placeholder="Describe what this template is used for..."
+            placeholder={t('samaLetters.describeTemplatePurpose')}
             rows={3}
-            className="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-sm font-medium focus:ring-2 focus:ring-emerald-500 outline-none resize-none"
+            className={`w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-sm font-medium focus:ring-2 focus:ring-emerald-500 outline-none resize-none ${isRTL ? 'text-right' : ''}`}
           />
         </div>
 
         <div>
-          <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-2">
-            Status
+          <label className={`text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-2 ${isRTL ? 'text-right' : ''}`}>
+            {t('common.status')}
           </label>
-          <div className="flex gap-3">
+          <div className={`flex gap-3 ${isRTL ? 'flex-row-reverse' : ''}`}>
             <button
               type="button"
               onClick={() => setStatus('Active')}
-              className={`flex-1 py-3 px-4 rounded-xl text-sm font-bold transition-all flex items-center justify-center gap-2 ${
+              className={`flex-1 py-3 px-4 rounded-xl text-sm font-bold transition-all flex items-center justify-center gap-2 ${isRTL ? 'flex-row-reverse' : ''} ${
                 status === 'Active'
                   ? 'bg-emerald-50 border-2 border-emerald-500 text-emerald-700'
                   : 'bg-slate-50 border-2 border-transparent text-slate-500 hover:bg-slate-100'
               }`}
             >
               <span className={`w-2 h-2 rounded-full ${status === 'Active' ? 'bg-emerald-500' : 'bg-slate-300'}`} />
-              Active
+              {t('common.active')}
             </button>
             <button
               type="button"
               onClick={() => setStatus('Draft')}
-              className={`flex-1 py-3 px-4 rounded-xl text-sm font-bold transition-all flex items-center justify-center gap-2 ${
+              className={`flex-1 py-3 px-4 rounded-xl text-sm font-bold transition-all flex items-center justify-center gap-2 ${isRTL ? 'flex-row-reverse' : ''} ${
                 status === 'Draft'
                   ? 'bg-amber-50 border-2 border-amber-500 text-amber-700'
                   : 'bg-slate-50 border-2 border-transparent text-slate-500 hover:bg-slate-100'
               }`}
             >
               <span className={`w-2 h-2 rounded-full ${status === 'Draft' ? 'bg-amber-500' : 'bg-slate-300'}`} />
-              Draft
+              {t('common.draft')}
             </button>
           </div>
         </div>
       </div>
 
-      <div className="mt-8 flex justify-end gap-3">
+      <div className={`mt-8 flex gap-3 ${isRTL ? 'justify-start flex-row-reverse' : 'justify-end'}`}>
         <button
           onClick={onClose}
           className="px-6 py-2.5 bg-slate-100 text-slate-600 rounded-xl text-sm font-bold hover:bg-slate-200 transition-colors cursor-pointer"
         >
-          Cancel
+          {t('common.cancel')}
         </button>
         <button
           onClick={handleSubmit}
           disabled={isSaving || !name.trim()}
-          className="px-8 py-2.5 bg-emerald-600 text-white rounded-xl text-sm font-bold hover:bg-emerald-700 transition-colors shadow-lg shadow-emerald-100 disabled:opacity-50 flex items-center gap-2 cursor-pointer"
+          className={`px-8 py-2.5 bg-emerald-600 text-white rounded-xl text-sm font-bold hover:bg-emerald-700 transition-colors shadow-lg shadow-emerald-100 disabled:opacity-50 flex items-center gap-2 cursor-pointer ${isRTL ? 'flex-row-reverse' : ''}`}
         >
           {isSaving ? (
             <>
               <Icon icon="lucide:loader-2" className="animate-spin" />
-              Saving...
+              {t('samaLetters.saving')}
             </>
           ) : (
             <>
               <Icon icon="lucide:check" />
-              {isCreateMode ? 'Create Template' : 'Save Changes'}
+              {isCreateMode ? t('samaLetters.createTemplate') : t('common.saveChanges')}
             </>
           )}
         </button>

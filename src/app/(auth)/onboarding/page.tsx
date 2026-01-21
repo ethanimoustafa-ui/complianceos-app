@@ -111,7 +111,7 @@ const integrations: Integration[] = [
 
 export default function OnboardingPage() {
   const router = useRouter()
-  const { t, isRTL } = useTranslation()
+  const { t, isRTL, language, toggleLanguage } = useTranslation()
   const [currentStep, setCurrentStep] = useState(1)
   const [isSubmitting, setIsSubmitting] = useState(false)
 
@@ -157,7 +157,7 @@ export default function OnboardingPage() {
     setIsSubmitting(true)
     // Simulate API call
     await new Promise((resolve) => setTimeout(resolve, 1500))
-    router.push('/dashboard')
+    router.push('/welcome')
   }
 
   return (
@@ -171,7 +171,16 @@ export default function OnboardingPage() {
             </div>
             <span className="text-xl font-bold text-slate-900">ComplianceOS</span>
           </Link>
-          <div className="text-sm font-medium text-slate-600">{t('onboarding.setup')}</div>
+          <div className="flex items-center gap-4">
+            <div className="text-sm font-medium text-slate-600">{t('onboarding.setup')}</div>
+            <button
+              onClick={toggleLanguage}
+              className={`flex items-center gap-2 px-3 py-2 text-sm font-medium text-slate-600 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors cursor-pointer ${isRTL ? 'flex-row-reverse' : ''}`}
+            >
+              <Icon icon="lucide:globe" className="text-lg" />
+              <span>{language === 'en' ? 'العربية' : 'English'}</span>
+            </button>
+          </div>
         </div>
       </header>
 

@@ -290,6 +290,46 @@ body::-webkit-scrollbar {
   color: #475569;
 }
 
+[dir="rtl"] .impact-label-vertical {
+  left: auto;
+  right: -20px;
+}
+
+/* RTL-aware icon positioning for auth forms */
+.auth-icon-start {
+  left: 1rem;
+}
+
+.auth-icon-end {
+  right: 1rem;
+}
+
+[dir="rtl"] .auth-icon-start {
+  left: auto;
+  right: 1rem;
+}
+
+[dir="rtl"] .auth-icon-end {
+  right: auto;
+  left: 1rem;
+}
+
+/* RTL-aware input padding */
+.auth-input-with-icons {
+  padding-left: 3rem;
+  padding-right: 3rem;
+}
+
+.auth-input-with-start-icon {
+  padding-left: 3rem;
+  padding-right: 1rem;
+}
+
+[dir="rtl"] .auth-input-with-start-icon {
+  padding-left: 1rem;
+  padding-right: 3rem;
+}
+
 /* Requirements view animation */
 .requirements-view {
   animation: modalSlideIn 0.4s cubic-bezier(0.4, 0, 0.2, 1);
@@ -461,4 +501,483 @@ body::-webkit-scrollbar {
 .rtl .modal-close-btn {
   right: unset;
   left: 1rem;
+}
+
+/* ================================
+   Welcome Splash Screen Animations
+   ================================ */
+
+/* Aurora surge gradient animation */
+.aurora-surge {
+  background: radial-gradient(ellipse at 50% 50%, rgba(16, 185, 129, 0.3) 0%, transparent 50%),
+              radial-gradient(ellipse at 80% 20%, rgba(59, 130, 246, 0.2) 0%, transparent 40%),
+              radial-gradient(ellipse at 20% 80%, rgba(16, 185, 129, 0.2) 0%, transparent 40%);
+  animation: surge-aurora 8s ease-in-out infinite;
+}
+
+@keyframes surge-aurora {
+  0%, 100% {
+    transform: scale(1) rotate(0deg);
+    opacity: 0.6;
+  }
+  25% {
+    transform: scale(1.1) rotate(2deg);
+    opacity: 0.8;
+  }
+  50% {
+    transform: scale(1.05) rotate(-1deg);
+    opacity: 0.5;
+  }
+  75% {
+    transform: scale(1.15) rotate(1deg);
+    opacity: 0.7;
+  }
+}
+
+/* Carbon fiber texture */
+.carbon-fiber-texture {
+  background-image:
+    linear-gradient(45deg, rgba(255,255,255,0.02) 25%, transparent 25%),
+    linear-gradient(-45deg, rgba(255,255,255,0.02) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, rgba(255,255,255,0.02) 75%),
+    linear-gradient(-45deg, transparent 75%, rgba(255,255,255,0.02) 75%);
+  background-size: 4px 4px;
+}
+
+/* Grid pattern */
+.grid-pattern {
+  background-image:
+    linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px);
+  background-size: 50px 50px;
+}
+
+/* Particle container */
+.particle-container {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+/* Particles */
+.particle {
+  position: absolute;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  animation: particle-sweep 6s linear infinite;
+}
+
+.particle-emerald {
+  background: radial-gradient(circle, rgba(16, 185, 129, 0.8) 0%, rgba(16, 185, 129, 0) 70%);
+  box-shadow: 0 0 10px rgba(16, 185, 129, 0.5);
+}
+
+.particle-blue {
+  background: radial-gradient(circle, rgba(59, 130, 246, 0.8) 0%, rgba(59, 130, 246, 0) 70%);
+  box-shadow: 0 0 10px rgba(59, 130, 246, 0.5);
+}
+
+@keyframes particle-sweep {
+  0% {
+    transform: translateX(-100px) translateY(0) scale(0);
+    opacity: 0;
+  }
+  10% {
+    opacity: 1;
+    transform: translateX(0) translateY(-20px) scale(1);
+  }
+  90% {
+    opacity: 1;
+    transform: translateX(calc(100vw - 100px)) translateY(20px) scale(1);
+  }
+  100% {
+    transform: translateX(100vw) translateY(0) scale(0);
+    opacity: 0;
+  }
+}
+
+[dir="rtl"] .particle {
+  animation: particle-sweep-rtl 6s linear infinite;
+}
+
+@keyframes particle-sweep-rtl {
+  0% {
+    transform: translateX(100px) translateY(0) scale(0);
+    opacity: 0;
+  }
+  10% {
+    opacity: 1;
+    transform: translateX(0) translateY(-20px) scale(1);
+  }
+  90% {
+    opacity: 1;
+    transform: translateX(calc(-100vw + 100px)) translateY(20px) scale(1);
+  }
+  100% {
+    transform: translateX(-100vw) translateY(0) scale(0);
+    opacity: 0;
+  }
+}
+
+/* Geometric shapes */
+.geometric-shapes {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.geometric-shape {
+  position: absolute;
+  opacity: 0.1;
+  animation: shape-dance 10s ease-in-out infinite;
+}
+
+.shape-square {
+  width: 20px;
+  height: 20px;
+  border: 1px solid rgba(16, 185, 129, 0.5);
+}
+
+.shape-circle {
+  width: 24px;
+  height: 24px;
+  border: 1px solid rgba(59, 130, 246, 0.5);
+  border-radius: 50%;
+}
+
+@keyframes shape-dance {
+  0%, 100% {
+    transform: translateY(0) rotate(0deg) scale(1);
+    opacity: 0.1;
+  }
+  25% {
+    transform: translateY(-30px) rotate(90deg) scale(1.2);
+    opacity: 0.2;
+  }
+  50% {
+    transform: translateY(-10px) rotate(180deg) scale(0.8);
+    opacity: 0.15;
+  }
+  75% {
+    transform: translateY(-40px) rotate(270deg) scale(1.1);
+    opacity: 0.2;
+  }
+}
+
+/* Radial convergence rings */
+.radial-rings {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.radial-ring {
+  position: absolute;
+  border: 1px solid rgba(16, 185, 129, 0.1);
+  border-radius: 50%;
+  animation: radial-pulse-in 4s ease-out infinite;
+}
+
+@keyframes radial-pulse-in {
+  0% {
+    width: 80vw;
+    height: 80vw;
+    opacity: 0;
+  }
+  50% {
+    opacity: 0.3;
+  }
+  100% {
+    width: 0;
+    height: 0;
+    opacity: 0;
+  }
+}
+
+/* Logo materialize animation */
+.logo-container {
+  transition: all 0.5s ease-out;
+}
+
+.logo-materialize {
+  animation: logo-materialize 1.2s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+@keyframes logo-materialize {
+  0% {
+    transform: scale(0) rotateY(180deg);
+    opacity: 0;
+    filter: blur(20px);
+  }
+  50% {
+    transform: scale(1.2) rotateY(0deg);
+    opacity: 0.8;
+    filter: blur(5px);
+  }
+  100% {
+    transform: scale(1) rotateY(0deg);
+    opacity: 1;
+    filter: blur(0);
+  }
+}
+
+/* Orbiting particles around logo */
+.orbit-container {
+  position: absolute;
+  inset: -20px;
+  animation: orbit-rotate 8s linear infinite;
+}
+
+.orbit-particle {
+  position: absolute;
+  width: 6px;
+  height: 6px;
+  background: radial-gradient(circle, rgba(16, 185, 129, 0.9) 0%, transparent 70%);
+  border-radius: 50%;
+  top: 50%;
+  left: 50%;
+  margin: -3px;
+  box-shadow: 0 0 10px rgba(16, 185, 129, 0.6);
+}
+
+@keyframes orbit-rotate {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Text slam/wake animation */
+.text-slam-wake {
+  animation: text-slam-wake 0.8s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+  animation-delay: 0.3s;
+  opacity: 0;
+}
+
+@keyframes text-slam-wake {
+  0% {
+    transform: scale(2) translateY(-50px);
+    opacity: 0;
+    filter: blur(10px);
+    letter-spacing: 0.5em;
+  }
+  60% {
+    transform: scale(0.95) translateY(5px);
+    opacity: 1;
+    filter: blur(0);
+    letter-spacing: -0.02em;
+  }
+  100% {
+    transform: scale(1) translateY(0);
+    opacity: 1;
+    filter: blur(0);
+    letter-spacing: normal;
+  }
+}
+
+/* Draw underline animation */
+.draw-underline {
+  animation: draw-underline-fast 0.6s ease-out forwards;
+  animation-delay: 0.7s;
+  width: 0;
+}
+
+@keyframes draw-underline-fast {
+  0% {
+    width: 0;
+    opacity: 0;
+  }
+  100% {
+    width: 200px;
+    opacity: 1;
+  }
+}
+
+/* Tagline fade up */
+.fade-up-tagline {
+  animation: fade-up-tagline 1s ease-out forwards;
+  animation-delay: 0.9s;
+  opacity: 0;
+}
+
+@keyframes fade-up-tagline {
+  0% {
+    transform: translateY(30px);
+    opacity: 0;
+  }
+  100% {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+/* Button appear animation */
+.button-appear {
+  animation: button-appear 0.8s ease-out forwards;
+  animation-delay: 1.3s;
+  opacity: 0;
+}
+
+@keyframes button-appear {
+  0% {
+    transform: translateY(30px) scale(0.9);
+    opacity: 0;
+  }
+  100% {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+}
+
+/* Gravitational pulse effect */
+.gravitational-pulse {
+  background: radial-gradient(circle at center, rgba(255,255,255,0.3) 0%, transparent 70%);
+  animation: gravitational-pulse 2s ease-in-out infinite;
+}
+
+@keyframes gravitational-pulse {
+  0%, 100% {
+    transform: scale(0);
+    opacity: 0;
+  }
+  50% {
+    transform: scale(2);
+    opacity: 0.3;
+  }
+}
+
+/* Scanline effect */
+.scanline {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, rgba(16, 185, 129, 0.5), transparent);
+  animation: scanline 4s linear infinite;
+  pointer-events: none;
+  z-index: 100;
+}
+
+@keyframes scanline {
+  0% {
+    top: -2px;
+    opacity: 0;
+  }
+  10% {
+    opacity: 1;
+  }
+  90% {
+    opacity: 1;
+  }
+  100% {
+    top: 100vh;
+    opacity: 0;
+  }
+}
+
+/* Portal exit animation - smoother fade to white */
+.portal-active {
+  animation: portal-exit 1s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+@keyframes portal-exit {
+  0% {
+    transform: scale(1);
+    filter: blur(0) brightness(1);
+    opacity: 1;
+  }
+  60% {
+    transform: scale(1.1);
+    filter: blur(8px) brightness(1.5);
+    opacity: 0.8;
+  }
+  100% {
+    transform: scale(1.2);
+    filter: blur(20px) brightness(2);
+    opacity: 0;
+  }
+}
+
+.portal-overlay {
+  position: fixed;
+  inset: 0;
+  background: white;
+  animation: portal-overlay-fade 1s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  z-index: 1000;
+}
+
+@keyframes portal-overlay-fade {
+  0% {
+    opacity: 0;
+  }
+  40% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+/* ================================
+   Email Verification Page Animations
+   ================================ */
+
+/* Pulse animation for pending verification icon */
+.verification-pulse-icon {
+  animation: verification-pulse 2s ease-in-out infinite;
+}
+
+@keyframes verification-pulse {
+  0%, 100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.4);
+  }
+  50% {
+    transform: scale(1.05);
+    box-shadow: 0 0 0 20px rgba(59, 130, 246, 0);
+  }
+}
+
+/* Success animation for verified icon */
+.verification-success-icon {
+  animation: verification-success 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+@keyframes verification-success {
+  0% {
+    transform: scale(0);
+    opacity: 0;
+  }
+  50% {
+    transform: scale(1.2);
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* Dashboard fade-in from welcome transition */
+.dashboard-fade-in {
+  animation: dashboard-fade-in 0.6s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+@keyframes dashboard-fade-in {
+  0% {
+    opacity: 0;
+    transform: scale(0.98);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
 }

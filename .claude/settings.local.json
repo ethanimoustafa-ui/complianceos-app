@@ -7,7 +7,9 @@
       "Bash(ls:*)",
       "Bash(npx tsc:*)",
       "Bash(npm run build)",
-      "Bash(test:*)"
+      "Bash(test:*)",
+      "Bash(cat:*)",
+      "Bash(head:*)"
     ],
     "deny": [],
     "ask": []

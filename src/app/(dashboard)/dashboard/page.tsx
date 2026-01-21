@@ -1,5 +1,6 @@
 'use client'
 
+import { useState, useEffect } from 'react'
 import { Icon } from '@iconify/react'
 import { Header } from '@/components/layout/header'
 import { Card } from '@/components/ui/card'
@@ -9,9 +10,19 @@ import { useTranslation } from '@/i18n'
 
 export default function DashboardPage() {
   const { t, isRTL } = useTranslation()
+  const [showFadeIn, setShowFadeIn] = useState(false)
+
+  useEffect(() => {
+    // Check if we're coming from the welcome page
+    const fromWelcome = sessionStorage.getItem('fromWelcome')
+    if (fromWelcome) {
+      setShowFadeIn(true)
+      sessionStorage.removeItem('fromWelcome')
+    }
+  }, [])
 
   return (
-    <>
+    <div className={showFadeIn ? 'dashboard-fade-in' : ''}>
       <Header title={t('dashboard.title')} subtitle={t('dashboard.subtitle')} />
 
       <div className="flex-1 overflow-auto hide-scrollbar p-8">
@@ -22,13 +33,13 @@ export default function DashboardPage() {
             <AlertCard
               type="critical"
               title={t('dashboard.criticalActionRequired')}
-              message="SAMA submission #TX-901 is 2 days overdue."
+              message={t('dashboard.samaOverdueMessage')}
               actionLabel={t('dashboard.resolveNow')}
             />
             <AlertCard
               type="warning"
               title={t('dashboard.trendAlert')}
-              message="Saudization target gap increased by 0.2% this month."
+              message={t('dashboard.saudizationGapMessage')}
               actionLabel={t('dashboard.viewDetails')}
             />
           </div>
@@ -215,7 +226,7 @@ export default function DashboardPage() {
           </div>
         </div>
       </div>
-    </>
+    </div>
   )
 }
 

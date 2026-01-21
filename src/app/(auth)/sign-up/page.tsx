@@ -41,7 +41,8 @@ export default function SignUpPage() {
     setIsLoading(true)
     await new Promise((resolve) => setTimeout(resolve, 1500))
     setIsLoading(false)
-    router.push('/dashboard')
+    // Navigate to verification page with email
+    router.push(`/verify-email?email=${encodeURIComponent(data.email)}`)
   }
 
   return (
@@ -60,11 +61,11 @@ export default function SignUpPage() {
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-2">{t('auth.fullName')}</label>
             <div className="relative">
-              <Icon icon="lucide:user" className={`absolute ${isRTL ? 'right-4' : 'left-4'} top-1/2 -translate-y-1/2 text-slate-400`} />
+              <Icon icon="lucide:user" className="absolute auth-icon-start top-1/2 -translate-y-1/2 text-slate-400" />
               <input
                 type="text"
                 placeholder={t('auth.fullNamePlaceholder')}
-                className={`w-full ${isRTL ? 'pr-12 pl-4' : 'pl-12 pr-4'} py-3.5 bg-white border border-slate-300 rounded-lg text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20`}
+                className="w-full auth-input-with-start-icon py-3.5 bg-white border border-slate-300 rounded-lg text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
                 {...register('name')}
               />
             </div>
@@ -74,11 +75,11 @@ export default function SignUpPage() {
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-2">{t('auth.workEmail')}</label>
             <div className="relative">
-              <Icon icon="lucide:mail" className={`absolute ${isRTL ? 'right-4' : 'left-4'} top-1/2 -translate-y-1/2 text-slate-400`} />
+              <Icon icon="lucide:mail" className="absolute auth-icon-start top-1/2 -translate-y-1/2 text-slate-400" />
               <input
                 type="email"
                 placeholder={t('auth.emailPlaceholder')}
-                className={`w-full ${isRTL ? 'pr-12 pl-4' : 'pl-12 pr-4'} py-3.5 bg-white border border-slate-300 rounded-lg text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20`}
+                className="w-full auth-input-with-start-icon py-3.5 bg-white border border-slate-300 rounded-lg text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
                 {...register('email')}
               />
             </div>
@@ -88,11 +89,11 @@ export default function SignUpPage() {
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-2">{t('auth.organization')}</label>
             <div className="relative">
-              <Icon icon="lucide:building" className={`absolute ${isRTL ? 'right-4' : 'left-4'} top-1/2 -translate-y-1/2 text-slate-400`} />
+              <Icon icon="lucide:building" className="absolute auth-icon-start top-1/2 -translate-y-1/2 text-slate-400" />
               <input
                 type="text"
                 placeholder={t('auth.organizationPlaceholder')}
-                className={`w-full ${isRTL ? 'pr-12 pl-4' : 'pl-12 pr-4'} py-3.5 bg-white border border-slate-300 rounded-lg text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20`}
+                className="w-full auth-input-with-start-icon py-3.5 bg-white border border-slate-300 rounded-lg text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
                 {...register('organization')}
               />
             </div>
@@ -102,17 +103,17 @@ export default function SignUpPage() {
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-2">{t('auth.password')}</label>
             <div className="relative">
-              <Icon icon="lucide:lock" className={`absolute ${isRTL ? 'right-4' : 'left-4'} top-1/2 -translate-y-1/2 text-slate-400`} />
+              <Icon icon="lucide:lock" className="absolute auth-icon-start top-1/2 -translate-y-1/2 text-slate-400" />
               <input
                 type={showPassword ? 'text' : 'password'}
-                placeholder="••••••••"
-                className={`w-full ${isRTL ? 'pr-12 pl-12' : 'pl-12 pr-12'} py-3.5 bg-white border border-slate-300 rounded-lg text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20`}
+                placeholder={t('auth.passwordPlaceholder')}
+                className="w-full auth-input-with-icons py-3.5 bg-white border border-slate-300 rounded-lg text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
                 {...register('password')}
               />
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
-                className={`absolute ${isRTL ? 'left-4' : 'right-4'} top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600`}
+                className="absolute auth-icon-end top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
               >
                 <Icon icon={showPassword ? 'lucide:eye-off' : 'lucide:eye'} />
               </button>
@@ -123,11 +124,11 @@ export default function SignUpPage() {
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-2">{t('auth.confirmPassword')}</label>
             <div className="relative">
-              <Icon icon="lucide:lock" className={`absolute ${isRTL ? 'right-4' : 'left-4'} top-1/2 -translate-y-1/2 text-slate-400`} />
+              <Icon icon="lucide:lock" className="absolute auth-icon-start top-1/2 -translate-y-1/2 text-slate-400" />
               <input
                 type="password"
-                placeholder="••••••••"
-                className={`w-full ${isRTL ? 'pr-12 pl-4' : 'pl-12 pr-4'} py-3.5 bg-white border border-slate-300 rounded-lg text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20`}
+                placeholder={t('auth.passwordPlaceholder')}
+                className="w-full auth-input-with-start-icon py-3.5 bg-white border border-slate-300 rounded-lg text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
                 {...register('confirmPassword')}
               />
             </div>
