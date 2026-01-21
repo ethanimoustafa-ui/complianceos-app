@@ -467,6 +467,11 @@ body::-webkit-scrollbar {
   animation: slideInRight 0.3s ease-out;
 }
 
+/* RTL Arrow Flip Utility - mirrors icons horizontally */
+.flip-x {
+  transform: scaleX(-1);
+}
+
 /* RTL timeline */
 .rtl .before\:left-2::before {
   left: unset;

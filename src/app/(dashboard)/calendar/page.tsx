@@ -171,7 +171,7 @@ function getLocalizedSubmissionTypeLabel(type: TaskType, t: (key: TranslationKey
   return labels[type]
 }
 
-function getDueStatus(dateKey: string): { text: string; className: string } {
+function getDueStatus(dateKey: string, t?: (key: TranslationKey) => string): { text: string; className: string } {
   const taskDate = new Date(dateKey)
   const today = new Date()
   today.setHours(0, 0, 0, 0)
@@ -180,11 +180,21 @@ function getDueStatus(dateKey: string): { text: string; className: string } {
   const diffTime = taskDate.getTime() - today.getTime()
   const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
 
-  if (diffDays < 0) return { text: `${Math.abs(diffDays)}d overdue`, className: 'text-red-600 bg-red-50' }
-  if (diffDays === 0) return { text: 'Due today', className: 'text-orange-600 bg-orange-50' }
-  if (diffDays === 1) return { text: 'Due tomorrow', className: 'text-amber-600 bg-amber-50' }
-  if (diffDays <= 7) return { text: `Due in ${diffDays}d`, className: 'text-slate-600 bg-slate-50' }
-  return { text: `Due in ${diffDays}d`, className: 'text-slate-500 bg-slate-50' }
+  if (diffDays < 0) {
+    const text = t ? t('calendar.daysOverdue').replace('{days}', String(Math.abs(diffDays))) : `${Math.abs(diffDays)}d overdue`
+    return { text, className: 'text-red-600 bg-red-50' }
+  }
+  if (diffDays === 0) {
+    const text = t ? t('calendar.dueToday') : 'Due today'
+    return { text, className: 'text-orange-600 bg-orange-50' }
+  }
+  if (diffDays === 1) {
+    const text = t ? t('calendar.dueTomorrow') : 'Due tomorrow'
+    return { text, className: 'text-amber-600 bg-amber-50' }
+  }
+  const text = t ? t('calendar.dueInDays').replace('{days}', String(diffDays)) : `Due in ${diffDays}d`
+  if (diffDays <= 7) return { text, className: 'text-slate-600 bg-slate-50' }
+  return { text, className: 'text-slate-500 bg-slate-50' }
 }
 
 // Helper functions to get localized month names
@@ -288,6 +298,7 @@ export default function CalendarPage() {
   const [selectedDayKey, setSelectedDayKey] = useState<string | null>('2024-10-06')
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null)
   const [isPickerOpen, setIsPickerOpen] = useState(false)
+  const [pickerDate, setPickerDate] = useState<Date>(new Date(2024, 9, 1)) // Separate state for picker navigation
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false)
   const [taskStore, setTaskStore] = useState<TaskStore>(TASK_STORE)
   const [calendarType, setCalendarType] = useState<CalendarType>('gregorian')
@@ -576,7 +587,7 @@ export default function CalendarPage() {
                 onClick={() => navigateDate(-1)}
                 className="p-1.5 hover:bg-slate-50 rounded transition-colors cursor-pointer"
               >
-                <Icon icon={isRTL ? "lucide:chevron-right" : "lucide:chevron-left"} className="text-slate-600" />
+                <Icon icon="lucide:chevron-left" className={cn("text-slate-600", isRTL && "flip-x")} />
               </button>
               <button
                 onClick={navigateToday}
@@ -585,7 +596,7 @@ export default function CalendarPage() {
                 {t('calendar.today')}
               </button>
               <button
-                onClick={() => setIsPickerOpen(true)}
+                onClick={() => { setPickerDate(new Date(currentDate)); setIsPickerOpen(true) }}
                 className="px-4 py-1.5 text-sm font-bold text-slate-900 hover:bg-slate-50 transition-colors border-x border-slate-100 flex items-center gap-2 cursor-pointer"
               >
                 <span>{getDisplayLabel()}</span>
@@ -595,7 +606,7 @@ export default function CalendarPage() {
                 onClick={() => navigateDate(1)}
                 className="p-1.5 hover:bg-slate-50 rounded transition-colors cursor-pointer"
               >
-                <Icon icon={isRTL ? "lucide:chevron-left" : "lucide:chevron-right"} className="text-slate-600" />
+                <Icon icon="lucide:chevron-right" className={cn("text-slate-600", isRTL && "flip-x")} />
               </button>
             </div>
 
@@ -834,7 +845,7 @@ export default function CalendarPage() {
               'w-full bg-slate-900 text-white py-3 rounded-xl font-bold text-xs uppercase tracking-widest shadow-lg hover:bg-slate-800 transition-all flex items-center justify-center gap-2 cursor-pointer',
               isRTL && 'flex-row-reverse'
             )}>
-              {t('calendar.fullReport')} <Icon icon={isRTL ? "lucide:arrow-left" : "lucide:arrow-right"} />
+              {t('calendar.fullReport')} <Icon icon="lucide:arrow-right" className={isRTL ? "flip-x" : ""} />
             </button>
           </div>
         </div>
@@ -843,10 +854,18 @@ export default function CalendarPage() {
       {/* Date Picker Modal */}
       {isPickerOpen && (
         <DatePickerModal
-          currentDate={currentDate}
+          currentDate={pickerDate}
           onClose={() => setIsPickerOpen(false)}
-          onSelectMonth={(month) => { setCurrentDate(new Date(currentDate.getFullYear(), month, 1)); setIsPickerOpen(false) }}
-          onSelectYear={(year) => { setCurrentDate(new Date(year, currentDate.getMonth(), 1)) }}
+          onSelectMonth={(month) => {
+            const newDate = new Date(pickerDate.getFullYear(), month, 1)
+            setPickerDate(newDate)
+            setCurrentDate(newDate)
+            setIsPickerOpen(false)
+          }}
+          onSelectYear={(year) => {
+            // Only update picker date, not main view - this is for browsing years
+            setPickerDate(new Date(year, pickerDate.getMonth(), 1))
+          }}
           onOpenMonthView={() => { setViewMode('month'); setIsPickerOpen(false) }}
           onOpenYearView={() => { setViewMode('year'); setIsPickerOpen(false) }}
           viewMode={viewMode}
@@ -1191,6 +1210,7 @@ function SubmissionsList({ taskStore, selectedTaskId, onSelectTask, showComplete
   isRTL: boolean
 }) {
   // Get all tasks filtered by date or month/year, and optionally by completed status
+  // When groupBy is 'month' or 'year', show ALL tasks from ALL time periods (clustered view)
   const allTasks: (Task & { date: string })[] = []
   Object.keys(taskStore).forEach(dateKey => {
     // If filterDate is set, only show tasks for that specific day
@@ -1198,13 +1218,15 @@ function SubmissionsList({ taskStore, selectedTaskId, onSelectTask, showComplete
       if (dateKey !== filterDate) {
         return // skip tasks not on the filtered date
       }
-    } else {
-      // Filter by month/year
+    } else if (groupBy === 'date') {
+      // Only apply month/year filter when groupBy is 'date'
+      // When groupBy is 'month' or 'year', show all tasks (clustered view)
       const taskDate = new Date(dateKey)
       if (taskDate.getMonth() !== filterMonth || taskDate.getFullYear() !== filterYear) {
         return // skip tasks outside current month
       }
     }
+    // For 'month' and 'year' groupBy, no date filtering - show all tasks clustered
 
     const dayData = taskStore[dateKey]
     dayData.tasks.forEach(task => {
@@ -1243,9 +1265,23 @@ function SubmissionsList({ taskStore, selectedTaskId, onSelectTask, showComplete
 
   if (allTasks.length === 0) {
     const dateLocale = isRTL ? 'ar-SA' : 'en-US'
-    const emptyLabel = filterDate
-      ? new Date(filterDate).toLocaleDateString(dateLocale, { month: 'long', day: 'numeric', year: 'numeric', calendar: 'gregory' })
-      : new Date(filterYear, filterMonth).toLocaleDateString(dateLocale, { month: 'long', year: 'numeric', calendar: 'gregory' })
+    let emptyLabel: string
+    let emptyMessage: string
+
+    if (filterDate) {
+      emptyLabel = new Date(filterDate).toLocaleDateString(dateLocale, { month: 'long', day: 'numeric', year: 'numeric', calendar: 'gregory' })
+      emptyMessage = showCompleted ? 'No tasks found for this date.' : 'No pending tasks or submissions for this date.'
+    } else if (groupBy === 'month') {
+      emptyLabel = t('calendar.monthView')
+      emptyMessage = showCompleted ? 'No tasks found.' : 'No pending tasks or submissions found.'
+    } else if (groupBy === 'year') {
+      emptyLabel = t('calendar.yearView')
+      emptyMessage = showCompleted ? 'No tasks found.' : 'No pending tasks or submissions found.'
+    } else {
+      emptyLabel = new Date(filterYear, filterMonth).toLocaleDateString(dateLocale, { month: 'long', year: 'numeric', calendar: 'gregory' })
+      emptyMessage = showCompleted ? 'No tasks found for this month.' : 'No pending tasks or submissions for this month.'
+    }
+
     return (
       <div className="flex flex-col items-center justify-center py-20 px-6">
         <div className="w-24 h-24 bg-emerald-50 rounded-full flex items-center justify-center mb-6">
@@ -1253,7 +1289,7 @@ function SubmissionsList({ taskStore, selectedTaskId, onSelectTask, showComplete
         </div>
         <h3 className="text-xl font-bold text-slate-900 mb-2">{t('calendar.noSubmissionsFor')} {emptyLabel}</h3>
         <p className="text-sm text-slate-500 text-center">
-          {showCompleted ? 'No tasks found for this month.' : 'No pending tasks or submissions for this month.'}
+          {emptyMessage}
         </p>
       </div>
     )
@@ -1325,7 +1361,7 @@ function SubmissionsList({ taskStore, selectedTaskId, onSelectTask, showComplete
             <div className="space-y-2 mb-6">
               {tasks.map(task => {
                 const colors = submissionColors[task.type]
-                const dueStatus = getDueStatus(task.date)
+                const dueStatus = getDueStatus(task.date, t)
                 const priorityColor = priorityColors[task.priority]
 
                 return (
@@ -1708,14 +1744,14 @@ function DatePickerModal({ currentDate, onClose, onSelectMonth, onSelectYear, on
           <div className="mt-6 pt-6 border-t border-slate-100 flex justify-between items-center shrink-0">
             <div className="flex gap-2">
               <span className="flex items-center gap-1.5 text-[10px] font-bold text-slate-400">
-                <div className="w-2 h-2 rounded-full bg-emerald-500" /> Selected Year
+                <div className="w-2 h-2 rounded-full bg-emerald-500" /> {t('calendar.selectedYear')}
               </span>
               <span className="flex items-center gap-1.5 text-[10px] font-bold text-slate-400">
-                <div className="w-2 h-2 rounded-full bg-slate-200" /> Available
+                <div className="w-2 h-2 rounded-full bg-slate-200" /> {t('calendar.available')}
               </span>
             </div>
             <button onClick={onOpenYearView} className="text-xs font-bold text-emerald-600 hover:text-emerald-700 cursor-pointer">
-              Switch to Full Year View &rarr;
+              {t('calendar.switchToFullYearView')} {isRTL ? '\u2190' : '\u2192'}
             </button>
           </div>
         </div>

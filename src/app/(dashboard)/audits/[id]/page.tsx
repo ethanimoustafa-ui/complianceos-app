@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Modal } from '@/components/ui/modal'
 import { useTranslation } from '@/i18n'
+import { formatRelativeTime, formatLocalizedDateShort } from '@/lib/time-utils'
 
 // Types
 interface Task {
@@ -30,8 +31,21 @@ interface TimelineItem {
   avatar: string
   action: string
   detail?: string
-  timestamp: string
+  timestamp: Date
   type: 'completed' | 'upload' | 'comment'
+}
+
+// Helper to create a date relative to now
+function hoursAgo(hours: number): Date {
+  const date = new Date()
+  date.setHours(date.getHours() - hours)
+  return date
+}
+
+function daysAgo(days: number): Date {
+  const date = new Date()
+  date.setDate(date.getDate() - days)
+  return date
 }
 
 interface TeamMember {
@@ -100,7 +114,7 @@ const timelineItems: TimelineItem[] = [
     avatar: 'Felix',
     action: 'completed',
     detail: 'A.9.2 Provisioning Review',
-    timestamp: '2 hours ago',
+    timestamp: hoursAgo(2),
     type: 'completed',
   },
   {
@@ -109,7 +123,7 @@ const timelineItems: TimelineItem[] = [
     avatar: 'Sarah',
     action: 'uploaded',
     detail: 'Firewall_Policy_Q3.pdf',
-    timestamp: 'Yesterday at 4:25 PM',
+    timestamp: daysAgo(1),
     type: 'upload',
   },
   {
@@ -118,7 +132,7 @@ const timelineItems: TimelineItem[] = [
     avatar: 'Michael',
     action: 'left a comment',
     detail: '"We need to confirm the encryption standards for the database before we can close A.12.3."',
-    timestamp: 'Oct 20, 2024',
+    timestamp: daysAgo(4),
     type: 'comment',
   },
 ]
@@ -235,7 +249,7 @@ export default function AuditDetailPage() {
                 <div className={`flex flex-wrap gap-6 mt-6 pt-6 border-t border-slate-100 ${isRTL ? 'flex-row-reverse' : ''}`}>
                   <div className={`flex items-center gap-2 text-slate-500 ${isRTL ? 'flex-row-reverse' : ''}`}>
                     <Icon icon="lucide:calendar" className="text-lg text-emerald-500" />
-                    <span className="text-sm font-medium">{t('auditDetail.started')}: {auditData.startDate}</span>
+                    <span className="text-sm font-medium">{t('auditDetail.started')}: {formatLocalizedDateShort(auditData.startDate, isRTL)}</span>
                   </div>
                   <div className={`flex items-center gap-2 text-slate-500 ${isRTL ? 'flex-row-reverse' : ''}`}>
                     <Icon icon="lucide:tag" className="text-lg text-blue-500" />
@@ -317,7 +331,7 @@ export default function AuditDetailPage() {
                         <div className={`bg-slate-50 px-4 pb-4 ${isRTL ? 'text-right' : ''}`}>
                           <div className="border-t border-slate-200 pt-3 space-y-2">
                             <p className="text-xs text-slate-600"><span className="font-bold">{t('auditDetail.assignee')}:</span> {task.assignee.name}</p>
-                            <p className="text-xs text-slate-600"><span className="font-bold">{t('auditDetail.dueDate')}:</span> {task.dueDate}</p>
+                            <p className="text-xs text-slate-600"><span className="font-bold">{t('auditDetail.dueDate')}:</span> {formatLocalizedDateShort(task.dueDate, isRTL)}</p>
                             <p className="text-xs text-slate-600"><span className="font-bold">{t('common.notes')}:</span> {task.notes}</p>
                           </div>
                         </div>
@@ -356,7 +370,7 @@ export default function AuditDetailPage() {
                         {item.type === 'comment' && item.detail && (
                           <p className="text-xs text-slate-600 bg-slate-50 p-3 rounded-lg mt-2 italic">{item.detail}</p>
                         )}
-                        <p className="text-xs text-slate-400 mt-1">{item.timestamp}{item.type === 'completed' && ` - ${t('auditDetail.automatedEvidenceCaptured')}`}{item.type === 'upload' && ` - ${t('auditDetail.artifactStorage')}`}</p>
+                        <p className="text-xs text-slate-400 mt-1">{formatRelativeTime(item.timestamp, t)}{item.type === 'completed' && ` - ${t('auditDetail.automatedEvidenceCaptured')}`}{item.type === 'upload' && ` - ${t('auditDetail.artifactStorage')}`}</p>
                       </div>
                     </div>
                   ))}
@@ -382,7 +396,7 @@ export default function AuditDetailPage() {
                   </div>
                   <div className={`flex justify-between items-center ${isRTL ? 'flex-row-reverse' : ''}`}>
                     <span className="text-xs text-slate-500 uppercase font-bold tracking-wider">{t('auditDetail.dueDate')}</span>
-                    <span className="text-sm font-bold text-slate-900">{auditData.dueDate}</span>
+                    <span className="text-sm font-bold text-slate-900">{formatLocalizedDateShort(auditData.dueDate, isRTL)}</span>
                   </div>
                   <div className={`flex justify-between items-center ${isRTL ? 'flex-row-reverse' : ''}`}>
                     <span className="text-xs text-slate-500 uppercase font-bold tracking-wider">{t('auditDetail.type')}</span>
@@ -704,7 +718,7 @@ export default function AuditDetailPage() {
               <div className={isRTL ? 'text-right' : ''}>
                 <p className="text-lg font-bold text-slate-900">{selectedTimeline.user}</p>
                 <p className="text-sm text-slate-600">{selectedTimeline.action}</p>
-                <p className="text-xs text-slate-400 mt-1">{selectedTimeline.timestamp}</p>
+                <p className="text-xs text-slate-400 mt-1">{formatRelativeTime(selectedTimeline.timestamp, t)}</p>
               </div>
             </div>
             {selectedTimeline.detail && (

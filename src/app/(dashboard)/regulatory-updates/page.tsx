@@ -1021,8 +1021,8 @@ function RuleCard({ rule, onClick, t, isRTL }: { rule: Rule; onClick: () => void
           <Icon icon="lucide:check-circle" className="text-emerald-500 text-xl" />
         ) : (
           <Icon
-            icon={isRTL ? 'lucide:chevron-left' : 'lucide:chevron-right'}
-            className="text-slate-300 group-hover:text-emerald-500 transition-colors text-xl"
+            icon="lucide:chevron-right"
+            className={cn("text-slate-300 group-hover:text-emerald-500 transition-colors text-xl", isRTL && "flip-x")}
           />
         )}
       </div>
@@ -1090,8 +1090,8 @@ function PolicyCard({
           <p className="text-xs font-bold text-slate-700">{policy.nextReview || '-'}</p>
         </div>
         <Icon
-          icon={isRTL ? 'lucide:chevron-left' : 'lucide:chevron-right'}
-          className="text-slate-300 group-hover:text-emerald-500 transition-colors text-xl"
+          icon="lucide:chevron-right"
+          className={cn("text-slate-300 group-hover:text-emerald-500 transition-colors text-xl", isRTL && "flip-x")}
         />
       </div>
     </div>

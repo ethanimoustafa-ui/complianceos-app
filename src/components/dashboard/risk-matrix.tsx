@@ -61,6 +61,7 @@ function getCellDotColor(impact: number, likelihood: string): string {
 export function RiskMatrix({ risks = sampleRisks, className, onEmptyCellClick }: RiskMatrixProps) {
   const [selectedCell, setSelectedCell] = useState<{ impact: number; likelihood: string } | null>(null)
   const [isModalOpen, setIsModalOpen] = useState(false)
+  const [selectedRiskId, setSelectedRiskId] = useState<number | null>(null)
 
   const likelihoodLevels = ['Low', 'Medium', 'High']
   const impactLevels = [5, 4, 3, 2, 1]
@@ -79,10 +80,18 @@ export function RiskMatrix({ risks = sampleRisks, className, onEmptyCellClick }:
     const cellRisks = getRisksForCell(impact, likelihood)
     if (cellRisks.length > 0) {
       setSelectedCell({ impact, likelihood })
+      setSelectedRiskId(null) // Reset selection when clicking cell
       setIsModalOpen(true)
     } else if (onEmptyCellClick) {
       onEmptyCellClick()
     }
+  }
+
+  const handleRiskDotClick = (e: React.MouseEvent, impact: number, likelihood: string, riskId: number) => {
+    e.stopPropagation() // Prevent cell click from triggering
+    setSelectedCell({ impact, likelihood })
+    setSelectedRiskId(riskId)
+    setIsModalOpen(true)
   }
 
   const selectedRisks = selectedCell
@@ -168,9 +177,10 @@ export function RiskMatrix({ risks = sampleRisks, className, onEmptyCellClick }:
                       {cellRisks.map((risk, idx) => (
                         <div
                           key={risk.id}
-                          className="w-6 h-6 rounded-full flex items-center justify-center text-white text-[10px] font-bold"
+                          className="w-6 h-6 rounded-full flex items-center justify-center text-white text-[10px] font-bold cursor-pointer hover:ring-2 hover:ring-white hover:ring-offset-1 transition-all"
                           style={{ backgroundColor: dotColor }}
                           title={risk.name}
+                          onClick={(e) => handleRiskDotClick(e, impact, likelihood, risk.id)}
                         >
                           {idx + 1}
                         </div>
@@ -226,29 +236,42 @@ export function RiskMatrix({ risks = sampleRisks, className, onEmptyCellClick }:
         size="lg"
       >
         <div className="space-y-3 max-h-[400px] overflow-y-auto hide-scrollbar">
-          {selectedRisks.map((risk) => (
-            <div
-              key={risk.id}
-              className={cn('p-4 border rounded-lg', severityColors[risk.severity])}
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex-1">
-                  <p className="text-sm font-bold text-slate-900">{risk.name}</p>
-                  <div className="flex gap-2 mt-2">
-                    <span className="text-[10px] font-bold uppercase px-2 py-0.5 bg-white rounded-full">
-                      {risk.severity}
-                    </span>
-                    <span className="text-[10px] font-bold uppercase px-2 py-0.5 bg-white rounded-full">
-                      Impact: {risk.impact}
-                    </span>
-                    <span className="text-[10px] font-bold uppercase px-2 py-0.5 bg-white rounded-full">
-                      Probability: {risk.probability}
-                    </span>
+          {selectedRisks.map((risk) => {
+            const isSelected = selectedRiskId === risk.id
+            return (
+              <div
+                key={risk.id}
+                className={cn(
+                  'p-4 border rounded-lg transition-all cursor-pointer',
+                  severityColors[risk.severity],
+                  isSelected && 'ring-2 ring-emerald-500 ring-offset-2 scale-[1.02]'
+                )}
+                onClick={() => setSelectedRiskId(isSelected ? null : risk.id)}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2">
+                      {isSelected && (
+                        <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                      )}
+                      <p className="text-sm font-bold text-slate-900">{risk.name}</p>
+                    </div>
+                    <div className="flex gap-2 mt-2">
+                      <span className="text-[10px] font-bold uppercase px-2 py-0.5 bg-white rounded-full">
+                        {risk.severity}
+                      </span>
+                      <span className="text-[10px] font-bold uppercase px-2 py-0.5 bg-white rounded-full">
+                        Impact: {risk.impact}
+                      </span>
+                      <span className="text-[10px] font-bold uppercase px-2 py-0.5 bg-white rounded-full">
+                        Probability: {risk.probability}
+                      </span>
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
-          ))}
+            )
+          })}
           {selectedRisks.length === 0 && (
             <p className="text-sm text-slate-500 text-center py-8">No risks in this category</p>
           )}

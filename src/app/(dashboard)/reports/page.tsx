@@ -742,6 +742,8 @@ export default function ReportsPage() {
   const [selectedRisk, setSelectedRisk] = useState<RiskRegisterItem | null>(null)
   const [isRiskDrawerOpen, setIsRiskDrawerOpen] = useState(false)
   const [monitoringFrequencyFilter, setMonitoringFrequencyFilter] = useState<MonitoringFrequency | 'all'>('all')
+  // State for tracking selected risk index within matrix cells with multiple risks
+  const [matrixCellSelection, setMatrixCellSelection] = useState<{ cellKey: string; index: number } | null>(null)
 
   // Monitoring frequency labels
   const monitoringFrequencyLabels: Record<MonitoringFrequency, string> = {
@@ -1020,7 +1022,7 @@ export default function ReportsPage() {
             </p>
           </div>
           {/* 3-Tab Toggle Group */}
-          <div className={`flex bg-slate-100 p-1 rounded-lg ${isRTL ? 'flex-row-reverse' : ''}`}>
+          <div className="flex bg-slate-100 p-1 rounded-lg">
             <button
               onClick={() => setActiveTab('audits')}
               className={cn(
@@ -1384,13 +1386,13 @@ export default function ReportsPage() {
                   className="p-2 text-slate-400 hover:text-emerald-600 hover:bg-white rounded border border-transparent hover:border-slate-200 disabled:opacity-30 cursor-pointer"
                   disabled
                 >
-                  <Icon icon={isRTL ? 'lucide:chevron-right' : 'lucide:chevron-left'} />
+                  <Icon icon="lucide:chevron-left" className={isRTL ? "flip-x" : ""} />
                 </button>
                 <button className="px-3 py-1 text-xs font-bold text-emerald-600 bg-white border border-slate-200 rounded shadow-sm cursor-pointer">
                   1
                 </button>
                 <button className="p-2 text-slate-400 hover:text-emerald-600 hover:bg-white rounded border border-transparent hover:border-slate-200 cursor-pointer">
-                  <Icon icon={isRTL ? 'lucide:chevron-left' : 'lucide:chevron-right'} />
+                  <Icon icon="lucide:chevron-right" className={isRTL ? "flip-x" : ""} />
                 </button>
               </div>
             </div>
@@ -1610,7 +1612,7 @@ export default function ReportsPage() {
                         <td className={`px-4 py-4 ${isRTL ? 'text-left' : 'text-right'}`}>
                           <div className={`flex items-center ${isRTL ? 'justify-start flex-row-reverse' : 'justify-end'} text-emerald-600 opacity-0 group-hover:opacity-100 transition-opacity`}>
                             <span className="text-xs font-bold">{t('reports.details')}</span>
-                            <Icon icon={isRTL ? 'lucide:chevron-left' : 'lucide:chevron-right'} className="w-4 h-4" />
+                            <Icon icon="lucide:chevron-right" className={cn("w-4 h-4", isRTL && "flip-x")} />
                           </div>
                         </td>
                       </tr>
@@ -1972,24 +1974,44 @@ export default function ReportsPage() {
                       {[5, 4, 3, 2, 1].map(impact => (
                         [1, 2, 3, 4, 5].map(likelihood => {
                           const risksInCell = mockRiskRegister.filter(r => r.likelihood === likelihood && r.impact === impact)
+                          const cellKey = `${impact}-${likelihood}`
+                          const currentSelection = matrixCellSelection?.cellKey === cellKey ? matrixCellSelection.index : 0
                           return (
                             <button
-                              key={`${impact}-${likelihood}`}
+                              key={cellKey}
                               className={cn(
-                                'aspect-square rounded-lg border-2 flex items-center justify-center transition-all cursor-pointer',
-                                getMatrixCellColor(likelihood, impact)
+                                'aspect-square rounded-lg border-2 flex flex-col items-center justify-center transition-all cursor-pointer relative',
+                                getMatrixCellColor(likelihood, impact),
+                                matrixCellSelection?.cellKey === cellKey && 'ring-2 ring-slate-900 ring-offset-1'
                               )}
                               onClick={() => {
                                 if (risksInCell.length > 0) {
-                                  setSelectedRisk(risksInCell[0])
+                                  // If clicking the same cell, cycle to next risk
+                                  if (matrixCellSelection?.cellKey === cellKey) {
+                                    const nextIndex = (currentSelection + 1) % risksInCell.length
+                                    setMatrixCellSelection({ cellKey, index: nextIndex })
+                                    setSelectedRisk(risksInCell[nextIndex])
+                                  } else {
+                                    // New cell - start at first risk
+                                    setMatrixCellSelection({ cellKey, index: 0 })
+                                    setSelectedRisk(risksInCell[0])
+                                  }
                                   setIsRiskDrawerOpen(true)
                                 }
                               }}
                             >
                               {risksInCell.length > 0 && (
-                                <div className={cn('w-6 h-6 rounded-full flex items-center justify-center text-white text-xs font-bold', getRiskDotColor(getRiskScore(likelihood, impact)))}>
-                                  {risksInCell.length}
-                                </div>
+                                <>
+                                  <div className={cn('w-6 h-6 rounded-full flex items-center justify-center text-white text-xs font-bold', getRiskDotColor(getRiskScore(likelihood, impact)))}>
+                                    {risksInCell.length}
+                                  </div>
+                                  {/* Show current selection indicator if multiple risks and this cell is selected */}
+                                  {risksInCell.length > 1 && matrixCellSelection?.cellKey === cellKey && (
+                                    <span className="absolute -bottom-0.5 text-[8px] font-bold text-slate-600 bg-white px-1 rounded">
+                                      {currentSelection + 1}/{risksInCell.length}
+                                    </span>
+                                  )}
+                                </>
                               )}
                             </button>
                           )
@@ -2438,6 +2460,7 @@ export default function ReportsPage() {
         onClose={() => setIsDrawerOpen(false)}
         size="md"
         hideBackdrop
+        isRTL={isRTL}
       >
         {selectedFinding && (
           <div className={`flex flex-col h-full ${isRTL ? 'rtl' : ''}`}>
@@ -2531,6 +2554,7 @@ export default function ReportsPage() {
         onClose={() => setIsRiskDrawerOpen(false)}
         title={selectedRisk?.name || t('reports.riskDetails' as TranslationKey)}
         hideBackdrop
+        isRTL={isRTL}
       >
         {selectedRisk && (() => {
           const score = getRiskScore(selectedRisk.likelihood, selectedRisk.impact)

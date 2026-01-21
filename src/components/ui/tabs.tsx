@@ -43,13 +43,15 @@ export function Tabs({ defaultValue, children, className, onChange }: TabsProps)
 interface TabsListProps {
   children: React.ReactNode
   className?: string
+  isRTL?: boolean
 }
 
-export function TabsList({ children, className }: TabsListProps) {
+export function TabsList({ children, className, isRTL = false }: TabsListProps) {
   return (
     <div
       className={cn(
         'inline-flex items-center gap-1 p-1 bg-slate-100 rounded-lg',
+        isRTL && 'flex-row-reverse',
         className
       )}
     >

@@ -270,7 +270,14 @@
     "annual": "سنوي",
     "semiAnnual": "نصف سنوي",
     "quarterly": "ربع سنوي",
-    "monthly": "شهري"
+    "monthly": "شهري",
+    "selectedYear": "السنة المحددة",
+    "available": "متاح",
+    "switchToFullYearView": "التبديل إلى عرض السنة الكاملة",
+    "dueToday": "مستحق اليوم",
+    "dueTomorrow": "مستحق غداً",
+    "daysOverdue": "متأخر {days} يوم",
+    "dueInDays": "مستحق خلال {days} يوم"
   },
   "samaLetters": {
     "title": "خطابات ساما",
@@ -1271,8 +1278,13 @@
     "trainingReminder": "تذكير بالتدريب",
     "amlTrainingDue": "تدريب مكافحة غسل الأموال مستحق خلال 3 أيام",
     "hoursAgo": "ساعات مضت",
+    "hourAgo": "ساعة مضت",
     "yesterday": "أمس",
-    "daysAgo": "أيام مضت"
+    "daysAgo": "أيام مضت",
+    "dayAgo": "يوم مضى",
+    "justNow": "الآن",
+    "minutesAgo": "دقائق مضت",
+    "minuteAgo": "دقيقة مضت"
   },
   "departments": {
     "compliance": "الامتثال",

@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { Icon } from '@iconify/react'
 import { cn } from '@/lib/utils'
+import { formatRelativeTime } from '@/lib/time-utils'
 import { Modal } from '@/components/ui/modal'
 import { useTranslation } from '@/i18n'
 
@@ -22,16 +23,29 @@ interface Notification {
   id: number
   title: string
   message: string
-  time: string
+  timestamp: Date
   unread: boolean
 }
 
-// Mock data
+// Helper to create a date relative to now
+function hoursAgo(hours: number): Date {
+  const date = new Date()
+  date.setHours(date.getHours() - hours)
+  return date
+}
+
+function daysAgo(days: number): Date {
+  const date = new Date()
+  date.setDate(date.getDate() - days)
+  return date
+}
+
+// Mock data with actual timestamps for proper localization
 const mockNotifications: Notification[] = [
-  { id: 1, title: 'New SAMA Circular', message: 'Circular 44321/2024 requires immediate review', time: '2 hours ago', unread: true },
-  { id: 2, title: 'Observation Assigned', message: 'You have been assigned to OBS-2024-015', time: '5 hours ago', unread: true },
-  { id: 3, title: 'Report Approved', message: 'Q3 Compliance Report has been approved', time: 'Yesterday', unread: false },
-  { id: 4, title: 'Training Reminder', message: 'AML Training due in 3 days', time: '2 days ago', unread: false },
+  { id: 1, title: 'New SAMA Circular', message: 'Circular 44321/2024 requires immediate review', timestamp: hoursAgo(2), unread: true },
+  { id: 2, title: 'Observation Assigned', message: 'You have been assigned to OBS-2024-015', timestamp: hoursAgo(5), unread: true },
+  { id: 3, title: 'Report Approved', message: 'Q3 Compliance Report has been approved', timestamp: daysAgo(1), unread: false },
+  { id: 4, title: 'Training Reminder', message: 'AML Training due in 3 days', timestamp: daysAgo(2), unread: false },
 ]
 
 // Avatar presets for selection
@@ -239,7 +253,7 @@ export function Sidebar() {
               <div className="flex-1">
                 <p className="text-sm font-bold text-slate-900">{notif.title}</p>
                 <p className="text-xs text-slate-600 mt-1">{notif.message}</p>
-                <p className="text-[10px] text-slate-400 mt-2">{notif.time}</p>
+                <p className="text-[10px] text-slate-400 mt-2">{formatRelativeTime(notif.timestamp, t)}</p>
               </div>
             </div>
           ))}

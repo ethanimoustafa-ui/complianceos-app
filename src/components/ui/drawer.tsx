@@ -12,6 +12,7 @@ interface DrawerProps {
   size?: 'sm' | 'md' | 'lg' | 'xl'
   position?: 'left' | 'right'
   hideBackdrop?: boolean
+  isRTL?: boolean
 }
 
 const sizeClasses = {
@@ -29,7 +30,13 @@ export function Drawer({
   size = 'md',
   position = 'right',
   hideBackdrop = false,
+  isRTL = false,
 }: DrawerProps) {
+  // In RTL mode, flip the position (right becomes left, left becomes right)
+  const effectivePosition = isRTL
+    ? (position === 'right' ? 'left' : 'right')
+    : position
+
   const handleEscape = useCallback(
     (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose()
@@ -69,11 +76,18 @@ export function Drawer({
       {/* Drawer Content */}
       <div
         className={cn(
-          'fixed top-0 h-full bg-white shadow-2xl flex flex-col pointer-events-auto border-l border-slate-200',
+          'fixed top-0 h-full bg-white shadow-2xl flex flex-col pointer-events-auto',
+          effectivePosition === 'right' ? 'border-l border-slate-200' : 'border-r border-slate-200',
           sizeClasses[size],
-          position === 'right'
-            ? 'right-0 animate-slide-in-right'
-            : 'left-0 animate-slide-in-left'
+          effectivePosition === 'right'
+            ? 'right-0'
+            : 'left-0',
+          // In RTL mode, swap animation classes so visual direction matches expectations
+          // When drawer is on left in RTL, use slide-in-right (CSS flips to visual left)
+          // When drawer is on right in RTL, use slide-in-left (CSS flips to visual right)
+          isRTL
+            ? (effectivePosition === 'right' ? 'animate-slide-in-left' : 'animate-slide-in-right')
+            : (effectivePosition === 'right' ? 'animate-slide-in-right' : 'animate-slide-in-left')
         )}
         onClick={(e) => e.stopPropagation()}
       >

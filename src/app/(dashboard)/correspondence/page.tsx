@@ -692,7 +692,7 @@ export default function CorrespondenceHubPage() {
           <div className="h-8 w-px bg-slate-200 mx-2" />
 
           {/* Tab Toggle */}
-          <div className={`flex bg-slate-100 p-1 rounded-lg ${isRTL ? 'flex-row-reverse' : ''}`}>
+          <div className="flex bg-slate-100 p-1 rounded-lg">
             <button
               onClick={() => setActiveTab('correspondence')}
               className={cn(

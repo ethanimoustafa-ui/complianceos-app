@@ -270,7 +270,14 @@
     "annual": "Annual",
     "semiAnnual": "Semi-Annual",
     "quarterly": "Quarterly",
-    "monthly": "Monthly"
+    "monthly": "Monthly",
+    "selectedYear": "Selected Year",
+    "available": "Available",
+    "switchToFullYearView": "Switch to Full Year View",
+    "dueToday": "Due today",
+    "dueTomorrow": "Due tomorrow",
+    "daysOverdue": "{days}d overdue",
+    "dueInDays": "Due in {days}d"
   },
   "samaLetters": {
     "title": "SAMA Letters",
@@ -1271,8 +1278,13 @@
     "trainingReminder": "Training Reminder",
     "amlTrainingDue": "AML Training due in 3 days",
     "hoursAgo": "hours ago",
+    "hourAgo": "hour ago",
     "yesterday": "Yesterday",
-    "daysAgo": "days ago"
+    "daysAgo": "days ago",
+    "dayAgo": "day ago",
+    "justNow": "Just now",
+    "minutesAgo": "minutes ago",
+    "minuteAgo": "minute ago"
   },
   "departments": {
     "compliance": "Compliance",
