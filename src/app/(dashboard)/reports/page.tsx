@@ -20,6 +20,18 @@ type TabValue = 'audits' | 'executive' | 'detailed' | 'risks'
 // Risk Register types
 type RiskCategory = 'operational' | 'financial' | 'compliance' | 'strategic' | 'reputational'
 type RiskStatus = 'open' | 'mitigating' | 'accepted' | 'closed'
+type MonitoringFrequency = 'weekly' | 'monthly' | 'quarterly' | 'semi_annual' | 'annual'
+type HistoryAction = 'created' | 'status_changed' | 'score_updated' | 'mitigation_updated' | 'reviewed' | 'assigned' | 'note_added'
+
+interface RiskHistoryEntry {
+  id: number
+  timestamp: Date
+  user: string
+  action: HistoryAction
+  previousValue?: string
+  newValue?: string
+  notes?: string
+}
 
 interface RiskRegisterItem {
   id: string
@@ -36,6 +48,10 @@ interface RiskRegisterItem {
   status: RiskStatus
   mitigationPlan?: string
   mitigationProgress: number
+  monitoringFrequency: MonitoringFrequency
+  lastReviewDate?: Date
+  nextReviewDate?: Date
+  history: RiskHistoryEntry[]
   createdAt: Date
   updatedAt: Date
 }
@@ -204,6 +220,14 @@ const mockRiskRegister: RiskRegisterItem[] = [
     status: 'mitigating',
     mitigationPlan: 'Implementing enhanced encryption and access controls',
     mitigationProgress: 65,
+    monitoringFrequency: 'monthly',
+    lastReviewDate: new Date('2024-01-15'),
+    nextReviewDate: new Date('2024-02-15'),
+    history: [
+      { id: 1, timestamp: new Date('2024-01-15'), user: 'Sarah Chen', action: 'created', newValue: 'Risk identified during security audit' },
+      { id: 2, timestamp: new Date('2024-01-18'), user: 'Ahmed Al-Rashid', action: 'status_changed', previousValue: 'open', newValue: 'mitigating' },
+      { id: 3, timestamp: new Date('2024-01-20'), user: 'Sarah Chen', action: 'mitigation_updated', notes: 'Encryption rollout at 65%' },
+    ],
     createdAt: new Date('2024-01-15'),
     updatedAt: new Date('2024-01-20'),
   },
@@ -218,6 +242,13 @@ const mockRiskRegister: RiskRegisterItem[] = [
     status: 'open',
     mitigationPlan: 'Gap assessment and remediation roadmap in progress',
     mitigationProgress: 30,
+    monitoringFrequency: 'weekly',
+    lastReviewDate: new Date('2024-01-18'),
+    nextReviewDate: new Date('2024-01-25'),
+    history: [
+      { id: 1, timestamp: new Date('2024-01-10'), user: 'Ahmed Al-Rashid', action: 'created', newValue: 'Identified during SAMA compliance review' },
+      { id: 2, timestamp: new Date('2024-01-18'), user: 'Ahmed Al-Rashid', action: 'reviewed', notes: 'Weekly monitoring initiated' },
+    ],
     createdAt: new Date('2024-01-10'),
     updatedAt: new Date('2024-01-18'),
   },
@@ -232,6 +263,14 @@ const mockRiskRegister: RiskRegisterItem[] = [
     status: 'mitigating',
     mitigationPlan: 'Developing alternative vendor relationships',
     mitigationProgress: 45,
+    monitoringFrequency: 'monthly',
+    lastReviewDate: new Date('2024-01-19'),
+    nextReviewDate: new Date('2024-02-19'),
+    history: [
+      { id: 1, timestamp: new Date('2024-01-08'), user: 'Maria Lopez', action: 'created', newValue: 'Vendor dependency assessment completed' },
+      { id: 2, timestamp: new Date('2024-01-12'), user: 'Maria Lopez', action: 'assigned', newValue: 'Maria Lopez', notes: 'Taking ownership of vendor risk' },
+      { id: 3, timestamp: new Date('2024-01-19'), user: 'Maria Lopez', action: 'mitigation_updated', notes: 'Alternative vendors identified' },
+    ],
     createdAt: new Date('2024-01-08'),
     updatedAt: new Date('2024-01-19'),
   },
@@ -246,6 +285,14 @@ const mockRiskRegister: RiskRegisterItem[] = [
     status: 'accepted',
     mitigationPlan: 'Hedging strategy implemented',
     mitigationProgress: 100,
+    monitoringFrequency: 'quarterly',
+    lastReviewDate: new Date('2024-01-15'),
+    nextReviewDate: new Date('2024-04-15'),
+    history: [
+      { id: 1, timestamp: new Date('2024-01-05'), user: 'John Smith', action: 'created', newValue: 'Market risk assessment conducted' },
+      { id: 2, timestamp: new Date('2024-01-10'), user: 'John Smith', action: 'status_changed', previousValue: 'open', newValue: 'mitigating' },
+      { id: 3, timestamp: new Date('2024-01-15'), user: 'John Smith', action: 'status_changed', previousValue: 'mitigating', newValue: 'accepted', notes: 'Hedging strategy approved by board' },
+    ],
     createdAt: new Date('2024-01-05'),
     updatedAt: new Date('2024-01-15'),
   },
@@ -260,6 +307,14 @@ const mockRiskRegister: RiskRegisterItem[] = [
     status: 'mitigating',
     mitigationPlan: 'Enhanced backup and recovery procedures',
     mitigationProgress: 80,
+    monitoringFrequency: 'weekly',
+    lastReviewDate: new Date('2024-01-21'),
+    nextReviewDate: new Date('2024-01-28'),
+    history: [
+      { id: 1, timestamp: new Date('2024-01-12'), user: 'Sarah Chen', action: 'created', newValue: 'Threat intelligence report identified risk' },
+      { id: 2, timestamp: new Date('2024-01-14'), user: 'Sarah Chen', action: 'score_updated', previousValue: '12', newValue: '16', notes: 'Increased likelihood after industry incidents' },
+      { id: 3, timestamp: new Date('2024-01-21'), user: 'Sarah Chen', action: 'reviewed', notes: 'Weekly security review completed' },
+    ],
     createdAt: new Date('2024-01-12'),
     updatedAt: new Date('2024-01-21'),
   },
@@ -274,6 +329,13 @@ const mockRiskRegister: RiskRegisterItem[] = [
     status: 'open',
     mitigationPlan: 'Social media monitoring and response protocol',
     mitigationProgress: 20,
+    monitoringFrequency: 'monthly',
+    lastReviewDate: new Date('2024-01-16'),
+    nextReviewDate: new Date('2024-02-16'),
+    history: [
+      { id: 1, timestamp: new Date('2024-01-14'), user: 'Emma Wilson', action: 'created', newValue: 'Risk assessment from brand audit' },
+      { id: 2, timestamp: new Date('2024-01-16'), user: 'Emma Wilson', action: 'note_added', notes: 'Monitoring tools being evaluated' },
+    ],
     createdAt: new Date('2024-01-14'),
     updatedAt: new Date('2024-01-16'),
   },
@@ -288,6 +350,14 @@ const mockRiskRegister: RiskRegisterItem[] = [
     status: 'mitigating',
     mitigationPlan: 'Knowledge transfer and succession planning',
     mitigationProgress: 55,
+    monitoringFrequency: 'quarterly',
+    lastReviewDate: new Date('2024-01-17'),
+    nextReviewDate: new Date('2024-04-17'),
+    history: [
+      { id: 1, timestamp: new Date('2024-01-06'), user: 'David Kim', action: 'created', newValue: 'Identified in workforce planning review' },
+      { id: 2, timestamp: new Date('2024-01-10'), user: 'David Kim', action: 'status_changed', previousValue: 'open', newValue: 'mitigating' },
+      { id: 3, timestamp: new Date('2024-01-17'), user: 'David Kim', action: 'mitigation_updated', notes: 'Succession plans for 3 key roles completed' },
+    ],
     createdAt: new Date('2024-01-06'),
     updatedAt: new Date('2024-01-17'),
   },
@@ -302,6 +372,15 @@ const mockRiskRegister: RiskRegisterItem[] = [
     status: 'closed',
     mitigationPlan: 'Documentation standards and review process implemented',
     mitigationProgress: 100,
+    monitoringFrequency: 'semi_annual',
+    lastReviewDate: new Date('2024-01-20'),
+    nextReviewDate: new Date('2024-07-20'),
+    history: [
+      { id: 1, timestamp: new Date('2024-01-02'), user: 'Ahmed Al-Rashid', action: 'created', newValue: 'Audit finding from internal review' },
+      { id: 2, timestamp: new Date('2024-01-08'), user: 'Ahmed Al-Rashid', action: 'status_changed', previousValue: 'open', newValue: 'mitigating' },
+      { id: 3, timestamp: new Date('2024-01-15'), user: 'Ahmed Al-Rashid', action: 'mitigation_updated', notes: 'Documentation standards published' },
+      { id: 4, timestamp: new Date('2024-01-20'), user: 'Ahmed Al-Rashid', action: 'status_changed', previousValue: 'mitigating', newValue: 'closed', notes: 'All documentation updated and approved' },
+    ],
     createdAt: new Date('2024-01-02'),
     updatedAt: new Date('2024-01-20'),
   },
@@ -662,6 +741,65 @@ export default function ReportsPage() {
   const [riskStatusFilter, setRiskStatusFilter] = useState<RiskStatus | ''>('')
   const [selectedRisk, setSelectedRisk] = useState<RiskRegisterItem | null>(null)
   const [isRiskDrawerOpen, setIsRiskDrawerOpen] = useState(false)
+  const [monitoringFrequencyFilter, setMonitoringFrequencyFilter] = useState<MonitoringFrequency | 'all'>('all')
+
+  // Monitoring frequency labels
+  const monitoringFrequencyLabels: Record<MonitoringFrequency, string> = {
+    weekly: t('reports.weekly' as TranslationKey),
+    monthly: t('reports.monthly' as TranslationKey),
+    quarterly: t('reports.quarterly' as TranslationKey),
+    semi_annual: t('reports.semiAnnual' as TranslationKey),
+    annual: t('reports.annual' as TranslationKey),
+  }
+
+  // History action labels
+  const historyActionLabels: Record<HistoryAction, string> = {
+    created: t('reports.created' as TranslationKey),
+    status_changed: t('reports.statusChanged' as TranslationKey),
+    score_updated: t('reports.scoreUpdated' as TranslationKey),
+    mitigation_updated: t('reports.mitigationUpdated' as TranslationKey),
+    reviewed: t('reports.reviewed' as TranslationKey),
+    assigned: t('reports.assigned' as TranslationKey),
+    note_added: t('reports.noteAdded' as TranslationKey),
+  }
+
+  // History action colors
+  const historyActionColors: Record<HistoryAction, string> = {
+    created: 'bg-emerald-500',
+    status_changed: 'bg-blue-500',
+    score_updated: 'bg-amber-500',
+    mitigation_updated: 'bg-purple-500',
+    reviewed: 'bg-indigo-500',
+    assigned: 'bg-slate-500',
+    note_added: 'bg-teal-500',
+  }
+
+  // Filter risks by monitoring frequency for category card
+  const filteredByMonitoringFrequency = mockRiskRegister.filter(risk =>
+    monitoringFrequencyFilter === 'all' || risk.monitoringFrequency === monitoringFrequencyFilter
+  )
+
+  // Helper: count due risks per category
+  const getDueCountForCategory = (category: RiskCategory) => {
+    return filteredByMonitoringFrequency
+      .filter(r => r.category === category && r.nextReviewDate && new Date(r.nextReviewDate) <= new Date())
+      .length
+  }
+
+  // Helper: get next review date for category
+  const getNextReviewForCategory = (category: RiskCategory): string => {
+    const risks = filteredByMonitoringFrequency.filter(r => r.category === category && r.nextReviewDate)
+    if (risks.length === 0) return '-'
+    const nextReview = risks.map(r => r.nextReviewDate!).sort((a, b) => a.getTime() - b.getTime())[0]
+    return nextReview.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  }
+
+  // Helper: get average progress for category
+  const getAvgProgressForCategory = (category: RiskCategory): number => {
+    const risks = filteredByMonitoringFrequency.filter(r => r.category === category)
+    if (risks.length === 0) return 0
+    return Math.round(risks.reduce((sum, r) => sum + r.mitigationProgress, 0) / risks.length)
+  }
   const [showAddRiskModal, setShowAddRiskModal] = useState(false)
 
   // Filter risks
@@ -1885,30 +2023,95 @@ export default function ReportsPage() {
                 </div>
               </Card>
 
-              {/* Category Distribution */}
+              {/* Category Distribution with Monitoring */}
               <Card className="p-6">
                 <CardHeader className="p-0 mb-6">
-                  <CardTitle className={`text-sm font-bold text-slate-900 flex items-center gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
-                    <Icon icon="lucide:pie-chart" className="text-slate-400" />
-                    {t('reports.risksByCategory' as TranslationKey)}
-                  </CardTitle>
+                  <div className={`flex items-center justify-between ${isRTL ? 'flex-row-reverse' : ''}`}>
+                    <CardTitle className={`text-sm font-bold text-slate-900 flex items-center gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                      <Icon icon="lucide:pie-chart" className="text-slate-400" />
+                      {t('reports.risksByCategory' as TranslationKey)}
+                    </CardTitle>
+                    <div className={`flex items-center gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                      <span className="text-[10px] font-bold text-slate-400 uppercase">{t('reports.monitoringFrequency' as TranslationKey)}:</span>
+                      <select
+                        value={monitoringFrequencyFilter}
+                        onChange={(e) => setMonitoringFrequencyFilter(e.target.value as MonitoringFrequency | 'all')}
+                        className={`px-2 py-1 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 ${isRTL ? 'text-right' : ''}`}
+                      >
+                        <option value="all">{t('common.all')}</option>
+                        <option value="weekly">{t('reports.weekly' as TranslationKey)}</option>
+                        <option value="monthly">{t('reports.monthly' as TranslationKey)}</option>
+                        <option value="quarterly">{t('reports.quarterly' as TranslationKey)}</option>
+                        <option value="semi_annual">{t('reports.semiAnnual' as TranslationKey)}</option>
+                        <option value="annual">{t('reports.annual' as TranslationKey)}</option>
+                      </select>
+                    </div>
+                  </div>
                 </CardHeader>
                 <div className="space-y-4">
                   {(['operational', 'financial', 'compliance', 'strategic', 'reputational'] as RiskCategory[]).map(category => {
-                    const count = mockRiskRegister.filter(r => r.category === category).length
-                    const percentage = (count / mockRiskRegister.length) * 100
+                    const count = filteredByMonitoringFrequency.filter(r => r.category === category).length
+                    const totalFiltered = filteredByMonitoringFrequency.length
+                    const percentage = totalFiltered > 0 ? (count / totalFiltered) * 100 : 0
                     const config = riskCategoryConfig[category]
+                    const dueCount = getDueCountForCategory(category)
+                    const nextReview = getNextReviewForCategory(category)
+                    const avgProgress = getAvgProgressForCategory(category)
+
+                    if (count === 0) return null
+
                     return (
-                      <div key={category}>
-                        <div className={`flex justify-between items-center mb-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                      <div key={category} className="p-3 border border-slate-100 rounded-xl hover:border-emerald-200 transition-colors">
+                        <div className={`flex items-center justify-between mb-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
                           <div className={`flex items-center gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
-                            <Icon icon={config.icon} className="text-slate-400" />
-                            <span className="text-sm font-bold text-slate-700">{config.label}</span>
+                            <div className={cn('w-8 h-8 rounded-lg flex items-center justify-center', config.color)}>
+                              <Icon icon={config.icon} className="text-sm" />
+                            </div>
+                            <div className={isRTL ? 'text-right' : ''}>
+                              <span className="text-sm font-bold text-slate-700">{config.label}</span>
+                              <span className="text-xs text-slate-400 ml-2">{count} {t('reports.risk' as TranslationKey)}{count !== 1 ? 's' : ''}</span>
+                            </div>
                           </div>
-                          <span className="text-xs font-bold text-slate-500">{count} ({percentage.toFixed(0)}%)</span>
+                          <div className={`flex items-center gap-4 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                            {/* Due for review indicators */}
+                            <div className={`flex items-center gap-1.5 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                              <div className={`flex gap-0.5 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                                {[...Array(Math.min(count, 5))].map((_, i) => (
+                                  <div
+                                    key={i}
+                                    className={cn(
+                                      'w-2 h-2 rounded-full',
+                                      i < dueCount ? 'bg-rose-500' : 'bg-slate-200'
+                                    )}
+                                  />
+                                ))}
+                              </div>
+                              <span className={cn(
+                                'text-[10px] font-bold',
+                                dueCount > 0 ? 'text-rose-600' : 'text-slate-400'
+                              )}>
+                                {dueCount} {t('reports.dueForReview' as TranslationKey)}
+                              </span>
+                            </div>
+                            {/* Next review */}
+                            <div className={`text-right ${isRTL ? 'text-left' : ''}`}>
+                              <p className="text-[10px] text-slate-400">{t('reports.nextReview' as TranslationKey)}</p>
+                              <p className="text-xs font-bold text-slate-600">{nextReview}</p>
+                            </div>
+                          </div>
                         </div>
-                        <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
-                          <div className={cn('h-full rounded-full', config.color.split(' ')[0])} style={{ width: `${percentage}%` }} />
+                        {/* Progress bar */}
+                        <div className="mt-2">
+                          <div className={`flex items-center justify-between text-[10px] text-slate-400 mb-1 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                            <span>{t('reports.progress' as TranslationKey)}</span>
+                            <span className="font-bold text-slate-600">{avgProgress}%</span>
+                          </div>
+                          <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                            <div
+                              className={cn('h-full rounded-full bg-emerald-500')}
+                              style={{ width: `${avgProgress}%` }}
+                            />
+                          </div>
                         </div>
                       </div>
                     )
@@ -2405,6 +2608,66 @@ export default function ReportsPage() {
                   </div>
                 </div>
               )}
+
+              {/* Monitoring Info */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className={`p-4 bg-slate-50 rounded-xl ${isRTL ? 'text-right' : ''}`}>
+                  <p className="text-xs font-bold text-slate-400 uppercase mb-1">{t('reports.monitoringFrequency' as TranslationKey)}</p>
+                  <span className="text-sm font-bold text-slate-700 bg-slate-100 px-2 py-1 rounded">
+                    {monitoringFrequencyLabels[selectedRisk.monitoringFrequency]}
+                  </span>
+                </div>
+                <div className={`p-4 bg-slate-50 rounded-xl ${isRTL ? 'text-right' : ''}`}>
+                  <p className="text-xs font-bold text-slate-400 uppercase mb-1">{t('reports.nextReview' as TranslationKey)}</p>
+                  <p className="text-sm font-bold text-slate-900">
+                    {selectedRisk.nextReviewDate?.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) || '-'}
+                  </p>
+                </div>
+              </div>
+
+              {/* Audit Trail */}
+              <div className={isRTL ? 'text-right' : ''}>
+                <p className="text-xs font-bold text-slate-400 uppercase mb-3">{t('reports.auditTrail' as TranslationKey)}</p>
+                <div className="relative">
+                  {/* Vertical line */}
+                  <div className={`absolute ${isRTL ? 'right-[7px]' : 'left-[7px]'} top-3 bottom-3 w-0.5 bg-slate-200`} />
+
+                  <div className="space-y-4">
+                    {[...selectedRisk.history].reverse().map((entry) => (
+                      <div key={entry.id} className={`relative flex gap-3 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                        {/* Dot */}
+                        <div className={cn(
+                          'w-4 h-4 rounded-full shrink-0 z-10 border-2 border-white',
+                          historyActionColors[entry.action]
+                        )} />
+
+                        {/* Content */}
+                        <div className={`flex-1 pb-2 ${isRTL ? 'text-right' : ''}`}>
+                          <div className={`flex items-center gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                            <span className="text-[10px] text-slate-400">
+                              {entry.timestamp.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                            </span>
+                            <span className="text-[10px] text-slate-400">-</span>
+                            <span className="text-[10px] font-bold text-slate-600">{entry.user}</span>
+                          </div>
+                          <p className="text-xs text-slate-900 mt-1">
+                            <span className="font-bold">{historyActionLabels[entry.action]}</span>
+                            {entry.previousValue && entry.newValue && (
+                              <span className="text-slate-500">: {entry.previousValue} → {entry.newValue}</span>
+                            )}
+                            {!entry.previousValue && entry.newValue && (
+                              <span className="text-slate-500">: {entry.newValue}</span>
+                            )}
+                          </p>
+                          {entry.notes && (
+                            <p className="text-[10px] text-slate-500 mt-1 italic">"{entry.notes}"</p>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
 
               {/* Actions */}
               <div className={`pt-4 border-t border-slate-100 flex gap-3 ${isRTL ? 'flex-row-reverse' : ''}`}>

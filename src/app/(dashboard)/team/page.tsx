@@ -47,6 +47,18 @@ interface DepartmentTraining {
   progress: number
 }
 
+interface TrainingCourse {
+  id: number
+  name: string
+  category: TrainingCategory
+  dueDate: string
+  description?: string
+  assignedCount: number
+  completedCount: number
+  overdueCount: number
+  inProgressCount: number
+}
+
 // Types
 interface TeamMember {
   id: number
@@ -324,6 +336,65 @@ const saudizationMetrics = {
   saudiEmployees: 5,
 }
 
+// Mock training courses data for management modal
+const mockTrainingCourses: TrainingCourse[] = [
+  {
+    id: 1,
+    name: 'AML Fundamentals',
+    category: 'aml',
+    dueDate: '2026-02-15',
+    description: 'Core anti-money laundering concepts and regulatory requirements',
+    assignedCount: 12,
+    completedCount: 8,
+    overdueCount: 2,
+    inProgressCount: 2,
+  },
+  {
+    id: 2,
+    name: 'Cybersecurity Awareness',
+    category: 'cybersecurity',
+    dueDate: '2026-03-01',
+    description: 'Information security best practices and threat awareness',
+    assignedCount: 10,
+    completedCount: 6,
+    overdueCount: 1,
+    inProgressCount: 3,
+  },
+  {
+    id: 3,
+    name: 'Sharia Compliance Basics',
+    category: 'sharia',
+    dueDate: '2026-04-15',
+    description: 'Fundamentals of Islamic banking and sharia-compliant operations',
+    assignedCount: 8,
+    completedCount: 5,
+    overdueCount: 0,
+    inProgressCount: 0,
+  },
+  {
+    id: 4,
+    name: 'Risk Assessment Methods',
+    category: 'risk',
+    dueDate: '2026-03-30',
+    description: 'Risk identification, analysis, and mitigation strategies',
+    assignedCount: 6,
+    completedCount: 4,
+    overdueCount: 1,
+    inProgressCount: 0,
+  },
+  {
+    id: 5,
+    name: 'Compliance Framework',
+    category: 'compliance',
+    dueDate: '2026-05-01',
+    description: 'Organizational compliance policies and procedures',
+    assignedCount: 10,
+    completedCount: 7,
+    overdueCount: 0,
+    inProgressCount: 0,
+  },
+]
+
 // Toast component
 function Toast({ message, onClose }: { message: string; onClose: () => void }) {
   useEffect(() => {
@@ -351,6 +422,19 @@ export default function TeamManagementPage() {
   const [trainingDeptFilter, setTrainingDeptFilter] = useState('')
   const [trainingStatusFilter, setTrainingStatusFilter] = useState<TrainingStatus | ''>('')
   const [toastMessage, setToastMessage] = useState<string | null>(null)
+
+  // Training management modal states
+  const [isTrainingManageModalOpen, setIsTrainingManageModalOpen] = useState(false)
+  const [trainingsData, setTrainingsData] = useState<TrainingCourse[]>(mockTrainingCourses)
+  const [isAddCourseFormOpen, setIsAddCourseFormOpen] = useState(false)
+  const [newCourse, setNewCourse] = useState({
+    name: '',
+    category: '' as TrainingCategory | '',
+    dueDate: '',
+    description: '',
+  })
+  const [courseToDelete, setCourseToDelete] = useState<number | null>(null)
+  const [editingDeadline, setEditingDeadline] = useState<number | null>(null)
 
   const showToast = useCallback((message: string) => {
     setToastMessage(message)
@@ -429,6 +513,59 @@ export default function TeamManagementPage() {
     setExpandedLogs((prev) =>
       prev.includes(logId) ? prev.filter((id) => id !== logId) : [...prev, logId]
     )
+  }
+
+  // Training management handlers
+  const handleAddCourse = () => {
+    if (!newCourse.name || !newCourse.category || !newCourse.dueDate) return
+
+    const course: TrainingCourse = {
+      id: Date.now(),
+      name: newCourse.name,
+      category: newCourse.category as TrainingCategory,
+      dueDate: newCourse.dueDate,
+      description: newCourse.description,
+      assignedCount: 0,
+      completedCount: 0,
+      overdueCount: 0,
+      inProgressCount: 0,
+    }
+    setTrainingsData([...trainingsData, course])
+    setNewCourse({ name: '', category: '', dueDate: '', description: '' })
+    setIsAddCourseFormOpen(false)
+    showToast(t('training.courseAdded' as TranslationKey))
+  }
+
+  const handleRemoveCourse = (courseId: number) => {
+    setTrainingsData(trainingsData.filter(c => c.id !== courseId))
+    setCourseToDelete(null)
+    showToast(t('training.courseRemoved' as TranslationKey))
+  }
+
+  const handleUpdateDeadline = (courseId: number, newDate: string) => {
+    setTrainingsData(trainingsData.map(c =>
+      c.id === courseId ? { ...c, dueDate: newDate } : c
+    ))
+    setEditingDeadline(null)
+    showToast(t('training.deadlineUpdated' as TranslationKey))
+  }
+
+  // Calculate totals for training management
+  const trainingStats = {
+    totalCourses: trainingsData.length,
+    totalAssigned: trainingsData.reduce((sum, c) => sum + c.assignedCount, 0),
+    totalCompleted: trainingsData.reduce((sum, c) => sum + c.completedCount, 0),
+    totalOverdue: trainingsData.reduce((sum, c) => sum + c.overdueCount, 0),
+    totalInProgress: trainingsData.reduce((sum, c) => sum + c.inProgressCount, 0),
+  }
+
+  // Category colors for training management
+  const categoryColors: Record<TrainingCategory, { bg: string; text: string }> = {
+    compliance: { bg: 'bg-blue-100', text: 'text-blue-700' },
+    aml: { bg: 'bg-emerald-100', text: 'text-emerald-700' },
+    cybersecurity: { bg: 'bg-purple-100', text: 'text-purple-700' },
+    sharia: { bg: 'bg-amber-100', text: 'text-amber-700' },
+    risk: { bg: 'bg-rose-100', text: 'text-rose-700' },
   }
 
   return (
@@ -900,6 +1037,20 @@ export default function TeamManagementPage() {
           {/* Training Tab Content */}
           {activeTab === 'training' && (
             <div className="flex-1 overflow-auto hide-scrollbar bg-slate-50 p-8">
+              {/* Training Overview Header */}
+              <div className={`flex items-center justify-between mb-4 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                <h3 className={`text-sm font-bold text-slate-700 ${isRTL ? 'text-right' : ''}`}>
+                  {t('training.overallCompletion' as TranslationKey)}
+                </h3>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setIsTrainingManageModalOpen(true)}
+                >
+                  <Icon icon="lucide:settings" className={isRTL ? 'ml-2' : 'mr-2'} />
+                  {t('training.manageTrainings' as TranslationKey)}
+                </Button>
+              </div>
               {/* Training Overview Stats */}
               <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
                 <div className="glass-card p-6 rounded-2xl">
@@ -1498,6 +1649,241 @@ export default function TeamManagementPage() {
             </div>
           </div>
         )}
+      </Modal>
+
+      {/* Training Management Modal */}
+      <Modal
+        isOpen={isTrainingManageModalOpen}
+        onClose={() => {
+          setIsTrainingManageModalOpen(false)
+          setIsAddCourseFormOpen(false)
+          setCourseToDelete(null)
+          setEditingDeadline(null)
+        }}
+        title={t('training.manageTrainingPrograms' as TranslationKey)}
+        subtitle={t('training.manageTrainingSubtitle' as TranslationKey)}
+        size="lg"
+      >
+        <div className="space-y-6">
+          {/* Statistics Summary */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="p-4 bg-slate-50 rounded-xl text-center">
+              <p className="text-2xl font-bold text-slate-900">{trainingStats.totalCourses}</p>
+              <p className="text-xs text-slate-500 font-bold uppercase">{t('training.totalCourses' as TranslationKey)}</p>
+            </div>
+            <div className="p-4 bg-emerald-50 rounded-xl text-center">
+              <p className="text-2xl font-bold text-emerald-600">{trainingStats.totalCompleted}</p>
+              <p className="text-xs text-slate-500 font-bold uppercase">{t('training.completed' as TranslationKey)}</p>
+            </div>
+            <div className="p-4 bg-amber-50 rounded-xl text-center">
+              <p className="text-2xl font-bold text-amber-600">{trainingStats.totalInProgress}</p>
+              <p className="text-xs text-slate-500 font-bold uppercase">{t('training.inProgress' as TranslationKey)}</p>
+            </div>
+            <div className="p-4 bg-rose-50 rounded-xl text-center">
+              <p className="text-2xl font-bold text-rose-600">{trainingStats.totalOverdue}</p>
+              <p className="text-xs text-slate-500 font-bold uppercase">{t('training.overdue' as TranslationKey)}</p>
+            </div>
+          </div>
+
+          {/* Training Courses Section */}
+          <div className="border border-slate-200 rounded-xl overflow-hidden">
+            <div className={`flex items-center justify-between p-4 bg-slate-50 border-b border-slate-200 ${isRTL ? 'flex-row-reverse' : ''}`}>
+              <h4 className="text-sm font-bold text-slate-900">{t('training.trainingCourses' as TranslationKey)}</h4>
+              <Button
+                size="sm"
+                onClick={() => setIsAddCourseFormOpen(true)}
+              >
+                <Icon icon="lucide:plus" className={isRTL ? 'ml-1' : 'mr-1'} />
+                {t('training.addCourse' as TranslationKey)}
+              </Button>
+            </div>
+
+            {/* Add Course Form */}
+            {isAddCourseFormOpen && (
+              <div className="p-4 bg-emerald-50/50 border-b border-slate-200">
+                <div className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <Input
+                      label={t('training.courseName' as TranslationKey)}
+                      placeholder={t('training.courseNamePlaceholder' as TranslationKey)}
+                      value={newCourse.name}
+                      onChange={(e) => setNewCourse({ ...newCourse, name: e.target.value })}
+                    />
+                    <div>
+                      <label className={`block text-sm font-medium text-slate-700 mb-1.5 ${isRTL ? 'text-right' : ''}`}>
+                        {t('common.category')}
+                      </label>
+                      <select
+                        value={newCourse.category}
+                        onChange={(e) => setNewCourse({ ...newCourse, category: e.target.value as TrainingCategory })}
+                        className={`w-full h-11 px-4 py-2 border border-slate-200 rounded-xl text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent bg-white ${isRTL ? 'text-right' : ''}`}
+                      >
+                        <option value="">{t('training.selectCategory' as TranslationKey)}</option>
+                        <option value="compliance">{t('training.category.compliance' as TranslationKey)}</option>
+                        <option value="aml">{t('training.category.aml' as TranslationKey)}</option>
+                        <option value="cybersecurity">{t('training.category.cybersecurity' as TranslationKey)}</option>
+                        <option value="sharia">{t('training.category.sharia' as TranslationKey)}</option>
+                        <option value="risk">{t('training.category.risk' as TranslationKey)}</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className={`block text-sm font-medium text-slate-700 mb-1.5 ${isRTL ? 'text-right' : ''}`}>
+                        {t('training.dueDate' as TranslationKey)}
+                      </label>
+                      <input
+                        type="date"
+                        value={newCourse.dueDate}
+                        onChange={(e) => setNewCourse({ ...newCourse, dueDate: e.target.value })}
+                        className={`w-full h-11 px-4 py-2 border border-slate-200 rounded-xl text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent bg-white ${isRTL ? 'text-right' : ''}`}
+                      />
+                    </div>
+                    <Input
+                      label={t('training.courseDescription' as TranslationKey)}
+                      placeholder={t('training.courseDescriptionPlaceholder' as TranslationKey)}
+                      value={newCourse.description}
+                      onChange={(e) => setNewCourse({ ...newCourse, description: e.target.value })}
+                    />
+                  </div>
+                  <div className={`flex gap-3 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setIsAddCourseFormOpen(false)
+                        setNewCourse({ name: '', category: '', dueDate: '', description: '' })
+                      }}
+                    >
+                      {t('common.cancel')}
+                    </Button>
+                    <Button
+                      size="sm"
+                      onClick={handleAddCourse}
+                      disabled={!newCourse.name || !newCourse.category || !newCourse.dueDate}
+                    >
+                      {t('training.addCourse' as TranslationKey)}
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Course List */}
+            <div className="divide-y divide-slate-100 max-h-80 overflow-y-auto">
+              {trainingsData.map((course) => (
+                <div key={course.id} className="p-4 hover:bg-slate-50 transition-colors">
+                  {/* Delete Confirmation */}
+                  {courseToDelete === course.id ? (
+                    <div className={`flex items-center justify-between ${isRTL ? 'flex-row-reverse' : ''}`}>
+                      <p className={`text-sm text-rose-600 font-medium ${isRTL ? 'text-right' : ''}`}>
+                        {t('training.confirmRemove' as TranslationKey)}
+                      </p>
+                      <div className={`flex gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setCourseToDelete(null)}
+                        >
+                          {t('common.cancel')}
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="border-rose-200 text-rose-600 hover:bg-rose-50"
+                          onClick={() => handleRemoveCourse(course.id)}
+                        >
+                          {t('common.delete')}
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className={`flex items-start justify-between ${isRTL ? 'flex-row-reverse' : ''}`}>
+                      <div className={`flex-1 ${isRTL ? 'text-right' : ''}`}>
+                        <div className={`flex items-center gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                          <h5 className="text-sm font-bold text-slate-900">{course.name}</h5>
+                          <span className={`px-2 py-0.5 text-[10px] font-bold rounded-full ${categoryColors[course.category].bg} ${categoryColors[course.category].text}`}>
+                            {t(`training.category.${course.category}` as TranslationKey)}
+                          </span>
+                        </div>
+                        <div className={`flex items-center gap-4 mt-2 text-xs text-slate-500 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                          <span className={`flex items-center gap-1 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                            <Icon icon="lucide:users" className="w-3 h-3" />
+                            {course.assignedCount} {t('training.assigned' as TranslationKey)}
+                          </span>
+                          <span className="text-emerald-600">{course.completedCount} {t('training.completed' as TranslationKey)}</span>
+                          {course.overdueCount > 0 && (
+                            <span className="text-rose-600">{course.overdueCount} {t('training.overdue' as TranslationKey)}</span>
+                          )}
+                        </div>
+                        <div className={`flex items-center gap-2 mt-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                          <Icon icon="lucide:calendar" className="w-3 h-3 text-slate-400" />
+                          {editingDeadline === course.id ? (
+                            <input
+                              type="date"
+                              defaultValue={course.dueDate}
+                              className="text-xs border border-slate-200 rounded px-2 py-1"
+                              onBlur={(e) => {
+                                if (e.target.value !== course.dueDate) {
+                                  handleUpdateDeadline(course.id, e.target.value)
+                                } else {
+                                  setEditingDeadline(null)
+                                }
+                              }}
+                              autoFocus
+                            />
+                          ) : (
+                            <span className="text-xs text-slate-500">
+                              {t('training.dueDate' as TranslationKey)}: {course.dueDate}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="relative">
+                        <div className={`flex items-center gap-1 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                          <button
+                            onClick={() => setEditingDeadline(course.id)}
+                            className="p-2 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-slate-600 cursor-pointer"
+                            title={t('training.editDeadline' as TranslationKey)}
+                          >
+                            <Icon icon="lucide:calendar-clock" className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => setCourseToDelete(course.id)}
+                            className="p-2 hover:bg-rose-50 rounded-lg text-slate-400 hover:text-rose-600 cursor-pointer"
+                            title={t('training.removeCourse' as TranslationKey)}
+                          >
+                            <Icon icon="lucide:trash-2" className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Modal Actions */}
+          <div className={`flex gap-3 pt-4 border-t border-slate-200 ${isRTL ? 'flex-row-reverse' : ''}`}>
+            <Button
+              variant="outline"
+              className="flex-1"
+              onClick={() => setIsTrainingManageModalOpen(false)}
+            >
+              {t('common.cancel')}
+            </Button>
+            <Button
+              className="flex-1"
+              onClick={() => {
+                showToast(t('common.saveChanges'))
+                setIsTrainingManageModalOpen(false)
+              }}
+            >
+              {t('training.saveChanges' as TranslationKey)}
+            </Button>
+          </div>
+        </div>
       </Modal>
 
       {/* Toast */}

@@ -30,6 +30,7 @@ interface Letter {
 type AdvisoryStatus = 'pending' | 'in_progress' | 'completed'
 type AdvisoryPriority = 'low' | 'medium' | 'high'
 type BusinessUnit = 'corporate_banking' | 'compliance' | 'it' | 'risk_management' | 'finance' | 'operations' | 'hr'
+type TimeFrequency = 'week' | 'month' | 'quarter' | 'semi_annual' | 'annual' | 'fiscal'
 
 interface AdvisoryNote {
   id: number
@@ -285,6 +286,7 @@ export default function CorrespondenceHubPage() {
   const [advisoryStatusFilter, setAdvisoryStatusFilter] = useState<AdvisoryStatus | ''>('')
   const [advisoryPriorityFilter, setAdvisoryPriorityFilter] = useState<AdvisoryPriority | ''>('')
   const [advisoryBusinessUnitFilter, setAdvisoryBusinessUnitFilter] = useState<BusinessUnit | ''>('')
+  const [advisoryFrequencyFilter, setAdvisoryFrequencyFilter] = useState<TimeFrequency | ''>('')
 
   // Registry view filters
   const [searchTerm, setSearchTerm] = useState('')
@@ -369,6 +371,37 @@ export default function CorrespondenceHubPage() {
 
   const uniqueCategories = [...new Set(fullRequirements.map(r => r.category))]
 
+  // Helper function to get date range for frequency filter
+  const getDateRangeForFrequency = (frequency: TimeFrequency): { start: Date, end: Date } => {
+    const now = new Date()
+    const start = new Date()
+
+    switch (frequency) {
+      case 'week':
+        start.setDate(now.getDate() - 7)
+        break
+      case 'month':
+        start.setMonth(now.getMonth() - 1)
+        break
+      case 'quarter':
+        start.setMonth(now.getMonth() - 3)
+        break
+      case 'semi_annual':
+        start.setMonth(now.getMonth() - 6)
+        break
+      case 'annual':
+        start.setFullYear(now.getFullYear() - 1)
+        break
+      case 'fiscal':
+        // Fiscal year starts April 1
+        start.setMonth(3, 1)
+        start.setHours(0, 0, 0, 0)
+        if (now.getMonth() < 3) start.setFullYear(now.getFullYear() - 1)
+        break
+    }
+    return { start, end: now }
+  }
+
   // Filter advisory requests
   const filteredAdvisory = advisoryRequests.filter(req => {
     const matchesSearch = req.subject.toLowerCase().includes(advisorySearchTerm.toLowerCase()) ||
@@ -376,7 +409,13 @@ export default function CorrespondenceHubPage() {
     const matchesStatus = !advisoryStatusFilter || req.status === advisoryStatusFilter
     const matchesPriority = !advisoryPriorityFilter || req.priority === advisoryPriorityFilter
     const matchesBusinessUnit = !advisoryBusinessUnitFilter || req.businessUnit === advisoryBusinessUnitFilter
-    return matchesSearch && matchesStatus && matchesPriority && matchesBusinessUnit
+    const matchesFrequency = !advisoryFrequencyFilter ||
+      (() => {
+        const { start, end } = getDateRangeForFrequency(advisoryFrequencyFilter)
+        const reqDate = new Date(req.requestedDate)
+        return reqDate >= start && reqDate <= end
+      })()
+    return matchesSearch && matchesStatus && matchesPriority && matchesBusinessUnit && matchesFrequency
   })
 
   // Advisory status config
@@ -1009,7 +1048,28 @@ export default function CorrespondenceHubPage() {
                   </select>
                 </div>
               </div>
-              {(advisorySearchTerm || advisoryStatusFilter || advisoryPriorityFilter || advisoryBusinessUnitFilter) && (
+              {/* Second row for timeframe filter */}
+              <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mt-4">
+                <div>
+                  <label className={`text-xs font-bold text-slate-700 uppercase mb-2 block ${isRTL ? 'text-right' : ''}`}>
+                    {t('advisory.timeframe' as TranslationKey)}
+                  </label>
+                  <select
+                    value={advisoryFrequencyFilter}
+                    onChange={(e) => setAdvisoryFrequencyFilter(e.target.value as TimeFrequency | '')}
+                    className={`w-full px-4 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 ${isRTL ? 'text-right' : ''}`}
+                  >
+                    <option value="">{t('advisory.allTimeframes' as TranslationKey)}</option>
+                    <option value="week">{t('advisory.thisWeek' as TranslationKey)}</option>
+                    <option value="month">{t('advisory.thisMonth' as TranslationKey)}</option>
+                    <option value="quarter">{t('advisory.thisQuarter' as TranslationKey)}</option>
+                    <option value="semi_annual">{t('advisory.lastSixMonths' as TranslationKey)}</option>
+                    <option value="annual">{t('advisory.thisYear' as TranslationKey)}</option>
+                    <option value="fiscal">{t('advisory.fiscalYear' as TranslationKey)}</option>
+                  </select>
+                </div>
+              </div>
+              {(advisorySearchTerm || advisoryStatusFilter || advisoryPriorityFilter || advisoryBusinessUnitFilter || advisoryFrequencyFilter) && (
                 <div className={`flex gap-3 mt-4 ${isRTL ? 'flex-row-reverse' : ''}`}>
                   <button
                     onClick={() => {
@@ -1017,6 +1077,7 @@ export default function CorrespondenceHubPage() {
                       setAdvisoryStatusFilter('')
                       setAdvisoryPriorityFilter('')
                       setAdvisoryBusinessUnitFilter('')
+                      setAdvisoryFrequencyFilter('')
                     }}
                     className={`px-4 py-2 text-sm font-bold text-slate-600 hover:text-slate-900 transition-colors flex items-center gap-1 cursor-pointer ${isRTL ? 'flex-row-reverse' : ''}`}
                   >

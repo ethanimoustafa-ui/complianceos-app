@@ -16,6 +16,20 @@ type Status = 'in_progress' | 'completed' | 'overdue'
 type TabValue = 'rules' | 'policies'
 type PolicyStatus = 'draft' | 'under_review' | 'approved' | 'expired'
 type PolicyCategory = 'compliance' | 'it' | 'operations' | 'risk' | 'hr' | 'finance'
+type ArticleRiskLevel = 'critical' | 'high' | 'medium' | 'low'
+type ArticleComplianceStatus = 'compliant' | 'in_progress' | 'non_compliant' | 'not_started'
+
+interface Article {
+  id: number
+  articleNumber: string
+  title: string
+  description?: string
+  riskLevel: ArticleRiskLevel
+  responsibleDepartment: string
+  complianceStatus: ArticleComplianceStatus
+  assignedTo?: string
+  notes?: string
+}
 
 interface Rule {
   id: number
@@ -99,6 +113,47 @@ const rulesData: Rule[] = [
     daysLeft: 45,
     dueDate: 'Dec 01, 2024',
     status: 'in_progress',
+  },
+]
+
+const mockArticles: Article[] = [
+  {
+    id: 1,
+    articleNumber: 'Art. 1',
+    title: 'Disclosure Requirements',
+    description: 'ESG impact disclosure for investment portfolios',
+    riskLevel: 'critical',
+    responsibleDepartment: 'Finance',
+    complianceStatus: 'in_progress',
+    assignedTo: 'Sarah Connor',
+  },
+  {
+    id: 2,
+    articleNumber: 'Art. 2.1',
+    title: 'Reporting Standards',
+    description: 'Alignment with GRI standards',
+    riskLevel: 'high',
+    responsibleDepartment: 'Compliance',
+    complianceStatus: 'not_started',
+  },
+  {
+    id: 3,
+    articleNumber: 'Art. 3',
+    title: 'Internal Controls',
+    description: 'Risk management framework updates',
+    riskLevel: 'medium',
+    responsibleDepartment: 'Risk',
+    complianceStatus: 'compliant',
+    assignedTo: 'Ahmed Al-Rashid',
+  },
+  {
+    id: 4,
+    articleNumber: 'Art. 4',
+    title: 'Documentation Requirements',
+    description: 'Policy documentation and record keeping',
+    riskLevel: 'low',
+    responsibleDepartment: 'Legal',
+    complianceStatus: 'compliant',
   },
 ]
 
@@ -1257,6 +1312,49 @@ function PolicyDetailsContent({
 }
 
 function RuleDetailsContent({ rule, onClose, t, isRTL }: { rule: Rule; onClose: () => void; t: any; isRTL: boolean }) {
+  const [articlesData, setArticlesData] = useState<Article[]>(mockArticles)
+  const [editingArticle, setEditingArticle] = useState<Article | null>(null)
+  const [isAddArticleFormOpen, setIsAddArticleFormOpen] = useState(false)
+  const [newArticle, setNewArticle] = useState({
+    articleNumber: '',
+    title: '',
+    description: '',
+    riskLevel: 'medium' as ArticleRiskLevel,
+    responsibleDepartment: '',
+    complianceStatus: 'not_started' as ArticleComplianceStatus,
+    assignedTo: '',
+  })
+
+  const handleAddArticle = () => {
+    if (!newArticle.articleNumber || !newArticle.title || !newArticle.responsibleDepartment) return
+    const article: Article = {
+      id: Date.now(),
+      ...newArticle,
+    }
+    setArticlesData([...articlesData, article])
+    setNewArticle({
+      articleNumber: '',
+      title: '',
+      description: '',
+      riskLevel: 'medium',
+      responsibleDepartment: '',
+      complianceStatus: 'not_started',
+      assignedTo: '',
+    })
+    setIsAddArticleFormOpen(false)
+  }
+
+  const handleUpdateArticle = () => {
+    if (!editingArticle) return
+    setArticlesData(articlesData.map(a => a.id === editingArticle.id ? editingArticle : a))
+    setEditingArticle(null)
+  }
+
+  const handleRemoveArticle = (id: number) => {
+    setArticlesData(articlesData.filter(a => a.id !== id))
+    setEditingArticle(null)
+  }
+
   const checklistItems = [
     { label: t('regulatoryUpdates.initialGapAnalysis'), status: 'completed' },
     { label: t('regulatoryUpdates.draftingDisclosurePolicy'), status: 'in_progress' },
@@ -1298,6 +1396,257 @@ function RuleDetailsContent({ rule, onClose, t, isRTL }: { rule: Rule; onClose: 
               <ChecklistItem key={index} label={item.label} status={item.status as 'completed' | 'in_progress' | 'pending'} t={t} isRTL={isRTL} />
             ))}
           </div>
+        </section>
+
+        {/* Article Breakdown Section */}
+        <section className={isRTL ? 'text-right' : ''}>
+          <div className={`flex items-center justify-between mb-4 ${isRTL ? 'flex-row-reverse' : ''}`}>
+            <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest">
+              {t('regulatoryUpdates.articleBreakdown')}
+            </h3>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setIsAddArticleFormOpen(!isAddArticleFormOpen)}
+              className={`flex items-center gap-1 ${isRTL ? 'flex-row-reverse' : ''}`}
+            >
+              <Icon icon={isAddArticleFormOpen ? 'lucide:x' : 'lucide:plus'} className="text-sm" />
+              <span className="text-xs">{isAddArticleFormOpen ? t('common.cancel') : t('regulatoryUpdates.addArticle')}</span>
+            </Button>
+          </div>
+
+          {/* Add Article Form */}
+          {isAddArticleFormOpen && (
+            <div className="p-4 bg-white border border-slate-200 rounded-xl mb-4 space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <Input
+                  label={t('regulatoryUpdates.articleNumber')}
+                  placeholder={t('regulatoryUpdates.articleNumberPlaceholder')}
+                  value={newArticle.articleNumber}
+                  onChange={(e) => setNewArticle({ ...newArticle, articleNumber: e.target.value })}
+                />
+                <Input
+                  label={t('regulatoryUpdates.articleTitle')}
+                  placeholder={t('regulatoryUpdates.articleTitlePlaceholder')}
+                  value={newArticle.title}
+                  onChange={(e) => setNewArticle({ ...newArticle, title: e.target.value })}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1.5">
+                  {t('regulatoryUpdates.articleDescription')}
+                </label>
+                <textarea
+                  className={`w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 ${isRTL ? 'text-right' : ''}`}
+                  rows={2}
+                  placeholder={t('regulatoryUpdates.articleDescription')}
+                  value={newArticle.description}
+                  onChange={(e) => setNewArticle({ ...newArticle, description: e.target.value })}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1.5">
+                    {t('regulatoryUpdates.riskLevel')}
+                  </label>
+                  <select
+                    className="flex h-11 w-full rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm"
+                    value={newArticle.riskLevel}
+                    onChange={(e) => setNewArticle({ ...newArticle, riskLevel: e.target.value as ArticleRiskLevel })}
+                  >
+                    <option value="critical">{t('regulatoryUpdates.critical')}</option>
+                    <option value="high">{t('regulatoryUpdates.high')}</option>
+                    <option value="medium">{t('regulatoryUpdates.medium')}</option>
+                    <option value="low">{t('regulatoryUpdates.low')}</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1.5">
+                    {t('regulatoryUpdates.responsibleDepartment')}
+                  </label>
+                  <select
+                    className="flex h-11 w-full rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm"
+                    value={newArticle.responsibleDepartment}
+                    onChange={(e) => setNewArticle({ ...newArticle, responsibleDepartment: e.target.value })}
+                  >
+                    <option value="">{t('regulatoryUpdates.selectDepartment')}</option>
+                    <option value="Compliance">{t('regulatoryUpdates.compliance')}</option>
+                    <option value="Finance">{t('regulatoryUpdates.finance')}</option>
+                    <option value="Risk">{t('regulatoryUpdates.risk')}</option>
+                    <option value="Legal">{t('regulatoryUpdates.legal')}</option>
+                    <option value="IT">{t('regulatoryUpdates.itCyber')}</option>
+                  </select>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1.5">
+                    {t('regulatoryUpdates.complianceStatus')}
+                  </label>
+                  <select
+                    className="flex h-11 w-full rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm"
+                    value={newArticle.complianceStatus}
+                    onChange={(e) => setNewArticle({ ...newArticle, complianceStatus: e.target.value as ArticleComplianceStatus })}
+                  >
+                    <option value="not_started">{t('regulatoryUpdates.notStarted')}</option>
+                    <option value="in_progress">{t('regulatoryUpdates.inProgress')}</option>
+                    <option value="compliant">{t('regulatoryUpdates.compliant')}</option>
+                    <option value="non_compliant">{t('regulatoryUpdates.nonCompliant')}</option>
+                  </select>
+                </div>
+                <Input
+                  label={t('regulatoryUpdates.assignedTo')}
+                  placeholder={t('regulatoryUpdates.assignedTo')}
+                  value={newArticle.assignedTo}
+                  onChange={(e) => setNewArticle({ ...newArticle, assignedTo: e.target.value })}
+                />
+              </div>
+              <div className={`flex justify-end gap-2 pt-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                <Button variant="ghost" size="sm" onClick={() => setIsAddArticleFormOpen(false)}>
+                  {t('common.cancel')}
+                </Button>
+                <Button variant="primary" size="sm" onClick={handleAddArticle}>
+                  {t('regulatoryUpdates.addArticle')}
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* Articles List */}
+          <div className="space-y-3">
+            {articlesData.map((article) => (
+              <ArticleBreakdownItem
+                key={article.id}
+                article={article}
+                onEdit={setEditingArticle}
+                t={t}
+                isRTL={isRTL}
+              />
+            ))}
+          </div>
+
+          {/* Edit Article Form */}
+          {editingArticle && (
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+              <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+                <div className={`p-6 border-b border-slate-100 ${isRTL ? 'text-right' : ''}`}>
+                  <div className={`flex items-center justify-between ${isRTL ? 'flex-row-reverse' : ''}`}>
+                    <h3 className="text-lg font-bold text-slate-900">{t('regulatoryUpdates.editArticle')}</h3>
+                    <button
+                      onClick={() => setEditingArticle(null)}
+                      className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+                    >
+                      <Icon icon="lucide:x" className="text-lg" />
+                    </button>
+                  </div>
+                </div>
+                <div className="p-6 space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <Input
+                      label={t('regulatoryUpdates.articleNumber')}
+                      placeholder={t('regulatoryUpdates.articleNumberPlaceholder')}
+                      value={editingArticle.articleNumber}
+                      onChange={(e) => setEditingArticle({ ...editingArticle, articleNumber: e.target.value })}
+                    />
+                    <Input
+                      label={t('regulatoryUpdates.articleTitle')}
+                      placeholder={t('regulatoryUpdates.articleTitlePlaceholder')}
+                      value={editingArticle.title}
+                      onChange={(e) => setEditingArticle({ ...editingArticle, title: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1.5">
+                      {t('regulatoryUpdates.articleDescription')}
+                    </label>
+                    <textarea
+                      className={`w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 ${isRTL ? 'text-right' : ''}`}
+                      rows={2}
+                      placeholder={t('regulatoryUpdates.articleDescription')}
+                      value={editingArticle.description || ''}
+                      onChange={(e) => setEditingArticle({ ...editingArticle, description: e.target.value })}
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-1.5">
+                        {t('regulatoryUpdates.riskLevel')}
+                      </label>
+                      <select
+                        className="flex h-11 w-full rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm"
+                        value={editingArticle.riskLevel}
+                        onChange={(e) => setEditingArticle({ ...editingArticle, riskLevel: e.target.value as ArticleRiskLevel })}
+                      >
+                        <option value="critical">{t('regulatoryUpdates.critical')}</option>
+                        <option value="high">{t('regulatoryUpdates.high')}</option>
+                        <option value="medium">{t('regulatoryUpdates.medium')}</option>
+                        <option value="low">{t('regulatoryUpdates.low')}</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-1.5">
+                        {t('regulatoryUpdates.responsibleDepartment')}
+                      </label>
+                      <select
+                        className="flex h-11 w-full rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm"
+                        value={editingArticle.responsibleDepartment}
+                        onChange={(e) => setEditingArticle({ ...editingArticle, responsibleDepartment: e.target.value })}
+                      >
+                        <option value="">{t('regulatoryUpdates.selectDepartment')}</option>
+                        <option value="Compliance">{t('regulatoryUpdates.compliance')}</option>
+                        <option value="Finance">{t('regulatoryUpdates.finance')}</option>
+                        <option value="Risk">{t('regulatoryUpdates.risk')}</option>
+                        <option value="Legal">{t('regulatoryUpdates.legal')}</option>
+                        <option value="IT">{t('regulatoryUpdates.itCyber')}</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-1.5">
+                        {t('regulatoryUpdates.complianceStatus')}
+                      </label>
+                      <select
+                        className="flex h-11 w-full rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm"
+                        value={editingArticle.complianceStatus}
+                        onChange={(e) => setEditingArticle({ ...editingArticle, complianceStatus: e.target.value as ArticleComplianceStatus })}
+                      >
+                        <option value="not_started">{t('regulatoryUpdates.notStarted')}</option>
+                        <option value="in_progress">{t('regulatoryUpdates.inProgress')}</option>
+                        <option value="compliant">{t('regulatoryUpdates.compliant')}</option>
+                        <option value="non_compliant">{t('regulatoryUpdates.nonCompliant')}</option>
+                      </select>
+                    </div>
+                    <Input
+                      label={t('regulatoryUpdates.assignedTo')}
+                      placeholder={t('regulatoryUpdates.assignedTo')}
+                      value={editingArticle.assignedTo || ''}
+                      onChange={(e) => setEditingArticle({ ...editingArticle, assignedTo: e.target.value })}
+                    />
+                  </div>
+                </div>
+                <div className={`p-6 border-t border-slate-100 flex items-center justify-between ${isRTL ? 'flex-row-reverse' : ''}`}>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => handleRemoveArticle(editingArticle.id)}
+                    className="text-rose-600 hover:text-rose-700 hover:bg-rose-50"
+                  >
+                    <Icon icon="lucide:trash-2" className="text-sm" />
+                    <span>{t('common.delete')}</span>
+                  </Button>
+                  <div className={`flex gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                    <Button variant="ghost" size="sm" onClick={() => setEditingArticle(null)}>
+                      {t('common.cancel')}
+                    </Button>
+                    <Button variant="primary" size="sm" onClick={handleUpdateArticle}>
+                      {t('common.saveChanges')}
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </section>
 
         <section className={isRTL ? 'text-right' : ''}>
@@ -1437,6 +1786,92 @@ function ChecklistItem({
         <span className={`text-sm ${style.textColor}`}>{label}</span>
       </div>
       <span className={`text-[10px] ${style.labelColor} font-bold uppercase`}>{style.label}</span>
+    </div>
+  )
+}
+
+function ArticleBreakdownItem({
+  article,
+  onEdit,
+  t,
+  isRTL,
+}: {
+  article: Article
+  onEdit: (article: Article) => void
+  t: (key: string) => string
+  isRTL: boolean
+}) {
+  const riskConfig = {
+    critical: { bg: 'bg-rose-50', text: 'text-rose-700', badge: 'bg-rose-100 text-rose-700' },
+    high: { bg: 'bg-orange-50', text: 'text-orange-700', badge: 'bg-orange-100 text-orange-700' },
+    medium: { bg: 'bg-amber-50', text: 'text-amber-700', badge: 'bg-amber-100 text-amber-700' },
+    low: { bg: 'bg-slate-50', text: 'text-slate-600', badge: 'bg-slate-100 text-slate-600' },
+  }
+
+  const statusConfig = {
+    compliant: { icon: 'lucide:check-circle', color: 'text-emerald-500', label: 'regulatoryUpdates.compliant' },
+    in_progress: { icon: 'lucide:loader', color: 'text-amber-500', label: 'regulatoryUpdates.inProgress' },
+    non_compliant: { icon: 'lucide:x-circle', color: 'text-rose-500', label: 'regulatoryUpdates.nonCompliant' },
+    not_started: { icon: 'lucide:circle-dashed', color: 'text-slate-400', label: 'regulatoryUpdates.notStarted' },
+  }
+
+  const riskLabels: Record<ArticleRiskLevel, string> = {
+    critical: t('regulatoryUpdates.critical'),
+    high: t('regulatoryUpdates.high'),
+    medium: t('regulatoryUpdates.medium'),
+    low: t('regulatoryUpdates.low'),
+  }
+
+  const risk = riskConfig[article.riskLevel]
+  const status = statusConfig[article.complianceStatus]
+
+  return (
+    <div className={`p-4 border border-slate-100 rounded-xl hover:border-emerald-200 transition-colors ${risk.bg}`}>
+      {/* Article header with number, title, and edit button */}
+      <div className={`flex items-start justify-between mb-3 ${isRTL ? 'flex-row-reverse' : ''}`}>
+        <div className={`flex items-center gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
+          <span className={`text-sm font-bold ${risk.text}`}>{article.articleNumber}</span>
+          <span className="text-slate-300">-</span>
+          <span className="text-sm font-bold text-slate-800">{article.title}</span>
+        </div>
+        <button
+          onClick={() => onEdit(article)}
+          className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-white rounded-lg transition-colors"
+        >
+          <Icon icon="lucide:pencil" className="text-sm" />
+        </button>
+      </div>
+
+      {/* Description */}
+      {article.description && (
+        <p className={`text-xs text-slate-500 mb-3 ${isRTL ? 'text-right' : ''}`}>
+          {article.description}
+        </p>
+      )}
+
+      {/* Risk level badge, department, and compliance status */}
+      <div className={`flex items-center gap-2 flex-wrap ${isRTL ? 'flex-row-reverse' : ''}`}>
+        <span className={`px-2 py-1 text-[10px] font-bold rounded-md ${risk.badge}`}>
+          {riskLabels[article.riskLevel].toUpperCase()}
+        </span>
+        <span className="px-2 py-1 text-[10px] font-bold rounded-md bg-slate-100 text-slate-600">
+          {article.responsibleDepartment}
+        </span>
+        <div className={`flex items-center gap-1 px-2 py-1 rounded-md bg-white border border-slate-100 ${isRTL ? 'flex-row-reverse' : ''}`}>
+          <Icon icon={status.icon} className={`text-sm ${status.color}`} />
+          <span className={`text-[10px] font-bold ${status.color}`}>
+            {t(status.label)}
+          </span>
+        </div>
+      </div>
+
+      {/* Assigned to */}
+      {article.assignedTo && (
+        <div className={`mt-3 pt-3 border-t border-slate-100 ${isRTL ? 'text-right' : ''}`}>
+          <span className="text-[10px] text-slate-400">{t('regulatoryUpdates.assignedTo')}: </span>
+          <span className="text-[10px] font-bold text-slate-600">{article.assignedTo}</span>
+        </div>
+      )}
     </div>
   )
 }
