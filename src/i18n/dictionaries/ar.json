@@ -981,7 +981,20 @@
     "courseDescriptionPlaceholder": "وصف موجز لمحتوى الدورة...",
     "statisticsSummary": "ملخص الإحصائيات",
     "viewDetails": "عرض التفاصيل",
-    "actions": "الإجراءات"
+    "actions": "الإجراءات",
+    "breakdownByDepartment": "التوزيع حسب القسم",
+    "saudiEmployees": "الموظفون السعوديون",
+    "currentlyInTraining": "قيد التدريب حالياً",
+    "inTrainingCount": "{count} أشخاص",
+    "assignTraining": "تعيين تدريب",
+    "assignToEmployees": "تعيين للموظفين",
+    "selectCourses": "اختر الدورات",
+    "availableCourses": "الدورات المتاحة",
+    "alreadyAssigned": "معين مسبقاً",
+    "assignSelected": "تعيين المحدد",
+    "trainingAssigned": "تم تعيين التدريب بنجاح",
+    "noCoursesAvailable": "لا توجد دورات متاحة للتعيين",
+    "allCoursesAssigned": "جميع الدورات معينة مسبقاً"
   },
   "settings": {
     "title": "الإعدادات",

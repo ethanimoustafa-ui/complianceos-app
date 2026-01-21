@@ -981,7 +981,20 @@
     "courseDescriptionPlaceholder": "Brief description of the course content...",
     "statisticsSummary": "Statistics Summary",
     "viewDetails": "View Details",
-    "actions": "Actions"
+    "actions": "Actions",
+    "breakdownByDepartment": "Breakdown by Department",
+    "saudiEmployees": "Saudi Employees",
+    "currentlyInTraining": "Currently In Training",
+    "inTrainingCount": "{count} people",
+    "assignTraining": "Assign Training",
+    "assignToEmployees": "Assign to Employees",
+    "selectCourses": "Select Courses",
+    "availableCourses": "Available Courses",
+    "alreadyAssigned": "Already Assigned",
+    "assignSelected": "Assign Selected",
+    "trainingAssigned": "Training assigned successfully",
+    "noCoursesAvailable": "No courses available to assign",
+    "allCoursesAssigned": "All courses already assigned"
   },
   "settings": {
     "title": "Settings",

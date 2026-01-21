@@ -328,12 +328,32 @@ const departmentTrainingData: DepartmentTraining[] = [
   { name: 'Operations', employees: 1, completed: 0, inProgress: 0, overdue: 1, progress: 0 },
 ]
 
-// Saudization metrics
+// Saudization metrics with department breakdown
 const saudizationMetrics = {
   target: 42,
-  actual: 38.2,
+  actual: 50, // Updated to reflect 5 Saudi out of 10 = 50%
   totalEmployees: 10,
   saudiEmployees: 5,
+  byDepartment: [
+    { name: 'Compliance', total: 3, saudi: 3, percentage: 100 },
+    { name: 'Risk Management', total: 2, saudi: 1, percentage: 50 },
+    { name: 'Finance', total: 2, saudi: 1, percentage: 50 },
+    { name: 'IT', total: 2, saudi: 0, percentage: 0 },
+    { name: 'Operations', total: 1, saudi: 0, percentage: 0 },
+  ],
+}
+
+// Get Saudi employees with their training progress
+const getSaudiEmployeesWithProgress = () => {
+  return employeeTrainingData
+    .filter(emp => emp.isSaudi)
+    .map(emp => ({
+      id: emp.id,
+      name: emp.name,
+      department: emp.department,
+      trainingProgress: emp.overallProgress,
+    }))
+    .sort((a, b) => b.trainingProgress - a.trainingProgress)
 }
 
 // Mock training courses data for management modal
@@ -426,6 +446,7 @@ export default function TeamManagementPage() {
   // Training management modal states
   const [isTrainingManageModalOpen, setIsTrainingManageModalOpen] = useState(false)
   const [trainingsData, setTrainingsData] = useState<TrainingCourse[]>(mockTrainingCourses)
+  const [employeesData, setEmployeesData] = useState<EmployeeTraining[]>(employeeTrainingData)
   const [isAddCourseFormOpen, setIsAddCourseFormOpen] = useState(false)
   const [newCourse, setNewCourse] = useState({
     name: '',
@@ -435,6 +456,20 @@ export default function TeamManagementPage() {
   })
   const [courseToDelete, setCourseToDelete] = useState<number | null>(null)
   const [editingDeadline, setEditingDeadline] = useState<number | null>(null)
+
+  // Training progress filter state (Feature 2)
+  const [trainingProgressFilter, setTrainingProgressFilter] = useState<'all' | 'in_training' | 'completed' | 'overdue'>('all')
+
+  // Training assignment modal states (Feature 3)
+  const [isAssignTrainingOpen, setIsAssignTrainingOpen] = useState(false)
+  const [assigningToEmployee, setAssigningToEmployee] = useState<EmployeeTraining | null>(null)
+  const [selectedCoursesToAssign, setSelectedCoursesToAssign] = useState<number[]>([])
+  const [assignmentDueDate, setAssignmentDueDate] = useState('')
+
+  // Assign to employees from course (bulk assignment)
+  const [isAssignToEmployeesOpen, setIsAssignToEmployeesOpen] = useState(false)
+  const [selectedCourseForAssignment, setSelectedCourseForAssignment] = useState<TrainingCourse | null>(null)
+  const [selectedEmployeesForAssignment, setSelectedEmployeesForAssignment] = useState<number[]>([])
 
   const showToast = useCallback((message: string) => {
     setToastMessage(message)
@@ -448,11 +483,33 @@ export default function TeamManagementPage() {
     overdue: { bg: 'bg-rose-100', text: 'text-rose-700', labelKey: 'training.overdue' },
   }
 
-  // Filter employees for training tab
-  const filteredEmployeeTraining = employeeTrainingData.filter(emp => {
+  // Compute employees by training status (Feature 2)
+  const employeesInTraining = employeesData.filter(emp =>
+    emp.courses.some(c => c.status === 'in_progress')
+  )
+  const employeesWithOverdue = employeesData.filter(emp =>
+    emp.courses.some(c => c.status === 'overdue')
+  )
+  const employeesAllCompleted = employeesData.filter(emp =>
+    emp.courses.length > 0 && emp.courses.every(c => c.status === 'completed')
+  )
+
+  // Filter employees for training tab with all filters
+  const filteredEmployeeTraining = employeesData.filter(emp => {
     const matchesDept = !trainingDeptFilter || emp.department === trainingDeptFilter
     const matchesStatus = !trainingStatusFilter || emp.courses.some(c => c.status === trainingStatusFilter)
-    return matchesDept && matchesStatus
+
+    // Training progress filter (Feature 2)
+    let matchesProgressFilter = true
+    if (trainingProgressFilter === 'in_training') {
+      matchesProgressFilter = emp.courses.some(c => c.status === 'in_progress')
+    } else if (trainingProgressFilter === 'completed') {
+      matchesProgressFilter = emp.courses.length > 0 && emp.courses.every(c => c.status === 'completed')
+    } else if (trainingProgressFilter === 'overdue') {
+      matchesProgressFilter = emp.courses.some(c => c.status === 'overdue')
+    }
+
+    return matchesDept && matchesStatus && matchesProgressFilter
   })
   const [isDrawerOpen, setIsDrawerOpen] = useState(true)
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false)
@@ -548,6 +605,104 @@ export default function TeamManagementPage() {
     ))
     setEditingDeadline(null)
     showToast(t('training.deadlineUpdated' as TranslationKey))
+  }
+
+  // Training assignment handlers (Feature 3)
+  const handleAssignTrainingToEmployee = () => {
+    if (!assigningToEmployee || selectedCoursesToAssign.length === 0 || !assignmentDueDate) return
+
+    // Get selected courses details
+    const coursesToAdd = trainingsData
+      .filter(c => selectedCoursesToAssign.includes(c.id))
+      .map(c => ({
+        id: c.id,
+        name: c.name,
+        category: c.category,
+        status: 'not_started' as TrainingStatus,
+        dueDate: assignmentDueDate,
+      }))
+
+    // Update employee's courses
+    setEmployeesData(prev => prev.map(emp => {
+      if (emp.id === assigningToEmployee.id) {
+        return {
+          ...emp,
+          courses: [...emp.courses, ...coursesToAdd],
+        }
+      }
+      return emp
+    }))
+
+    // Update training course counts
+    setTrainingsData(prev => prev.map(course => {
+      if (selectedCoursesToAssign.includes(course.id)) {
+        return { ...course, assignedCount: course.assignedCount + 1 }
+      }
+      return course
+    }))
+
+    // Update selected employee reference
+    if (selectedEmployee && selectedEmployee.id === assigningToEmployee.id) {
+      setSelectedEmployee({
+        ...selectedEmployee,
+        courses: [...selectedEmployee.courses, ...coursesToAdd],
+      })
+    }
+
+    // Reset and close modal
+    setIsAssignTrainingOpen(false)
+    setAssigningToEmployee(null)
+    setSelectedCoursesToAssign([])
+    setAssignmentDueDate('')
+    showToast(t('training.trainingAssigned' as TranslationKey))
+  }
+
+  const handleBulkAssignCourse = () => {
+    if (!selectedCourseForAssignment || selectedEmployeesForAssignment.length === 0 || !assignmentDueDate) return
+
+    const newCourseAssignment = {
+      id: selectedCourseForAssignment.id,
+      name: selectedCourseForAssignment.name,
+      category: selectedCourseForAssignment.category,
+      status: 'not_started' as TrainingStatus,
+      dueDate: assignmentDueDate,
+    }
+
+    // Update employees' courses
+    setEmployeesData(prev => prev.map(emp => {
+      if (selectedEmployeesForAssignment.includes(emp.id)) {
+        // Check if course is already assigned
+        if (!emp.courses.some(c => c.id === selectedCourseForAssignment.id)) {
+          return {
+            ...emp,
+            courses: [...emp.courses, newCourseAssignment],
+          }
+        }
+      }
+      return emp
+    }))
+
+    // Update training course counts
+    setTrainingsData(prev => prev.map(course => {
+      if (course.id === selectedCourseForAssignment.id) {
+        return { ...course, assignedCount: course.assignedCount + selectedEmployeesForAssignment.length }
+      }
+      return course
+    }))
+
+    // Reset and close modal
+    setIsAssignToEmployeesOpen(false)
+    setSelectedCourseForAssignment(null)
+    setSelectedEmployeesForAssignment([])
+    setAssignmentDueDate('')
+    showToast(t('training.trainingAssigned' as TranslationKey))
+  }
+
+  // Get available courses for an employee (not yet assigned)
+  const getAvailableCoursesForEmployee = (employee: EmployeeTraining) => {
+    return trainingsData.filter(course =>
+      !employee.courses.some(c => c.name === course.name)
+    )
   }
 
   // Calculate totals for training management
@@ -1131,101 +1286,232 @@ export default function TeamManagementPage() {
                   </div>
                 </Card>
 
-                {/* Saudization Metrics */}
+                {/* Enhanced Saudization Metrics */}
                 <Card className="p-6">
-                  <h3 className={`text-sm font-bold text-slate-900 mb-6 flex items-center gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                  <h3 className={`text-sm font-bold text-slate-900 mb-4 flex items-center gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
                     <Icon icon="lucide:flag" className="text-slate-400" />
                     {t('training.saudizationMetrics' as TranslationKey)}
                   </h3>
-                  <div className={`flex items-center gap-8 ${isRTL ? 'flex-row-reverse' : ''}`}>
+
+                  {/* Top Section: Circular Progress + Summary */}
+                  <div className={`flex items-center gap-6 mb-6 pb-6 border-b border-slate-100 ${isRTL ? 'flex-row-reverse' : ''}`}>
                     {/* Circular Progress */}
-                    <div className="relative w-32 h-32">
-                      <svg className="w-32 h-32 -rotate-90" viewBox="0 0 100 100">
+                    <div className="relative w-24 h-24 flex-shrink-0">
+                      <svg className="w-24 h-24 -rotate-90" viewBox="0 0 100 100">
+                        <circle cx="50" cy="50" r="40" fill="none" stroke="#f1f5f9" strokeWidth="10" />
                         <circle
-                          cx="50"
-                          cy="50"
-                          r="40"
-                          fill="none"
-                          stroke="#f1f5f9"
-                          strokeWidth="12"
-                        />
-                        <circle
-                          cx="50"
-                          cy="50"
-                          r="40"
-                          fill="none"
+                          cx="50" cy="50" r="40" fill="none"
                           stroke={saudizationMetrics.actual >= saudizationMetrics.target ? '#10b981' : '#f59e0b'}
-                          strokeWidth="12"
-                          strokeLinecap="round"
+                          strokeWidth="10" strokeLinecap="round"
                           strokeDasharray={`${(saudizationMetrics.actual / 100) * 251.2} 251.2`}
                         />
                       </svg>
                       <div className="absolute inset-0 flex items-center justify-center">
-                        <div className="text-center">
-                          <p className="text-2xl font-bold text-slate-900">{saudizationMetrics.actual}%</p>
-                          <p className="text-[10px] text-slate-500 uppercase font-bold">{t('training.actual' as TranslationKey)}</p>
-                        </div>
+                        <p className="text-lg font-bold text-slate-900">{saudizationMetrics.actual}%</p>
                       </div>
                     </div>
-                    <div className={`flex-1 space-y-4 ${isRTL ? 'text-right' : ''}`}>
-                      <div>
-                        <p className="text-xs text-slate-500 font-bold uppercase">{t('training.target' as TranslationKey)}</p>
-                        <p className="text-xl font-bold text-slate-900">{saudizationMetrics.target}%</p>
+                    <div className={`flex-1 ${isRTL ? 'text-right' : ''}`}>
+                      <div className={`flex items-center gap-4 mb-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                        <span className="text-xs text-slate-500">{t('training.target' as TranslationKey)}: <span className="font-bold text-slate-700">{saudizationMetrics.target}%</span></span>
+                        <span className={`text-xs font-bold ${saudizationMetrics.actual >= saudizationMetrics.target ? 'text-emerald-600' : 'text-rose-600'}`}>
+                          {t('training.gap' as TranslationKey)}: {saudizationMetrics.actual >= saudizationMetrics.target ? '+' : ''}{(saudizationMetrics.actual - saudizationMetrics.target).toFixed(1)}%
+                        </span>
                       </div>
-                      <div>
-                        <p className="text-xs text-slate-500 font-bold uppercase">{t('training.gap' as TranslationKey)}</p>
-                        <p className={`text-xl font-bold ${saudizationMetrics.actual >= saudizationMetrics.target ? 'text-emerald-600' : 'text-rose-600'}`}>
-                          {saudizationMetrics.actual >= saudizationMetrics.target ? '+' : ''}{(saudizationMetrics.actual - saudizationMetrics.target).toFixed(1)}%
-                        </p>
+                      <div className={`flex gap-3 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                        <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-2 py-1 rounded">{saudizationMetrics.saudiEmployees} {t('training.saudi' as TranslationKey)}</span>
+                        <span className="text-xs font-bold text-slate-600 bg-slate-100 px-2 py-1 rounded">{saudizationMetrics.totalEmployees - saudizationMetrics.saudiEmployees} {t('training.nonSaudi' as TranslationKey)}</span>
                       </div>
-                      <div className={`flex gap-4 pt-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
-                        <div className={`flex items-center gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
-                          <Icon icon="lucide:users" className="text-emerald-600" />
-                          <span className="text-sm font-bold text-slate-700">{saudizationMetrics.saudiEmployees} {t('training.saudi' as TranslationKey)}</span>
+                    </div>
+                  </div>
+
+                  {/* Breakdown by Department */}
+                  <div className="mb-6">
+                    <h4 className={`text-xs font-bold text-slate-500 uppercase tracking-wider mb-3 ${isRTL ? 'text-right' : ''}`}>
+                      {t('training.breakdownByDepartment' as TranslationKey)}
+                    </h4>
+                    <div className="space-y-2">
+                      {saudizationMetrics.byDepartment.map((dept) => (
+                        <div key={dept.name} className={`flex items-center gap-3 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                          <span className="text-xs font-medium text-slate-700 w-28 truncate">{dept.name}</span>
+                          <span className="text-[10px] text-slate-500 w-8">{dept.saudi}/{dept.total}</span>
+                          <div className="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden">
+                            <div
+                              className={`h-full rounded-full transition-all ${dept.percentage >= 50 ? 'bg-emerald-500' : dept.percentage > 0 ? 'bg-amber-500' : 'bg-slate-200'}`}
+                              style={{ width: `${dept.percentage}%` }}
+                            />
+                          </div>
+                          <span className={`text-[10px] font-bold w-10 text-right ${dept.percentage >= 50 ? 'text-emerald-600' : dept.percentage > 0 ? 'text-amber-600' : 'text-slate-400'}`}>
+                            {dept.percentage.toFixed(0)}%
+                          </span>
                         </div>
-                        <div className={`flex items-center gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
-                          <Icon icon="lucide:users" className="text-slate-400" />
-                          <span className="text-sm font-bold text-slate-500">{saudizationMetrics.totalEmployees - saudizationMetrics.saudiEmployees} {t('training.nonSaudi' as TranslationKey)}</span>
-                        </div>
-                      </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Saudi Employees List */}
+                  <div>
+                    <h4 className={`text-xs font-bold text-slate-500 uppercase tracking-wider mb-3 ${isRTL ? 'text-right' : ''}`}>
+                      {t('training.saudiEmployees' as TranslationKey)}
+                    </h4>
+                    <div className="space-y-2 max-h-32 overflow-y-auto">
+                      {getSaudiEmployeesWithProgress().map((emp) => (
+                        <button
+                          key={emp.id}
+                          onClick={() => {
+                            const fullEmployee = employeesData.find(e => e.id === emp.id)
+                            if (fullEmployee) {
+                              setSelectedEmployee(fullEmployee)
+                              setIsEmployeeDetailOpen(true)
+                            }
+                          }}
+                          className={`w-full flex items-center gap-3 p-2 rounded-lg hover:bg-slate-50 transition-colors cursor-pointer ${isRTL ? 'flex-row-reverse' : ''}`}
+                        >
+                          <span className="text-base">🇸🇦</span>
+                          <div className={`flex-1 ${isRTL ? 'text-right' : 'text-left'}`}>
+                            <span className="text-xs font-bold text-slate-700">{emp.name}</span>
+                            <span className="text-[10px] text-slate-400 mx-2">({emp.department})</span>
+                          </div>
+                          <span className={`text-[10px] font-bold ${emp.trainingProgress === 100 ? 'text-emerald-600' : emp.trainingProgress >= 50 ? 'text-amber-600' : 'text-rose-600'}`}>
+                            {emp.trainingProgress}% {t('training.progress' as TranslationKey).toLowerCase()}
+                          </span>
+                        </button>
+                      ))}
                     </div>
                   </div>
                 </Card>
               </div>
 
+              {/* Currently In Training Summary Card (Feature 2) */}
+              {employeesInTraining.length > 0 && (
+                <Card className="p-4 mb-6 bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-100">
+                  <div className={`flex items-center justify-between ${isRTL ? 'flex-row-reverse' : ''}`}>
+                    <div className={`flex items-center gap-3 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                      <div className="p-2 bg-blue-100 rounded-lg">
+                        <Icon icon="lucide:book-open-check" className="text-xl text-blue-600" />
+                      </div>
+                      <div className={isRTL ? 'text-right' : ''}>
+                        <h4 className="text-sm font-bold text-slate-900">{t('training.currentlyInTraining' as TranslationKey)}</h4>
+                        <p className="text-xs text-slate-500">
+                          {t('training.inTrainingCount' as TranslationKey).replace('{count}', employeesInTraining.length.toString())}
+                        </p>
+                      </div>
+                    </div>
+                    <div className={`flex items-center gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                      {employeesInTraining.slice(0, 5).map((emp) => (
+                        <button
+                          key={emp.id}
+                          onClick={() => {
+                            setSelectedEmployee(emp)
+                            setIsEmployeeDetailOpen(true)
+                          }}
+                          className="group relative"
+                          title={emp.name}
+                        >
+                          <img
+                            src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${emp.name}`}
+                            className="w-9 h-9 rounded-full border-2 border-white shadow-sm hover:border-blue-300 transition-all cursor-pointer"
+                            alt={emp.name}
+                          />
+                          <span className="absolute -bottom-1 -right-1 bg-blue-500 text-white text-[8px] font-bold px-1 rounded">
+                            {emp.courses.filter(c => c.status === 'in_progress').length}
+                          </span>
+                        </button>
+                      ))}
+                      {employeesInTraining.length > 5 && (
+                        <button
+                          onClick={() => setTrainingProgressFilter('in_training')}
+                          className="w-9 h-9 rounded-full bg-slate-200 text-slate-600 text-xs font-bold flex items-center justify-center hover:bg-slate-300 transition-colors cursor-pointer"
+                        >
+                          +{employeesInTraining.length - 5}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </Card>
+              )}
+
               {/* Employee Training Records */}
               <Card className="overflow-hidden">
-                <CardHeader className={`flex items-center justify-between ${isRTL ? 'flex-row-reverse' : ''}`}>
-                  <h3 className="text-sm font-bold text-slate-900">{t('training.employeeRecords' as TranslationKey)}</h3>
-                  <div className={`flex items-center gap-4 ${isRTL ? 'flex-row-reverse' : ''}`}>
-                    <select
-                      value={trainingDeptFilter}
-                      onChange={(e) => setTrainingDeptFilter(e.target.value)}
-                      className={`px-3 py-1.5 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 ${isRTL ? 'text-right' : ''}`}
-                    >
-                      <option value="">{t('training.allDepartments' as TranslationKey)}</option>
-                      <option value="Compliance">{t('training.compliance' as TranslationKey)}</option>
-                      <option value="Risk Management">{t('training.riskManagement' as TranslationKey)}</option>
-                      <option value="Finance">{t('training.finance' as TranslationKey)}</option>
-                      <option value="IT">{t('training.it' as TranslationKey)}</option>
-                      <option value="Operations">{t('training.operations' as TranslationKey)}</option>
-                    </select>
-                    <select
-                      value={trainingStatusFilter}
-                      onChange={(e) => setTrainingStatusFilter(e.target.value as TrainingStatus | '')}
-                      className={`px-3 py-1.5 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 ${isRTL ? 'text-right' : ''}`}
-                    >
-                      <option value="">{t('training.allStatuses' as TranslationKey)}</option>
-                      <option value="completed">{t('training.completed' as TranslationKey)}</option>
-                      <option value="in_progress">{t('training.inProgress' as TranslationKey)}</option>
-                      <option value="overdue">{t('training.overdue' as TranslationKey)}</option>
-                      <option value="not_started">{t('training.notStarted' as TranslationKey)}</option>
-                    </select>
+                <CardHeader className={`flex flex-col gap-4 ${isRTL ? 'items-end' : 'items-start'}`}>
+                  <div className={`w-full flex items-center justify-between ${isRTL ? 'flex-row-reverse' : ''}`}>
+                    <h3 className="text-sm font-bold text-slate-900">{t('training.employeeRecords' as TranslationKey)}</h3>
+                    <div className={`flex items-center gap-4 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                      <select
+                        value={trainingDeptFilter}
+                        onChange={(e) => setTrainingDeptFilter(e.target.value)}
+                        className={`px-3 py-1.5 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 ${isRTL ? 'text-right' : ''}`}
+                      >
+                        <option value="">{t('training.allDepartments' as TranslationKey)}</option>
+                        <option value="Compliance">{t('training.compliance' as TranslationKey)}</option>
+                        <option value="Risk Management">{t('training.riskManagement' as TranslationKey)}</option>
+                        <option value="Finance">{t('training.finance' as TranslationKey)}</option>
+                        <option value="IT">{t('training.it' as TranslationKey)}</option>
+                        <option value="Operations">{t('training.operations' as TranslationKey)}</option>
+                      </select>
+                      <select
+                        value={trainingStatusFilter}
+                        onChange={(e) => setTrainingStatusFilter(e.target.value as TrainingStatus | '')}
+                        className={`px-3 py-1.5 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 ${isRTL ? 'text-right' : ''}`}
+                      >
+                        <option value="">{t('training.allStatuses' as TranslationKey)}</option>
+                        <option value="completed">{t('training.completed' as TranslationKey)}</option>
+                        <option value="in_progress">{t('training.inProgress' as TranslationKey)}</option>
+                        <option value="overdue">{t('training.overdue' as TranslationKey)}</option>
+                        <option value="not_started">{t('training.notStarted' as TranslationKey)}</option>
+                      </select>
+                      <button
+                        onClick={() => showToast(t('training.exportingReport' as TranslationKey))}
+                        className="p-2 hover:bg-slate-50 rounded-lg text-slate-400 cursor-pointer"
+                      >
+                        <Icon icon="lucide:download" />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Training Progress Filter Pills (Feature 2) */}
+                  <div className={`flex items-center gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
                     <button
-                      onClick={() => showToast(t('training.exportingReport' as TranslationKey))}
-                      className="p-2 hover:bg-slate-50 rounded-lg text-slate-400 cursor-pointer"
+                      onClick={() => setTrainingProgressFilter('all')}
+                      className={`px-3 py-1.5 text-xs font-bold rounded-full transition-colors cursor-pointer ${
+                        trainingProgressFilter === 'all'
+                          ? 'bg-slate-900 text-white'
+                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                      }`}
                     >
-                      <Icon icon="lucide:download" />
+                      {t('common.all')} ({employeesData.length})
+                    </button>
+                    <button
+                      onClick={() => setTrainingProgressFilter('in_training')}
+                      className={`px-3 py-1.5 text-xs font-bold rounded-full transition-colors cursor-pointer flex items-center gap-1 ${
+                        trainingProgressFilter === 'in_training'
+                          ? 'bg-blue-600 text-white'
+                          : 'bg-blue-50 text-blue-700 hover:bg-blue-100'
+                      }`}
+                    >
+                      <Icon icon="lucide:book-open" className="text-sm" />
+                      {t('training.inProgress' as TranslationKey)} ({employeesInTraining.length})
+                    </button>
+                    <button
+                      onClick={() => setTrainingProgressFilter('completed')}
+                      className={`px-3 py-1.5 text-xs font-bold rounded-full transition-colors cursor-pointer flex items-center gap-1 ${
+                        trainingProgressFilter === 'completed'
+                          ? 'bg-emerald-600 text-white'
+                          : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+                      }`}
+                    >
+                      <Icon icon="lucide:check-circle" className="text-sm" />
+                      {t('training.completed' as TranslationKey)} ({employeesAllCompleted.length})
+                    </button>
+                    <button
+                      onClick={() => setTrainingProgressFilter('overdue')}
+                      className={`px-3 py-1.5 text-xs font-bold rounded-full transition-colors cursor-pointer flex items-center gap-1 ${
+                        trainingProgressFilter === 'overdue'
+                          ? 'bg-rose-600 text-white'
+                          : 'bg-rose-50 text-rose-700 hover:bg-rose-100'
+                      }`}
+                    >
+                      <Icon icon="lucide:alert-triangle" className="text-sm" />
+                      {t('training.overdue' as TranslationKey)} ({employeesWithOverdue.length})
                     </button>
                   </div>
                 </CardHeader>
@@ -1589,9 +1875,22 @@ export default function TeamManagementPage() {
 
             {/* Courses List */}
             <div>
-              <h4 className={`text-sm font-bold text-slate-900 mb-4 ${isRTL ? 'text-right' : ''}`}>
-                {t('training.assignedCourses' as TranslationKey)} ({selectedEmployee.courses.length})
-              </h4>
+              <div className={`flex items-center justify-between mb-4 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                <h4 className={`text-sm font-bold text-slate-900 ${isRTL ? 'text-right' : ''}`}>
+                  {t('training.assignedCourses' as TranslationKey)} ({selectedEmployee.courses.length})
+                </h4>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    setAssigningToEmployee(selectedEmployee)
+                    setIsAssignTrainingOpen(true)
+                  }}
+                >
+                  <Icon icon="lucide:plus-circle" className={isRTL ? 'ml-1' : 'mr-1'} />
+                  {t('training.assignTraining' as TranslationKey)}
+                </Button>
+              </div>
               <div className="space-y-3">
                 {selectedEmployee.courses.map((course) => {
                   const statusConfig = trainingStatusConfig[course.status]
@@ -1842,6 +2141,16 @@ export default function TeamManagementPage() {
                       <div className="relative">
                         <div className={`flex items-center gap-1 ${isRTL ? 'flex-row-reverse' : ''}`}>
                           <button
+                            onClick={() => {
+                              setSelectedCourseForAssignment(course)
+                              setIsAssignToEmployeesOpen(true)
+                            }}
+                            className="p-2 hover:bg-blue-50 rounded-lg text-slate-400 hover:text-blue-600 cursor-pointer"
+                            title={t('training.assignToEmployees' as TranslationKey)}
+                          >
+                            <Icon icon="lucide:user-plus" className="w-4 h-4" />
+                          </button>
+                          <button
                             onClick={() => setEditingDeadline(course.id)}
                             className="p-2 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-slate-600 cursor-pointer"
                             title={t('training.editDeadline' as TranslationKey)}
@@ -1884,6 +2193,237 @@ export default function TeamManagementPage() {
             </Button>
           </div>
         </div>
+      </Modal>
+
+      {/* Assign Training to Employee Modal (Feature 3) */}
+      <Modal
+        isOpen={isAssignTrainingOpen}
+        onClose={() => {
+          setIsAssignTrainingOpen(false)
+          setAssigningToEmployee(null)
+          setSelectedCoursesToAssign([])
+          setAssignmentDueDate('')
+        }}
+        title={t('training.assignTraining' as TranslationKey)}
+        subtitle={assigningToEmployee?.name}
+        size="md"
+      >
+        {assigningToEmployee && (
+          <div className="space-y-6">
+            {/* Employee Info */}
+            <div className={`flex items-center gap-3 p-3 bg-slate-50 rounded-xl ${isRTL ? 'flex-row-reverse' : ''}`}>
+              <img
+                src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${assigningToEmployee.name}`}
+                className="w-10 h-10 rounded-full border-2 border-white"
+                alt={assigningToEmployee.name}
+              />
+              <div className={isRTL ? 'text-right' : ''}>
+                <p className="text-sm font-bold text-slate-900">{assigningToEmployee.name}</p>
+                <p className="text-xs text-slate-500">{assigningToEmployee.department}</p>
+              </div>
+            </div>
+
+            {/* Available Courses */}
+            <div>
+              <h4 className={`text-sm font-bold text-slate-900 mb-3 ${isRTL ? 'text-right' : ''}`}>
+                {t('training.availableCourses' as TranslationKey)}
+              </h4>
+              {getAvailableCoursesForEmployee(assigningToEmployee).length > 0 ? (
+                <div className="space-y-2 max-h-48 overflow-y-auto">
+                  {getAvailableCoursesForEmployee(assigningToEmployee).map((course) => (
+                    <label
+                      key={course.id}
+                      className={`flex items-center gap-3 p-3 border rounded-lg cursor-pointer transition-colors ${
+                        selectedCoursesToAssign.includes(course.id)
+                          ? 'border-emerald-300 bg-emerald-50'
+                          : 'border-slate-200 hover:bg-slate-50'
+                      } ${isRTL ? 'flex-row-reverse' : ''}`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedCoursesToAssign.includes(course.id)}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedCoursesToAssign([...selectedCoursesToAssign, course.id])
+                          } else {
+                            setSelectedCoursesToAssign(selectedCoursesToAssign.filter(id => id !== course.id))
+                          }
+                        }}
+                        className="accent-emerald-600"
+                      />
+                      <div className={`flex-1 ${isRTL ? 'text-right' : ''}`}>
+                        <p className="text-sm font-medium text-slate-700">{course.name}</p>
+                        <p className="text-xs text-slate-500">{t(`training.category.${course.category}` as TranslationKey)}</p>
+                      </div>
+                    </label>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-slate-500 text-center py-4 bg-slate-50 rounded-lg">
+                  {t('training.allCoursesAssigned' as TranslationKey)}
+                </p>
+              )}
+            </div>
+
+            {/* Due Date */}
+            {selectedCoursesToAssign.length > 0 && (
+              <div>
+                <label className={`block text-sm font-medium text-slate-700 mb-1.5 ${isRTL ? 'text-right' : ''}`}>
+                  {t('training.dueDate' as TranslationKey)}
+                </label>
+                <input
+                  type="date"
+                  value={assignmentDueDate}
+                  onChange={(e) => setAssignmentDueDate(e.target.value)}
+                  min={new Date().toISOString().split('T')[0]}
+                  className={`w-full h-11 px-4 py-2 border border-slate-200 rounded-xl text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent bg-white ${isRTL ? 'text-right' : ''}`}
+                />
+              </div>
+            )}
+
+            {/* Actions */}
+            <div className={`flex gap-3 pt-4 border-t border-slate-200 ${isRTL ? 'flex-row-reverse' : ''}`}>
+              <Button
+                variant="outline"
+                className="flex-1"
+                onClick={() => {
+                  setIsAssignTrainingOpen(false)
+                  setAssigningToEmployee(null)
+                  setSelectedCoursesToAssign([])
+                  setAssignmentDueDate('')
+                }}
+              >
+                {t('common.cancel')}
+              </Button>
+              <Button
+                className="flex-1"
+                onClick={handleAssignTrainingToEmployee}
+                disabled={selectedCoursesToAssign.length === 0 || !assignmentDueDate}
+              >
+                {t('training.assignSelected' as TranslationKey)}
+                <Icon icon="lucide:check" className={`text-sm ${isRTL ? 'mr-1' : 'ml-1'}`} />
+              </Button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      {/* Assign Course to Employees Modal (Feature 3 - Bulk Assignment) */}
+      <Modal
+        isOpen={isAssignToEmployeesOpen}
+        onClose={() => {
+          setIsAssignToEmployeesOpen(false)
+          setSelectedCourseForAssignment(null)
+          setSelectedEmployeesForAssignment([])
+          setAssignmentDueDate('')
+        }}
+        title={t('training.assignToEmployees' as TranslationKey)}
+        subtitle={selectedCourseForAssignment?.name}
+        size="md"
+      >
+        {selectedCourseForAssignment && (
+          <div className="space-y-6">
+            {/* Course Info */}
+            <div className={`p-3 bg-slate-50 rounded-xl ${isRTL ? 'text-right' : ''}`}>
+              <p className="text-sm font-bold text-slate-900">{selectedCourseForAssignment.name}</p>
+              <p className="text-xs text-slate-500">{t(`training.category.${selectedCourseForAssignment.category}` as TranslationKey)}</p>
+              <p className="text-xs text-slate-400 mt-1">
+                {selectedCourseForAssignment.assignedCount} {t('training.assigned' as TranslationKey)} • {selectedCourseForAssignment.completedCount} {t('training.completed' as TranslationKey)}
+              </p>
+            </div>
+
+            {/* Select Employees */}
+            <div>
+              <h4 className={`text-sm font-bold text-slate-900 mb-3 ${isRTL ? 'text-right' : ''}`}>
+                {t('training.selectEmployees' as TranslationKey)}
+              </h4>
+              <div className="space-y-2 max-h-48 overflow-y-auto">
+                {employeesData
+                  .filter(emp => !emp.courses.some(c => c.id === selectedCourseForAssignment.id))
+                  .map((emp) => (
+                    <label
+                      key={emp.id}
+                      className={`flex items-center gap-3 p-3 border rounded-lg cursor-pointer transition-colors ${
+                        selectedEmployeesForAssignment.includes(emp.id)
+                          ? 'border-emerald-300 bg-emerald-50'
+                          : 'border-slate-200 hover:bg-slate-50'
+                      } ${isRTL ? 'flex-row-reverse' : ''}`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedEmployeesForAssignment.includes(emp.id)}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedEmployeesForAssignment([...selectedEmployeesForAssignment, emp.id])
+                          } else {
+                            setSelectedEmployeesForAssignment(selectedEmployeesForAssignment.filter(id => id !== emp.id))
+                          }
+                        }}
+                        className="accent-emerald-600"
+                      />
+                      <img
+                        src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${emp.name}`}
+                        className="w-8 h-8 rounded-full border border-slate-200"
+                        alt={emp.name}
+                      />
+                      <div className={`flex-1 ${isRTL ? 'text-right' : ''}`}>
+                        <p className="text-sm font-medium text-slate-700">{emp.name}</p>
+                        <p className="text-xs text-slate-500">{emp.department}</p>
+                      </div>
+                      {emp.isSaudi && (
+                        <span className="text-base">🇸🇦</span>
+                      )}
+                    </label>
+                  ))}
+                {employeesData.filter(emp => !emp.courses.some(c => c.id === selectedCourseForAssignment.id)).length === 0 && (
+                  <p className="text-sm text-slate-500 text-center py-4 bg-slate-50 rounded-lg">
+                    {t('training.allCoursesAssigned' as TranslationKey)}
+                  </p>
+                )}
+              </div>
+            </div>
+
+            {/* Due Date */}
+            {selectedEmployeesForAssignment.length > 0 && (
+              <div>
+                <label className={`block text-sm font-medium text-slate-700 mb-1.5 ${isRTL ? 'text-right' : ''}`}>
+                  {t('training.dueDate' as TranslationKey)}
+                </label>
+                <input
+                  type="date"
+                  value={assignmentDueDate}
+                  onChange={(e) => setAssignmentDueDate(e.target.value)}
+                  min={new Date().toISOString().split('T')[0]}
+                  className={`w-full h-11 px-4 py-2 border border-slate-200 rounded-xl text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent bg-white ${isRTL ? 'text-right' : ''}`}
+                />
+              </div>
+            )}
+
+            {/* Actions */}
+            <div className={`flex gap-3 pt-4 border-t border-slate-200 ${isRTL ? 'flex-row-reverse' : ''}`}>
+              <Button
+                variant="outline"
+                className="flex-1"
+                onClick={() => {
+                  setIsAssignToEmployeesOpen(false)
+                  setSelectedCourseForAssignment(null)
+                  setSelectedEmployeesForAssignment([])
+                  setAssignmentDueDate('')
+                }}
+              >
+                {t('common.cancel')}
+              </Button>
+              <Button
+                className="flex-1"
+                onClick={handleBulkAssignCourse}
+                disabled={selectedEmployeesForAssignment.length === 0 || !assignmentDueDate}
+              >
+                {t('training.assignSelected' as TranslationKey)} ({selectedEmployeesForAssignment.length})
+                <Icon icon="lucide:check" className={`text-sm ${isRTL ? 'mr-1' : 'ml-1'}`} />
+              </Button>
+            </div>
+          </div>
+        )}
       </Modal>
 
       {/* Toast */}

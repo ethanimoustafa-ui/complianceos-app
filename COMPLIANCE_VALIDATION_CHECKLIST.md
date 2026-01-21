@@ -203,7 +203,6 @@
 - [x] Dashboard shows compliance score (94.2% in demo)
 - [x] Compliance trend chart (12-month history)
 - [x] Risk distribution breakdown
-- [ ] Dedicated compliance monitoring page
 - [ ] Risk-based monitoring frequency configuration
 - [ ] Compliance assessment workflow
 - [ ] Monitoring checklist execution
@@ -275,8 +274,8 @@
 - [x] Saudization rate display (38.2% current vs 42% target)
 - [x] Gap to target calculation (3.8% below target)
 - [x] Dedicated Training Management page
-- [ ] Individual training records view
-- [ ] Training assignment workflow
+- [x] Individual training records view
+- [x] Training assignment workflow
 - [ ] Saudization detailed report
 - [ ] Training compliance export for regulators
 
@@ -318,7 +317,7 @@
 - [x] Add risk modal
 - [x] Risk detail drawer
 - [x] Risk owner assignment with user linking
-- [ ] Risk history/audit trail
+- [x] Risk history/audit trail
 
 ---
 
@@ -455,7 +454,7 @@
 - [x] Task priority levels
 - [x] Team workload visualization
 - [x] Task creation and editing
-- [ ] Week view for weekly task focus
+- [x] Week view for weekly task focus
 - [x] Recurring task configuration
 - [x] Task templates for common activities
 
