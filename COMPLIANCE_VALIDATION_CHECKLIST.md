@@ -57,10 +57,10 @@
 - [x] Task types support: audit_task, submission_deadline, letter_send, observation_deadline
 - [x] Task statuses: pending, completed, in_progress
 - [x] Team member workload visualization
-- [ ] Working day calculation logic (excludes weekends/holidays)
+- [x] Working day calculation logic (excludes weekends/holidays)
 - [ ] Automated notifications for upcoming deadlines
-- [ ] Submission type categorization (Annual/Semi/Quarterly/Monthly/Internal/Ad-hoc)
-- [ ] Financial Statements and Risk Reports templates
+- [x] Submission type categorization (Annual/Semi/Quarterly/Monthly/Internal/Ad-hoc)
+- [x] Financial Statements and Risk Reports templates
 
 ---
 
@@ -98,8 +98,8 @@
 - [x] Letter creation form with bilingual editors
 - [x] Dashboard stats: Total YTD, Sent this quarter, Pending drafts, Overdue replies
 - [ ] Formal approval workflow with role-based permissions
-- [ ] SLA Non-objection specific template
-- [ ] Senior Management Non-objection specific template
+- [x] SLA Non-objection specific template
+- [x] Senior Management Non-objection specific template
 
 ---
 
@@ -274,7 +274,7 @@
 - [x] Employee count tracking (1,240 completed, 282 pending)
 - [x] Saudization rate display (38.2% current vs 42% target)
 - [x] Gap to target calculation (3.8% below target)
-- [ ] Dedicated Training Management page
+- [x] Dedicated Training Management page
 - [ ] Individual training records view
 - [ ] Training assignment workflow
 - [ ] Saudization detailed report
@@ -317,7 +317,7 @@
 - [x] Search functionality
 - [x] Add risk modal
 - [x] Risk detail drawer
-- [ ] Risk owner assignment with user linking
+- [x] Risk owner assignment with user linking
 - [ ] Risk history/audit trail
 
 ---
@@ -421,7 +421,7 @@
 - [x] Activity timeline shows all changes
 - [ ] Observation report generation
 - [ ] Export for regulatory submission (PDF/Excel)
-- [ ] Full audit trail with timestamps
+- [x] Full audit trail with timestamps
 
 ---
 
@@ -456,8 +456,8 @@
 - [x] Team workload visualization
 - [x] Task creation and editing
 - [ ] Week view for weekly task focus
-- [ ] Recurring task configuration
-- [ ] Task templates for common activities
+- [x] Recurring task configuration
+- [x] Task templates for common activities
 
 ---
 
