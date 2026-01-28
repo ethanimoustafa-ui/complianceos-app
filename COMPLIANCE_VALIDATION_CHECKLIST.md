@@ -1,490 +1,347 @@
-# ComplianceOS - Compliance Requirements Validation Checklist
+# ComplianceOS - Feature Validation Checklist
 
-**Version:** 1.0
-**Date:** January 2026
-**Purpose:** Define user stories, acceptance criteria, and validation checkpoints for all compliance processes
-
----
-
-## Summary Matrix
-
-| # | Category | Process | Implementation Status |
-|---|----------|---------|----------------------|
-| 1 | Compliance Calendar | SAMA Submissions | :white_check_mark: Implemented |
-| 2 | SAMA Letters | Non-objection / Inquiry | :white_check_mark: Implemented |
-| 3 | SAMA Submission Requests | Non-objection Requirements | :yellow_circle: Partial |
-| 4 | Compliance Monitoring | New Rules / Circulars | :white_check_mark: Implemented |
-| 5 | Compliance Monitoring | Continuous Monitoring | :yellow_circle: Partial |
-| 6 | Policies and Procedures | Policy & Procedure Management | :white_check_mark: Implemented |
-| 7 | Mandatory Training | Compliance Training & Saudization | :yellow_circle: Partial |
-| 8 | Risk Register | Compliance Risk Register | :white_check_mark: Implemented |
-| 9 | Observations | SAMA / Internal Audit / Sharia Observations | :white_check_mark: Implemented |
-| 10 | Advisory | Internal Advisory | :white_check_mark: Implemented |
-| 11 | Observations | Observation Records & Reporting | :white_check_mark: Implemented |
-| 12 | Timeline Tracker | Internal Weekly / Monthly Tasks | :white_check_mark: Implemented |
+**Version:** 2.0
+**Date:** January 28, 2026
+**Purpose:** Comprehensive testing checklist for all implemented features
 
 ---
 
-## 1. Compliance Calendar - SAMA Submissions
+## Quick Reference
 
-### User Story
-**As a** Compliance Officer
-**I want to** manage a compliance calendar that tracks all SAMA submission requirements and deadlines
-**So that** I can ensure timely submission of all required reports (Annual/Semi-Annual/Quarterly/Monthly/Internal/Ad-hoc) considering working day calculations
-
-### Acceptance Criteria
-
-| # | Criterion | Priority |
-|---|-----------|----------|
-| 1.1 | System displays a calendar view (month/year) showing all submission deadlines | Must Have |
-| 1.2 | Each submission shows type (Annual/Semi/Quarterly/Monthly/Internal/Ad-hoc) | Must Have |
-| 1.3 | System calculates deadlines based on working days (excludes weekends/holidays) | Must Have |
-| 1.4 | Users can create new submission tasks with due dates and assignees | Must Have |
-| 1.5 | System sends notifications/alerts for upcoming deadlines | Should Have |
-| 1.6 | Users can filter calendar by submission type | Should Have |
-| 1.7 | System displays submission status (Pending/In Progress/Completed/Overdue) | Must Have |
-| 1.8 | Users can view submission queue/list format alongside calendar | Should Have |
-| 1.9 | Team workload distribution is visible for resource planning | Could Have |
-| 1.10 | System supports Financial Statements and Risk Reports submission tracking | Must Have |
-
-### Validation Checklist
-
-- [x] Calendar page exists at `/calendar`
-- [x] Month view displays tasks on specific dates
-- [x] Year view provides overview of all submissions
-- [x] Submissions queue/list view available
-- [x] Task creation modal with priority, date, and assignee fields
-- [x] Task types support: audit_task, submission_deadline, letter_send, observation_deadline
-- [x] Task statuses: pending, completed, in_progress
-- [x] Team member workload visualization
-- [x] Working day calculation logic (excludes weekends/holidays)
-- [ ] Automated notifications for upcoming deadlines
-- [x] Submission type categorization (Annual/Semi/Quarterly/Monthly/Internal/Ad-hoc)
-- [x] Financial Statements and Risk Reports templates
+| # | Category | Status |
+|---|----------|--------|
+| 1 | TypeScript Types | To Test |
+| 2 | Zustand Stores | To Test |
+| 3 | CRUD Modals | To Test |
+| 4 | Form Validations | To Test |
+| 5 | Auth Flows | To Test |
+| 6 | Dashboard Wiring | To Test |
+| 7 | Navigation | To Test |
+| 8 | i18n (EN/AR + RTL) | To Test |
+| 9 | Role-Based Access | To Test |
+| 10 | File Uploads | To Test |
+| 11 | Comments System | To Test |
+| 12 | Export (CSV/PDF) | To Test |
+| 13 | Empty States | To Test |
+| 14 | Sorting | To Test |
+| 15 | Checklist CRUD | To Test |
+| 16 | UI Polish | To Test |
 
 ---
 
-## 2. SAMA Letters - Non-objection / Inquiry
+## 1. TypeScript Types
 
-### User Story
-**As a** Compliance Officer
-**I want to** create and manage standardized SAMA letters and inquiries with proper templates
-**So that** all regulatory communications are properly documented, approved through workflow, and submitted in the required format
-
-### Acceptance Criteria
-
-| # | Criterion | Priority |
-|---|-----------|----------|
-| 2.1 | System provides standard templates for Non-Objection letters | Must Have |
-| 2.2 | System provides standard templates for Inquiry letters | Must Have |
-| 2.3 | All letters support bilingual content (English/Arabic) | Must Have |
-| 2.4 | Letters follow an approval workflow before submission | Must Have |
-| 2.5 | System tracks letter status (Draft/Pending Approval/Approved/Sent/Response Received) | Must Have |
-| 2.6 | Reference numbers are auto-generated by letter type | Should Have |
-| 2.7 | Users can attach supporting documents to letters | Must Have |
-| 2.8 | Activity timeline shows letter lifecycle events | Should Have |
-| 2.9 | System tracks SLA Non-objection and Senior Management Non-objection types | Must Have |
-| 2.10 | Overdue responses are highlighted | Should Have |
-
-### Validation Checklist
-
-- [x] SAMA Letters page exists at `/sama-letters`
-- [x] Letter templates available: Non-Objection, Inquiry, Submission, Notification
-- [x] Bilingual content support (English/Arabic)
-- [x] Letter status tracking: Draft, Pending Approval, Approved, Sent to SAMA, SAMA Response Received, Overdue
-- [x] Reference number generation by letter type
-- [x] Attachment management functionality
-- [x] Activity timeline for letter workflow
-- [x] Letter creation form with bilingual editors
-- [x] Dashboard stats: Total YTD, Sent this quarter, Pending drafts, Overdue replies
-- [ ] Formal approval workflow with role-based permissions
-- [x] SLA Non-objection specific template
-- [x] Senior Management Non-objection specific template
+### Test: Type Safety
+| # | Test Case | Expected Result | Pass/Fail |
+|---|-----------|-----------------|-----------|
+| 1.1 | Run `npx tsc --noEmit` | No TypeScript errors | [ ] |
+| 1.2 | Check `src/types/index.ts` exports | All entity types exported (Observation, Audit, Report, etc.) | [ ] |
+| 1.3 | Verify store types | All stores have proper TypeScript interfaces | [ ] |
 
 ---
 
-## 3. SAMA Submission Requests - Non-objection Requirements
+## 2. Zustand Stores
 
-### User Story
-**As a** Compliance Officer
-**I want to** identify, document, and track regulatory non-objection requirements
-**So that** all requirements are fulfilled prior to contracting or implementing products/services
-
-### Acceptance Criteria
-
-| # | Criterion | Priority |
-|---|-----------|----------|
-| 3.1 | System maintains a registry of all non-objection requirements | Must Have |
-| 3.2 | Each requirement links to relevant products/services | Must Have |
-| 3.3 | System tracks requirement fulfillment status | Must Have |
-| 3.4 | Users can document evidence of compliance | Must Have |
-| 3.5 | System prevents proceeding without required approvals | Should Have |
-| 3.6 | Support for Product Approval tracking | Must Have |
-| 3.7 | Support for SLA Approval tracking | Must Have |
-| 3.8 | Requirements can be filtered by category and status | Should Have |
-| 3.9 | Export functionality for regulatory review | Could Have |
-
-### Validation Checklist
-
-- [x] Correspondence page has regulatory requirements registry
-- [x] Requirements filtering by category and status
-- [x] Add requirement modal for creating new entries
-- [x] Export to CSV functionality
-- [ ] Dedicated non-objection requirements page
-- [ ] Product-to-requirement linking
-- [ ] SLA-to-requirement linking
-- [ ] Approval gate workflow (blocks progress until approved)
-- [ ] Evidence upload and documentation
+### Test: Store Functionality
+| # | Store | Test Case | Expected Result | Pass/Fail |
+|---|-------|-----------|-----------------|-----------|
+| 2.1 | observation-store | Create observation | State updates, new observation in list | [ ] |
+| 2.2 | observation-store | Update observation | State updates with new values | [ ] |
+| 2.3 | observation-store | Delete observation | Observation removed from state | [ ] |
+| 2.4 | observation-store | Add comment | Comment added to selectedObservation | [ ] |
+| 2.5 | observation-store | Add checklist item | Checklist item appears in observation | [ ] |
+| 2.6 | observation-store | Remove checklist item | Checklist item removed from observation | [ ] |
+| 2.7 | observation-store | Toggle checklist | Completed status toggles | [ ] |
+| 2.8 | auth-store | Login | User state populated, isAuthenticated true | [ ] |
+| 2.9 | auth-store | Logout | User state cleared, isAuthenticated false | [ ] |
+| 2.10 | audit-store | CRUD operations | Audits can be created/read/updated/deleted | [ ] |
+| 2.11 | report-store | Generate report | Report generated and stored | [ ] |
+| 2.12 | calendar-store | Add task | Task appears on calendar | [ ] |
+| 2.13 | notification-store | Add notification | Notification appears in list | [ ] |
 
 ---
 
-## 4. Compliance Monitoring - New Rules / Circulars
+## 3. CRUD Modals
 
-### User Story
-**As a** Compliance Officer
-**I want to** monitor new regulations and circulars issued by SAMA
-**So that** I can update internal policies, procedures, and controls accordingly and convert regulatory requirements into monitoring checklists
-
-### Acceptance Criteria
-
-| # | Criterion | Priority |
-|---|-----------|----------|
-| 4.1 | System tracks new SAMA rules and circulars | Must Have |
-| 4.2 | Each rule shows circular reference number | Must Have |
-| 4.3 | Priority levels assigned (Critical/High/Medium/Low) | Must Have |
-| 4.4 | Implementation progress is tracked per rule | Must Have |
-| 4.5 | Affected departments are identified per rule | Must Have |
-| 4.6 | Due dates with days-remaining calculation | Must Have |
-| 4.7 | Implementation checklist can be created per rule | Must Have |
-| 4.8 | Internal notes and comments supported | Should Have |
-| 4.9 | Documentation can be uploaded | Should Have |
-| 4.10 | Regulatory Impact Assessment template available | Should Have |
-
-### Validation Checklist
-
-- [x] Regulatory Updates page exists at `/regulatory-updates`
-- [x] Rule tracking with SAMA circular references
-- [x] Priority levels: Critical, High, Medium, Low
-- [x] Implementation progress tracking
-- [x] Affected departments tracking
-- [x] Due date management with days-left calculation
-- [x] Status tracking: In Progress, Completed, Overdue
-- [x] Rule registration modal
-- [x] Implementation checklist per rule
-- [x] Internal notes/comments functionality
-- [x] Documentation upload capability
-- [x] Activity feed for rule changes
-- [ ] Regulatory Impact Assessment template
-- [ ] Auto-conversion to monitoring checklist
+### Test: Modal Operations
+| # | Page | Test Case | Expected Result | Pass/Fail |
+|---|------|-----------|-----------------|-----------|
+| 3.1 | Observations | Click "Add Observation" | AddObservationModal opens | [ ] |
+| 3.2 | Observations | Fill form and submit | New observation created, modal closes | [ ] |
+| 3.3 | Observations | Click observation row | ObservationDetailModal opens with data | [ ] |
+| 3.4 | Observations | Click edit in detail modal | EditObservationModal opens | [ ] |
+| 3.5 | Audits | Click "New Audit" | AddAuditModal opens | [ ] |
+| 3.6 | Audits | Fill form and submit | New audit created | [ ] |
+| 3.7 | Settings | Click "New Template" | Template modal opens | [ ] |
+| 3.8 | SAMA Letters | Click "Draft New Letter" | CreateLetterModal opens | [ ] |
+| 3.9 | All Modals | Click X or Cancel | Modal closes without saving | [ ] |
+| 3.10 | All Modals | Click outside modal | Modal closes (if configured) | [ ] |
 
 ---
 
-## 5. Compliance Monitoring - Continuous Monitoring
+## 4. Form Validations
 
-### User Story
-**As a** Compliance Officer
-**I want to** conduct continuous monitoring of compliance with regulations and internal policies
-**So that** I can assess compliance status based on risk level (High/Medium/Low) and document compliance levels
-
-### Acceptance Criteria
-
-| # | Criterion | Priority |
-|---|-----------|----------|
-| 5.1 | System supports compliance level assessment | Must Have |
-| 5.2 | Monitoring frequency varies by risk level (High/Medium/Low) | Must Have |
-| 5.3 | Compliance status is documented and tracked over time | Must Have |
-| 5.4 | Dashboard displays overall compliance score | Must Have |
-| 5.5 | Trend analysis shows compliance changes over time | Should Have |
-| 5.6 | Non-compliance issues trigger follow-up actions | Should Have |
-| 5.7 | Monitoring checklists can be created and executed | Should Have |
-
-### Validation Checklist
-
-- [x] Dashboard shows compliance score (94.2% in demo)
-- [x] Compliance trend chart (12-month history)
-- [x] Risk distribution breakdown
-- [ ] Risk-based monitoring frequency configuration
-- [ ] Compliance assessment workflow
-- [ ] Monitoring checklist execution
-- [ ] Automated follow-up action creation for non-compliance
+### Test: Validation Rules
+| # | Form | Test Case | Expected Result | Pass/Fail |
+|---|------|-----------|-----------------|-----------|
+| 4.1 | Login | Submit empty form | Error messages shown for email/password | [ ] |
+| 4.2 | Login | Submit invalid email | "Invalid email" error shown | [ ] |
+| 4.3 | Sign Up | Password too short | "Password must be 8+ characters" error | [ ] |
+| 4.4 | Sign Up | Passwords don't match | "Passwords don't match" error | [ ] |
+| 4.5 | Forgot Password | Invalid email format | Validation error shown | [ ] |
+| 4.6 | Add Observation | Submit without title | "Title required" error | [ ] |
+| 4.7 | Add Observation | Submit without severity | "Severity required" error | [ ] |
+| 4.8 | All Forms | Valid data submitted | Form submits successfully | [ ] |
 
 ---
 
-## 6. Policies and Procedures - Policy & Procedure Management
+## 5. Auth Flows
 
-### User Story
-**As a** Compliance Officer
-**I want to** develop, review, update, and maintain policies and procedures
-**So that** they align with regulatory requirements and are properly approved and communicated internally
-
-### Acceptance Criteria
-
-| # | Criterion | Priority |
-|---|-----------|----------|
-| 6.1 | System maintains a policy library | Must Have |
-| 6.2 | Users can create new policies and procedures | Must Have |
-| 6.3 | Version control tracks policy changes | Must Have |
-| 6.4 | Approval workflow for policy changes | Must Have |
-| 6.5 | Policy review schedule with reminders | Must Have |
-| 6.6 | Policies linked to relevant regulations | Should Have |
-| 6.7 | Communication/acknowledgment tracking | Should Have |
-| 6.8 | Policy status: Draft, Under Review, Approved, Expired | Must Have |
-| 6.9 | Search and filter policies by category | Should Have |
-
-### Validation Checklist
-
-- [x] Dashboard mentions "42 Policies up-to-date, 3 overdue"
-- [x] Correspondence shows "Policy review status (84% current, 4 expired)"
-- [x] Dedicated Policies & Procedures page (tab in /regulatory-updates)
-- [x] Policy creation/edit interface (full modal with 8 fields)
-- [x] Version control system (version history timeline display)
-- [x] Approval workflow (4-step workflow timeline visualization)
-- [ ] Review schedule with notifications (backend needed)
-- [ ] Regulation-to-policy linking (not implemented)
-- [ ] Staff acknowledgment tracking (not implemented)
-- [x] Policy search and filtering (category, status, text search)
+### Test: Authentication Pages
+| # | Page | Test Case | Expected Result | Pass/Fail |
+|---|------|-----------|-----------------|-----------|
+| 5.1 | `/login` | Page loads | Login form displayed | [ ] |
+| 5.2 | `/login` | Valid credentials | Redirects to dashboard | [ ] |
+| 5.3 | `/login` | Invalid credentials | Error message shown | [ ] |
+| 5.4 | `/sign-up` | Page loads | Sign up form displayed | [ ] |
+| 5.5 | `/sign-up` | Valid registration | Success message, redirect to verify | [ ] |
+| 5.6 | `/forgot-password` | Page loads | Email input form displayed | [ ] |
+| 5.7 | `/forgot-password` | Submit valid email | "Check your email" message | [ ] |
+| 5.8 | `/verify-email` | Page loads | Verification code input displayed | [ ] |
+| 5.9 | `/verify-email` | Valid code | Redirects to onboarding/dashboard | [ ] |
+| 5.10 | `/onboarding` | Page loads | Multi-step onboarding wizard | [ ] |
+| 5.11 | `/onboarding` | Complete all steps | Redirects to dashboard | [ ] |
+| 5.12 | Protected routes | Access without auth | Redirects to login | [ ] |
 
 ---
 
-## 7. Mandatory Training - Compliance Training & Saudization
+## 6. Dashboard Wiring
 
-### User Story
-**As a** Compliance Officer
-**I want to** track completion of mandatory compliance training and monitor Saudization percentage
-**So that** I can ensure alignment with regulatory and internal requirements
-
-### Acceptance Criteria
-
-| # | Criterion | Priority |
-|---|-----------|----------|
-| 7.1 | System tracks training completion rates | Must Have |
-| 7.2 | Training records stored per employee | Must Have |
-| 7.3 | Department-level training statistics | Must Have |
-| 7.4 | Saudization percentage tracking | Must Have |
-| 7.5 | Target vs actual Saudization comparison | Must Have |
-| 7.6 | Training due/overdue notifications | Should Have |
-| 7.7 | Export training reports for regulatory submission | Should Have |
-| 7.8 | Training assignment and scheduling | Could Have |
-
-### Validation Checklist
-
-- [x] Dashboard shows mandatory training completion (82% overall)
-- [x] Department breakdown visible
-- [x] Employee count tracking (1,240 completed, 282 pending)
-- [x] Saudization rate display (38.2% current vs 42% target)
-- [x] Gap to target calculation (3.8% below target)
-- [x] Dedicated Training Management page
-- [x] Individual training records view
-- [x] Training assignment workflow
-- [ ] Saudization detailed report
-- [ ] Training compliance export for regulators
+### Test: Dashboard Components
+| # | Component | Test Case | Expected Result | Pass/Fail |
+|---|-----------|-----------|-----------------|-----------|
+| 6.1 | Stats Cards | Page loads | 4 stat cards display with values | [ ] |
+| 6.2 | Compliance Score | Page loads | Circular progress shows percentage | [ ] |
+| 6.3 | Trend Chart | Page loads | 12-month trend chart renders | [ ] |
+| 6.4 | Recent Activity | Page loads | Activity timeline with items | [ ] |
+| 6.5 | Quick Actions | Click action button | Navigates to correct page | [ ] |
+| 6.6 | Upcoming Tasks | Page loads | Task list with due dates | [ ] |
+| 6.7 | Risk Distribution | Page loads | Risk breakdown by category | [ ] |
 
 ---
 
-## 8. Risk Register - Compliance Risk Register
+## 7. Navigation
 
-### User Story
-**As a** Compliance Officer
-**I want to** maintain a compliance risk register
-**So that** I can identify key compliance risks, mitigation actions, risk owners, and track status
-
-### Acceptance Criteria
-
-| # | Criterion | Priority |
-|---|-----------|----------|
-| 8.1 | System maintains a risk register | Must Have |
-| 8.2 | 5x5 Risk matrix visualization (Likelihood vs Impact) | Must Have |
-| 8.3 | Risk categories: Operational, Financial, Compliance, Strategic, Reputational | Must Have |
-| 8.4 | Risk scoring (Likelihood x Impact) | Must Have |
-| 8.5 | Mitigation plan tracking per risk | Must Have |
-| 8.6 | Risk owner assignment | Must Have |
-| 8.7 | Risk status tracking: Open, Mitigating, Accepted, Closed | Must Have |
-| 8.8 | Search and filter risks | Should Have |
-| 8.9 | Progress visualization for mitigation | Should Have |
-
-### Validation Checklist
-
-- [x] Risk Register page exists at `/risk-register`
-- [x] 5x5 Risk matrix visualization
-- [x] Risk categories: Operational, Financial, Compliance, Strategic, Reputational
-- [x] Likelihood (1-5) and Impact (1-5) ratings
-- [x] Risk score calculation
-- [x] Mitigation plan tracking
-- [x] Progress visualization
-- [x] Risk status: Open, Mitigating, Accepted, Closed
-- [x] Risk filtering by category and status
-- [x] Search functionality
-- [x] Add risk modal
-- [x] Risk detail drawer
-- [x] Risk owner assignment with user linking
-- [x] Risk history/audit trail
+### Test: App Navigation
+| # | Test Case | Expected Result | Pass/Fail |
+|---|-----------|-----------------|-----------|
+| 7.1 | Click Dashboard in sidebar | Navigates to `/dashboard` | [ ] |
+| 7.2 | Click Observations in sidebar | Navigates to `/observations` | [ ] |
+| 7.3 | Click SAMA Letters in sidebar | Navigates to `/sama-letters` | [ ] |
+| 7.4 | Click Regulatory Updates in sidebar | Navigates to `/regulatory-updates` | [ ] |
+| 7.5 | Click Risk Register in sidebar | Navigates to `/risk-register` | [ ] |
+| 7.6 | Click Calendar in sidebar | Navigates to `/calendar` | [ ] |
+| 7.7 | Click Reports in sidebar | Navigates to `/reports` | [ ] |
+| 7.8 | Click Team in sidebar | Navigates to `/team` | [ ] |
+| 7.9 | Click Settings in sidebar | Navigates to `/settings` | [ ] |
+| 7.10 | Active route | Sidebar item highlighted | [ ] |
+| 7.11 | Collapse sidebar | Sidebar collapses to icons only | [ ] |
+| 7.12 | Expand sidebar | Sidebar expands with labels | [ ] |
 
 ---
 
-## 9. Observations - SAMA / Internal Audit / Sharia Observations (Tracking)
+## 8. i18n (EN/AR + RTL)
 
-### User Story
-**As a** Compliance Officer
-**I want to** track and follow up on observations raised by SAMA, internal audit, and Sharia audit
-**So that** I can ensure timely remediation and document closure evidence
-
-### Acceptance Criteria
-
-| # | Criterion | Priority |
-|---|-----------|----------|
-| 9.1 | System tracks observations from multiple sources (SAMA, Internal Audit, Sharia) | Must Have |
-| 9.2 | Severity classification: Critical, High, Medium, Low | Must Have |
-| 9.3 | Status tracking: Open, In Progress, Resolved, Closed | Must Have |
-| 9.4 | Remediation checklist per observation | Must Have |
-| 9.5 | Team assignment for remediation | Must Have |
-| 9.6 | Progress tracking with percentage | Must Have |
-| 9.7 | Supporting document uploads | Must Have |
-| 9.8 | Activity timeline per observation | Should Have |
-| 9.9 | Due date tracking with overdue alerts | Should Have |
-
-### Validation Checklist
-
-- [x] Observations page exists at `/observations`
-- [x] Filter by source: SAMA, Internal Audit, Sharia Board
-- [x] Filter by severity: Critical, High, Medium, Low
-- [x] Filter by status: Open, In Progress, Resolved, Closed
-- [x] Observation detail modal
-- [x] Remediation checklist items
-- [x] Team assignments
-- [x] Progress tracking
-- [x] Supporting documents
-- [x] Activity timeline
-- [x] Add observation modal
-- [ ] Overdue alerts/notifications
-- [ ] Closure evidence documentation workflow
+### Test: Internationalization
+| # | Test Case | Expected Result | Pass/Fail |
+|---|-----------|-----------------|-----------|
+| 8.1 | Default language | Page loads in English | [ ] |
+| 8.2 | Toggle to Arabic | All text changes to Arabic | [ ] |
+| 8.3 | Arabic layout | Page switches to RTL | [ ] |
+| 8.4 | Toggle back to English | All text changes to English | [ ] |
+| 8.5 | English layout | Page switches to LTR | [ ] |
+| 8.6 | Sidebar in Arabic | Navigation items in Arabic | [ ] |
+| 8.7 | Forms in Arabic | Labels and placeholders in Arabic | [ ] |
+| 8.8 | Buttons in Arabic | Button text in Arabic | [ ] |
+| 8.9 | Date formats | Dates display correctly per locale | [ ] |
+| 8.10 | Number formats | Numbers display correctly per locale | [ ] |
 
 ---
 
-## 10. Advisory - Internal Advisory
+## 9. Role-Based Access
 
-### User Story
-**As a** Compliance Officer
-**I want to** provide internal advisory support to business units on compliance matters
-**So that** I can document advice provided for audit trail and reference
+### Test: RoleGuard Component
+| # | Page | Element | Admin | Editor | Viewer | Pass/Fail |
+|---|------|---------|-------|--------|--------|-----------|
+| 9.1 | Observations | "Add Observation" button | Visible | Visible | Hidden | [ ] |
+| 9.2 | Observations | "Export CSV" button | Visible | Visible | Hidden | [ ] |
+| 9.3 | Observations Table | Actions menu (3 dots) | Visible | Visible | Hidden (shows check icon) | [ ] |
+| 9.4 | SAMA Letters | "Manage Templates" link | Visible | Visible | Hidden | [ ] |
+| 9.5 | SAMA Letters | Template Edit button | Visible | Visible | Hidden | [ ] |
+| 9.6 | SAMA Letters | Template Delete button | Visible | Hidden | Hidden | [ ] |
+| 9.7 | Team | "Invite Member" button | Visible | Hidden | Hidden | [ ] |
+| 9.8 | Team | Member Edit button | Visible | Visible | Hidden | [ ] |
+| 9.9 | Settings | "Add Standard" button | Visible | Hidden | Hidden | [ ] |
+| 9.10 | Settings | "New Template" button | Visible | Hidden | Hidden | [ ] |
+| 9.11 | Settings | Framework Configure buttons | Visible | Hidden | Hidden | [ ] |
+| 9.12 | Settings | Template Edit button | Visible | Visible | Hidden | [ ] |
+| 9.13 | Settings | Template Delete button | Visible | Hidden | Hidden | [ ] |
 
-### Acceptance Criteria
-
-| # | Criterion | Priority |
-|---|-----------|----------|
-| 10.1 | System supports advisory request creation | Must Have |
-| 10.2 | Advisory notes can be documented | Must Have |
-| 10.3 | Requesting business unit tracked | Must Have |
-| 10.4 | Advisory response tracked | Must Have |
-| 10.5 | Status tracking: Pending, In Progress, Completed | Must Have |
-| 10.6 | Advisory history searchable | Should Have |
-| 10.7 | Related regulations linked to advisory | Could Have |
-| 10.8 | Advisory reports exportable | Could Have |
-
-### Validation Checklist
-
-- [x] Dedicated Advisory page (tab in /correspondence)
-- [x] Advisory request creation form (full modal with subject, unit, priority, description)
-- [x] Advisory notes editor (discussion thread with add note functionality)
-- [x] Business unit selection (7 units: Corporate Banking, Compliance, IT, Risk, Finance, Operations, HR)
-- [x] Response documentation (notes thread with timestamps and authors)
-- [x] Status tracking workflow (Pending, In Progress, Completed with color-coded badges)
-- [x] Search and filter advisories (by status, priority, business unit)
-- [ ] Regulation linking (not implemented)
-- [ ] Export functionality (UI button exists, backend needed)
+### How to Test Roles
+1. Open `src/stores/auth-store.ts`
+2. Change the mock user's role to test different permissions:
+   - `role: 'admin'` - Full access
+   - `role: 'editor'` - Create/Edit access
+   - `role: 'viewer'` - Read-only access
 
 ---
 
-## 11. Observations - Observation Records & Reporting
+## 10. File Uploads
 
-### User Story
-**As a** Compliance Officer
-**I want to** maintain records of regulatory and audit observations with actions taken and closure status
-**So that** I can provide documentation for audit and regulatory review purposes
-
-### Acceptance Criteria
-
-| # | Criterion | Priority |
-|---|-----------|----------|
-| 11.1 | Comprehensive observation records maintained | Must Have |
-| 11.2 | Actions taken are documented | Must Have |
-| 11.3 | Closure status tracked | Must Have |
-| 11.4 | Observation reports can be generated | Must Have |
-| 11.5 | Export for regulatory submission | Should Have |
-| 11.6 | Audit trail of all changes | Should Have |
-
-### Validation Checklist
-
-- [x] Observation records with full detail
-- [x] Action items/checklist per observation
-- [x] Closure status tracking
-- [x] Activity timeline shows all changes
-- [ ] Observation report generation
-- [ ] Export for regulatory submission (PDF/Excel)
-- [x] Full audit trail with timestamps
+### Test: FileUpload Component
+| # | Test Case | Expected Result | Pass/Fail |
+|---|-----------|-----------------|-----------|
+| 10.1 | FileUpload renders | Upload area with drag zone visible | [ ] |
+| 10.2 | Click to browse | File picker opens | [ ] |
+| 10.3 | Select file | File appears in upload list | [ ] |
+| 10.4 | Drag file over | Drop zone highlights | [ ] |
+| 10.5 | Drop file | File added to list | [ ] |
+| 10.6 | Multiple files | All files appear in list | [ ] |
+| 10.7 | Remove file | File removed from list | [ ] |
+| 10.8 | File type validation | Invalid types rejected with message | [ ] |
+| 10.9 | File size validation | Oversized files rejected with message | [ ] |
 
 ---
 
-## 12. Timeline Tracker - Internal Weekly / Monthly Tasks
+## 11. Comments System
 
-### User Story
-**As a** Compliance Officer
-**I want to** track internal compliance tasks and timelines on a weekly and monthly basis
-**So that** I can ensure ongoing operational effectiveness
-
-### Acceptance Criteria
-
-| # | Criterion | Priority |
-|---|-----------|----------|
-| 12.1 | System supports weekly task tracking | Must Have |
-| 12.2 | System supports monthly task tracking | Must Have |
-| 12.3 | Tasks have assignees | Must Have |
-| 12.4 | Task status tracking | Must Have |
-| 12.5 | Task priority levels | Should Have |
-| 12.6 | Task completion tracking | Must Have |
-| 12.7 | Team workload visibility | Should Have |
-| 12.8 | Recurring task support | Could Have |
-
-### Validation Checklist
-
-- [x] Calendar page with task management
-- [x] Month view for monthly task tracking
-- [x] Queue/list view for task overview
-- [x] Task assignee assignment
-- [x] Task status: pending, completed, in_progress
-- [x] Task priority levels
-- [x] Team workload visualization
-- [x] Task creation and editing
-- [x] Week view for weekly task focus
-- [x] Recurring task configuration
-- [x] Task templates for common activities
+### Test: Observation Comments
+| # | Test Case | Expected Result | Pass/Fail |
+|---|-----------|-----------------|-----------|
+| 11.1 | Open observation detail | Comment section visible | [ ] |
+| 11.2 | Type comment text | Text appears in input | [ ] |
+| 11.3 | Click "Add Update" | Comment added to timeline | [ ] |
+| 11.4 | Comment displays | Shows author, timestamp, content | [ ] |
+| 11.5 | Multiple comments | All comments visible in order | [ ] |
+| 11.6 | Empty comment | Submit button disabled or shows error | [ ] |
 
 ---
 
-## Implementation Priority Matrix
+## 12. Export (CSV/PDF)
 
-### Phase 1: Critical Gaps (Not Implemented)
+### Test: Export Functionality
+| # | Page | Test Case | Expected Result | Pass/Fail |
+|---|------|-----------|-----------------|-----------|
+| 12.1 | Observations | Click "Export CSV" | CSV file downloads | [ ] |
+| 12.2 | Observations CSV | Check file content | Contains observation data | [ ] |
+| 12.3 | Reports | Export report | PDF or CSV generates | [ ] |
+| 12.4 | Team | Export logs | CSV file downloads | [ ] |
+| 12.5 | Calendar | Export tasks | CSV file downloads | [ ] |
 
-| Feature | Business Impact | Effort |
-|---------|----------------|--------|
-| Policies & Procedures Management | High | High |
-| Internal Advisory Module | Medium | Medium |
+### CSV Format Check
+- Headers match data columns
+- Special characters escaped properly
+- Dates formatted consistently
+- All records included
 
-### Phase 2: Enhancements (Partial Implementation)
+---
 
-| Feature | Business Impact | Effort |
-|---------|----------------|--------|
-| Non-objection Requirements Workflow | High | Medium |
-| Continuous Monitoring Assessment | Medium | Medium |
-| Training Management Page | Medium | Medium |
+## 13. Empty States
 
-### Phase 3: Optimizations
+### Test: Empty State Components
+| # | Page | Condition | Expected Result | Pass/Fail |
+|---|------|-----------|-----------------|-----------|
+| 13.1 | Observations | No observations exist | NoDataEmptyState with "Add Observation" button | [ ] |
+| 13.2 | Observations | Filter returns 0 | NoResultsEmptyState with "Clear Filters" button | [ ] |
+| 13.3 | Team (Training) | Filter returns 0 employees | NoDataEmptyState for training records | [ ] |
+| 13.4 | Regulatory Updates | Rules filter returns 0 | NoResultsEmptyState with clear filters | [ ] |
+| 13.5 | Regulatory Updates | Policies filter returns 0 | NoResultsEmptyState with clear filters | [ ] |
+| 13.6 | Empty State | Click "Clear Filters" | Filters reset, data reappears | [ ] |
+| 13.7 | Empty State | Click "Add" button | Opens add modal | [ ] |
 
-| Feature | Business Impact | Effort |
-|---------|----------------|--------|
-| Working day calculations | Medium | Low |
-| Automated notifications | High | Medium |
-| Report generation & exports | Medium | Medium |
-| Approval workflows | High | High |
+---
+
+## 14. Sorting
+
+### Test: Table Sorting
+| # | Page | Test Case | Expected Result | Pass/Fail |
+|---|------|-----------|-----------------|-----------|
+| 14.1 | Observations | Click "Title" header | Sorts A-Z | [ ] |
+| 14.2 | Observations | Click "Title" again | Sorts Z-A | [ ] |
+| 14.3 | Observations | Click "Severity" header | Sorts by severity level | [ ] |
+| 14.4 | Observations | Click "Due Date" header | Sorts by date | [ ] |
+| 14.5 | Team | Click sortable headers | Data sorts correctly | [ ] |
+| 14.6 | Sort indicator | Active sort column | Shows arrow direction | [ ] |
+
+---
+
+## 15. Checklist CRUD
+
+### Test: Checklist Add/Remove (Observation Detail)
+| # | Test Case | Expected Result | Pass/Fail |
+|---|-----------|-----------------|-----------|
+| 15.1 | Open observation detail | Checklist section visible | [ ] |
+| 15.2 | Type in checklist input | Text appears in input | [ ] |
+| 15.3 | Click + button | New checklist item added | [ ] |
+| 15.4 | Press Enter in input | New checklist item added | [ ] |
+| 15.5 | Empty input + click | Nothing happens / validation | [ ] |
+| 15.6 | Hover checklist item | X button appears | [ ] |
+| 15.7 | Click X button | Checklist item removed | [ ] |
+| 15.8 | Click checkbox | Item toggles completed | [ ] |
+| 15.9 | Completed item | Shows strikethrough text | [ ] |
+| 15.10 | Progress updates | Percentage recalculates | [ ] |
+
+---
+
+## 16. UI Polish
+
+### Test: Visual Consistency
+| # | Test Case | Expected Result | Pass/Fail |
+|---|-----------|-----------------|-----------|
+| 16.1 | Typography | Consistent font sizes across app | [ ] |
+| 16.2 | Colors | Consistent color scheme (emerald primary) | [ ] |
+| 16.3 | Spacing | Consistent padding/margins | [ ] |
+| 16.4 | Buttons | Consistent button styles | [ ] |
+| 16.5 | Cards | Consistent card styling | [ ] |
+| 16.6 | Hover states | All interactive elements have hover | [ ] |
+| 16.7 | Focus states | Keyboard navigation visible focus | [ ] |
+| 16.8 | Loading states | Spinners/skeletons where appropriate | [ ] |
+| 16.9 | Error states | Error messages styled consistently | [ ] |
+| 16.10 | Responsive | Layout adapts to screen sizes | [ ] |
+| 16.11 | Animations | Smooth transitions (modals, dropdowns) | [ ] |
+| 16.12 | Icons | Consistent icon style (Iconify) | [ ] |
+
+---
+
+## Test Environment Setup
+
+### Prerequisites
+```bash
+# Install dependencies
+npm install
+
+# Start development server
+npm run dev
+
+# Run TypeScript check
+npx tsc --noEmit
+
+# Run linter
+npm run lint
+```
+
+### Test Data
+The app uses mock data for demonstration. To test:
+1. Navigate to each page
+2. Interact with UI elements
+3. Verify expected behaviors
+
+### Browser Testing
+Test in:
+- [ ] Chrome (latest)
+- [ ] Firefox (latest)
+- [ ] Safari (latest)
+- [ ] Edge (latest)
 
 ---
 
@@ -492,7 +349,16 @@
 
 | Role | Name | Date | Signature |
 |------|------|------|-----------|
+| Developer | | | |
+| QA Tester | | | |
 | Product Owner | | | |
-| Compliance Lead | | | |
-| Development Lead | | | |
-| QA Lead | | | |
+
+---
+
+## Notes
+
+_Add any testing notes, bugs found, or observations here:_
+
+1.
+2.
+3.
