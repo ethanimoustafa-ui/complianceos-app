@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -15,24 +15,66 @@ const forgotPasswordSchema = z.object({
 
 type ForgotPasswordInput = z.infer<typeof forgotPasswordSchema>
 
+const COOLDOWN_SECONDS = 60
+
 export default function ForgotPasswordPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [isSubmitted, setIsSubmitted] = useState(false)
+  const [submittedEmail, setSubmittedEmail] = useState('')
+  const [cooldown, setCooldown] = useState(0)
   const { t, isRTL } = useTranslation()
 
   const {
     register,
     handleSubmit,
+    getValues,
     formState: { errors },
   } = useForm<ForgotPasswordInput>({
     resolver: zodResolver(forgotPasswordSchema),
   })
 
+  // Cooldown timer effect
+  useEffect(() => {
+    if (cooldown > 0) {
+      const timer = setTimeout(() => setCooldown(cooldown - 1), 1000)
+      return () => clearTimeout(timer)
+    }
+  }, [cooldown])
+
   const onSubmit = async (data: ForgotPasswordInput) => {
     setIsLoading(true)
-    await new Promise((resolve) => setTimeout(resolve, 1500))
-    setIsLoading(false)
-    setIsSubmitted(true)
+    try {
+      // TODO: Replace with actual API call
+      await new Promise((resolve) => setTimeout(resolve, 1500))
+      setSubmittedEmail(data.email)
+      setIsSubmitted(true)
+      setCooldown(COOLDOWN_SECONDS)
+    } catch (error) {
+      console.error('Failed to send reset email:', error)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleResendEmail = useCallback(async () => {
+    if (cooldown > 0) return
+
+    setIsLoading(true)
+    try {
+      // TODO: Replace with actual API call
+      await new Promise((resolve) => setTimeout(resolve, 1500))
+      setCooldown(COOLDOWN_SECONDS)
+    } catch (error) {
+      console.error('Failed to resend email:', error)
+    } finally {
+      setIsLoading(false)
+    }
+  }, [cooldown])
+
+  const formatCooldown = (seconds: number): string => {
+    const mins = Math.floor(seconds / 60)
+    const secs = seconds % 60
+    return mins > 0 ? `${mins}:${secs.toString().padStart(2, '0')}` : `${secs}s`
   }
 
   if (isSubmitted) {
@@ -43,15 +85,63 @@ export default function ForgotPasswordPage() {
             <Icon icon="lucide:mail-check" className="text-3xl text-emerald-600" />
           </div>
           <h1 className="text-3xl font-display font-bold text-slate-900 mb-3">{t('auth.checkYourEmail')}</h1>
-          <p className="text-slate-500 mb-8">
+          <p className="text-slate-500 mb-2">
             {t('auth.resetInstructionsSent')}
           </p>
-          <Link href="/sign-in">
-            <Button variant="outline" className="w-full">
-              <Icon icon={isRTL ? 'lucide:arrow-right' : 'lucide:arrow-left'} />
-              {t('auth.backToSignIn')}
+          <p className="text-sm text-slate-600 font-medium mb-8">
+            {submittedEmail}
+          </p>
+
+          {/* Resend Email Button with Cooldown */}
+          <div className="space-y-4">
+            <Button
+              variant="outline"
+              onClick={handleResendEmail}
+              disabled={cooldown > 0 || isLoading}
+              className="w-full"
+            >
+              {isLoading ? (
+                <>
+                  <Icon icon="lucide:loader-2" className="animate-spin" />
+                  Sending...
+                </>
+              ) : cooldown > 0 ? (
+                <>
+                  <Icon icon="lucide:clock" />
+                  Resend in {formatCooldown(cooldown)}
+                </>
+              ) : (
+                <>
+                  <Icon icon="lucide:refresh-cw" />
+                  Resend Email
+                </>
+              )}
             </Button>
-          </Link>
+
+            {cooldown > 0 && (
+              <p className="text-xs text-slate-500">
+                Didn&apos;t receive the email? Check your spam folder or wait to resend.
+              </p>
+            )}
+
+            <Link href="/sign-in">
+              <Button variant="ghost" className="w-full">
+                <Icon icon={isRTL ? 'lucide:arrow-right' : 'lucide:arrow-left'} />
+                {t('auth.backToSignIn')}
+              </Button>
+            </Link>
+          </div>
+
+          {/* Help Text */}
+          <div className="mt-8 p-4 bg-slate-50 rounded-xl">
+            <p className="text-xs text-slate-600">
+              <span className="font-bold">Need help?</span> If you continue to have issues,
+              please contact{' '}
+              <a href="mailto:support@complianceos.com" className="text-emerald-600 hover:underline">
+                support@complianceos.com
+              </a>
+            </p>
+          </div>
         </div>
       </div>
     )

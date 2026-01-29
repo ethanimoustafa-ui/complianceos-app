@@ -2,6 +2,7 @@
 
 import { Icon } from '@iconify/react'
 import { ObservationSource, ObservationSeverity, ObservationStatus } from './observation-types'
+import { useTranslation } from '@/i18n'
 
 interface ObservationFiltersProps {
   searchQuery: string
@@ -24,53 +25,55 @@ export function ObservationFilters({
   statusFilter,
   onStatusChange,
 }: ObservationFiltersProps) {
+  const { t, isRTL } = useTranslation()
+
   return (
-    <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 mb-6">
+    <div className={`flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 mb-6 ${isRTL ? 'lg:flex-row-reverse' : ''}`}>
       <div className="w-full lg:w-96 relative">
         <Icon
           icon="lucide:search"
-          className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+          className={`absolute ${isRTL ? 'right-3' : 'left-3'} top-1/2 -translate-y-1/2 text-slate-400`}
         />
         <input
           type="text"
-          placeholder="Search by ID or Finding title..."
+          placeholder={t('observations.filters.searchPlaceholder')}
           value={searchQuery}
           onChange={(e) => onSearchChange(e.target.value)}
-          className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all"
+          className={`w-full ${isRTL ? 'pr-4' : 'pl-10 pr-4'} py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all`}
         />
       </div>
-      <div className="flex flex-wrap gap-2">
+      <div className={`flex flex-wrap gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
         <select
           value={sourceFilter}
           onChange={(e) => onSourceChange(e.target.value as ObservationSource | 'all')}
-          className="bg-white border border-slate-200 px-3 py-2 rounded-lg text-xs font-bold text-slate-600 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+          className={`bg-white border border-slate-200 px-3 py-2 rounded-lg text-xs font-bold text-slate-600 focus:outline-none focus:ring-2 focus:ring-emerald-500`}
         >
-          <option value="all">All Sources</option>
-          <option value="sama">SAMA Inspection</option>
-          <option value="internal">Internal Audit</option>
-          <option value="sharia">Sharia Audit</option>
+          <option value="all">{t('observations.filters.allSources')}</option>
+          <option value="sama">{t('observations.sources.sama')}</option>
+          <option value="internal">{t('observations.sources.internal')}</option>
+          <option value="sharia">{t('observations.sources.sharia')}</option>
         </select>
         <select
           value={severityFilter}
           onChange={(e) => onSeverityChange(e.target.value as ObservationSeverity | 'all')}
-          className="bg-white border border-slate-200 px-3 py-2 rounded-lg text-xs font-bold text-slate-600 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+          className={`bg-white border border-slate-200 px-3 py-2 rounded-lg text-xs font-bold text-slate-600 focus:outline-none focus:ring-2 focus:ring-emerald-500`}
         >
-          <option value="all">All Severity</option>
-          <option value="critical">Critical</option>
-          <option value="high">High</option>
-          <option value="medium">Medium</option>
-          <option value="low">Low</option>
+          <option value="all">{t('observations.filters.allSeverity')}</option>
+          <option value="critical">{t('observations.severityOptions.critical')}</option>
+          <option value="high">{t('observations.severityOptions.high')}</option>
+          <option value="medium">{t('observations.severityOptions.medium')}</option>
+          <option value="low">{t('observations.severityOptions.low')}</option>
         </select>
         <select
           value={statusFilter}
           onChange={(e) => onStatusChange(e.target.value as ObservationStatus | 'all')}
-          className="bg-white border border-slate-200 px-3 py-2 rounded-lg text-xs font-bold text-slate-600 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+          className={`bg-white border border-slate-200 px-3 py-2 rounded-lg text-xs font-bold text-slate-600 focus:outline-none focus:ring-2 focus:ring-emerald-500 text-center`}
         >
-          <option value="all">All Status</option>
-          <option value="open">Open</option>
-          <option value="in_progress">In Progress</option>
-          <option value="resolved">Pending Review</option>
-          <option value="closed">Closed</option>
+          <option value="all">{t('observations.filters.allStatus')}</option>
+          <option value="open">{t('observations.statusOptions.open')}</option>
+          <option value="in_progress">{t('observations.statusOptions.inProgress')}</option>
+          <option value="resolved">{t('observations.statusOptions.pendingReview')}</option>
+          <option value="closed">{t('observations.statusOptions.closed')}</option>
         </select>
         <button className="p-2 text-slate-400 hover:text-slate-600 transition-colors">
           <Icon icon="lucide:filter" className="text-xl" />

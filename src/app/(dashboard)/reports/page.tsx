@@ -1300,7 +1300,7 @@ export default function ReportsPage() {
                         className="hover:bg-slate-50/50 transition-colors group"
                       >
                         <td className="px-6 py-4">
-                          <Link href={`/audits/${audit.id}`} className="block">
+                          <Link href={`/reports/${audit.id}`} className="block">
                             <p className="text-sm font-bold text-slate-900 group-hover:text-emerald-600 transition-colors">
                               {audit.name}
                             </p>

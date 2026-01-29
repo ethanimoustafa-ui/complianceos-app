@@ -7,6 +7,11 @@
     "cancel": "Cancel",
     "close": "Close",
     "delete": "Delete",
+    "deleting": "Deleting...",
+    "deleteConfirmTitle": "Delete {{type}}?",
+    "deleteConfirmDescription": "Are you sure you want to delete \"{{name}}\"? This action cannot be undone.",
+    "thisItem": "this item",
+    "typeToConfirm": "Type {{word}} to confirm:",
     "edit": "Edit",
     "view": "View",
     "add": "Add",
@@ -392,6 +397,7 @@
     "templateSystemOutageDesc": "Report critical system outages affecting banking services."
   },
   "observations": {
+    "observation": "observation",
     "title": "Observations Tracker",
     "subtitle": "Audit & Remediation Management",
     "newObservation": "New Observation",
@@ -415,7 +421,127 @@
     "internal": "Internal",
     "systemHealth": "System Health",
     "samaLetters": "SAMA Letters",
-    "regulatoryUpdates": "Regulatory Updates"
+    "regulatoryUpdates": "Regulatory Updates",
+    "table": {
+      "id": "ID",
+      "source": "Source",
+      "findingTitle": "Finding Title",
+      "severity": "Severity",
+      "dueDate": "Due Date",
+      "status": "Status",
+      "actions": "Actions"
+    },
+    "pagination": {
+      "showing": "Showing {{start}}-{{end}} of {{total}} observations",
+      "previous": "Previous",
+      "next": "Next"
+    },
+    "actions": {
+      "edit": "Edit",
+      "delete": "Delete"
+    },
+    "filters": {
+      "searchPlaceholder": "Search by title or reference...",
+      "allSources": "All Sources",
+      "allSeverity": "All Severity",
+      "allStatus": "All Status"
+    },
+    "severityOptions": {
+      "critical": "Critical",
+      "high": "High",
+      "medium": "Medium",
+      "low": "Low"
+    },
+    "statusOptions": {
+      "open": "Open",
+      "inProgress": "In Progress",
+      "pendingReview": "Pending Review",
+      "closed": "Closed"
+    },
+    "sources": {
+      "sama": "SAMA Inspection",
+      "internal": "Internal Audit",
+      "sharia": "Sharia Audit"
+    },
+    "stats": {
+      "totalFindings": "Total Findings",
+      "acrossAllAudits": "Across all audits",
+      "openCritical": "Open Critical",
+      "overdue": "Overdue",
+      "immediateAction": "Immediate Action",
+      "inRemediation": "In Remediation",
+      "draftingResponse": "Drafting response",
+      "closedQ": "Closed (Q{{quarter}})",
+      "target": "Target",
+      "verified": "Verified"
+    },
+    "form": {
+      "sourceSelection": "Source Selection",
+      "findingTitle": "Finding Title",
+      "findingTitlePlaceholder": "e.g., Inadequate Logging for Administrative Access",
+      "subFindingTitle": "Sub-Finding Title",
+      "subFindingTitlePlaceholder": "e.g., Secondary classification or category",
+      "referenceNumber": "Reference Number",
+      "referencePlaceholder": "e.g., OBS-2026-0001",
+      "description": "Description",
+      "descriptionPlaceholder": "Detailed findings from the audit report...",
+      "departmentAssignment": "Department Assignment",
+      "assignees": "Assignees",
+      "addAssignee": "Add assignee...",
+      "uploadReport": "Upload Report (PDF)",
+      "fileHelper": "PDF, DOC, or images up to 10MB",
+      "documents": "Documents",
+      "documentsHelper": "Upload or remove documents"
+    },
+    "modal": {
+      "addTitle": "Add New Observation",
+      "addDescription": "Log a new finding for tracking and remediation.",
+      "editTitle": "Edit Observation",
+      "editDescription": "Update observation details and status.",
+      "createButton": "Create Observation",
+      "saveButton": "Save Changes",
+      "saving": "Saving..."
+    },
+    "detail": {
+      "findingOverview": "Finding Overview",
+      "remediationChecklist": "Remediation Checklist",
+      "complete": "{{percent}}% Complete",
+      "addChecklistItem": "Add a new checklist item...",
+      "removeItem": "Remove item",
+      "updatesDiscussion": "Updates & Discussion",
+      "writeUpdate": "Write an update...",
+      "severityLabel": "Severity",
+      "deadlineCountdown": "Deadline Countdown",
+      "daysRemaining": "{{days}} Days Remaining",
+      "assignedTeam": "Assigned Team",
+      "relatedDocuments": "Related Documents",
+      "activityTimeline": "Activity Timeline",
+      "justNow": "Just now",
+      "by": "by",
+      "today": "Today",
+      "yesterday": "Yesterday",
+      "timeline": {
+        "checklistAdded": "Added checklist item: \"{{item}}\"",
+        "checklistRemoved": "Removed checklist item: \"{{item}}\"",
+        "checklistMarkedComplete": "Marked checklist item '{{item}}' as complete",
+        "checklistMarkedPending": "Marked checklist item '{{item}}' as pending",
+        "documentAdded": "{{name}} added a new document",
+        "statusChanged": "Status changed to {{status}}",
+        "commentAdded": "{{name}} added a comment",
+        "observationCreated": "Observation created",
+        "observationClosed": "Observation verified and closed",
+        "tasksCompleted": "All remediation tasks completed"
+      }
+    },
+    "departments": {
+      "itCybersecurity": "IT & Cybersecurity",
+      "humanResources": "Human Resources",
+      "riskManagement": "Risk Management",
+      "operations": "Operations",
+      "legal": "Legal",
+      "compliance": "Compliance",
+      "finance": "Finance"
+    }
   },
   "regulatoryUpdates": {
     "tabs": {
@@ -1683,6 +1809,24 @@
     "lastSixMonths": "Last 6 Months",
     "thisYear": "This Year",
     "fiscalYear": "Fiscal Year"
+  },
+  "export": {
+    "reference": "Reference",
+    "title": "Title",
+    "subTitle": "Sub-Title",
+    "source": "Source",
+    "severity": "Severity",
+    "status": "Status",
+    "dueDate": "Due Date",
+    "department": "Department",
+    "assignees": "Assignees",
+    "description": "Description",
+    "documents": "Documents",
+    "checklistProgress": "Checklist Progress",
+    "unassigned": "Unassigned",
+    "none": "None",
+    "noChecklist": "No checklist",
+    "na": "N/A"
   },
   "auditDetail": {
     "audits": "Audits",

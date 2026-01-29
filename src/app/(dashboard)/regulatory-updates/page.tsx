@@ -10,6 +10,7 @@ import { Input } from '@/components/ui/input'
 import { Modal } from '@/components/ui/modal'
 import { useTranslation } from '@/i18n'
 import { cn } from '@/lib/utils'
+import { NoResultsEmptyState } from '@/components/ui/empty-state'
 
 type Priority = 'critical' | 'high' | 'medium' | 'low'
 type Status = 'in_progress' | 'completed' | 'overdue'
@@ -539,11 +540,20 @@ export default function RegulatoryUpdatesPage() {
             </div>
 
             {/* Rules Card List */}
-            <div className="grid grid-cols-1 gap-4">
-              {filteredRules.map((rule) => (
-                <RuleCard key={rule.id} rule={rule} onClick={() => setSelectedRule(rule)} t={t} isRTL={isRTL} />
-              ))}
-            </div>
+            {filteredRules.length === 0 ? (
+              <NoResultsEmptyState
+                onClearFilters={() => {
+                  setSearchQuery('')
+                  setDepartmentFilter('all')
+                }}
+              />
+            ) : (
+              <div className="grid grid-cols-1 gap-4">
+                {filteredRules.map((rule) => (
+                  <RuleCard key={rule.id} rule={rule} onClick={() => setSelectedRule(rule)} t={t} isRTL={isRTL} />
+                ))}
+              </div>
+            )}
           </>
         )}
 
@@ -634,19 +644,29 @@ export default function RegulatoryUpdatesPage() {
             </div>
 
             {/* Policy Cards */}
-            <div className="grid grid-cols-1 gap-4">
-              {filteredPolicies.map((policy) => (
-                <PolicyCard
-                  key={policy.id}
-                  policy={policy}
-                  onClick={() => setSelectedPolicy(policy)}
-                  statusConfig={policyStatusConfig}
-                  categoryConfig={policyCategoryConfig}
-                  t={t}
-                  isRTL={isRTL}
-                />
-              ))}
-            </div>
+            {filteredPolicies.length === 0 ? (
+              <NoResultsEmptyState
+                onClearFilters={() => {
+                  setPolicySearchQuery('')
+                  setPolicyCategoryFilter('all')
+                  setPolicyStatusFilter('all')
+                }}
+              />
+            ) : (
+              <div className="grid grid-cols-1 gap-4">
+                {filteredPolicies.map((policy) => (
+                  <PolicyCard
+                    key={policy.id}
+                    policy={policy}
+                    onClick={() => setSelectedPolicy(policy)}
+                    statusConfig={policyStatusConfig}
+                    categoryConfig={policyCategoryConfig}
+                    t={t}
+                    isRTL={isRTL}
+                  />
+                ))}
+              </div>
+            )}
           </>
         )}
       </div>

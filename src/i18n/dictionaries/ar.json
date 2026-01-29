@@ -7,6 +7,11 @@
     "cancel": "إلغاء",
     "close": "إغلاق",
     "delete": "حذف",
+    "deleting": "جاري الحذف...",
+    "deleteConfirmTitle": "حذف {{type}}؟",
+    "deleteConfirmDescription": "هل أنت متأكد من حذف \"{{name}}\"؟ لا يمكن التراجع عن هذا الإجراء.",
+    "thisItem": "هذا العنصر",
+    "typeToConfirm": "اكتب {{word}} للتأكيد:",
     "edit": "تعديل",
     "view": "عرض",
     "add": "إضافة",
@@ -392,6 +397,7 @@
     "templateSystemOutageDesc": "الإبلاغ عن انقطاعات النظام الحرجة التي تؤثر على الخدمات المصرفية."
   },
   "observations": {
+    "observation": "الملاحظة",
     "title": "متتبع الملاحظات",
     "subtitle": "إدارة التدقيق والمعالجة",
     "newObservation": "ملاحظة جديدة",
@@ -415,7 +421,127 @@
     "internal": "داخلي",
     "systemHealth": "صحة النظام",
     "samaLetters": "خطابات ساما",
-    "regulatoryUpdates": "التحديثات التنظيمية"
+    "regulatoryUpdates": "التحديثات التنظيمية",
+    "table": {
+      "id": "المعرف",
+      "source": "المصدر",
+      "findingTitle": "عنوان النتيجة",
+      "severity": "الخطورة",
+      "dueDate": "تاريخ الاستحقاق",
+      "status": "الحالة",
+      "actions": "الإجراءات"
+    },
+    "pagination": {
+      "showing": "عرض {{start}}-{{end}} من {{total}} ملاحظة",
+      "previous": "السابق",
+      "next": "التالي"
+    },
+    "actions": {
+      "edit": "تعديل",
+      "delete": "حذف"
+    },
+    "filters": {
+      "searchPlaceholder": "البحث بالعنوان أو المرجع...",
+      "allSources": "جميع المصادر",
+      "allSeverity": "جميع مستويات الخطورة",
+      "allStatus": "جميع الحالات"
+    },
+    "severityOptions": {
+      "critical": "حرج",
+      "high": "عالي",
+      "medium": "متوسط",
+      "low": "منخفض"
+    },
+    "statusOptions": {
+      "open": "مفتوح",
+      "inProgress": "قيد التنفيذ",
+      "pendingReview": "في انتظار المراجعة",
+      "closed": "مغلق"
+    },
+    "sources": {
+      "sama": "فحص ساما",
+      "internal": "التدقيق الداخلي",
+      "sharia": "التدقيق الشرعي"
+    },
+    "stats": {
+      "totalFindings": "إجمالي النتائج",
+      "acrossAllAudits": "عبر جميع التدقيقات",
+      "openCritical": "الحرجة المفتوحة",
+      "overdue": "متأخرة",
+      "immediateAction": "إجراء فوري",
+      "inRemediation": "قيد المعالجة",
+      "draftingResponse": "صياغة الرد",
+      "closedQ": "مغلقة (الربع {{quarter}})",
+      "target": "الهدف",
+      "verified": "تم التحقق"
+    },
+    "form": {
+      "sourceSelection": "اختيار المصدر",
+      "findingTitle": "عنوان النتيجة",
+      "findingTitlePlaceholder": "مثال: عدم كفاية تسجيل الوصول الإداري",
+      "subFindingTitle": "العنوان الفرعي",
+      "subFindingTitlePlaceholder": "مثال: التصنيف الثانوي أو الفئة",
+      "referenceNumber": "رقم المرجع",
+      "referencePlaceholder": "مثال: OBS-2026-0001",
+      "description": "الوصف",
+      "descriptionPlaceholder": "نتائج التدقيق التفصيلية من التقرير...",
+      "departmentAssignment": "تعيين القسم",
+      "assignees": "المُكلفون",
+      "addAssignee": "إضافة مُكلف...",
+      "uploadReport": "رفع التقرير (PDF)",
+      "fileHelper": "PDF أو DOC أو صور حتى 10 ميجابايت",
+      "documents": "المستندات",
+      "documentsHelper": "رفع أو إزالة المستندات"
+    },
+    "modal": {
+      "addTitle": "إضافة ملاحظة جديدة",
+      "addDescription": "تسجيل نتيجة جديدة للمتابعة والمعالجة.",
+      "editTitle": "تعديل الملاحظة",
+      "editDescription": "تحديث تفاصيل الملاحظة والحالة.",
+      "createButton": "إنشاء الملاحظة",
+      "saveButton": "حفظ التغييرات",
+      "saving": "جارٍ الحفظ..."
+    },
+    "detail": {
+      "findingOverview": "نظرة عامة على النتيجة",
+      "remediationChecklist": "قائمة المعالجة",
+      "complete": "{{percent}}% مكتمل",
+      "addChecklistItem": "إضافة عنصر جديد...",
+      "removeItem": "إزالة العنصر",
+      "updatesDiscussion": "التحديثات والمناقشة",
+      "writeUpdate": "اكتب تحديثاً...",
+      "severityLabel": "الخطورة",
+      "deadlineCountdown": "العد التنازلي للموعد",
+      "daysRemaining": "{{days}} أيام متبقية",
+      "assignedTeam": "الفريق المُكلف",
+      "relatedDocuments": "المستندات ذات الصلة",
+      "activityTimeline": "سجل النشاط",
+      "justNow": "الآن",
+      "by": "بواسطة",
+      "today": "اليوم",
+      "yesterday": "أمس",
+      "timeline": {
+        "checklistAdded": "تمت إضافة عنصر قائمة التحقق: \"{{item}}\"",
+        "checklistRemoved": "تم حذف عنصر قائمة التحقق: \"{{item}}\"",
+        "checklistMarkedComplete": "تم تحديد عنصر قائمة التحقق '{{item}}' كمكتمل",
+        "checklistMarkedPending": "تم تحديد عنصر قائمة التحقق '{{item}}' كمعلق",
+        "documentAdded": "{{name}} أضاف مستنداً جديداً",
+        "statusChanged": "تم تغيير الحالة إلى {{status}}",
+        "commentAdded": "{{name}} أضاف تعليقاً",
+        "observationCreated": "تم إنشاء الملاحظة",
+        "observationClosed": "تم التحقق من الملاحظة وإغلاقها",
+        "tasksCompleted": "اكتملت جميع مهام المعالجة"
+      }
+    },
+    "departments": {
+      "itCybersecurity": "تقنية المعلومات والأمن السيبراني",
+      "humanResources": "الموارد البشرية",
+      "riskManagement": "إدارة المخاطر",
+      "operations": "العمليات",
+      "legal": "الشؤون القانونية",
+      "compliance": "الامتثال",
+      "finance": "المالية"
+    }
   },
   "regulatoryUpdates": {
     "tabs": {
@@ -1679,6 +1805,24 @@
     "lastSixMonths": "آخر 6 أشهر",
     "thisYear": "هذا العام",
     "fiscalYear": "السنة المالية"
+  },
+  "export": {
+    "reference": "المرجع",
+    "title": "العنوان",
+    "subTitle": "العنوان الفرعي",
+    "source": "المصدر",
+    "severity": "الخطورة",
+    "status": "الحالة",
+    "dueDate": "تاريخ الاستحقاق",
+    "department": "القسم",
+    "assignees": "المُكلفون",
+    "description": "الوصف",
+    "documents": "المستندات",
+    "checklistProgress": "تقدم قائمة التحقق",
+    "unassigned": "غير مُعيّن",
+    "none": "لا يوجد",
+    "noChecklist": "لا توجد قائمة",
+    "na": "غ/م"
   },
   "auditDetail": {
     "audits": "التدقيقات",

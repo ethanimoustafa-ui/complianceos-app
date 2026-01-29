@@ -3,9 +3,12 @@
 import { useState, useMemo } from 'react'
 import Link from 'next/link'
 import { Icon } from '@iconify/react'
-import { Header } from '@/components/layout/header'
 import { Button } from '@/components/ui/button'
 import { useTranslation } from '@/i18n'
+import { exportObservations } from '@/lib/export'
+import { RoleGuard } from '@/components/auth/role-guard'
+import { DeleteConfirmationDialog } from '@/components/ui/delete-confirmation-dialog'
+import { useObservationStore } from '@/stores/observation-store'
 import {
   Observation,
   ObservationSource,
@@ -16,129 +19,29 @@ import {
   ObservationTable,
   ObservationDetailModal,
   AddObservationModal,
+  EditObservationModal,
   ObservationFormData,
 } from '@/components/observations'
 
-// Sample data based on the HTML reference
-const sampleObservations: Observation[] = [
-  {
-    id: 'OBS-2024-101',
-    title: 'MFA Implementation Gap in Corporate Banking',
-    description:
-      'The audit revealed that corporate banking customers are currently able to perform high-value transactions without Mandatory Multi-Factor Authentication (MFA) under certain browser configurations. This violates the SAMA Cybersecurity Framework update 4.2 regarding critical transaction security.',
-    source: 'sama',
-    severity: 'critical',
-    status: 'in_progress',
-    dueDate: 'Oct 24, 2024',
-    department: 'IT Security',
-    reference: 'Cybersecurity Framework - Rule 4.2',
-    team: [
-      { name: 'Michael Scott', avatar: 'Michael', role: 'Lead Assignee' },
-      { name: 'Felix Henderson', avatar: 'Felix', role: 'Compliance Officer' },
-    ],
-    progress: 40,
-    checklist: [
-      { id: '1', text: 'Identify affected browser engine configurations', completed: true },
-      { id: '2', text: 'Draft technical requirement for MFA enforcement', completed: true },
-      { id: '3', text: 'Implement session hijacking prevention measures', completed: false },
-      { id: '4', text: 'QA Testing - Sandbox environment', completed: false },
-      { id: '5', text: 'Verification by Internal Audit team', completed: false },
-    ],
-    updates: [
-      {
-        id: '1',
-        author: { name: 'Sarah Connor', avatar: 'Sarah' },
-        text: 'The middleware team has confirmed the fix will be ready for staging by Friday. We need Legal to review the updated T&Cs for customers.',
-        createdAt: '2 days ago',
-      },
-    ],
-    documents: [
-      { id: '1', name: 'SAMA_Cyber_Audit_2024.pdf', type: 'pdf' },
-      { id: '2', name: 'Error_Screen_MFA.png', type: 'image' },
-    ],
-    timeline: [
-      { id: '1', date: 'Today', description: "Checklist item 'Audit Verification' marked as pending" },
-      { id: '2', date: 'Yesterday', description: 'Sarah Henderson added a new document' },
-    ],
-  },
-  {
-    id: 'OBS-2024-102',
-    title: 'Untrained Staff in Fraud Detection Module',
-    description:
-      'Internal audit identified that 15% of customer service staff have not completed the mandatory fraud detection training module. This creates compliance risk with regulatory training requirements.',
-    source: 'internal',
-    severity: 'medium',
-    status: 'open',
-    dueDate: 'Nov 12, 2024',
-    department: 'Compliance',
-    reference: 'Compliance Training Audit 2024',
-    team: [{ name: 'Ahmed Khan', avatar: 'Ahmed', role: 'Training Coordinator' }],
-    checklist: [
-      { id: '1', text: 'Identify all untrained staff members', completed: false },
-      { id: '2', text: 'Schedule mandatory training sessions', completed: false },
-      { id: '3', text: 'Track completion and update records', completed: false },
-    ],
-    timeline: [
-      { id: '1', date: 'Oct 15, 2024', description: 'Observation created from internal audit' },
-    ],
-  },
-  {
-    id: 'OBS-2024-103',
-    title: 'Contractual Ambiguity in Murabaha Clauses',
-    description:
-      'Sharia board review identified ambiguous language in several Murabaha contract templates that could lead to non-compliance with Islamic financing principles.',
-    source: 'sharia',
-    severity: 'high',
-    status: 'resolved',
-    dueDate: 'Oct 30, 2024',
-    department: 'Legal',
-    reference: 'Sharia Product Review',
-    team: [
-      { name: 'Dr. Hassan Ali', avatar: 'Hassan', role: 'Sharia Advisor' },
-      { name: 'Lisa Martinez', avatar: 'Lisa', role: 'Legal Counsel' },
-    ],
-    checklist: [
-      { id: '1', text: 'Review all affected contract templates', completed: true },
-      { id: '2', text: 'Draft revised language with Sharia board', completed: true },
-      { id: '3', text: 'Legal review of proposed changes', completed: true },
-      { id: '4', text: 'Final approval from Sharia board', completed: false },
-    ],
-    timeline: [
-      { id: '1', date: 'Oct 20, 2024', description: 'Submitted for Sharia board review' },
-      { id: '2', date: 'Oct 18, 2024', description: 'Legal review completed' },
-    ],
-  },
-  {
-    id: 'OBS-2024-098',
-    title: 'Outdated AML Screening Parameters',
-    description:
-      'Annual compliance audit found that AML screening parameters had not been updated to reflect the latest SAMA sanctions list changes.',
-    source: 'sama',
-    severity: 'medium',
-    status: 'closed',
-    dueDate: 'Sep 15, 2024',
-    department: 'Compliance',
-    reference: 'Annual Compliance Audit',
-    team: [{ name: 'Omar Al-Rashid', avatar: 'Omar', role: 'AML Officer' }],
-    checklist: [
-      { id: '1', text: 'Update AML screening parameters', completed: true },
-      { id: '2', text: 'Test updated screening rules', completed: true },
-      { id: '3', text: 'Document changes and obtain sign-off', completed: true },
-    ],
-    timeline: [
-      { id: '1', date: 'Sep 15, 2024', description: 'Observation verified and closed' },
-      { id: '2', date: 'Sep 10, 2024', description: 'All remediation tasks completed' },
-    ],
-  },
-]
-
 export default function ObservationsPage() {
   const { t, isRTL } = useTranslation()
+
+  // Zustand store - single source of truth
+  const {
+    observations,
+    create: createObservation,
+    update: updateObservation,
+    delete: deleteObservation,
+  } = useObservationStore()
 
   // State for modals
   const [selectedObservation, setSelectedObservation] = useState<Observation | null>(null)
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false)
   const [isAddModalOpen, setIsAddModalOpen] = useState(false)
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false)
+  const [observationToEdit, setObservationToEdit] = useState<Observation | null>(null)
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
+  const [observationToDelete, setObservationToDelete] = useState<string | null>(null)
 
   // State for filters
   const [searchQuery, setSearchQuery] = useState('')
@@ -152,12 +55,13 @@ export default function ObservationsPage() {
 
   // Filter observations
   const filteredObservations = useMemo(() => {
-    return sampleObservations.filter((obs) => {
-      // Search filter
+    return observations.filter((obs) => {
+      // Search filter (title, subtitle, reference)
       const matchesSearch =
         searchQuery === '' ||
         obs.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        obs.id.toLowerCase().includes(searchQuery.toLowerCase())
+        (obs.subTitle && obs.subTitle.toLowerCase().includes(searchQuery.toLowerCase())) ||
+        (obs.reference && obs.reference.toLowerCase().includes(searchQuery.toLowerCase()))
 
       // Source filter
       const matchesSource = sourceFilter === 'all' || obs.source === sourceFilter
@@ -170,7 +74,7 @@ export default function ObservationsPage() {
 
       return matchesSearch && matchesSource && matchesSeverity && matchesStatus
     })
-  }, [searchQuery, sourceFilter, severityFilter, statusFilter])
+  }, [observations, searchQuery, sourceFilter, severityFilter, statusFilter])
 
   // Handle row click
   const handleRowClick = (observation: Observation) => {
@@ -178,10 +82,89 @@ export default function ObservationsPage() {
     setIsDetailModalOpen(true)
   }
 
-  // Handle add observation
-  const handleAddObservation = (data: ObservationFormData) => {
-    console.log('New observation:', data)
-    // In a real app, this would make an API call to save the observation
+  // Handle add observation - calls Zustand store
+  const handleAddObservation = async (data: ObservationFormData) => {
+    try {
+      await createObservation({
+        title: data.title,
+        subTitle: data.subTitle,
+        description: data.description,
+        source: data.source,
+        severity: data.severity,
+        status: 'open',
+        dueDate: data.dueDate,
+        department: data.department || 'Compliance',
+        reference: data.reference || '',
+        assignees: data.assignees && data.assignees.length > 0 ? data.assignees : undefined,
+        checklist: [],
+        updates: [],
+        timeline: [
+          {
+            id: '1',
+            date: 'Today',
+            description: 'Observation created',
+          },
+        ],
+      })
+      setIsAddModalOpen(false)
+    } catch (error) {
+      console.error('Failed to create observation:', error)
+    }
+  }
+
+  // Handle edit observation
+  const handleEditObservation = (observation: Observation) => {
+    setObservationToEdit(observation)
+    setIsEditModalOpen(true)
+  }
+
+  // Handle edit save - calls Zustand store
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const handleEditSave = async (observationId: string, updates: any) => {
+    try {
+      await updateObservation(observationId, updates)
+      setIsEditModalOpen(false)
+      setObservationToEdit(null)
+    } catch (error) {
+      console.error('Failed to update observation:', error)
+    }
+  }
+
+  // Handle delete click
+  const handleDeleteClick = (observationId: string) => {
+    setObservationToDelete(observationId)
+    setIsDeleteDialogOpen(true)
+  }
+
+  // Handle delete confirm - calls Zustand store
+  const handleDeleteConfirm = async () => {
+    if (observationToDelete) {
+      try {
+        await deleteObservation(observationToDelete)
+        setIsDeleteDialogOpen(false)
+        setObservationToDelete(null)
+      } catch (error) {
+        console.error('Failed to delete observation:', error)
+      }
+    }
+  }
+
+  // Check if any filters are active
+  const hasActiveFilters = searchQuery !== '' || sourceFilter !== 'all' || severityFilter !== 'all' || statusFilter !== 'all'
+
+  // Clear all filters
+  const handleClearFilters = () => {
+    setSearchQuery('')
+    setSourceFilter('all')
+    setSeverityFilter('all')
+    setStatusFilter('all')
+  }
+
+  // Export observations with localization
+  const handleExport = () => {
+    const baseFilename = isRTL ? 'ملاحظات' : 'observations'
+    const dateStr = new Date().toISOString().split('T')[0]
+    exportObservations(filteredObservations, `${baseFilename}-${dateStr}`, t, isRTL)
   }
 
   return (
@@ -232,15 +215,29 @@ export default function ObservationsPage() {
             </div>
           </div>
 
+          {/* Export Button */}
+          <RoleGuard requiredPermission="export" hidden>
+            <Button
+              variant="outline"
+              onClick={handleExport}
+              className={`hidden md:flex ${isRTL ? 'flex-row-reverse' : ''}`}
+            >
+              <Icon icon="lucide:download" />
+              {t('common.exportCsv')}
+            </Button>
+          </RoleGuard>
+
           {/* Add Observation Button */}
-          <Button
-            variant="primary"
-            onClick={() => setIsAddModalOpen(true)}
-            className="shadow-lg shadow-emerald-100"
-          >
-            <Icon icon="lucide:plus" />
-            {t('observations.addObservation')}
-          </Button>
+          <RoleGuard requiredPermission="observation:create" hidden>
+            <Button
+              variant="primary"
+              onClick={() => setIsAddModalOpen(true)}
+              className="shadow-lg shadow-emerald-100"
+            >
+              <Icon icon="lucide:plus" />
+              {t('observations.addObservation')}
+            </Button>
+          </RoleGuard>
         </div>
       </header>
 
@@ -269,6 +266,11 @@ export default function ObservationsPage() {
             totalItems={filteredObservations.length}
             onPageChange={setCurrentPage}
             itemsPerPage={itemsPerPage}
+            onClearFilters={handleClearFilters}
+            onAddObservation={() => setIsAddModalOpen(true)}
+            onEdit={handleEditObservation}
+            onDelete={handleDeleteClick}
+            hasFilters={hasActiveFilters}
           />
         </div>
       </div>
@@ -288,6 +290,31 @@ export default function ObservationsPage() {
         isOpen={isAddModalOpen}
         onClose={() => setIsAddModalOpen(false)}
         onSave={handleAddObservation}
+      />
+
+      {/* Edit Observation Modal */}
+      <EditObservationModal
+        isOpen={isEditModalOpen}
+        onClose={() => {
+          setIsEditModalOpen(false)
+          setObservationToEdit(null)
+        }}
+        // Cast to match the expected type from the modal
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        observation={observationToEdit as any}
+        onSave={handleEditSave}
+      />
+
+      {/* Delete Confirmation Dialog */}
+      <DeleteConfirmationDialog
+        isOpen={isDeleteDialogOpen}
+        onClose={() => {
+          setIsDeleteDialogOpen(false)
+          setObservationToDelete(null)
+        }}
+        onConfirm={handleDeleteConfirm}
+        itemType={t('observations.observation')}
+        itemName={observations.find((o) => o.id === observationToDelete)?.title}
       />
     </>
   )

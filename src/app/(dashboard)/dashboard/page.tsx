@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import { Icon } from '@iconify/react'
 import { Header } from '@/components/layout/header'
 import { Card } from '@/components/ui/card'
@@ -10,6 +11,7 @@ import { useTranslation } from '@/i18n'
 
 export default function DashboardPage() {
   const { t, isRTL } = useTranslation()
+  const router = useRouter()
   const [showFadeIn, setShowFadeIn] = useState(false)
 
   useEffect(() => {
@@ -20,6 +22,26 @@ export default function DashboardPage() {
       sessionStorage.removeItem('fromWelcome')
     }
   }, [])
+
+  // Button handlers
+  const handleStartReview = () => {
+    router.push('/reports')
+  }
+
+  const handlePolicyLibrary = () => {
+    // Navigate to policies page or open policy modal
+    router.push('/settings')
+  }
+
+  const handleResolveNow = () => {
+    // Navigate to observations with overdue filter
+    router.push('/observations?status=open&severity=critical')
+  }
+
+  const handleViewDetails = () => {
+    // Navigate to relevant details page
+    router.push('/regulatory-updates')
+  }
 
   return (
     <div className={showFadeIn ? 'dashboard-fade-in' : ''}>
@@ -35,12 +57,14 @@ export default function DashboardPage() {
               title={t('dashboard.criticalActionRequired')}
               message={t('dashboard.samaOverdueMessage')}
               actionLabel={t('dashboard.resolveNow')}
+              onAction={handleResolveNow}
             />
             <AlertCard
               type="warning"
               title={t('dashboard.trendAlert')}
               message={t('dashboard.saudizationGapMessage')}
               actionLabel={t('dashboard.viewDetails')}
+              onAction={handleViewDetails}
             />
           </div>
 
@@ -61,8 +85,8 @@ export default function DashboardPage() {
                   <span className="font-bold text-rose-500">3 {t('dashboard.policiesOverdue')}</span>.
                 </p>
                 <div className="flex gap-4 pt-2">
-                  <Button variant="dark">{t('dashboard.startReview')}</Button>
-                  <Button variant="outline">{t('dashboard.policyLibrary')}</Button>
+                  <Button variant="dark" onClick={handleStartReview}>{t('dashboard.startReview')}</Button>
+                  <Button variant="outline" onClick={handlePolicyLibrary}>{t('dashboard.policyLibrary')}</Button>
                 </div>
               </div>
               <div className="relative flex-1 flex justify-center">
@@ -236,11 +260,13 @@ function AlertCard({
   title,
   message,
   actionLabel,
+  onAction,
 }: {
   type: 'critical' | 'warning'
   title: string
   message: string
   actionLabel: string
+  onAction?: () => void
 }) {
   const styles = {
     critical: {
@@ -276,6 +302,7 @@ function AlertCard({
         <p className={`text-sm ${s.messageColor} font-medium`}>{message}</p>
       </div>
       <button
+        onClick={onAction}
         className={`text-[10px] font-bold ${s.buttonColor} uppercase tracking-widest px-3 py-1 bg-white border rounded-lg cursor-pointer`}
       >
         {actionLabel}

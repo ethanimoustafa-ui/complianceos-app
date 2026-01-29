@@ -10,6 +10,8 @@ import { Modal } from '@/components/ui/modal'
 import { cn } from '@/lib/utils'
 import { useTranslation } from '@/i18n'
 import type { TranslationKey } from '@/i18n'
+import { RoleGuard } from '@/components/auth/role-guard'
+import { NoDataEmptyState } from '@/components/ui/empty-state'
 
 // Tab type
 type TabValue = 'directory' | 'logs' | 'training'
@@ -780,10 +782,12 @@ export default function TeamManagementPage() {
             </div>
             <button className="px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50 rounded cursor-pointer">{t('team.filters')}</button>
           </div>
-          <Button onClick={() => setIsInviteModalOpen(true)}>
-            <Icon icon="lucide:user-plus" />
-            {t('team.inviteMember')}
-          </Button>
+          <RoleGuard requiredPermission="team:invite" hidden>
+            <Button onClick={() => setIsInviteModalOpen(true)}>
+              <Icon icon="lucide:user-plus" />
+              {t('team.inviteMember')}
+            </Button>
+          </RoleGuard>
         </div>
       </header>
 
@@ -927,12 +931,14 @@ export default function TeamManagementPage() {
                             </td>
                             <td className="px-6 py-4 text-xs text-slate-500">{member.lastActive}</td>
                             <td className={`px-6 py-4 ${isRTL ? 'text-left' : 'text-right'}`}>
-                              <button
-                                onClick={(e) => e.stopPropagation()}
-                                className="text-slate-400 hover:text-slate-900 transition-colors p-2 cursor-pointer"
-                              >
-                                <Icon icon="lucide:edit-3" />
-                              </button>
+                              <RoleGuard requiredPermission="team:edit" hidden>
+                                <button
+                                  onClick={(e) => e.stopPropagation()}
+                                  className="text-slate-400 hover:text-slate-900 transition-colors p-2 cursor-pointer"
+                                >
+                                  <Icon icon="lucide:edit-3" />
+                                </button>
+                              </RoleGuard>
                             </td>
                           </tr>
                         ))}
@@ -1515,6 +1521,12 @@ export default function TeamManagementPage() {
                     </button>
                   </div>
                 </CardHeader>
+                {filteredEmployeeTraining.length === 0 ? (
+                  <NoDataEmptyState
+                    entityName="training records"
+                    onAdd={undefined}
+                  />
+                ) : (
                 <div className="overflow-x-auto">
                   <table className="w-full">
                     <thead className="bg-slate-50 border-y border-slate-100">
@@ -1616,6 +1628,8 @@ export default function TeamManagementPage() {
                     </tbody>
                   </table>
                 </div>
+                )}
+                {filteredEmployeeTraining.length > 0 && (
                 <div className={`px-6 py-4 bg-slate-50 border-t border-slate-100 flex items-center justify-between ${isRTL ? 'flex-row-reverse' : ''}`}>
                   <p className="text-xs text-slate-500 font-medium">
                     {t('training.showingEmployees' as TranslationKey).replace('{count}', filteredEmployeeTraining.length.toString()).replace('{total}', employeeTrainingData.length.toString())}
@@ -1628,6 +1642,7 @@ export default function TeamManagementPage() {
                     {t('training.exportReport' as TranslationKey)}
                   </button>
                 </div>
+                )}
               </Card>
             </div>
           )}

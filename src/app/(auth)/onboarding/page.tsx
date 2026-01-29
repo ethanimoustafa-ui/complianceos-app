@@ -7,6 +7,9 @@ import { Icon } from '@iconify/react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { useTranslation } from '@/i18n'
+import { useForm, Controller } from 'react-hook-form'
+import { zodResolver } from '@hookform/resolvers/zod'
+import { z } from 'zod'
 
 // Types
 type FrameworkId = 'nca-ecc' | 'sama-csf' | 'ndmo-pdpl' | 'nca-cscc' | 'citc' | 'nca-ccc'
@@ -29,6 +32,39 @@ interface Integration {
   descriptionKey: string
   icon: string
 }
+
+// Zod Schemas for each step
+const step1Schema = z.object({
+  selectedFrameworks: z
+    .array(z.enum(['nca-ecc', 'sama-csf', 'ndmo-pdpl', 'nca-cscc', 'citc', 'nca-ccc']))
+    .min(1, 'Please select at least one framework'),
+})
+
+const step2Schema = z.object({
+  companyName: z
+    .string()
+    .min(2, 'Company name must be at least 2 characters')
+    .max(100, 'Company name must be less than 100 characters'),
+  orgSize: z.enum(['1-20', '21-100', '101-500', '500+']),
+  industry: z.enum(['government', 'banking', 'energy', 'healthcare', 'technology']),
+  region: z.enum(['riyadh', 'makkah', 'eastern', 'other']),
+})
+
+const step3Schema = z.object({
+  selectedIntegrations: z.array(z.string()).optional(),
+})
+
+// Combined schema for the entire form
+const onboardingSchema = z.object({
+  selectedFrameworks: step1Schema.shape.selectedFrameworks,
+  companyName: step2Schema.shape.companyName,
+  orgSize: step2Schema.shape.orgSize,
+  industry: step2Schema.shape.industry,
+  region: step2Schema.shape.region,
+  selectedIntegrations: step3Schema.shape.selectedIntegrations,
+})
+
+type OnboardingFormData = z.infer<typeof onboardingSchema>
 
 // Data
 const frameworks: Framework[] = [
@@ -115,13 +151,29 @@ export default function OnboardingPage() {
   const [currentStep, setCurrentStep] = useState(1)
   const [isSubmitting, setIsSubmitting] = useState(false)
 
-  // Form state
-  const [selectedFrameworks, setSelectedFrameworks] = useState<FrameworkId[]>([])
-  const [companyName, setCompanyName] = useState('')
-  const [orgSize, setOrgSize] = useState<OrgSize>('21-100')
-  const [industry, setIndustry] = useState<Industry>('technology')
-  const [region, setRegion] = useState<Region>('riyadh')
-  const [selectedIntegrations, setSelectedIntegrations] = useState<string[]>([])
+  // React Hook Form setup
+  const {
+    control,
+    handleSubmit,
+    watch,
+    trigger,
+    setValue,
+    formState: { errors },
+  } = useForm<OnboardingFormData>({
+    resolver: zodResolver(onboardingSchema),
+    defaultValues: {
+      selectedFrameworks: [],
+      companyName: '',
+      orgSize: '21-100',
+      industry: 'technology',
+      region: 'riyadh',
+      selectedIntegrations: [],
+    },
+    mode: 'onChange',
+  })
+
+  const selectedFrameworks = watch('selectedFrameworks')
+  const selectedIntegrations = watch('selectedIntegrations') || []
 
   const steps = [
     { id: 1, label: t('onboarding.frameworks') },
@@ -130,19 +182,31 @@ export default function OnboardingPage() {
   ]
 
   const toggleFramework = (id: FrameworkId) => {
-    setSelectedFrameworks((prev) =>
-      prev.includes(id) ? prev.filter((f) => f !== id) : [...prev, id]
-    )
+    const current = selectedFrameworks
+    const updated = current.includes(id)
+      ? current.filter((f) => f !== id)
+      : [...current, id]
+    setValue('selectedFrameworks', updated, { shouldValidate: true })
   }
 
   const toggleIntegration = (id: string) => {
-    setSelectedIntegrations((prev) =>
-      prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]
-    )
+    const current = selectedIntegrations
+    const updated = current.includes(id)
+      ? current.filter((i) => i !== id)
+      : [...current, id]
+    setValue('selectedIntegrations', updated)
   }
 
-  const handleNext = () => {
-    if (currentStep < 3) {
+  const handleNext = async () => {
+    let isValid = false
+
+    if (currentStep === 1) {
+      isValid = await trigger('selectedFrameworks')
+    } else if (currentStep === 2) {
+      isValid = await trigger(['companyName', 'orgSize', 'industry', 'region'])
+    }
+
+    if (isValid && currentStep < 3) {
       setCurrentStep(currentStep + 1)
     }
   }
@@ -153,11 +217,21 @@ export default function OnboardingPage() {
     }
   }
 
-  const handleFinish = async () => {
+  const onSubmit = async (data: OnboardingFormData) => {
     setIsSubmitting(true)
-    // Simulate API call
-    await new Promise((resolve) => setTimeout(resolve, 1500))
-    router.push('/welcome')
+    try {
+      // TODO: Replace with actual API call
+      console.log('Onboarding data:', data)
+      await new Promise((resolve) => setTimeout(resolve, 1500))
+      router.push('/welcome')
+    } catch (error) {
+      console.error('Onboarding error:', error)
+      setIsSubmitting(false)
+    }
+  }
+
+  const handleFinish = () => {
+    handleSubmit(onSubmit)()
   }
 
   return (
@@ -239,7 +313,7 @@ export default function OnboardingPage() {
                   </p>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-12">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-4">
                   {frameworks.map((framework) => (
                     <div
                       key={framework.id}
@@ -278,7 +352,17 @@ export default function OnboardingPage() {
                   ))}
                 </div>
 
-                <div className="flex items-center justify-between border-t border-slate-100 pt-8">
+                {/* Validation Error Message */}
+                {errors.selectedFrameworks && (
+                  <div className="mb-8 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center gap-3">
+                    <Icon icon="lucide:alert-circle" className="text-red-500 text-xl flex-shrink-0" />
+                    <p className="text-red-600 text-sm font-medium">
+                      {errors.selectedFrameworks.message}
+                    </p>
+                  </div>
+                )}
+
+                <div className="flex items-center justify-between border-t border-slate-100 pt-8 mt-8">
                   <Link
                     href="/sign-in"
                     className="text-sm font-semibold text-slate-500 hover:text-slate-900 transition-colors flex items-center gap-2"
@@ -311,13 +395,29 @@ export default function OnboardingPage() {
                     <label className="block text-sm font-medium text-slate-700">
                       {t('onboarding.legalCompanyName')}
                     </label>
-                    <input
-                      type="text"
-                      value={companyName}
-                      onChange={(e) => setCompanyName(e.target.value)}
-                      placeholder={t('onboarding.companyPlaceholder')}
-                      className="w-full px-4 py-3.5 bg-white border border-slate-300 rounded-lg text-slate-900 focus:outline-none focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600 transition-all"
+                    <Controller
+                      name="companyName"
+                      control={control}
+                      render={({ field }) => (
+                        <input
+                          {...field}
+                          type="text"
+                          placeholder={t('onboarding.companyPlaceholder')}
+                          className={cn(
+                            'w-full px-4 py-3.5 bg-white border rounded-lg text-slate-900 focus:outline-none transition-all',
+                            errors.companyName
+                              ? 'border-red-300 focus:border-red-500 focus:ring-1 focus:ring-red-500'
+                              : 'border-slate-300 focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600'
+                          )}
+                        />
+                      )}
                     />
+                    {errors.companyName && (
+                      <p className="text-red-500 text-sm mt-1 flex items-center gap-1">
+                        <Icon icon="lucide:alert-circle" className="text-sm" />
+                        {errors.companyName.message}
+                      </p>
+                    )}
                   </div>
 
                   <div className="grid grid-cols-2 gap-6">
@@ -325,32 +425,42 @@ export default function OnboardingPage() {
                       <label className="block text-sm font-medium text-slate-700">
                         {t('onboarding.organizationSize')}
                       </label>
-                      <select
-                        value={orgSize}
-                        onChange={(e) => setOrgSize(e.target.value as OrgSize)}
-                        className="w-full px-4 py-3.5 bg-white border border-slate-300 rounded-lg text-slate-900 focus:outline-none focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600 transition-all"
-                      >
-                        <option value="1-20">{t('onboarding.employees1_20')}</option>
-                        <option value="21-100">{t('onboarding.employees21_100')}</option>
-                        <option value="101-500">{t('onboarding.employees101_500')}</option>
-                        <option value="500+">{t('onboarding.employees500plus')}</option>
-                      </select>
+                      <Controller
+                        name="orgSize"
+                        control={control}
+                        render={({ field }) => (
+                          <select
+                            {...field}
+                            className="w-full px-4 py-3.5 bg-white border border-slate-300 rounded-lg text-slate-900 focus:outline-none focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600 transition-all"
+                          >
+                            <option value="1-20">{t('onboarding.employees1_20')}</option>
+                            <option value="21-100">{t('onboarding.employees21_100')}</option>
+                            <option value="101-500">{t('onboarding.employees101_500')}</option>
+                            <option value="500+">{t('onboarding.employees500plus')}</option>
+                          </select>
+                        )}
+                      />
                     </div>
                     <div className="space-y-2">
                       <label className="block text-sm font-medium text-slate-700">
                         {t('onboarding.industry')}
                       </label>
-                      <select
-                        value={industry}
-                        onChange={(e) => setIndustry(e.target.value as Industry)}
-                        className="w-full px-4 py-3.5 bg-white border border-slate-300 rounded-lg text-slate-900 focus:outline-none focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600 transition-all"
-                      >
-                        <option value="government">{t('onboarding.governmentAgency')}</option>
-                        <option value="banking">{t('onboarding.bankingFinance')}</option>
-                        <option value="energy">{t('onboarding.energyUtilities')}</option>
-                        <option value="healthcare">{t('onboarding.healthcareSeha')}</option>
-                        <option value="technology">{t('onboarding.technologySaas')}</option>
-                      </select>
+                      <Controller
+                        name="industry"
+                        control={control}
+                        render={({ field }) => (
+                          <select
+                            {...field}
+                            className="w-full px-4 py-3.5 bg-white border border-slate-300 rounded-lg text-slate-900 focus:outline-none focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600 transition-all"
+                          >
+                            <option value="government">{t('onboarding.governmentAgency')}</option>
+                            <option value="banking">{t('onboarding.bankingFinance')}</option>
+                            <option value="energy">{t('onboarding.energyUtilities')}</option>
+                            <option value="healthcare">{t('onboarding.healthcareSeha')}</option>
+                            <option value="technology">{t('onboarding.technologySaas')}</option>
+                          </select>
+                        )}
+                      />
                     </div>
                   </div>
 
@@ -358,16 +468,21 @@ export default function OnboardingPage() {
                     <label className="block text-sm font-medium text-slate-700">
                       {t('onboarding.headquartersRegion')}
                     </label>
-                    <select
-                      value={region}
-                      onChange={(e) => setRegion(e.target.value as Region)}
-                      className="w-full px-4 py-3.5 bg-white border border-slate-300 rounded-lg text-slate-900 focus:outline-none focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600 transition-all"
-                    >
-                      <option value="riyadh">{t('onboarding.riyadhRegion')}</option>
-                      <option value="makkah">{t('onboarding.makkahJeddah')}</option>
-                      <option value="eastern">{t('onboarding.easternProvince')}</option>
-                      <option value="other">{t('onboarding.otherKsa')}</option>
-                    </select>
+                    <Controller
+                      name="region"
+                      control={control}
+                      render={({ field }) => (
+                        <select
+                          {...field}
+                          className="w-full px-4 py-3.5 bg-white border border-slate-300 rounded-lg text-slate-900 focus:outline-none focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600 transition-all"
+                        >
+                          <option value="riyadh">{t('onboarding.riyadhRegion')}</option>
+                          <option value="makkah">{t('onboarding.makkahJeddah')}</option>
+                          <option value="eastern">{t('onboarding.easternProvince')}</option>
+                          <option value="other">{t('onboarding.otherKsa')}</option>
+                        </select>
+                      )}
+                    />
                   </div>
                 </div>
 

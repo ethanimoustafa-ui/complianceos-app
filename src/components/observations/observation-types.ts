@@ -7,6 +7,7 @@ export type ObservationSource = 'sama' | 'internal' | 'sharia'
 export interface Observation {
   id: string
   title: string
+  subTitle?: string
   description: string
   source: ObservationSource
   severity: ObservationSeverity
@@ -15,10 +16,17 @@ export interface Observation {
   department: string
   reference: string
   assignee?: {
+    id?: string
     name: string
     avatar: string
     role: string
   }
+  assignees?: {
+    id?: string
+    name: string
+    avatar: string
+    role: string
+  }[]
   team?: {
     name: string
     avatar: string
@@ -47,7 +55,18 @@ export interface Observation {
   timeline?: {
     id: string
     date: string
+    dateKey?: string // Translation key like 'today', 'yesterday'
     description: string
+    descriptionAr?: string // Arabic description for bilingual support
+    descriptionKey?: string // Translation key for standard actions
+    descriptionParams?: Record<string, string> // Parameters for translation interpolation
+    userId?: string
+    userName?: string
+    userAvatar?: string
+    userRole?: string // e.g., "Compliance Officer"
+    userDepartment?: string // e.g., "Risk Management"
+    actionType?: 'checklist_add' | 'checklist_delete' | 'checklist_update' | 'status_change' | 'document_add' | 'comment_add' | 'created' | 'updated'
+    targetId?: string
   }[]
 }
 

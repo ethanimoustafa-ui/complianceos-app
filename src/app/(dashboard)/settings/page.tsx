@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Modal } from '@/components/ui/modal'
 import { useTranslation, TranslationKey, InterpolationParams } from '@/i18n'
+import { RoleGuard } from '@/components/auth/role-guard'
 
 export default function SettingsPage() {
   const { t, language, setLanguage, isRTL } = useTranslation()
@@ -86,13 +87,15 @@ export default function SettingsPage() {
                   {t('settings.manageFrameworks')}
                 </p>
               </div>
-              <button
-                onClick={() => setIsAddStandardModalOpen(true)}
-                className="text-sm font-bold text-emerald-600 hover:text-emerald-700 flex items-center gap-1 cursor-pointer"
-              >
-                <Icon icon="lucide:plus-circle" />
-                {t('settings.addStandard')}
-              </button>
+              <RoleGuard adminOnly hidden>
+                <button
+                  onClick={() => setIsAddStandardModalOpen(true)}
+                  className="text-sm font-bold text-emerald-600 hover:text-emerald-700 flex items-center gap-1 cursor-pointer"
+                >
+                  <Icon icon="lucide:plus-circle" />
+                  {t('settings.addStandard')}
+                </button>
+              </RoleGuard>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -248,10 +251,12 @@ export default function SettingsPage() {
                 <h2 className="text-lg font-bold text-slate-900 font-display">{t('settings.auditTemplates')}</h2>
                 <p className="text-sm text-slate-500">{t('settings.standardizeChecks')}</p>
               </div>
-              <Button variant="dark" onClick={() => setIsNewTemplateModalOpen(true)}>
-                <Icon icon="lucide:plus" />
-                {t('settings.newTemplate')}
-              </Button>
+              <RoleGuard adminOnly hidden>
+                <Button variant="dark" onClick={() => setIsNewTemplateModalOpen(true)}>
+                  <Icon icon="lucide:plus" />
+                  {t('settings.newTemplate')}
+                </Button>
+              </RoleGuard>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-left">
@@ -677,12 +682,14 @@ export default function SettingsPage() {
             <Button variant="outline" onClick={() => setIsEditTemplateModalOpen(false)}>
               {t('common.cancel')}
             </Button>
-            <button
-              onClick={() => setIsEditTemplateModalOpen(false)}
-              className="px-4 py-2 text-sm font-bold text-rose-600 hover:text-rose-700 hover:bg-rose-50 rounded-xl transition-colors cursor-pointer"
-            >
-              {t('settings.deleteTemplate')}
-            </button>
+            <RoleGuard deleteOnly hidden>
+              <button
+                onClick={() => setIsEditTemplateModalOpen(false)}
+                className="px-4 py-2 text-sm font-bold text-rose-600 hover:text-rose-700 hover:bg-rose-50 rounded-xl transition-colors cursor-pointer"
+              >
+                {t('settings.deleteTemplate')}
+              </button>
+            </RoleGuard>
             <Button variant="primary" className="flex-1" onClick={() => setIsEditTemplateModalOpen(false)}>
               {t('common.saveChanges')}
             </Button>
@@ -744,12 +751,14 @@ function FrameworkCard({
         <span className={`text-[10px] font-black ${active ? 'text-emerald-600' : 'text-slate-400'}`}>
           {active ? t('common.active') : t('settings.disabled')}
         </span>
-        <button
-          onClick={() => onConfigure(title, description)}
-          className={`text-xs font-bold cursor-pointer ${active ? 'text-slate-400 hover:text-slate-900' : 'text-emerald-600'}`}
-        >
-          {active ? t('settings.configure') : t('settings.enableNow')} &rarr;
-        </button>
+        <RoleGuard adminOnly hidden>
+          <button
+            onClick={() => onConfigure(title, description)}
+            className={`text-xs font-bold cursor-pointer ${active ? 'text-slate-400 hover:text-slate-900' : 'text-emerald-600'}`}
+          >
+            {active ? t('settings.configure') : t('settings.enableNow')} &rarr;
+          </button>
+        </RoleGuard>
       </div>
     </div>
   )
@@ -859,12 +868,14 @@ function TemplateRow({
         </div>
       </td>
       <td className="px-8 py-4 text-right">
-        <button
-          onClick={() => onEdit(name, category)}
-          className="text-slate-400 hover:text-emerald-600 transition-colors cursor-pointer"
-        >
-          <Icon icon="lucide:edit-3" />
-        </button>
+        <RoleGuard editOnly hidden>
+          <button
+            onClick={() => onEdit(name, category)}
+            className="text-slate-400 hover:text-emerald-600 transition-colors cursor-pointer"
+          >
+            <Icon icon="lucide:edit-3" />
+          </button>
+        </RoleGuard>
       </td>
     </tr>
   )

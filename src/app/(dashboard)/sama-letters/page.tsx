@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { Icon } from '@iconify/react'
 import { Modal } from '@/components/ui/modal'
 import { useTranslation } from '@/i18n'
+import { RoleGuard } from '@/components/auth/role-guard'
 
 // Types
 type LetterStatus = 'Draft' | 'Pending Approval' | 'Approved' | 'Sent to SAMA' | 'SAMA Response Received' | 'Overdue'
@@ -696,13 +697,15 @@ export default function SAMALettersPage() {
                               >
                                 <Icon icon="lucide:eye" />
                               </button>
-                              <button
-                                onClick={() => handleEditTemplate(template)}
-                                className="p-1.5 hover:bg-slate-200 rounded text-slate-400 hover:text-slate-900 transition-colors cursor-pointer"
-                                title="Edit"
-                              >
-                                <Icon icon="lucide:pencil" />
-                              </button>
+                              <RoleGuard editOnly hidden>
+                                <button
+                                  onClick={() => handleEditTemplate(template)}
+                                  className="p-1.5 hover:bg-slate-200 rounded text-slate-400 hover:text-slate-900 transition-colors cursor-pointer"
+                                  title="Edit"
+                                >
+                                  <Icon icon="lucide:pencil" />
+                                </button>
+                              </RoleGuard>
                               <button
                                 onClick={() => handleDuplicateTemplate(template)}
                                 className="p-1.5 hover:bg-slate-200 rounded text-slate-400 hover:text-slate-900 transition-colors cursor-pointer"
@@ -710,13 +713,15 @@ export default function SAMALettersPage() {
                               >
                                 <Icon icon="lucide:copy" />
                               </button>
-                              <button
-                                onClick={() => handleDeleteTemplate(template)}
-                                className="p-1.5 hover:bg-rose-100 rounded text-slate-400 hover:text-rose-600 transition-colors cursor-pointer"
-                                title="Delete"
-                              >
-                                <Icon icon="lucide:trash-2" />
-                              </button>
+                              <RoleGuard deleteOnly hidden>
+                                <button
+                                  onClick={() => handleDeleteTemplate(template)}
+                                  className="p-1.5 hover:bg-rose-100 rounded text-slate-400 hover:text-rose-600 transition-colors cursor-pointer"
+                                  title="Delete"
+                                >
+                                  <Icon icon="lucide:trash-2" />
+                                </button>
+                              </RoleGuard>
                             </div>
                           </td>
                         </tr>
@@ -770,12 +775,14 @@ export default function SAMALettersPage() {
             <div className="mb-10">
               <div className={`flex items-baseline justify-between mb-6 ${isRTL ? 'flex-row-reverse' : ''}`}>
                 <h2 className="text-lg font-bold font-display text-slate-900">{t('samaLetters.letterTemplates')}</h2>
-                <button
-                  onClick={() => setIsTemplateManagementOpen(true)}
-                  className="text-xs font-bold text-emerald-600 hover:underline cursor-pointer"
-                >
-                  {t('samaLetters.manageTemplates')} {isRTL ? '\u2190' : '\u2192'}
-                </button>
+                <RoleGuard editOnly hidden>
+                  <button
+                    onClick={() => setIsTemplateManagementOpen(true)}
+                    className="text-xs font-bold text-emerald-600 hover:underline cursor-pointer"
+                  >
+                    {t('samaLetters.manageTemplates')} {isRTL ? '\u2190' : '\u2192'}
+                  </button>
+                </RoleGuard>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 {templateTypeCards.map((template) => {

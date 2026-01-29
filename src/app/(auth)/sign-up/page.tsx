@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useForm } from 'react-hook-form'
@@ -9,6 +9,7 @@ import { z } from 'zod'
 import { Icon } from '@iconify/react'
 import { Button } from '@/components/ui/button'
 import { useTranslation } from '@/i18n'
+import { cn } from '@/lib/utils'
 
 const signUpSchema = z.object({
   name: z.string().min(2, 'Name must be at least 2 characters'),
@@ -16,12 +17,53 @@ const signUpSchema = z.object({
   organization: z.string().min(2, 'Organization name is required'),
   password: z.string().min(8, 'Password must be at least 8 characters'),
   confirmPassword: z.string(),
+  acceptTerms: z.boolean().refine((val) => val === true, {
+    message: 'You must accept the terms and conditions',
+  }),
 }).refine((data) => data.password === data.confirmPassword, {
   message: "Passwords don't match",
   path: ['confirmPassword'],
 })
 
 type SignUpInput = z.infer<typeof signUpSchema>
+
+// Password strength calculation
+function getPasswordStrength(password: string): {
+  score: number
+  label: string
+  color: string
+  feedback: string[]
+} {
+  const feedback: string[] = []
+  let score = 0
+
+  if (password.length >= 8) score += 1
+  else feedback.push('At least 8 characters')
+
+  if (password.length >= 12) score += 1
+
+  if (/[a-z]/.test(password)) score += 1
+  else feedback.push('Lowercase letter')
+
+  if (/[A-Z]/.test(password)) score += 1
+  else feedback.push('Uppercase letter')
+
+  if (/[0-9]/.test(password)) score += 1
+  else feedback.push('Number')
+
+  if (/[^a-zA-Z0-9]/.test(password)) score += 1
+  else feedback.push('Special character')
+
+  const labels = ['Very Weak', 'Weak', 'Fair', 'Good', 'Strong', 'Very Strong']
+  const colors = ['rose', 'rose', 'amber', 'amber', 'emerald', 'emerald']
+
+  return {
+    score,
+    label: labels[Math.min(score, 5)],
+    color: colors[Math.min(score, 5)],
+    feedback,
+  }
+}
 
 export default function SignUpPage() {
   const router = useRouter()
@@ -32,10 +74,17 @@ export default function SignUpPage() {
   const {
     register,
     handleSubmit,
+    watch,
     formState: { errors },
   } = useForm<SignUpInput>({
     resolver: zodResolver(signUpSchema),
+    defaultValues: {
+      acceptTerms: false,
+    },
   })
+
+  const password = watch('password', '')
+  const passwordStrength = useMemo(() => getPasswordStrength(password), [password])
 
   const onSubmit = async (data: SignUpInput) => {
     setIsLoading(true)
@@ -119,6 +168,46 @@ export default function SignUpPage() {
               </button>
             </div>
             {errors.password && <p className="mt-1.5 text-xs text-rose-500">{errors.password.message}</p>}
+
+            {/* Password Strength Indicator */}
+            {password && (
+              <div className="mt-3 space-y-2">
+                <div className="flex gap-1.5">
+                  {[1, 2, 3, 4, 5].map((level) => (
+                    <div
+                      key={level}
+                      className={cn(
+                        'h-1.5 flex-1 rounded-full transition-colors',
+                        level <= passwordStrength.score
+                          ? passwordStrength.color === 'rose'
+                            ? 'bg-rose-500'
+                            : passwordStrength.color === 'amber'
+                              ? 'bg-amber-500'
+                              : 'bg-emerald-500'
+                          : 'bg-slate-200'
+                      )}
+                    />
+                  ))}
+                </div>
+                <div className="flex justify-between items-center">
+                  <span
+                    className={cn(
+                      'text-xs font-bold',
+                      passwordStrength.color === 'rose' && 'text-rose-600',
+                      passwordStrength.color === 'amber' && 'text-amber-600',
+                      passwordStrength.color === 'emerald' && 'text-emerald-600'
+                    )}
+                  >
+                    {passwordStrength.label}
+                  </span>
+                  {passwordStrength.feedback.length > 0 && (
+                    <span className="text-xs text-slate-500">
+                      Add: {passwordStrength.feedback.slice(0, 2).join(', ')}
+                    </span>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
 
           <div>
@@ -134,6 +223,27 @@ export default function SignUpPage() {
             </div>
             {errors.confirmPassword && <p className="mt-1.5 text-xs text-rose-500">{errors.confirmPassword.message}</p>}
           </div>
+
+          {/* Terms and Conditions Checkbox */}
+          <div className="flex items-start gap-3">
+            <input
+              type="checkbox"
+              id="acceptTerms"
+              className="mt-1 w-4 h-4 text-emerald-600 bg-white border-slate-300 rounded focus:ring-emerald-500 focus:ring-2 cursor-pointer"
+              {...register('acceptTerms')}
+            />
+            <label htmlFor="acceptTerms" className="text-sm text-slate-600 cursor-pointer">
+              I agree to the{' '}
+              <Link href="/terms" className="text-emerald-600 hover:text-emerald-700 font-medium">
+                Terms of Service
+              </Link>{' '}
+              and{' '}
+              <Link href="/privacy" className="text-emerald-600 hover:text-emerald-700 font-medium">
+                Privacy Policy
+              </Link>
+            </label>
+          </div>
+          {errors.acceptTerms && <p className="text-xs text-rose-500">{errors.acceptTerms.message}</p>}
 
           <Button type="submit" disabled={isLoading} className="w-full py-3.5 text-base mt-6">
             {isLoading ? (
