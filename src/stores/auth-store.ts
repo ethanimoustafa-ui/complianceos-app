@@ -30,7 +30,7 @@ export const useAuthStore = create<AuthState>()(
       // 'manager' = View + Create + Edit + Export
       // 'admin'   = Full access (including Delete, Settings, Team)
       user: {
-        id: '1',
+        id: 'current-user', // Unique ID to avoid collision with team members
         name: 'Test User',
         email: 'test@example.com',
         role: 'admin', // <-- Change this to test: 'officer' | 'manager' | 'admin'
@@ -55,7 +55,7 @@ export const useAuthStore = create<AuthState>()(
           // 'manager' = View + Create + Edit + Export
           // 'admin'   = Full access (including Delete, Settings, Team)
           const mockUser: User = {
-            id: '1',
+            id: 'current-user', // Unique ID to avoid collision with team members
             name: 'Test User',
             email,
             role: 'admin', // <-- Change this to test: 'officer' | 'manager' | 'admin'

@@ -9,19 +9,21 @@ import { exportObservations } from '@/lib/export'
 import { RoleGuard } from '@/components/auth/role-guard'
 import { DeleteConfirmationDialog } from '@/components/ui/delete-confirmation-dialog'
 import { useObservationStore } from '@/stores/observation-store'
-import {
+import { useAuthStore } from '@/stores/auth-store'
+import { ObservationStats } from '@/components/observations/observation-stats'
+import type { ObservationStatsData } from '@/components/observations/observation-stats'
+import { ObservationFilters } from '@/components/observations/observation-filters'
+import { ObservationTable } from '@/components/observations/observation-table'
+import { ObservationDetailModal } from '@/components/observations/observation-detail-modal'
+import { AddObservationModal } from '@/components/observations/add-observation-modal'
+import type { ObservationFormData } from '@/components/observations/add-observation-modal'
+import { EditObservationModal } from '@/components/observations/edit-observation-modal'
+import type {
   Observation,
   ObservationSource,
   ObservationSeverity,
   ObservationStatus,
-  ObservationStats,
-  ObservationFilters,
-  ObservationTable,
-  ObservationDetailModal,
-  AddObservationModal,
-  EditObservationModal,
-  ObservationFormData,
-} from '@/components/observations'
+} from '@/components/observations/observation-types'
 
 export default function ObservationsPage() {
   const { t, isRTL } = useTranslation()
@@ -32,7 +34,12 @@ export default function ObservationsPage() {
     create: createObservation,
     update: updateObservation,
     delete: deleteObservation,
+    removeDocument,
+    setSelected: setStoreSelected,
   } = useObservationStore()
+
+  // Get current user for creator assignment
+  const user = useAuthStore((state) => state.user)
 
   // State for modals
   const [selectedObservation, setSelectedObservation] = useState<Observation | null>(null)
@@ -48,6 +55,8 @@ export default function ObservationsPage() {
   const [sourceFilter, setSourceFilter] = useState<ObservationSource | 'all'>('all')
   const [severityFilter, setSeverityFilter] = useState<ObservationSeverity | 'all'>('all')
   const [statusFilter, setStatusFilter] = useState<ObservationStatus | 'all'>('all')
+  const [dueDateFilter, setDueDateFilter] = useState('')
+  const [submissionDueDateFilter, setSubmissionDueDateFilter] = useState('')
 
   // State for pagination
   const [currentPage, setCurrentPage] = useState(1)
@@ -72,13 +81,25 @@ export default function ObservationsPage() {
       // Status filter
       const matchesStatus = statusFilter === 'all' || obs.status === statusFilter
 
-      return matchesSearch && matchesSource && matchesSeverity && matchesStatus
+      // Remediation due date filter - show observations due on or before selected date
+      const matchesDueDate =
+        !dueDateFilter ||
+        (obs.dueDate && obs.dueDate <= dueDateFilter)
+
+      // Plan submission due date filter - show observations due on or before selected date
+      const matchesSubmissionDueDate =
+        !submissionDueDateFilter ||
+        (obs.remediationSubmissionDueDate && obs.remediationSubmissionDueDate <= submissionDueDateFilter)
+
+      return matchesSearch && matchesSource && matchesSeverity && matchesStatus && matchesDueDate && matchesSubmissionDueDate
     })
-  }, [observations, searchQuery, sourceFilter, severityFilter, statusFilter])
+  }, [observations, searchQuery, sourceFilter, severityFilter, statusFilter, dueDateFilter, submissionDueDateFilter])
 
   // Handle row click
   const handleRowClick = (observation: Observation) => {
     setSelectedObservation(observation)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    setStoreSelected(observation as any) // Sync with store for timeline updates
     setIsDetailModalOpen(true)
   }
 
@@ -96,16 +117,31 @@ export default function ObservationsPage() {
         department: data.department || 'Compliance',
         reference: data.reference || '',
         assignees: data.assignees && data.assignees.length > 0 ? data.assignees : undefined,
+        // Map uploaded files to document format
+        documents: data.attachments?.map(file => ({
+          id: file.id || crypto.randomUUID(),
+          name: file.name,
+          type: file.type.includes('pdf') ? 'pdf' as const : file.type.includes('image') ? 'image' as const : 'doc' as const,
+        })) || [],
         checklist: [],
         updates: [],
         timeline: [
           {
-            id: '1',
-            date: 'Today',
-            description: 'Observation created',
+            id: crypto.randomUUID(),
+            date: new Date().toISOString(),
+            dateKey: 'today',
+            description: `${user?.name || 'Unknown'} created this observation`,
+            descriptionAr: `أنشأ ${user?.name || 'غير معروف'} هذه الملاحظة`,
+            descriptionKey: 'observations.detail.timeline.observationCreated',
+            descriptionParams: { name: user?.name || 'Unknown' },
+            userId: user?.id,
+            userName: user?.name,
+            userAvatar: user?.avatar,
+            actionType: 'created',
           },
         ],
-      })
+        remediationSubmissionDueDate: data.remediationSubmissionDueDate,
+      }, user || undefined) // Pass user as creator
       setIsAddModalOpen(false)
     } catch (error) {
       console.error('Failed to create observation:', error)
@@ -118,11 +154,23 @@ export default function ObservationsPage() {
     setIsEditModalOpen(true)
   }
 
-  // Handle edit save - calls Zustand store
+  // Handle edit save - calls Zustand store with user for activity tracking
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const handleEditSave = async (observationId: string, updates: any) => {
     try {
-      await updateObservation(observationId, updates)
+      // Track removed documents for timeline
+      if (user && observationToEdit?.documents && updates.documents) {
+        const currentDocIds = new Set(updates.documents.map((d: { id: string }) => d.id))
+        const removedDocs = observationToEdit.documents.filter(
+          (doc) => !currentDocIds.has(doc.id)
+        )
+        // Call removeDocument for each removed document to create timeline entries
+        for (const doc of removedDocs) {
+          await removeDocument(observationId, doc.id, doc.name, user)
+        }
+      }
+
+      await updateObservation(observationId, updates, user || undefined)
       setIsEditModalOpen(false)
       setObservationToEdit(null)
     } catch (error) {
@@ -149,8 +197,42 @@ export default function ObservationsPage() {
     }
   }
 
+  // Calculate stats from observations
+  const observationStats: ObservationStatsData = useMemo(() => {
+    const now = new Date()
+    const openCritical = observations.filter(
+      (o) => o.severity === 'critical' && o.status !== 'closed'
+    ).length
+    const overdue = observations.filter((o) => {
+      if (o.status === 'closed') return false
+      const dueDate = new Date(o.dueDate)
+      return dueDate < now
+    }).length
+    const inRemediation = observations.filter(
+      (o) => o.status === 'in_progress'
+    ).length
+    const drafting = observations.filter(
+      (o) => o.status === 'open'
+    ).length
+    const closedThisQuarter = observations.filter((o) => {
+      if (o.status !== 'closed') return false
+      // Simple quarter check - closed observations
+      return true
+    }).length
+
+    return {
+      total: observations.length,
+      openCritical,
+      overdue,
+      inRemediation,
+      drafting,
+      closedThisQuarter,
+      quarterlyTarget: 30,
+    }
+  }, [observations])
+
   // Check if any filters are active
-  const hasActiveFilters = searchQuery !== '' || sourceFilter !== 'all' || severityFilter !== 'all' || statusFilter !== 'all'
+  const hasActiveFilters = searchQuery !== '' || sourceFilter !== 'all' || severityFilter !== 'all' || statusFilter !== 'all' || dueDateFilter !== '' || submissionDueDateFilter !== ''
 
   // Clear all filters
   const handleClearFilters = () => {
@@ -158,6 +240,8 @@ export default function ObservationsPage() {
     setSourceFilter('all')
     setSeverityFilter('all')
     setStatusFilter('all')
+    setDueDateFilter('')
+    setSubmissionDueDateFilter('')
   }
 
   // Export observations with localization
@@ -244,7 +328,7 @@ export default function ObservationsPage() {
       {/* Content Area */}
       <div className="flex-1 overflow-auto hide-scrollbar bg-slate-50 p-8">
         {/* Metrics Strip */}
-        <ObservationStats />
+        <ObservationStats stats={observationStats} />
 
         {/* Filters and List */}
         <div className="bg-white/80 backdrop-blur-sm border border-slate-100 rounded-3xl p-6">
@@ -257,6 +341,10 @@ export default function ObservationsPage() {
             onSeverityChange={setSeverityFilter}
             statusFilter={statusFilter}
             onStatusChange={setStatusFilter}
+            dueDateFilter={dueDateFilter}
+            onDueDateChange={setDueDateFilter}
+            submissionDueDateFilter={submissionDueDateFilter}
+            onSubmissionDueDateChange={setSubmissionDueDateFilter}
           />
 
           <ObservationTable
@@ -282,6 +370,7 @@ export default function ObservationsPage() {
         onClose={() => {
           setIsDetailModalOpen(false)
           setSelectedObservation(null)
+          setStoreSelected(null) // Clear store's selected observation
         }}
       />
 

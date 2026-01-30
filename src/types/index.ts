@@ -58,18 +58,39 @@ export interface ObservationChecklistItem {
 
 export interface ObservationUpdate {
   id: string
+  authorId: string              // For permission checks
   author: {
     name: string
     avatar: string
   }
   text: string
   createdAt: string
+  isEdited?: boolean            // Show "edited" label
+  editedAt?: string             // Edit timestamp
 }
 
 export interface ObservationDocument {
   id: string
   name: string
   type: 'pdf' | 'image' | 'doc'
+}
+
+// Remediation Plan types
+export type RemediationPlanStatus = 'draft' | 'submitted' | 'approved' | 'rejected'
+
+export interface RemediationPlan {
+  id: string
+  title: string
+  description: string
+  dueDate: string                // Must be < observation.dueDate
+  status: RemediationPlanStatus
+  submittedAt?: string
+  submittedBy?: string
+  reviewedAt?: string
+  reviewedBy?: string
+  reviewNotes?: string
+  documents?: ObservationDocument[]
+  createdAt: string
 }
 
 export interface ObservationTimelineEntry {
@@ -85,7 +106,14 @@ export interface ObservationTimelineEntry {
   userAvatar?: string
   userRole?: string // e.g., "Compliance Officer"
   userDepartment?: string // e.g., "Risk Management"
-  actionType?: 'checklist_add' | 'checklist_delete' | 'checklist_update' | 'status_change' | 'document_add' | 'comment_add' | 'created' | 'updated'
+  actionType?:
+    | 'checklist_add' | 'checklist_edit' | 'checklist_delete' | 'checklist_update'
+    | 'status_change' | 'severity_change' | 'observation_updated'
+    | 'document_add' | 'document_delete'
+    | 'comment_add' | 'comment_edit' | 'comment_delete'
+    | 'leader_transfer'
+    | 'remediation_submitted' | 'remediation_approved' | 'remediation_rejected'
+    | 'created' | 'updated'
   targetId?: string
 }
 
@@ -98,6 +126,7 @@ export interface Observation {
   severity: ObservationSeverity
   status: ObservationStatus
   dueDate: string
+  remediationSubmissionDueDate?: string  // Deadline to submit remediation plan
   department: string
   reference: string
   assignee?: ObservationAssignee
@@ -108,6 +137,9 @@ export interface Observation {
   updates?: ObservationUpdate[]
   documents?: ObservationDocument[]
   timeline?: ObservationTimelineEntry[]
+  creatorId?: string              // User who created the observation
+  leaderId?: string               // Current leader (initially = creatorId)
+  remediationPlan?: RemediationPlan
   createdAt?: string
   updatedAt?: string
 }

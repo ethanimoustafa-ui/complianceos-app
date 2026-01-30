@@ -158,3 +158,85 @@ export function canExport(user: User | null): boolean {
   if (!user) return false
   return hasPermission(user, 'export')
 }
+
+// Comment permissions
+/**
+ * Check if user can edit a comment
+ * Users can edit their own comments, or managers/admins can edit any
+ */
+export function canEditComment(user: User | null, authorId: string): boolean {
+  if (!user) return false
+  if (user.id === authorId) return true       // Own comment
+  return hasRole(user, 'manager')             // Manager/Admin
+}
+
+/**
+ * Check if user can delete a comment
+ * Same logic as edit - own comment or manager/admin
+ */
+export function canDeleteComment(user: User | null, authorId: string): boolean {
+  return canEditComment(user, authorId)       // Same logic
+}
+
+// Leader permissions
+/**
+ * Check if user is the observation leader
+ */
+export function isObservationLeader(user: User | null, obs: { leaderId?: string }): boolean {
+  return user?.id === obs.leaderId
+}
+
+/**
+ * Check if user can manage an observation (leader or manager/admin)
+ */
+export function canManageObservation(user: User | null, obs: { leaderId?: string }): boolean {
+  if (!user) return false
+  if (hasRole(user, 'manager')) return true   // Manager/Admin override
+  return isObservationLeader(user, obs)
+}
+
+/**
+ * Check if user can transfer leadership of an observation
+ */
+export function canTransferLeadership(user: User | null, obs: { leaderId?: string }): boolean {
+  return canManageObservation(user, obs)
+}
+
+// Remediation permissions
+/**
+ * Check if user can submit a remediation plan
+ * Leaders and assignees can submit
+ */
+export function canSubmitRemediation(user: User | null, obs: { assignees?: { id?: string }[]; leaderId?: string }): boolean {
+  if (!user) return false
+  if (isObservationLeader(user, obs)) return true
+  return obs.assignees?.some(a => a.id === user.id) ?? false
+}
+
+/**
+ * Check if user can review (approve/reject) a remediation plan
+ */
+export function canReviewRemediation(user: User | null, obs: { leaderId?: string }): boolean {
+  return canManageObservation(user, obs)
+}
+
+/**
+ * Check if user can upload documents to an observation
+ * Assignees, leaders, managers, and admins can upload
+ */
+export function canUploadDocument(user: User | null, obs: { assignees?: { id?: string }[]; leaderId?: string }): boolean {
+  if (!user) return false
+  if (hasRole(user, 'manager')) return true   // Manager/Admin override
+  if (isObservationLeader(user, obs)) return true
+  return obs.assignees?.some(a => a.id === user.id) ?? false
+}
+
+/**
+ * Check if user can edit/delete an observation
+ * Only leaders and managers/admins can edit/delete
+ */
+export function canEditObservation(user: User | null, obs: { leaderId?: string }): boolean {
+  if (!user) return false
+  if (hasRole(user, 'manager')) return true   // Manager/Admin override
+  return isObservationLeader(user, obs)
+}

@@ -13,6 +13,10 @@ interface ObservationFiltersProps {
   onSeverityChange: (severity: ObservationSeverity | 'all') => void
   statusFilter: ObservationStatus | 'all'
   onStatusChange: (status: ObservationStatus | 'all') => void
+  dueDateFilter?: string
+  onDueDateChange?: (date: string) => void
+  submissionDueDateFilter?: string
+  onSubmissionDueDateChange?: (date: string) => void
 }
 
 export function ObservationFilters({
@@ -24,6 +28,10 @@ export function ObservationFilters({
   onSeverityChange,
   statusFilter,
   onStatusChange,
+  dueDateFilter,
+  onDueDateChange,
+  submissionDueDateFilter,
+  onSubmissionDueDateChange,
 }: ObservationFiltersProps) {
   const { t, isRTL } = useTranslation()
 
@@ -75,6 +83,48 @@ export function ObservationFilters({
           <option value="resolved">{t('observations.statusOptions.pendingReview')}</option>
           <option value="closed">{t('observations.statusOptions.closed')}</option>
         </select>
+        {/* Remediation Deadline Filter */}
+        {onDueDateChange ? (
+          <div className={`relative flex items-center gap-1 bg-white border border-slate-200 rounded-lg px-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
+            <Icon icon="lucide:flag" className="text-rose-400 text-sm" />
+            <input
+              type="date"
+              value={dueDateFilter || ''}
+              onChange={(e) => onDueDateChange(e.target.value)}
+              className={`bg-transparent py-2 text-xs font-bold text-slate-600 focus:outline-none ${dueDateFilter ? 'pr-6' : ''}`}
+              title={t('observations.filters.remediationDeadline')}
+            />
+            {dueDateFilter ? (
+              <button
+                onClick={() => onDueDateChange('')}
+                className="absolute right-1 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+              >
+                <Icon icon="lucide:x" className="text-sm" />
+              </button>
+            ) : null}
+          </div>
+        ) : null}
+        {/* Plan Submission Deadline Filter */}
+        {onSubmissionDueDateChange ? (
+          <div className={`relative flex items-center gap-1 bg-white border border-slate-200 rounded-lg px-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
+            <Icon icon="lucide:file-clock" className="text-amber-400 text-sm" />
+            <input
+              type="date"
+              value={submissionDueDateFilter || ''}
+              onChange={(e) => onSubmissionDueDateChange(e.target.value)}
+              className={`bg-transparent py-2 text-xs font-bold text-slate-600 focus:outline-none ${submissionDueDateFilter ? 'pr-6' : ''}`}
+              title={t('observations.filters.planSubmissionDeadline')}
+            />
+            {submissionDueDateFilter ? (
+              <button
+                onClick={() => onSubmissionDueDateChange('')}
+                className="absolute right-1 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+              >
+                <Icon icon="lucide:x" className="text-sm" />
+              </button>
+            ) : null}
+          </div>
+        ) : null}
         <button className="p-2 text-slate-400 hover:text-slate-600 transition-colors">
           <Icon icon="lucide:filter" className="text-xl" />
         </button>

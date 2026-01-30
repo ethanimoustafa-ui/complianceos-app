@@ -1,28 +1,22 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, memo, useCallback } from 'react'
 import { Icon } from '@iconify/react'
 import { Modal } from '@/components/ui/modal'
 import { Button } from '@/components/ui/button'
 import { FileUpload, UploadedFile } from '@/components/ui/file-upload'
-import { ObservationSource, ObservationSeverity, sourceConfig } from './observation-types'
+import { ObservationSource, ObservationSeverity } from './observation-types'
 import { useObservationStore } from '@/stores/observation-store'
 import { useTeamStore } from '@/stores/team-store'
 import { useTranslation } from '@/i18n'
 import type { TeamMember } from '@/types'
-
-// Department keys for translation lookup
-const departmentKeys: Record<string, string> = {
-  'IT & Cybersecurity': 'observations.departments.itCybersecurity',
-  'Human Resources': 'observations.departments.humanResources',
-  'Risk Management': 'observations.departments.riskManagement',
-  'Operations': 'observations.departments.operations',
-  'Legal': 'observations.departments.legal',
-  'Compliance': 'observations.departments.compliance',
-  'Finance': 'observations.departments.finance',
-}
-
-const departments = Object.keys(departmentKeys)
+import {
+  SourceSelectionField,
+  SeverityField,
+  DepartmentField,
+  AssigneeField,
+  DueDateField,
+} from './observation-form-fields'
 
 interface AddObservationModalProps {
   isOpen: boolean
@@ -40,10 +34,23 @@ export interface ObservationFormData {
   department: string
   assignees: { id: string; name: string; avatar: string; role: string }[]
   dueDate: string
+  remediationSubmissionDueDate?: string
   attachments?: UploadedFile[]
 }
 
-export function AddObservationModal({ isOpen, onClose, onSave }: AddObservationModalProps) {
+interface FormErrors {
+  title?: string
+  subTitle?: string
+  reference?: string
+  severity?: string
+  description?: string
+  department?: string
+  dueDate?: string
+  remediationSubmissionDueDate?: string
+  assignees?: string
+}
+
+export const AddObservationModal = memo(function AddObservationModal({ isOpen, onClose, onSave }: AddObservationModalProps) {
   const { t, isRTL } = useTranslation()
   const { getNextReference } = useObservationStore()
   const { members } = useTeamStore()
@@ -56,19 +63,97 @@ export function AddObservationModal({ isOpen, onClose, onSave }: AddObservationM
     reference: '',
     severity: 'critical',
     description: '',
-    department: 'IT & Cybersecurity',
+    department: '',
     assignees: [],
     dueDate: '',
+    remediationSubmissionDueDate: '',
     attachments: [],
   })
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([])
   const [selectedAssignees, setSelectedAssignees] = useState<TeamMember[]>([])
+  const [errors, setErrors] = useState<FormErrors>({})
+  const [touched, setTouched] = useState<Record<string, boolean>>({})
 
   const handleSourceSelect = (source: ObservationSource) => {
     setFormData((prev) => ({ ...prev, source }))
   }
 
+  const validateForm = useCallback((): FormErrors => {
+    const newErrors: FormErrors = {}
+
+    if (!formData.title.trim()) {
+      newErrors.title = t('observations.validation.titleRequired')
+    } else if (formData.title.trim().length < 3) {
+      newErrors.title = t('observations.validation.titleMinLength')
+    }
+
+    if (!formData.subTitle.trim()) {
+      newErrors.subTitle = t('observations.validation.subTitleRequired')
+    }
+
+    if (!formData.reference.trim()) {
+      newErrors.reference = t('observations.validation.referenceRequired')
+    }
+
+    if (!formData.description.trim()) {
+      newErrors.description = t('observations.validation.descriptionRequired')
+    } else if (formData.description.trim().length < 10) {
+      newErrors.description = t('observations.validation.descriptionMinLength')
+    }
+
+    if (!formData.department) {
+      newErrors.department = t('observations.validation.departmentRequired')
+    }
+
+    if (!formData.dueDate) {
+      newErrors.dueDate = t('observations.validation.dueDateRequired')
+    }
+
+    // Validate submission due date must be before observation due date
+    if (formData.remediationSubmissionDueDate && formData.dueDate) {
+      const submissionDate = new Date(formData.remediationSubmissionDueDate)
+      const completionDate = new Date(formData.dueDate)
+      if (submissionDate >= completionDate) {
+        newErrors.remediationSubmissionDueDate = t('observations.validation.submissionDueDateMustBeBefore')
+      }
+    }
+
+    // Assignees are optional - creator will be auto-added by the store
+
+    return newErrors
+  }, [formData, selectedAssignees, t])
+
+  const handleBlur = (field: string) => {
+    setTouched((prev) => ({ ...prev, [field]: true }))
+    // Only validate the specific field, not the entire form
+    const validationErrors = validateForm()
+    // Only set error for the blurred field
+    setErrors((prev) => ({
+      ...prev,
+      [field]: validationErrors[field as keyof FormErrors],
+    }))
+  }
+
   const handleSubmit = () => {
+    // Mark all fields as touched
+    setTouched({
+      title: true,
+      subTitle: true,
+      reference: true,
+      description: true,
+      department: true,
+      dueDate: true,
+      remediationSubmissionDueDate: true,
+      assignees: true,
+    })
+
+    const validationErrors = validateForm()
+    setErrors(validationErrors)
+
+    if (Object.keys(validationErrors).length > 0) {
+      return
+    }
+
     // Convert selected team members to assignees format
     const assignees = selectedAssignees.map(member => ({
       id: member.id,
@@ -86,13 +171,16 @@ export function AddObservationModal({ isOpen, onClose, onSave }: AddObservationM
       reference: '',
       severity: 'critical',
       description: '',
-      department: 'IT & Cybersecurity',
+      department: '',
       assignees: [],
       dueDate: '',
+      remediationSubmissionDueDate: '',
       attachments: [],
     })
     setUploadedFiles([])
     setSelectedAssignees([])
+    setErrors({})
+    setTouched({})
   }
 
   return (
@@ -115,100 +203,90 @@ export function AddObservationModal({ isOpen, onClose, onSave }: AddObservationM
 
           <div className="space-y-8">
             {/* Source Selection */}
-            <div>
-              <label className={`text-xs font-black uppercase text-slate-500 tracking-widest mb-4 block `}>
-                {t('observations.form.sourceSelection')}
-              </label>
-              <div className="grid grid-cols-3 gap-4">
-                {(Object.keys(sourceConfig) as ObservationSource[]).map((source) => {
-                  const config = sourceConfig[source]
-                  const isSelected = formData.source === source
-
-                  return (
-                    <button
-                      key={source}
-                      type="button"
-                      onClick={() => handleSourceSelect(source)}
-                      className={`p-4 border rounded-xl flex flex-col items-center gap-3 transition-all cursor-pointer ${
-                        isSelected
-                          ? 'border-emerald-500 bg-emerald-50 ring-2 ring-emerald-500'
-                          : 'border-slate-200 hover:border-emerald-400 hover:bg-emerald-50/50'
-                      }`}
-                    >
-                      <Icon
-                        icon={config.icon}
-                        className={`text-3xl ${
-                          source === 'sama'
-                            ? 'text-emerald-600'
-                            : source === 'internal'
-                            ? 'text-blue-600'
-                            : 'text-amber-600'
-                        }`}
-                      />
-                      <span className="text-sm font-bold text-slate-900">
-                        {source === 'sama'
-                          ? t('observations.sama')
-                          : source === 'internal'
-                          ? t('observations.sources.internal')
-                          : t('observations.sources.sharia')}
-                      </span>
-                    </button>
-                  )
-                })}
-              </div>
-            </div>
+            <SourceSelectionField
+              value={formData.source}
+              onChange={handleSourceSelect}
+            />
 
             {/* Form Fields */}
             <div className="grid grid-cols-2 gap-6">
               <div className="col-span-2">
-                <label className={`text-xs font-black uppercase text-slate-500 tracking-widest mb-2 block `}>
-                  {t('observations.form.findingTitle')}
+                <label className={`text-xs font-black uppercase text-slate-500 tracking-widest mb-2 block`}>
+                  {t('observations.form.findingTitle')} <span className="text-rose-500">*</span>
                 </label>
                 <input
                   type="text"
                   placeholder={t('observations.form.findingTitlePlaceholder')}
                   value={formData.title}
-                  onChange={(e) =>
+                  onChange={(e) => {
                     setFormData((prev) => ({ ...prev, title: e.target.value }))
-                  }
-                  className={`w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 `}
+                    // Clear error when field becomes valid
+                    if (e.target.value.trim().length >= 3) {
+                      setErrors((prev) => ({ ...prev, title: undefined }))
+                    }
+                  }}
+                  onBlur={() => handleBlur('title')}
+                  className={`w-full px-4 py-3 bg-slate-50 border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 ${
+                    touched.title && errors.title ? 'border-rose-300' : 'border-slate-200'
+                  }`}
                 />
+                {touched.title && errors.title ? (
+                  <p className="text-rose-500 text-xs mt-1">{errors.title}</p>
+                ) : null}
               </div>
 
               <div className="col-span-2">
-                <label className={`text-xs font-black uppercase text-slate-500 tracking-widest mb-2 block `}>
-                  {t('observations.form.subFindingTitle')}
+                <label className={`text-xs font-black uppercase text-slate-500 tracking-widest mb-2 block`}>
+                  {t('observations.form.subFindingTitle')} <span className="text-rose-500">*</span>
                 </label>
                 <input
                   type="text"
                   placeholder={t('observations.form.subFindingTitlePlaceholder')}
                   value={formData.subTitle}
-                  onChange={(e) =>
+                  onChange={(e) => {
                     setFormData((prev) => ({ ...prev, subTitle: e.target.value }))
-                  }
-                  className={`w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 `}
+                    // Clear error when field becomes valid
+                    if (e.target.value.trim()) {
+                      setErrors((prev) => ({ ...prev, subTitle: undefined }))
+                    }
+                  }}
+                  onBlur={() => handleBlur('subTitle')}
+                  className={`w-full px-4 py-3 bg-slate-50 border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 ${
+                    touched.subTitle && errors.subTitle ? 'border-rose-300' : 'border-slate-200'
+                  }`}
                 />
+                {touched.subTitle && errors.subTitle ? (
+                  <p className="text-rose-500 text-xs mt-1">{errors.subTitle}</p>
+                ) : null}
               </div>
 
               <div>
-                <label className={`text-xs font-black uppercase text-slate-500 tracking-widest mb-2 block `}>
-                  {t('observations.form.referenceNumber')}
+                <label className={`text-xs font-black uppercase text-slate-500 tracking-widest mb-2 block`}>
+                  {t('observations.form.referenceNumber')} <span className="text-rose-500">*</span>
                 </label>
                 <div className={`flex gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
                   <input
                     type="text"
                     placeholder={t('observations.form.referencePlaceholder')}
                     value={formData.reference}
-                    onChange={(e) =>
+                    onChange={(e) => {
                       setFormData((prev) => ({ ...prev, reference: e.target.value }))
-                    }
-                    className={`flex-1 px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 `}
+                      // Clear error when field becomes valid
+                      if (e.target.value.trim()) {
+                        setErrors((prev) => ({ ...prev, reference: undefined }))
+                      }
+                    }}
+                    onBlur={() => handleBlur('reference')}
+                    className={`flex-1 px-4 py-3 bg-slate-50 border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 ${
+                      touched.reference && errors.reference ? 'border-rose-300' : 'border-slate-200'
+                    }`}
                   />
                   <button
                     type="button"
                     onClick={() => {
                       const nextRef = getNextReference()
                       setFormData((prev) => ({ ...prev, reference: nextRef }))
+                      setTouched((prev) => ({ ...prev, reference: true }))
                     }}
                     className="px-3 py-3 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-600 hover:bg-emerald-100 transition-colors"
                     title="Auto-generate reference"
@@ -216,136 +294,121 @@ export function AddObservationModal({ isOpen, onClose, onSave }: AddObservationM
                     <Icon icon="lucide:sparkles" />
                   </button>
                 </div>
+                {touched.reference && errors.reference ? (
+                  <p className="text-rose-500 text-xs mt-1">{errors.reference}</p>
+                ) : null}
               </div>
 
-              <div>
-                <label className={`text-xs font-black uppercase text-slate-500 tracking-widest mb-2 block `}>
-                  {t('observations.severity')}
-                </label>
-                <select
-                  value={formData.severity}
-                  onChange={(e) =>
-                    setFormData((prev) => ({
-                      ...prev,
-                      severity: e.target.value as ObservationSeverity,
-                    }))
-                  }
-                  className={`w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 `}
-                >
-                  <option value="critical">{t('observations.severityOptions.critical')}</option>
-                  <option value="high">{t('observations.severityOptions.high')}</option>
-                  <option value="medium">{t('observations.severityOptions.medium')}</option>
-                  <option value="low">{t('observations.severityOptions.low')}</option>
-                </select>
-              </div>
+              <SeverityField
+                value={formData.severity}
+                onChange={(severity) => setFormData((prev) => ({ ...prev, severity }))}
+              />
 
               <div className="col-span-2">
-                <label className={`text-xs font-black uppercase text-slate-500 tracking-widest mb-2 block `}>
-                  {t('observations.form.description')}
+                <label className={`text-xs font-black uppercase text-slate-500 tracking-widest mb-2 block`}>
+                  {t('observations.form.description')} <span className="text-rose-500">*</span>
                 </label>
                 <textarea
                   rows={3}
                   placeholder={t('observations.form.descriptionPlaceholder')}
                   value={formData.description}
-                  onChange={(e) =>
+                  onChange={(e) => {
                     setFormData((prev) => ({ ...prev, description: e.target.value }))
-                  }
-                  className={`w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-none `}
+                    // Clear error when field becomes valid
+                    if (e.target.value.trim().length >= 10) {
+                      setErrors((prev) => ({ ...prev, description: undefined }))
+                    }
+                  }}
+                  onBlur={() => handleBlur('description')}
+                  className={`w-full px-4 py-3 bg-slate-50 border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-none ${
+                    touched.description && errors.description ? 'border-rose-300' : 'border-slate-200'
+                  }`}
                 />
+                {touched.description && errors.description ? (
+                  <p className="text-rose-500 text-xs mt-1">{errors.description}</p>
+                ) : null}
               </div>
 
-              <div>
-                <label className={`text-xs font-black uppercase text-slate-500 tracking-widest mb-2 block `}>
-                  {t('observations.form.departmentAssignment')}
-                </label>
-                <select
-                  value={formData.department}
-                  onChange={(e) =>
-                    setFormData((prev) => ({ ...prev, department: e.target.value }))
+              <DepartmentField
+                value={formData.department}
+                onChange={(department) => {
+                  setFormData((prev) => ({ ...prev, department }))
+                  // Clear error when user makes a selection
+                  if (department) {
+                    setErrors((prev) => ({ ...prev, department: undefined }))
                   }
-                  className={`w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 `}
-                >
-                  {departments.map((dept) => (
-                    <option key={dept} value={dept}>
-                      {t(departmentKeys[dept] as 'observations.departments.itCybersecurity')}
-                    </option>
-                  ))}
-                </select>
-              </div>
+                }}
+                onBlur={() => handleBlur('department')}
+                error={touched.department ? errors.department : undefined}
+                required
+              />
 
+              <DueDateField
+                value={formData.dueDate}
+                onChange={(dueDate) => {
+                  setFormData((prev) => ({ ...prev, dueDate }))
+                  // Clear error when user makes a selection
+                  if (dueDate) {
+                    setErrors((prev) => ({ ...prev, dueDate: undefined }))
+                  }
+                  // Re-validate submission due date if it exists
+                  if (formData.remediationSubmissionDueDate && dueDate) {
+                    const submissionDate = new Date(formData.remediationSubmissionDueDate)
+                    const completionDate = new Date(dueDate)
+                    if (submissionDate >= completionDate) {
+                      setErrors((prev) => ({ ...prev, remediationSubmissionDueDate: t('observations.validation.submissionDueDateMustBeBefore') }))
+                    } else {
+                      setErrors((prev) => ({ ...prev, remediationSubmissionDueDate: undefined }))
+                    }
+                  }
+                }}
+                onBlur={() => handleBlur('dueDate')}
+                error={touched.dueDate ? errors.dueDate : undefined}
+                required
+              />
+
+              {/* Remediation Plan Submission Due Date */}
               <div>
-                <label className={`text-xs font-black uppercase text-slate-500 tracking-widest mb-2 block `}>
-                  {t('observations.dueDate')}
+                <label className={`text-xs font-black uppercase text-slate-500 tracking-widest mb-2 block`}>
+                  {t('observations.form.remediationSubmissionDueDate')}
                 </label>
                 <input
                   type="date"
-                  value={formData.dueDate}
-                  onChange={(e) =>
-                    setFormData((prev) => ({ ...prev, dueDate: e.target.value }))
-                  }
-                  className={`w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 `}
+                  value={formData.remediationSubmissionDueDate}
+                  onChange={(e) => {
+                    const submissionDate = e.target.value
+                    setFormData((prev) => ({ ...prev, remediationSubmissionDueDate: submissionDate }))
+                    // Clear error when valid
+                    if (submissionDate && formData.dueDate) {
+                      const submission = new Date(submissionDate)
+                      const completion = new Date(formData.dueDate)
+                      if (submission < completion) {
+                        setErrors((prev) => ({ ...prev, remediationSubmissionDueDate: undefined }))
+                      }
+                    } else if (!submissionDate) {
+                      setErrors((prev) => ({ ...prev, remediationSubmissionDueDate: undefined }))
+                    }
+                  }}
+                  onBlur={() => handleBlur('remediationSubmissionDueDate')}
+                  className={`w-full px-4 py-3 bg-slate-50 border ${touched.remediationSubmissionDueDate && errors.remediationSubmissionDueDate ? 'border-rose-300' : 'border-slate-200'} rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500`}
                 />
+                <p className="text-xs text-slate-400 mt-1">{t('observations.form.remediationSubmissionDueDateHint')}</p>
+                {touched.remediationSubmissionDueDate && errors.remediationSubmissionDueDate ? (
+                  <p className="text-rose-500 text-xs mt-1">{errors.remediationSubmissionDueDate}</p>
+                ) : null}
               </div>
 
               <div className="col-span-2">
-                <label className={`text-xs font-black uppercase text-slate-500 tracking-widest mb-2 block`}>
-                  {t('observations.form.assignees')}
-                </label>
-                {/* Selected assignees as chips */}
-                {selectedAssignees.length > 0 && (
-                  <div className={`flex flex-wrap gap-2 mb-3 max-h-20 overflow-y-auto ${isRTL ? 'flex-row-reverse' : ''}`}>
-                    {selectedAssignees.map(member => (
-                      <span
-                        key={member.id}
-                        className={`flex items-center gap-2 px-3 py-1.5 bg-emerald-50 border border-emerald-200 rounded-full text-xs font-medium text-slate-700 ${isRTL ? 'flex-row-reverse' : ''}`}
-                      >
-                        <img
-                          src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${member.avatar}`}
-                          className="w-5 h-5 rounded-full"
-                          alt={member.name}
-                        />
-                        {member.name}
-                        <button
-                          type="button"
-                          onClick={() => setSelectedAssignees(prev => prev.filter(m => m.id !== member.id))}
-                          className="text-slate-400 hover:text-rose-500 transition-colors"
-                        >
-                          <Icon icon="lucide:x" className="text-sm" />
-                        </button>
-                      </span>
-                    ))}
-                  </div>
-                )}
-                {/* Dropdown to add more */}
-                <div className="relative">
-                  <Icon
-                    icon="lucide:user-plus"
-                    className={`absolute ${isRTL ? 'right-3' : 'left-3'} top-1/2 -translate-y-1/2 text-slate-400`}
-                  />
-                  <select
-                    value=""
-                    onChange={(e) => {
-                      const member = activeMembers.find(m => m.id === e.target.value)
-                      if (member && !selectedAssignees.find(m => m.id === member.id)) {
-                        setSelectedAssignees(prev => [...prev, member])
-                      }
-                    }}
-                    className={`w-full pl-10 pr-8 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-emerald-500`}
-                  >
-                    <option value="">{t('observations.form.addAssignee')}</option>
-                    {activeMembers
-                      .filter(m => !selectedAssignees.find(s => s.id === m.id))
-                      .map((member) => (
-                        <option key={member.id} value={member.id}>
-                          {member.name} - {member.role} ({member.department})
-                        </option>
-                      ))}
-                  </select>
-                  <Icon
-                    icon="lucide:chevron-down"
-                    className={`absolute ${isRTL ? 'left-3' : 'right-3'} top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none`}
-                  />
-                </div>
+                <AssigneeField
+                  selectedAssignees={selectedAssignees}
+                  availableMembers={activeMembers}
+                  onChange={(assignees) => {
+                    setSelectedAssignees(assignees)
+                    setTouched((prev) => ({ ...prev, assignees: true }))
+                  }}
+                  isRTL={isRTL}
+                  error={touched.assignees ? errors.assignees : undefined}
+                />
               </div>
 
               <div className="col-span-2">
@@ -374,4 +437,4 @@ export function AddObservationModal({ isOpen, onClose, onSave }: AddObservationM
       </div>
     </Modal>
   )
-}
+})

@@ -1,5 +1,6 @@
 'use client'
 
+import { memo } from 'react'
 import { Icon } from '@iconify/react'
 import { useTranslation } from '@/i18n'
 
@@ -19,7 +20,7 @@ interface StatCardProps {
   isRTL: boolean
 }
 
-function StatCard({
+const StatCard = memo(function StatCard({
   icon,
   iconBg,
   iconColor,
@@ -39,11 +40,11 @@ function StatCard({
         <div className={`p-2 ${iconBg} rounded-lg`}>
           <Icon icon={icon} className={`text-2xl ${iconColor}`} />
         </div>
-        {badge && (
+        {badge ? (
           <span className={`text-[10px] font-bold ${badge.color} px-2 py-0.5 rounded-full`}>
             {badge.text}
           </span>
-        )}
+        ) : null}
       </div>
       <h3 className={`text-slate-500 text-xs font-bold uppercase tracking-wider mb-1 ${isRTL ? 'text-right' : ''}`}>{label}</h3>
       <div className={`flex items-baseline gap-2 ${isRTL ? 'flex-row-reverse justify-end' : ''}`}>
@@ -52,10 +53,38 @@ function StatCard({
       </div>
     </div>
   )
+})
+
+export interface ObservationStatsData {
+  total: number
+  openCritical: number
+  overdue: number
+  inRemediation: number
+  drafting: number
+  closedThisQuarter: number
+  quarterlyTarget: number
 }
 
-export function ObservationStats() {
+export interface ObservationStatsProps {
+  stats?: ObservationStatsData
+}
+
+const formatStatValue = (value: number): string => {
+  return value.toString().padStart(2, '0')
+}
+
+export const ObservationStats = memo(function ObservationStats({ stats }: ObservationStatsProps) {
   const { t, isRTL } = useTranslation()
+
+  const data = stats ?? {
+    total: 0,
+    openCritical: 0,
+    overdue: 0,
+    inRemediation: 0,
+    drafting: 0,
+    closedThisQuarter: 0,
+    quarterlyTarget: 30,
+  }
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
@@ -66,7 +95,7 @@ export function ObservationStats() {
         borderColor="border-l-4 border-l-slate-400"
         borderColorRTL="border-r-4 border-r-slate-400"
         label={t('observations.stats.totalFindings')}
-        value="42"
+        value={formatStatValue(data.total)}
         subtext={t('observations.stats.acrossAllAudits')}
         isRTL={isRTL}
       />
@@ -78,9 +107,9 @@ export function ObservationStats() {
         borderColor="border-l-4 border-l-rose-500"
         borderColorRTL="border-r-4 border-r-rose-500"
         label={t('observations.stats.openCritical')}
-        value="05"
-        subtext={`${t('observations.stats.overdue')}: 01`}
-        badge={{ text: t('observations.stats.immediateAction'), color: 'text-rose-600 bg-rose-50' }}
+        value={formatStatValue(data.openCritical)}
+        subtext={`${t('observations.stats.overdue')}: ${formatStatValue(data.overdue)}`}
+        badge={data.openCritical > 0 ? { text: t('observations.stats.immediateAction'), color: 'text-rose-600 bg-rose-50' } : undefined}
         isRTL={isRTL}
       />
 
@@ -91,8 +120,8 @@ export function ObservationStats() {
         borderColor="border-l-4 border-l-amber-400"
         borderColorRTL="border-r-4 border-r-amber-400"
         label={t('observations.stats.inRemediation')}
-        value="18"
-        subtext={`${t('observations.stats.draftingResponse')}: 04`}
+        value={formatStatValue(data.inRemediation)}
+        subtext={`${t('observations.stats.draftingResponse')}: ${formatStatValue(data.drafting)}`}
         isRTL={isRTL}
       />
 
@@ -103,11 +132,11 @@ export function ObservationStats() {
         borderColor="border-l-4 border-l-emerald-500"
         borderColorRTL="border-r-4 border-r-emerald-500"
         label={t('observations.stats.closedQ', { quarter: '3' })}
-        value="24"
-        subtext={`${t('observations.stats.target')}: 30`}
-        badge={{ text: t('observations.stats.verified'), color: 'text-emerald-600 bg-emerald-50' }}
+        value={formatStatValue(data.closedThisQuarter)}
+        subtext={`${t('observations.stats.target')}: ${data.quarterlyTarget}`}
+        badge={data.closedThisQuarter > 0 ? { text: t('observations.stats.verified'), color: 'text-emerald-600 bg-emerald-50' } : undefined}
         isRTL={isRTL}
       />
     </div>
   )
-}
+})

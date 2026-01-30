@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useState, useMemo, memo } from 'react'
 import { Icon } from '@iconify/react'
 import { Modal } from '@/components/ui/modal'
 import { Button } from '@/components/ui/button'
@@ -12,17 +12,13 @@ import { cn } from '@/lib/utils'
 import { useTeamStore } from '@/stores/team-store'
 import { useTranslation } from '@/i18n'
 import type { TeamMember } from '@/types'
-
-// Department keys for translation lookup
-const departmentKeys: Record<string, string> = {
-  'IT & Cybersecurity': 'observations.departments.itCybersecurity',
-  'Human Resources': 'observations.departments.humanResources',
-  'Risk Management': 'observations.departments.riskManagement',
-  'Operations': 'observations.departments.operations',
-  'Legal': 'observations.departments.legal',
-  'Compliance': 'observations.departments.compliance',
-  'Finance': 'observations.departments.finance',
-}
+import {
+  SeverityField,
+  DepartmentField,
+  AssigneeField,
+  DueDateField,
+  departments,
+} from './observation-form-fields'
 
 const observationSchema = z.object({
   title: z.string().min(3, 'Title must be at least 3 characters'),
@@ -32,8 +28,20 @@ const observationSchema = z.object({
   severity: z.enum(['critical', 'high', 'medium', 'low']),
   status: z.enum(['open', 'in_progress', 'resolved', 'closed']),
   dueDate: z.string().min(1, 'Due date is required'),
+  remediationSubmissionDueDate: z.string().optional(),
   assigneeId: z.string().optional(),
   department: z.string().optional(),
+}).refine((data) => {
+  // Validate submission due date is before observation due date
+  if (data.remediationSubmissionDueDate && data.dueDate) {
+    const submissionDate = new Date(data.remediationSubmissionDueDate)
+    const completionDate = new Date(data.dueDate)
+    return submissionDate < completionDate
+  }
+  return true
+}, {
+  message: 'Submission due date must be before observation due date',
+  path: ['remediationSubmissionDueDate'],
 })
 
 type ObservationFormData = z.infer<typeof observationSchema>
@@ -48,6 +56,7 @@ interface ObservationData {
   severity: string
   status: string
   dueDate: string
+  remediationSubmissionDueDate?: string
   department?: string
   assignee?: { id?: string; name?: string; avatar?: string; role?: string }
   assignees?: { id?: string; name?: string; avatar?: string; role?: string }[]
@@ -61,9 +70,7 @@ interface EditObservationModalProps {
   onSave: (observationId: string, data: Partial<ObservationData>) => void
 }
 
-const departments = Object.keys(departmentKeys)
-
-export function EditObservationModal({
+export const EditObservationModal = memo(function EditObservationModal({
   isOpen,
   onClose,
   observation,
@@ -91,6 +98,7 @@ export function EditObservationModal({
       severity: 'medium',
       status: 'open',
       dueDate: '',
+      remediationSubmissionDueDate: '',
       assigneeId: '',
       department: '',
     },
@@ -113,6 +121,7 @@ export function EditObservationModal({
         severity: observation.severity as ObservationFormData['severity'],
         status: observation.status as ObservationFormData['status'],
         dueDate: observation.dueDate,
+        remediationSubmissionDueDate: observation.remediationSubmissionDueDate || '',
         assigneeId: '',
         department: observation.department || '',
       })
@@ -180,6 +189,7 @@ export function EditObservationModal({
         severity: data.severity,
         status: data.status,
         dueDate: data.dueDate,
+        remediationSubmissionDueDate: data.remediationSubmissionDueDate || undefined,
         department: data.department,
         assignees,
         documents,
@@ -276,29 +286,19 @@ export function EditObservationModal({
                 />
               </div>
 
-              <div>
-                <label className={`text-xs font-black uppercase text-slate-500 tracking-widest mb-2 block `}>
-                  {t('observations.severity')}
-                </label>
-                <Controller
-                  name="severity"
-                  control={control}
-                  render={({ field }) => (
-                    <select
-                      {...field}
-                      className={`w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 `}
-                    >
-                      <option value="critical">{t('observations.severityOptions.critical')}</option>
-                      <option value="high">{t('observations.severityOptions.high')}</option>
-                      <option value="medium">{t('observations.severityOptions.medium')}</option>
-                      <option value="low">{t('observations.severityOptions.low')}</option>
-                    </select>
-                  )}
-                />
-              </div>
+              <Controller
+                name="severity"
+                control={control}
+                render={({ field }) => (
+                  <SeverityField
+                    value={field.value}
+                    onChange={field.onChange}
+                  />
+                )}
+              />
 
               <div>
-                <label className={`text-xs font-black uppercase text-slate-500 tracking-widest mb-2 block `}>
+                <label className={`text-xs font-black uppercase text-slate-500 tracking-widest mb-2 block`}>
                   {t('common.status')}
                 </label>
                 <Controller
@@ -307,7 +307,7 @@ export function EditObservationModal({
                   render={({ field }) => (
                     <select
                       {...field}
-                      className={`w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 `}
+                      className={`w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500`}
                     >
                       <option value="open">{t('observations.statusOptions.open')}</option>
                       <option value="in_progress">{t('observations.statusOptions.inProgress')}</option>
@@ -318,115 +318,65 @@ export function EditObservationModal({
                 />
               </div>
 
+              <Controller
+                name="dueDate"
+                control={control}
+                render={({ field }) => (
+                  <DueDateField
+                    value={field.value}
+                    onChange={field.onChange}
+                    error={errors.dueDate?.message}
+                  />
+                )}
+              />
+
+              {/* Remediation Plan Submission Due Date */}
               <div>
                 <label className={`text-xs font-black uppercase text-slate-500 tracking-widest mb-2 block`}>
-                  {t('observations.dueDate')}
+                  {t('observations.form.remediationSubmissionDueDate')}
                 </label>
                 <Controller
-                  name="dueDate"
+                  name="remediationSubmissionDueDate"
                   control={control}
                   render={({ field }) => (
                     <input
-                      {...field}
                       type="date"
+                      value={field.value || ''}
+                      onChange={field.onChange}
                       className={cn(
                         `w-full px-4 py-3 bg-slate-50 border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500`,
-                        errors.dueDate ? 'border-rose-300' : 'border-slate-200'
+                        errors.remediationSubmissionDueDate ? 'border-rose-300' : 'border-slate-200'
                       )}
                     />
                   )}
                 />
-                {errors.dueDate && (
-                  <p className={`text-rose-500 text-xs mt-1 `}>{errors.dueDate.message}</p>
-                )}
+                <p className="text-xs text-slate-400 mt-1">{t('observations.form.remediationSubmissionDueDateHint')}</p>
+                {errors.remediationSubmissionDueDate ? (
+                  <p className="text-rose-500 text-xs mt-1">{errors.remediationSubmissionDueDate.message}</p>
+                ) : null}
               </div>
 
-              <div>
-                <label className={`text-xs font-black uppercase text-slate-500 tracking-widest mb-2 block `}>
-                  {t('observations.form.departmentAssignment')}
-                </label>
-                <Controller
-                  name="department"
-                  control={control}
-                  render={({ field }) => (
-                    <select
-                      {...field}
-                      className={`w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 `}
-                    >
-                      <option value="">{t('regulatoryUpdates.selectDepartment')}</option>
-                      {departments.map((dept) => (
-                        <option key={dept} value={dept}>
-                          {t(departmentKeys[dept] as 'observations.departments.itCybersecurity')}
-                        </option>
-                      ))}
-                    </select>
-                  )}
-                />
-              </div>
-
-              <div>
-                <label className={`text-xs font-black uppercase text-slate-500 tracking-widest mb-2 block `}>
-                  {t('observations.form.assignees')}
-                </label>
-                {/* Selected assignees as chips */}
-                {selectedAssignees.length > 0 && (
-                  <div className={`flex flex-wrap gap-2 mb-3 max-h-20 overflow-y-auto`}>
-                    {selectedAssignees.map(member => (
-                      <span
-                        key={member.id}
-                        className={`flex items-center gap-2 px-3 py-1.5 bg-emerald-50 border border-emerald-200 rounded-full text-xs font-medium text-slate-700`}
-                      >
-                        <img
-                          src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${member.avatar}`}
-                          className="w-5 h-5 rounded-full"
-                          alt={member.name}
-                        />
-                        {member.name}
-                        <button
-                          type="button"
-                          onClick={() => setSelectedAssignees(prev => prev.filter(m => m.id !== member.id))}
-                          className="text-slate-400 hover:text-rose-500 transition-colors"
-                        >
-                          <Icon icon="lucide:x" className="text-sm" />
-                        </button>
-                      </span>
-                    ))}
-                  </div>
+              <Controller
+                name="department"
+                control={control}
+                render={({ field }) => (
+                  <DepartmentField
+                    value={field.value || ''}
+                    onChange={field.onChange}
+                    showEmpty
+                  />
                 )}
-                {/* Dropdown to add more */}
-                <div className="relative">
-                  <Icon
-                    icon="lucide:user-plus"
-                    className={`absolute ${isRTL ? 'right-3' : 'left-3'} top-1/2 -translate-y-1/2 text-slate-400`}
-                  />
-                  <select
-                    value=""
-                    onChange={(e) => {
-                      const member = activeMembers.find(m => m.id === e.target.value)
-                      if (member && !selectedAssignees.find(m => m.id === member.id)) {
-                        setSelectedAssignees(prev => [...prev, member])
-                      }
-                    }}
-                    className={`w-full pl-10 pr-8 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-emerald-500`}
-                  >
-                    <option value="">{t('observations.form.addAssignee')}</option>
-                    {activeMembers
-                      .filter(m => !selectedAssignees.find(s => s.id === m.id))
-                      .map((member) => (
-                        <option key={member.id} value={member.id}>
-                          {member.name} - {member.role} ({member.department})
-                        </option>
-                      ))}
-                  </select>
-                  <Icon
-                    icon="lucide:chevron-down"
-                    className={`absolute ${isRTL ? 'left-3' : 'right-3'} top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none`}
-                  />
-                </div>
-              </div>
+              />
+
+              <AssigneeField
+                selectedAssignees={selectedAssignees}
+                availableMembers={activeMembers}
+                onChange={setSelectedAssignees}
+                isRTL={isRTL}
+              />
 
               <div className="col-span-2">
-                <label className={`text-xs font-black uppercase text-slate-500 tracking-widest mb-2 block `}>
+                <label className={`text-xs font-black uppercase text-slate-500 tracking-widest mb-2 block`}>
                   {t('observations.form.description')}
                 </label>
                 <Controller
@@ -437,15 +387,15 @@ export function EditObservationModal({
                       {...field}
                       rows={4}
                       className={cn(
-                        `w-full px-4 py-3 bg-slate-50 border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-none `,
+                        `w-full px-4 py-3 bg-slate-50 border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-none`,
                         errors.description ? 'border-rose-300' : 'border-slate-200'
                       )}
                     />
                   )}
                 />
-                {errors.description && (
-                  <p className={`text-rose-500 text-xs mt-1 `}>{errors.description.message}</p>
-                )}
+                {errors.description ? (
+                  <p className={`text-rose-500 text-xs mt-1`}>{errors.description.message}</p>
+                ) : null}
               </div>
 
               <div className="col-span-2">
@@ -485,4 +435,4 @@ export function EditObservationModal({
       </div>
     </Modal>
   )
-}
+})

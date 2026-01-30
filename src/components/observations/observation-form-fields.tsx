@@ -1,0 +1,287 @@
+'use client'
+
+import { memo } from 'react'
+import { Icon } from '@iconify/react'
+import { useTranslation } from '@/i18n'
+import { ObservationSource, ObservationSeverity, sourceConfig } from './observation-types'
+import type { TeamMember } from '@/types'
+
+// Department keys for translation lookup
+export const departmentKeys: Record<string, string> = {
+  'IT & Cybersecurity': 'observations.departments.itCybersecurity',
+  'Human Resources': 'observations.departments.humanResources',
+  'Risk Management': 'observations.departments.riskManagement',
+  'Operations': 'observations.departments.operations',
+  'Legal': 'observations.departments.legal',
+  'Compliance': 'observations.departments.compliance',
+  'Finance': 'observations.departments.finance',
+}
+
+export const departments = Object.keys(departmentKeys)
+
+export interface ObservationFormFieldsProps {
+  values: {
+    source: ObservationSource
+    severity: ObservationSeverity
+    department: string
+    assignees: TeamMember[]
+    dueDate: string
+  }
+  onChange: (field: string, value: unknown) => void
+  availableMembers: TeamMember[]
+  errors?: Record<string, string>
+  isRTL: boolean
+}
+
+// Source Selection Cards
+export const SourceSelectionField = memo(function SourceSelectionField({
+  value,
+  onChange,
+}: {
+  value: ObservationSource
+  onChange: (source: ObservationSource) => void
+}) {
+  const { t } = useTranslation()
+
+  return (
+    <div>
+      <label className={`text-xs font-black uppercase text-slate-500 tracking-widest mb-4 block`}>
+        {t('observations.form.sourceSelection')}
+      </label>
+      <div className="grid grid-cols-3 gap-4">
+        {(Object.keys(sourceConfig) as ObservationSource[]).map((source) => {
+          const config = sourceConfig[source]
+          const isSelected = value === source
+
+          return (
+            <button
+              key={source}
+              type="button"
+              onClick={() => onChange(source)}
+              className={`p-4 border rounded-xl flex flex-col items-center gap-3 transition-all cursor-pointer ${
+                isSelected
+                  ? 'border-emerald-500 bg-emerald-50 ring-2 ring-emerald-500'
+                  : 'border-slate-200 hover:border-emerald-400 hover:bg-emerald-50/50'
+              }`}
+            >
+              <Icon
+                icon={config.icon}
+                className={`text-3xl ${
+                  source === 'sama'
+                    ? 'text-emerald-600'
+                    : source === 'internal'
+                    ? 'text-blue-600'
+                    : 'text-amber-600'
+                }`}
+              />
+              <span className="text-sm font-bold text-slate-900">
+                {source === 'sama'
+                  ? t('observations.sama')
+                  : source === 'internal'
+                  ? t('observations.sources.internal')
+                  : t('observations.sources.sharia')}
+              </span>
+            </button>
+          )
+        })}
+      </div>
+    </div>
+  )
+})
+
+// Severity Dropdown
+export const SeverityField = memo(function SeverityField({
+  value,
+  onChange,
+  error,
+}: {
+  value: ObservationSeverity
+  onChange: (severity: ObservationSeverity) => void
+  error?: string
+}) {
+  const { t } = useTranslation()
+
+  return (
+    <div>
+      <label className={`text-xs font-black uppercase text-slate-500 tracking-widest mb-2 block`}>
+        {t('observations.severity')}
+      </label>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value as ObservationSeverity)}
+        className={`w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500`}
+      >
+        <option value="critical">{t('observations.severityOptions.critical')}</option>
+        <option value="high">{t('observations.severityOptions.high')}</option>
+        <option value="medium">{t('observations.severityOptions.medium')}</option>
+        <option value="low">{t('observations.severityOptions.low')}</option>
+      </select>
+      {error ? <p className="text-rose-500 text-xs mt-1">{error}</p> : null}
+    </div>
+  )
+})
+
+// Department Dropdown
+export const DepartmentField = memo(function DepartmentField({
+  value,
+  onChange,
+  onBlur,
+  showEmpty = false,
+  error,
+  required = false,
+}: {
+  value: string
+  onChange: (department: string) => void
+  onBlur?: () => void
+  showEmpty?: boolean
+  error?: string
+  required?: boolean
+}) {
+  const { t } = useTranslation()
+
+  return (
+    <div>
+      <label className={`text-xs font-black uppercase text-slate-500 tracking-widest mb-2 block`}>
+        {t('observations.form.departmentAssignment')} {required ? <span className="text-rose-500">*</span> : null}
+      </label>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        onBlur={onBlur}
+        className={`w-full px-4 py-3 bg-slate-50 border ${error ? 'border-rose-300' : 'border-slate-200'} rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500`}
+      >
+        <option value="">{t('observations.form.selectDepartment')}</option>
+        {departments.map((dept) => (
+          <option key={dept} value={dept}>
+            {t(departmentKeys[dept] as 'observations.departments.itCybersecurity')}
+          </option>
+        ))}
+      </select>
+      {error ? <p className="text-rose-500 text-xs mt-1">{error}</p> : null}
+    </div>
+  )
+})
+
+// Assignee Multi-select
+export const AssigneeField = memo(function AssigneeField({
+  selectedAssignees,
+  availableMembers,
+  onChange,
+  isRTL,
+  error,
+  required = false,
+}: {
+  selectedAssignees: TeamMember[]
+  availableMembers: TeamMember[]
+  onChange: (assignees: TeamMember[]) => void
+  isRTL: boolean
+  error?: string
+  required?: boolean
+}) {
+  const { t } = useTranslation()
+
+  const handleAdd = (memberId: string) => {
+    const member = availableMembers.find(m => m.id === memberId)
+    if (member && !selectedAssignees.find(m => m.id === member.id)) {
+      onChange([...selectedAssignees, member])
+    }
+  }
+
+  const handleRemove = (memberId: string) => {
+    onChange(selectedAssignees.filter(m => m.id !== memberId))
+  }
+
+  const filteredMembers = availableMembers.filter(
+    m => !selectedAssignees.find(s => s.id === m.id)
+  )
+
+  return (
+    <div>
+      <label className={`text-xs font-black uppercase text-slate-500 tracking-widest mb-2 block`}>
+        {t('observations.form.assignees')} {required ? <span className="text-rose-500">*</span> : null}
+      </label>
+      {/* Selected assignees as chips */}
+      {selectedAssignees.length > 0 ? (
+        <div className={`flex flex-wrap gap-2 mb-3 max-h-20 overflow-y-auto ${isRTL ? 'flex-row-reverse' : ''}`}>
+          {selectedAssignees.map(member => (
+            <span
+              key={member.id}
+              className={`flex items-center gap-2 px-3 py-1.5 bg-emerald-50 border border-emerald-200 rounded-full text-xs font-medium text-slate-700 ${isRTL ? 'flex-row-reverse' : ''}`}
+            >
+              <img
+                src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${member.avatar}`}
+                className="w-5 h-5 rounded-full"
+                alt={member.name}
+              />
+              {member.name}
+              <button
+                type="button"
+                onClick={() => handleRemove(member.id)}
+                className="text-slate-400 hover:text-rose-500 transition-colors"
+              >
+                <Icon icon="lucide:x" className="text-sm" />
+              </button>
+            </span>
+          ))}
+        </div>
+      ) : null}
+      {/* Dropdown to add more */}
+      <div className="relative">
+        <Icon
+          icon="lucide:user-plus"
+          className={`absolute ${isRTL ? 'right-3' : 'left-3'} top-1/2 -translate-y-1/2 text-slate-400`}
+        />
+        <select
+          value=""
+          onChange={(e) => handleAdd(e.target.value)}
+          className={`w-full pl-10 pr-8 py-3 bg-slate-50 border ${error ? 'border-rose-300' : 'border-slate-200'} rounded-xl text-sm appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-emerald-500`}
+        >
+          <option value="">{t('observations.form.addAssignee')}</option>
+          {filteredMembers.map((member) => (
+            <option key={member.id} value={member.id}>
+              {member.name} - {member.role} ({member.department})
+            </option>
+          ))}
+        </select>
+        <Icon
+          icon="lucide:chevron-down"
+          className={`absolute ${isRTL ? 'left-3' : 'right-3'} top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none`}
+        />
+      </div>
+      {error ? <p className="text-rose-500 text-xs mt-1">{error}</p> : null}
+    </div>
+  )
+})
+
+// Due Date Picker
+export const DueDateField = memo(function DueDateField({
+  value,
+  onChange,
+  onBlur,
+  error,
+  required = false,
+}: {
+  value: string
+  onChange: (date: string) => void
+  onBlur?: () => void
+  error?: string
+  required?: boolean
+}) {
+  const { t } = useTranslation()
+
+  return (
+    <div>
+      <label className={`text-xs font-black uppercase text-slate-500 tracking-widest mb-2 block`}>
+        {t('observations.dueDate')} {required ? <span className="text-rose-500">*</span> : null}
+      </label>
+      <input
+        type="date"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        onBlur={onBlur}
+        className={`w-full px-4 py-3 bg-slate-50 border ${error ? 'border-rose-300' : 'border-slate-200'} rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500`}
+      />
+      {error ? <p className="text-rose-500 text-xs mt-1">{error}</p> : null}
+    </div>
+  )
+})
