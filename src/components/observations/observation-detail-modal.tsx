@@ -8,7 +8,7 @@ import { useObservationStore } from '@/stores/observation-store'
 import { useAuthStore } from '@/stores/auth-store'
 import { useTeamStore } from '@/stores/team-store'
 import { useTranslation } from '@/i18n'
-import { canTransferLeadership, canReviewRemediation, canUploadDocument } from '@/lib/permissions'
+import { canTransferLeadership, canReviewRemediation, canUploadDocument, canRequestClosure, canReviewClosure } from '@/lib/permissions'
 import { TransferLeadershipModal } from './transfer-leadership-modal'
 import { FileUploadModal, getFileType } from './file-upload-modal'
 import {
@@ -21,6 +21,7 @@ import {
   RemediationStatus,
   RelatedDocuments,
   ActivityTimeline,
+  ClosureStatus,
 } from './detail'
 
 interface ObservationDetailModalProps {
@@ -60,7 +61,7 @@ export const ObservationDetailModal = memo(function ObservationDetailModal({
   const [localChecklist, setLocalChecklist] = useState<LocalChecklistItem[]>([])
   const [localComments, setLocalComments] = useState<LocalComment[]>([])
 
-  const { addComment, editComment, deleteComment, addChecklistItem, editChecklistItem, toggleChecklistItem, removeChecklistItem, transferLeadership, reviewRemediationPlan, addDocument, selectedObservation: storeObservation } = useObservationStore()
+  const { addComment, editComment, deleteComment, addChecklistItem, editChecklistItem, toggleChecklistItem, removeChecklistItem, transferLeadership, reviewRemediationPlan, addDocument, requestClosure, reviewClosure, selectedObservation: storeObservation } = useObservationStore()
   const user = useAuthStore((state) => state.user)
   const { members } = useTeamStore()
 
@@ -188,6 +189,18 @@ export const ObservationDetailModal = memo(function ObservationDetailModal({
     await reviewRemediationPlan(observation.id, approved, user, notes)
   }
 
+  // Closure request
+  const handleRequestClosure = async (notes?: string) => {
+    if (!observation || !user) return
+    await requestClosure(observation.id, user, notes)
+  }
+
+  // Closure review
+  const handleReviewClosure = async (approved: boolean, notes?: string) => {
+    if (!observation || !user) return
+    await reviewClosure(observation.id, approved, user, notes)
+  }
+
   // File upload
   const handleFileUpload = async (files: File[], addToRemediationPlan: boolean) => {
     if (!observation || !user || files.length === 0) return
@@ -306,6 +319,17 @@ export const ObservationDetailModal = memo(function ObservationDetailModal({
             canReview={canReviewRemediation(user, observation)}
             onReview={handleReviewRemediationPlan}
             documents={localRemediationDocs}
+            isRTL={isRTL}
+          />
+
+          <ClosureStatus
+            status={storeObservation?.status || observation.status}
+            closureRequest={storeObservation?.closureRequest || observation.closureRequest}
+            closureReview={storeObservation?.closureReview || observation.closureReview}
+            canRequestClosure={canRequestClosure(user, observation)}
+            canReviewClosure={canReviewClosure(user, observation)}
+            onRequestClosure={handleRequestClosure}
+            onReviewClosure={handleReviewClosure}
             isRTL={isRTL}
           />
 

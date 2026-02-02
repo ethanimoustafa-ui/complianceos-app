@@ -20,6 +20,37 @@ export interface TeamMember extends User {
 }
 
 // Audit types
+export interface AuditDocument {
+  id: string
+  name: string
+  type: 'pdf' | 'image' | 'doc'
+  uploadedAt: string
+  uploadedBy?: string
+}
+
+export interface AuditTeamMember {
+  id: string
+  name: string
+  avatar: string
+  role: string
+  isOwner?: boolean
+  addedAt: string
+}
+
+export interface AuditComment {
+  id: string
+  auditId: string
+  content: string
+  author: {
+    id: string
+    name: string
+    avatar: string
+  }
+  createdAt: string
+  updatedAt?: string
+  isEdited?: boolean
+}
+
 export interface Audit {
   id: string
   title: string
@@ -28,6 +59,12 @@ export interface Audit {
   dueDate: string
   assignee: User
   progress: number
+  documents?: AuditDocument[]
+  team?: AuditTeamMember[]
+  comments?: AuditComment[]
+  description?: string
+  closedOverdue?: boolean  // Flag indicating audit was completed after due date
+  completedAt?: string     // Timestamp when audit was marked complete
   createdAt: string
   updatedAt: string
 }
@@ -93,6 +130,22 @@ export interface RemediationPlan {
   createdAt: string
 }
 
+// Closure request/review types
+export interface ClosureRequest {
+  requestedAt: string
+  requestedBy: string
+  requestedByName?: string
+  notes?: string
+}
+
+export interface ClosureReview {
+  reviewedAt: string
+  reviewedBy: string
+  reviewedByName?: string
+  approved: boolean
+  notes?: string
+}
+
 export interface ObservationTimelineEntry {
   id: string
   date: string
@@ -140,6 +193,8 @@ export interface Observation {
   creatorId?: string              // User who created the observation
   leaderId?: string               // Current leader (initially = creatorId)
   remediationPlan?: RemediationPlan
+  closureRequest?: ClosureRequest   // Present when closure has been requested
+  closureReview?: ClosureReview     // Present after closure has been reviewed
   createdAt?: string
   updatedAt?: string
 }
@@ -389,7 +444,7 @@ export interface ObservationWithRelations extends Omit<Observation, 'timeline'> 
   auditId?: string
 }
 
-export interface AuditWithRelations extends Audit {
+export interface AuditWithRelations extends Omit<Audit, 'documents'> {
   observations: Observation[]
   findings: ObservationWithRelations[]
   checklists: ChecklistItem[]

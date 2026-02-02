@@ -8,8 +8,10 @@ import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { cn } from '@/lib/utils'
-import { useTranslation } from '@/i18n'
 import { useAuditStore } from '@/stores/audit-store'
+import { useTeamStore } from '@/stores/team-store'
+import { useAuthStore } from '@/stores/auth-store'
+import { useTranslation } from '@/i18n'
 import type { Audit } from '@/types'
 
 const auditSchema = z.object({
@@ -17,9 +19,8 @@ const auditSchema = z.object({
   type: z.enum(['internal', 'sama', 'sharia']),
   status: z.enum(['pending', 'in_progress', 'completed', 'overdue']),
   dueDate: z.string().min(1, 'Due date is required'),
-  assigneeId: z.string().optional(),
+  assigneeId: z.string().min(1, 'Lead author is required'),
   scope: z.string().optional(),
-  framework: z.string().optional(),
   description: z.string().optional(),
 })
 
@@ -31,24 +32,17 @@ interface AddAuditModalProps {
   onSuccess?: (audit: Audit) => void
 }
 
-const auditTypes = [
-  { id: 'internal', label: 'Internal Audit', icon: 'lucide:shield', color: 'blue' },
-  { id: 'sama', label: 'SAMA Audit', icon: 'lucide:landmark', color: 'emerald' },
-  { id: 'sharia', label: 'Sharia Audit', icon: 'lucide:book-open', color: 'amber' },
-] as const
-
-const frameworks = [
-  'ISO 27001',
-  'SAMA CSF',
-  'PCI DSS',
-  'SOC 2',
-  'GDPR',
-  'NCA ECC',
-]
-
 export function AddAuditModal({ isOpen, onClose, onSuccess }: AddAuditModalProps) {
   const { t } = useTranslation()
   const { create, isLoading } = useAuditStore()
+  const { members } = useTeamStore()
+  const currentUser = useAuthStore((state) => state.user)
+
+  const auditTypes = [
+    { id: 'internal' as const, label: t('auditDetail.internalAuditType'), icon: 'lucide:clipboard-check', color: 'blue' },
+    { id: 'sama' as const, label: t('auditDetail.samaAuditType'), icon: 'lucide:landmark', color: 'emerald' },
+    { id: 'sharia' as const, label: t('auditDetail.shariaAuditType'), icon: 'lucide:moon', color: 'amber' },
+  ]
   const [selectedType, setSelectedType] = useState<'internal' | 'sama' | 'sharia'>('internal')
 
   const {
@@ -66,7 +60,6 @@ export function AddAuditModal({ isOpen, onClose, onSuccess }: AddAuditModalProps
       dueDate: '',
       assigneeId: '',
       scope: '',
-      framework: '',
       description: '',
     },
   })
@@ -78,20 +71,39 @@ export function AddAuditModal({ isOpen, onClose, onSuccess }: AddAuditModalProps
 
   const onSubmit = async (data: AuditFormData) => {
     try {
+      // Find the selected assignee from team members or current user
+      let selectedAssignee = members.find((m) => m.id === data.assigneeId)
+      if (!selectedAssignee && currentUser && currentUser.id === data.assigneeId) {
+        selectedAssignee = {
+          ...currentUser,
+          status: 'active' as const,
+          joinedAt: new Date().toISOString(),
+        }
+      }
+
       const auditData = {
         title: data.title,
         type: data.type,
         status: data.status,
         dueDate: data.dueDate,
         progress: 0,
-        assignee: {
-          id: data.assigneeId || '1',
-          name: 'Unassigned',
-          email: '',
-          role: 'officer' as const,
-          department: '',
-          workload: 0,
-        },
+        assignee: selectedAssignee
+          ? {
+              id: selectedAssignee.id,
+              name: selectedAssignee.name,
+              email: selectedAssignee.email,
+              role: selectedAssignee.role,
+              department: selectedAssignee.department,
+              workload: selectedAssignee.workload,
+            }
+          : {
+              id: data.assigneeId,
+              name: 'Unknown',
+              email: '',
+              role: 'officer' as const,
+              department: '',
+              workload: 0,
+            },
       }
 
       const newAudit = await create(auditData)
@@ -114,9 +126,9 @@ export function AddAuditModal({ isOpen, onClose, onSuccess }: AddAuditModalProps
         <div className="p-8 flex-1 overflow-y-auto hide-scrollbar">
           <div className="flex justify-between items-start mb-8">
             <div>
-              <h2 className="text-2xl font-bold font-display text-slate-900">Create New Audit</h2>
+              <h2 className="text-2xl font-bold font-display text-slate-900">{t('auditDetail.createAuditTitle')}</h2>
               <p className="text-sm text-slate-500">
-                Schedule a new audit for compliance verification.
+                {t('auditDetail.createAuditSubtitle')}
               </p>
             </div>
             <button onClick={handleClose} className="text-slate-400 hover:text-slate-600">
@@ -128,7 +140,7 @@ export function AddAuditModal({ isOpen, onClose, onSuccess }: AddAuditModalProps
             {/* Audit Type Selection */}
             <div>
               <label className="text-xs font-black uppercase text-slate-500 tracking-widest mb-4 block">
-                Audit Type
+                {t('auditDetail.auditTypeLabel')}
               </label>
               <div className="grid grid-cols-3 gap-4">
                 {auditTypes.map((type) => (
@@ -137,7 +149,7 @@ export function AddAuditModal({ isOpen, onClose, onSuccess }: AddAuditModalProps
                     type="button"
                     onClick={() => handleTypeSelect(type.id)}
                     className={cn(
-                      'p-4 border-2 rounded-xl flex flex-col items-center gap-3 transition-all cursor-pointer',
+                      'p-4 border rounded-xl flex flex-col items-center gap-3 transition-all cursor-pointer',
                       selectedType === type.id
                         ? 'border-emerald-500 bg-emerald-50 ring-2 ring-emerald-500'
                         : 'border-slate-200 hover:border-emerald-400 hover:bg-emerald-50/50'
@@ -162,7 +174,7 @@ export function AddAuditModal({ isOpen, onClose, onSuccess }: AddAuditModalProps
             <div className="grid grid-cols-2 gap-6">
               <div className="col-span-2">
                 <label className="text-xs font-black uppercase text-slate-500 tracking-widest mb-2 block">
-                  Audit Title
+                  {t('auditDetail.auditTitleLabel')}
                 </label>
                 <Controller
                   name="title"
@@ -171,7 +183,7 @@ export function AddAuditModal({ isOpen, onClose, onSuccess }: AddAuditModalProps
                     <input
                       {...field}
                       type="text"
-                      placeholder="e.g., Q1 2024 Information Security Audit"
+                      placeholder={t('auditDetail.auditTitlePlaceholder')}
                       className={cn(
                         'w-full px-4 py-3 bg-slate-50 border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500',
                         errors.title ? 'border-rose-300' : 'border-slate-200'
@@ -186,30 +198,7 @@ export function AddAuditModal({ isOpen, onClose, onSuccess }: AddAuditModalProps
 
               <div>
                 <label className="text-xs font-black uppercase text-slate-500 tracking-widest mb-2 block">
-                  Framework
-                </label>
-                <Controller
-                  name="framework"
-                  control={control}
-                  render={({ field }) => (
-                    <select
-                      {...field}
-                      className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                    >
-                      <option value="">Select framework...</option>
-                      {frameworks.map((fw) => (
-                        <option key={fw} value={fw}>
-                          {fw}
-                        </option>
-                      ))}
-                    </select>
-                  )}
-                />
-              </div>
-
-              <div>
-                <label className="text-xs font-black uppercase text-slate-500 tracking-widest mb-2 block">
-                  Due Date
+                  {t('auditDetail.dueDateLabel')}
                 </label>
                 <Controller
                   name="dueDate"
@@ -232,7 +221,7 @@ export function AddAuditModal({ isOpen, onClose, onSuccess }: AddAuditModalProps
 
               <div>
                 <label className="text-xs font-black uppercase text-slate-500 tracking-widest mb-2 block">
-                  Status
+                  {t('auditDetail.statusLabel')}
                 </label>
                 <Controller
                   name="status"
@@ -242,10 +231,10 @@ export function AddAuditModal({ isOpen, onClose, onSuccess }: AddAuditModalProps
                       {...field}
                       className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
                     >
-                      <option value="pending">Pending</option>
-                      <option value="in_progress">In Progress</option>
-                      <option value="completed">Completed</option>
-                      <option value="overdue">Overdue</option>
+                      <option value="pending">{t('auditDetail.pending')}</option>
+                      <option value="in_progress">{t('auditDetail.inProgress')}</option>
+                      <option value="completed">{t('auditDetail.completed')}</option>
+                      <option value="overdue">{t('auditDetail.overdue')}</option>
                     </select>
                   )}
                 />
@@ -253,31 +242,41 @@ export function AddAuditModal({ isOpen, onClose, onSuccess }: AddAuditModalProps
 
               <div>
                 <label className="text-xs font-black uppercase text-slate-500 tracking-widest mb-2 block">
-                  Lead Assignee
+                  {t('auditDetail.leadAuthorLabel')}
                 </label>
-                <div className="relative">
-                  <Icon
-                    icon="lucide:user"
-                    className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
-                  />
-                  <Controller
-                    name="assigneeId"
-                    control={control}
-                    render={({ field }) => (
-                      <input
-                        {...field}
-                        type="text"
-                        placeholder="Select assignee..."
-                        className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                      />
-                    )}
-                  />
-                </div>
+                <Controller
+                  name="assigneeId"
+                  control={control}
+                  render={({ field }) => (
+                    <select
+                      {...field}
+                      className={cn(
+                        'w-full px-4 py-3 bg-slate-50 border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500',
+                        errors.assigneeId ? 'border-rose-300' : 'border-slate-200'
+                      )}
+                    >
+                      <option value="">{t('auditDetail.selectLeadAuthor')}</option>
+                      {currentUser && (
+                        <option value={currentUser.id}>{currentUser.name} {t('auditDetail.youSuffix')}</option>
+                      )}
+                      {members
+                        .filter((m) => m.id !== currentUser?.id)
+                        .map((member) => (
+                          <option key={member.id} value={member.id}>
+                            {member.name} - {member.department}
+                          </option>
+                        ))}
+                    </select>
+                  )}
+                />
+                {errors.assigneeId && (
+                  <p className="text-rose-500 text-xs mt-1">{errors.assigneeId.message}</p>
+                )}
               </div>
 
               <div className="col-span-2">
                 <label className="text-xs font-black uppercase text-slate-500 tracking-widest mb-2 block">
-                  Scope & Description
+                  {t('auditDetail.scopeDescription')}
                 </label>
                 <Controller
                   name="description"
@@ -286,7 +285,7 @@ export function AddAuditModal({ isOpen, onClose, onSuccess }: AddAuditModalProps
                     <textarea
                       {...field}
                       rows={3}
-                      placeholder="Describe the scope and objectives of this audit..."
+                      placeholder={t('auditDetail.scopePlaceholder')}
                       className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-none"
                     />
                   )}
@@ -299,7 +298,7 @@ export function AddAuditModal({ isOpen, onClose, onSuccess }: AddAuditModalProps
         {/* Footer */}
         <div className="p-8 bg-slate-50 border-t border-slate-200 flex justify-end gap-3">
           <Button variant="ghost" onClick={handleClose} disabled={isLoading}>
-            Cancel
+            {t('common.cancel')}
           </Button>
           <Button
             variant="primary"
@@ -309,10 +308,10 @@ export function AddAuditModal({ isOpen, onClose, onSuccess }: AddAuditModalProps
             {isLoading ? (
               <>
                 <Icon icon="lucide:loader-2" className="animate-spin" />
-                Creating...
+                {t('auditDetail.creating')}
               </>
             ) : (
-              'Create Audit'
+              t('auditDetail.createAudit')
             )}
           </Button>
         </div>

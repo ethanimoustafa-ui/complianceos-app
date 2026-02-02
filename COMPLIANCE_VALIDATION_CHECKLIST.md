@@ -45,15 +45,15 @@
 ### Test: Store Functionality
 | # | Store | Test Case | Scenario / Steps | Expected Result | Pass/Fail |
 |---|-------|-----------|------------------|-----------------|-----------|
-| 2.1 | observation-store | Create observation | Go to /observations → Click "Add Observation" → Fill form → Submit | State updates, new observation in list | [ ] |
-| 2.2 | observation-store | Update observation | Click observation row → Click Edit → Change values → Save | State updates with new values | [ ] |
-| 2.3 | observation-store | Delete observation | Click observation → Click Delete → Confirm | Observation removed from state | [ ] |
-| 2.4 | observation-store | Add comment | Open observation detail → Type in comment box → Click "Add Update" | Comment added to selectedObservation | [ ] |
-| 2.5 | observation-store | Add checklist item | Open observation detail → Type in checklist input → Click + button | Checklist item appears in observation | [ ] |
-| 2.6 | observation-store | Remove checklist item | Open observation detail → Hover checklist item → Click X button | Checklist item removed from observation | [ ] |
-| 2.7 | observation-store | Toggle checklist | Open observation detail → Click checkbox on checklist item | Completed status toggles, strikethrough appears | [ ] |
-| 2.8 | auth-store | Login | Go to /login → Enter email/password → Click Sign In | User state populated, isAuthenticated true | [ ] |
-| 2.9 | auth-store | Logout | Click user avatar → Click Logout | User state cleared, isAuthenticated false | [ ] |
+| 2.1 | observation-store | Create observation | Go to /observations → Click "Add Observation" → Fill form → Submit | State updates, new observation in list | [x] |
+| 2.2 | observation-store | Update observation | Click observation row → Click Edit → Change values → Save | State updates with new values | [x] |
+| 2.3 | observation-store | Delete observation | Click observation → Click Delete → Confirm | Observation removed from state | [x] |
+| 2.4 | observation-store | Add comment | Open observation detail → Type in comment box → Click "Add Update" | Comment added to selectedObservation | [x] |
+| 2.5 | observation-store | Add checklist item | Open observation detail → Type in checklist input → Click + button | Checklist item appears in observation | [x] |
+| 2.6 | observation-store | Remove checklist item | Open observation detail → Hover checklist item → Click X button | Checklist item removed from observation | [x] |
+| 2.7 | observation-store | Toggle checklist | Open observation detail → Click checkbox on checklist item | Completed status toggles, strikethrough appears | [x] |
+| 2.8 | auth-store | Login | Go to /login → Enter email/password → Click Sign In | User state populated, isAuthenticated true | [x] |
+| 2.9 | auth-store | Logout | Click user avatar → Click Logout | User state cleared, isAuthenticated false | [x] |
 | 2.10 | audit-store | CRUD operations | Go to /reports → Create/Edit/Delete audits | Audits can be created/read/updated/deleted | [ ] |
 | 2.11 | report-store | Generate report | Go to /reports → Click Generate Report → Select options | Report generated and stored | [ ] |
 | 2.12 | calendar-store | Add task | Go to /calendar → Click on date → Fill task form → Save | Task appears on calendar | [ ] |

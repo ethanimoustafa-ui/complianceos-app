@@ -26,6 +26,22 @@ export interface RemediationPlan {
   createdAt: string
 }
 
+// Closure types
+export interface ClosureRequest {
+  requestedAt: string
+  requestedBy: string
+  requestedByName?: string
+  notes?: string
+}
+
+export interface ClosureReview {
+  reviewedAt: string
+  reviewedBy: string
+  reviewedByName?: string
+  approved: boolean
+  notes?: string
+}
+
 export interface Observation {
   id: string
   title: string
@@ -104,6 +120,8 @@ export interface Observation {
   creatorId?: string              // User who created the observation
   leaderId?: string               // Current leader (initially = creatorId)
   remediationPlan?: RemediationPlan
+  closureRequest?: ClosureRequest   // Present when closure has been requested
+  closureReview?: ClosureReview     // Present after closure has been reviewed
 }
 
 export const severityConfig: Record<

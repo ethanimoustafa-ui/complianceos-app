@@ -24,3 +24,6 @@ export type { RelatedDocumentsProps } from './related-documents'
 
 export { ActivityTimeline } from './activity-timeline'
 export type { ActivityTimelineProps } from './activity-timeline'
+
+export { ClosureStatus } from './closure-status'
+export type { ClosureStatusProps } from './closure-status'

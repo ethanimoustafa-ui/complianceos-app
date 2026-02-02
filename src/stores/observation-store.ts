@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { Observation, ObservationFilters, PaginationState, SortState, Comment, User, ObservationTimelineEntry, RemediationPlan } from '@/types'
+import type { Observation, ObservationFilters, PaginationState, SortState, Comment, User, ObservationTimelineEntry, RemediationPlan, ClosureRequest, ClosureReview } from '@/types'
 
 interface ChecklistItem {
   id: string
@@ -37,8 +37,10 @@ interface ObservationState {
   toggleChecklistItem: (observationId: string, itemId: string, completed: boolean, user?: User) => Promise<void>
   removeChecklistItem: (observationId: string, itemId: string, itemText?: string, user?: User) => Promise<void>
   transferLeadership: (observationId: string, newLeaderId: string, newLeaderName: string, currentUser: User) => Promise<void>
-  submitRemediationPlan: (observationId: string, plan: Omit<RemediationPlan, 'id' | 'status' | 'createdAt' | 'submittedAt' | 'submittedBy'>, submitter: User) => Promise<void>
+  submitRemediationPlan: (observationId: string, plan: Omit<RemediationPlan, 'id' | 'status' | 'createdAt' | 'submittedAt' | 'submittedBy'>, submitter: User, observationLeaderId?: string) => Promise<void>
   reviewRemediationPlan: (observationId: string, approved: boolean, reviewer: User, notes?: string) => Promise<void>
+  requestClosure: (observationId: string, requester: User, notes?: string) => Promise<void>
+  reviewClosure: (observationId: string, approved: boolean, reviewer: User, notes?: string) => Promise<void>
   addDocument: (observationId: string, document: { name: string; type: 'pdf' | 'image' | 'doc' }, uploader: User, addToRemediationPlan?: boolean) => Promise<void>
   removeDocument: (observationId: string, documentId: string, documentName: string, user: User) => Promise<void>
   getNextReference: () => string
@@ -786,47 +788,67 @@ export const useObservationStore = create<ObservationState>((set, get) => ({
     }
   },
 
-  submitRemediationPlan: async (observationId: string, plan, submitter: User) => {
+  submitRemediationPlan: async (observationId: string, plan, submitter: User, observationLeaderId?: string) => {
     try {
       await new Promise((resolve) => setTimeout(resolve, 300))
+
+      // Check if submitter is the observation leader for auto-approval
+      const isLeader = observationLeaderId && submitter.id === observationLeaderId
+      const planStatus = isLeader ? 'approved' : 'submitted'
 
       const newPlan: RemediationPlan = {
         ...plan,
         id: crypto.randomUUID(),
-        status: 'submitted',
+        status: planStatus,
         submittedAt: new Date().toISOString(),
         submittedBy: submitter.id,
         createdAt: new Date().toISOString(),
+        // If auto-approved, also set review fields
+        ...(isLeader && {
+          reviewedAt: new Date().toISOString(),
+          reviewedBy: submitter.id,
+        }),
       }
 
       const timelineEntry: ObservationTimelineEntry = {
         id: crypto.randomUUID(),
         date: new Date().toISOString(),
         dateKey: 'today',
-        description: `${submitter.name} submitted a remediation plan`,
-        descriptionAr: `قدّم ${submitter.name} خطة المعالجة`,
-        descriptionKey: 'observations.detail.timeline.remediationSubmitted',
+        description: isLeader
+          ? `${submitter.name} submitted and auto-approved remediation plan`
+          : `${submitter.name} submitted a remediation plan`,
+        descriptionAr: isLeader
+          ? `قدّم ${submitter.name} خطة المعالجة ووافق عليها تلقائياً`
+          : `قدّم ${submitter.name} خطة المعالجة`,
+        descriptionKey: isLeader
+          ? 'observations.detail.timeline.remediationAutoApproved'
+          : 'observations.detail.timeline.remediationSubmitted',
         descriptionParams: { name: submitter.name },
         userId: submitter.id,
         userName: submitter.name,
         userAvatar: submitter.avatar,
-        actionType: 'remediation_submitted',
+        actionType: isLeader ? 'remediation_approved' : 'remediation_submitted',
       }
 
       set((state) => {
-        // Update in observations array
-        const observations = state.observations.map((obs) =>
-          obs.id === observationId ? { ...obs, remediationPlan: newPlan } : obs
-        )
+        // Update in observations array - if auto-approved, also set status to in_progress
+        const observations = state.observations.map((obs) => {
+          if (obs.id !== observationId) return obs
+          const newStatus = isLeader && obs.status === 'open' ? 'in_progress' : obs.status
+          return { ...obs, remediationPlan: newPlan, status: newStatus }
+        })
 
         // Update selected observation if it matches
-        const selectedObservation = state.selectedObservation?.id === observationId
-          ? {
-              ...state.selectedObservation,
-              remediationPlan: newPlan,
-              timeline: [timelineEntry, ...(state.selectedObservation.timeline || [])],
-            }
-          : state.selectedObservation
+        let selectedObservation = state.selectedObservation
+        if (selectedObservation?.id === observationId) {
+          const newStatus = isLeader && selectedObservation.status === 'open' ? 'in_progress' : selectedObservation.status
+          selectedObservation = {
+            ...selectedObservation,
+            remediationPlan: newPlan,
+            status: newStatus,
+            timeline: [timelineEntry, ...(selectedObservation.timeline || [])],
+          }
+        }
 
         return { observations, selectedObservation }
       })
@@ -899,6 +921,136 @@ export const useObservationStore = create<ObservationState>((set, get) => ({
     } catch (error) {
       set({
         error: error instanceof Error ? error.message : 'Failed to review remediation plan',
+      })
+      throw error
+    }
+  },
+
+  requestClosure: async (observationId: string, requester: User, notes?: string) => {
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 300))
+
+      const closureRequest: ClosureRequest = {
+        requestedAt: new Date().toISOString(),
+        requestedBy: requester.id,
+        requestedByName: requester.name,
+        notes,
+      }
+
+      const timelineEntry: ObservationTimelineEntry = {
+        id: crypto.randomUUID(),
+        date: new Date().toISOString(),
+        dateKey: 'today',
+        description: `${requester.name} requested closure`,
+        descriptionAr: `طلب ${requester.name} إغلاق الملاحظة`,
+        descriptionKey: 'observations.detail.timeline.closureRequested',
+        descriptionParams: { name: requester.name },
+        userId: requester.id,
+        userName: requester.name,
+        userAvatar: requester.avatar,
+        actionType: 'status_change',
+      }
+
+      set((state) => {
+        // Update in observations array - change status to 'resolved' (Pending Review)
+        const observations = state.observations.map((obs) => {
+          if (obs.id !== observationId) return obs
+          return {
+            ...obs,
+            status: 'resolved' as const,
+            closureRequest,
+            closureReview: undefined, // Clear any previous review
+            timeline: [timelineEntry, ...(obs.timeline || [])],
+          }
+        })
+
+        // Update selected observation if it matches
+        let selectedObservation = state.selectedObservation
+        if (selectedObservation?.id === observationId) {
+          selectedObservation = {
+            ...selectedObservation,
+            status: 'resolved' as const,
+            closureRequest,
+            closureReview: undefined,
+            timeline: [timelineEntry, ...(selectedObservation.timeline || [])],
+          }
+        }
+
+        return { observations, selectedObservation }
+      })
+    } catch (error) {
+      set({
+        error: error instanceof Error ? error.message : 'Failed to request closure',
+      })
+      throw error
+    }
+  },
+
+  reviewClosure: async (observationId: string, approved: boolean, reviewer: User, notes?: string) => {
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 300))
+
+      const closureReview: ClosureReview = {
+        reviewedAt: new Date().toISOString(),
+        reviewedBy: reviewer.id,
+        reviewedByName: reviewer.name,
+        approved,
+        notes,
+      }
+
+      const newStatus = approved ? 'closed' : 'in_progress'
+
+      const timelineEntry: ObservationTimelineEntry = {
+        id: crypto.randomUUID(),
+        date: new Date().toISOString(),
+        dateKey: 'today',
+        description: approved
+          ? `${reviewer.name} approved closure`
+          : `${reviewer.name} rejected closure request`,
+        descriptionAr: approved
+          ? `وافق ${reviewer.name} على إغلاق الملاحظة`
+          : `رفض ${reviewer.name} طلب الإغلاق`,
+        descriptionKey: approved
+          ? 'observations.detail.timeline.closureApproved'
+          : 'observations.detail.timeline.closureRejected',
+        descriptionParams: { name: reviewer.name },
+        userId: reviewer.id,
+        userName: reviewer.name,
+        userAvatar: reviewer.avatar,
+        actionType: 'status_change',
+      }
+
+      set((state) => {
+        // Update in observations array
+        const observations = state.observations.map((obs) => {
+          if (obs.id !== observationId) return obs
+          return {
+            ...obs,
+            status: newStatus as 'closed' | 'in_progress',
+            closureReview,
+            // If rejected, clear the closure request so they can request again
+            closureRequest: approved ? obs.closureRequest : undefined,
+            timeline: [timelineEntry, ...(obs.timeline || [])],
+          }
+        })
+
+        // Update selected observation if it matches
+        let selectedObservation = state.selectedObservation
+        if (selectedObservation?.id === observationId) {
+          selectedObservation = {
+            ...selectedObservation,
+            status: newStatus as 'closed' | 'in_progress',
+            closureReview,
+            closureRequest: approved ? selectedObservation.closureRequest : undefined,
+            timeline: [timelineEntry, ...(selectedObservation.timeline || [])],
+          }
+        }
+
+        return { observations, selectedObservation }
+      })
+    } catch (error) {
+      set({
+        error: error instanceof Error ? error.message : 'Failed to review closure',
       })
       throw error
     }

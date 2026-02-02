@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useMemo } from 'react'
+import React, { useState, useMemo, useEffect } from 'react'
 import Link from 'next/link'
 import { Icon } from '@iconify/react'
 import { Button } from '@/components/ui/button'
@@ -11,6 +11,12 @@ import { Modal } from '@/components/ui/modal'
 import { MultiSelectFilter, FilterOption } from '@/components/ui/multi-select-filter'
 import { cn } from '@/lib/utils'
 import { useTranslation } from '@/i18n'
+import { useAuditStore } from '@/stores/audit-store'
+import { useAuditLogStore, type AuditLog as AuditLogFromStore } from '@/stores/audit-log-store'
+import { AddAuditModal } from '@/components/audits/add-audit-modal'
+import { EditAuditModal } from '@/components/audits/edit-audit-modal'
+import { DeleteConfirmationDialog } from '@/components/ui/delete-confirmation-dialog'
+import type { Audit as AuditType } from '@/types'
 
 import type { TranslationKey } from '@/i18n'
 
@@ -103,7 +109,7 @@ interface RiskDistribution {
 }
 
 // Audit types for the Audits tab
-type AuditStatus = 'in_progress' | 'pending' | 'in_review' | 'completed'
+type AuditStatus = 'in_progress' | 'pending' | 'in_review' | 'completed' | 'overdue'
 type AuditPriority = 'critical' | 'high' | 'medium' | 'low'
 
 interface Audit {
@@ -118,6 +124,7 @@ interface Audit {
   source: AuditSource
   frequency: AuditFrequency
   category: AuditCategory
+  closedOverdue?: boolean
 }
 
 // Config
@@ -158,6 +165,7 @@ const auditStatusConfig: Record<AuditStatus, { label: string; bgColor: string; t
   pending: { label: 'Pending', bgColor: 'bg-slate-50', textColor: 'text-slate-500', borderColor: 'border-slate-200' },
   in_review: { label: 'In Review', bgColor: 'bg-blue-50', textColor: 'text-blue-600', borderColor: 'border-blue-100' },
   completed: { label: 'Completed', bgColor: 'bg-emerald-50', textColor: 'text-emerald-600', borderColor: 'border-emerald-100' },
+  overdue: { label: 'Overdue', bgColor: 'bg-rose-50', textColor: 'text-rose-600', borderColor: 'border-rose-100' },
 }
 
 const auditPriorityConfig: Record<AuditPriority, { label: string; bgColor: string; textColor: string; borderColor: string }> = {
@@ -207,184 +215,8 @@ const riskStatusConfig: Record<RiskStatus, { label: string; color: string }> = {
   closed: { label: 'Closed', color: 'bg-emerald-100 text-emerald-700' },
 }
 
-// Risk Register mock data
-const mockRiskRegister: RiskRegisterItem[] = [
-  {
-    id: 'RSK-001',
-    name: 'Data Breach - Customer Records',
-    description: 'Potential unauthorized access to customer personal and financial data through system vulnerabilities.',
-    category: 'compliance',
-    likelihood: 4,
-    impact: 5,
-    owner: { name: 'Sarah Chen', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Sarah', department: 'IT Security' },
-    status: 'mitigating',
-    mitigationPlan: 'Implementing enhanced encryption and access controls',
-    mitigationProgress: 65,
-    monitoringFrequency: 'monthly',
-    lastReviewDate: new Date('2024-01-15'),
-    nextReviewDate: new Date('2024-02-15'),
-    history: [
-      { id: 1, timestamp: new Date('2024-01-15'), user: 'Sarah Chen', action: 'created', newValue: 'Risk identified during security audit' },
-      { id: 2, timestamp: new Date('2024-01-18'), user: 'Ahmed Al-Rashid', action: 'status_changed', previousValue: 'open', newValue: 'mitigating' },
-      { id: 3, timestamp: new Date('2024-01-20'), user: 'Sarah Chen', action: 'mitigation_updated', notes: 'Encryption rollout at 65%' },
-    ],
-    createdAt: new Date('2024-01-15'),
-    updatedAt: new Date('2024-01-20'),
-  },
-  {
-    id: 'RSK-002',
-    name: 'SAMA Regulatory Non-Compliance',
-    description: 'Risk of non-compliance with SAMA cybersecurity framework requirements.',
-    category: 'compliance',
-    likelihood: 3,
-    impact: 5,
-    owner: { name: 'Ahmed Al-Rashid', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Ahmed', department: 'Compliance' },
-    status: 'open',
-    mitigationPlan: 'Gap assessment and remediation roadmap in progress',
-    mitigationProgress: 30,
-    monitoringFrequency: 'weekly',
-    lastReviewDate: new Date('2024-01-18'),
-    nextReviewDate: new Date('2024-01-25'),
-    history: [
-      { id: 1, timestamp: new Date('2024-01-10'), user: 'Ahmed Al-Rashid', action: 'created', newValue: 'Identified during SAMA compliance review' },
-      { id: 2, timestamp: new Date('2024-01-18'), user: 'Ahmed Al-Rashid', action: 'reviewed', notes: 'Weekly monitoring initiated' },
-    ],
-    createdAt: new Date('2024-01-10'),
-    updatedAt: new Date('2024-01-18'),
-  },
-  {
-    id: 'RSK-003',
-    name: 'Third-Party Vendor Failure',
-    description: 'Critical vendor service disruption affecting core business operations.',
-    category: 'operational',
-    likelihood: 3,
-    impact: 4,
-    owner: { name: 'Maria Lopez', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Maria', department: 'Procurement' },
-    status: 'mitigating',
-    mitigationPlan: 'Developing alternative vendor relationships',
-    mitigationProgress: 45,
-    monitoringFrequency: 'monthly',
-    lastReviewDate: new Date('2024-01-19'),
-    nextReviewDate: new Date('2024-02-19'),
-    history: [
-      { id: 1, timestamp: new Date('2024-01-08'), user: 'Maria Lopez', action: 'created', newValue: 'Vendor dependency assessment completed' },
-      { id: 2, timestamp: new Date('2024-01-12'), user: 'Maria Lopez', action: 'assigned', newValue: 'Maria Lopez', notes: 'Taking ownership of vendor risk' },
-      { id: 3, timestamp: new Date('2024-01-19'), user: 'Maria Lopez', action: 'mitigation_updated', notes: 'Alternative vendors identified' },
-    ],
-    createdAt: new Date('2024-01-08'),
-    updatedAt: new Date('2024-01-19'),
-  },
-  {
-    id: 'RSK-004',
-    name: 'Market Risk - Interest Rate Fluctuation',
-    description: 'Exposure to interest rate changes affecting investment portfolio.',
-    category: 'financial',
-    likelihood: 4,
-    impact: 3,
-    owner: { name: 'John Smith', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=John', department: 'Treasury' },
-    status: 'accepted',
-    mitigationPlan: 'Hedging strategy implemented',
-    mitigationProgress: 100,
-    monitoringFrequency: 'quarterly',
-    lastReviewDate: new Date('2024-01-15'),
-    nextReviewDate: new Date('2024-04-15'),
-    history: [
-      { id: 1, timestamp: new Date('2024-01-05'), user: 'John Smith', action: 'created', newValue: 'Market risk assessment conducted' },
-      { id: 2, timestamp: new Date('2024-01-10'), user: 'John Smith', action: 'status_changed', previousValue: 'open', newValue: 'mitigating' },
-      { id: 3, timestamp: new Date('2024-01-15'), user: 'John Smith', action: 'status_changed', previousValue: 'mitigating', newValue: 'accepted', notes: 'Hedging strategy approved by board' },
-    ],
-    createdAt: new Date('2024-01-05'),
-    updatedAt: new Date('2024-01-15'),
-  },
-  {
-    id: 'RSK-005',
-    name: 'Cyber Attack - Ransomware',
-    description: 'Potential ransomware attack targeting critical infrastructure.',
-    category: 'operational',
-    likelihood: 4,
-    impact: 4,
-    owner: { name: 'Sarah Chen', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Sarah', department: 'IT Security' },
-    status: 'mitigating',
-    mitigationPlan: 'Enhanced backup and recovery procedures',
-    mitigationProgress: 80,
-    monitoringFrequency: 'weekly',
-    lastReviewDate: new Date('2024-01-21'),
-    nextReviewDate: new Date('2024-01-28'),
-    history: [
-      { id: 1, timestamp: new Date('2024-01-12'), user: 'Sarah Chen', action: 'created', newValue: 'Threat intelligence report identified risk' },
-      { id: 2, timestamp: new Date('2024-01-14'), user: 'Sarah Chen', action: 'score_updated', previousValue: '12', newValue: '16', notes: 'Increased likelihood after industry incidents' },
-      { id: 3, timestamp: new Date('2024-01-21'), user: 'Sarah Chen', action: 'reviewed', notes: 'Weekly security review completed' },
-    ],
-    createdAt: new Date('2024-01-12'),
-    updatedAt: new Date('2024-01-21'),
-  },
-  {
-    id: 'RSK-006',
-    name: 'Reputational Damage - Social Media',
-    description: 'Negative publicity from social media incidents or customer complaints.',
-    category: 'reputational',
-    likelihood: 3,
-    impact: 3,
-    owner: { name: 'Emma Wilson', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Emma', department: 'Marketing' },
-    status: 'open',
-    mitigationPlan: 'Social media monitoring and response protocol',
-    mitigationProgress: 20,
-    monitoringFrequency: 'monthly',
-    lastReviewDate: new Date('2024-01-16'),
-    nextReviewDate: new Date('2024-02-16'),
-    history: [
-      { id: 1, timestamp: new Date('2024-01-14'), user: 'Emma Wilson', action: 'created', newValue: 'Risk assessment from brand audit' },
-      { id: 2, timestamp: new Date('2024-01-16'), user: 'Emma Wilson', action: 'note_added', notes: 'Monitoring tools being evaluated' },
-    ],
-    createdAt: new Date('2024-01-14'),
-    updatedAt: new Date('2024-01-16'),
-  },
-  {
-    id: 'RSK-007',
-    name: 'Key Person Dependency',
-    description: 'Over-reliance on specific individuals for critical business functions.',
-    category: 'strategic',
-    likelihood: 3,
-    impact: 4,
-    owner: { name: 'David Kim', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=David', department: 'HR' },
-    status: 'mitigating',
-    mitigationPlan: 'Knowledge transfer and succession planning',
-    mitigationProgress: 55,
-    monitoringFrequency: 'quarterly',
-    lastReviewDate: new Date('2024-01-17'),
-    nextReviewDate: new Date('2024-04-17'),
-    history: [
-      { id: 1, timestamp: new Date('2024-01-06'), user: 'David Kim', action: 'created', newValue: 'Identified in workforce planning review' },
-      { id: 2, timestamp: new Date('2024-01-10'), user: 'David Kim', action: 'status_changed', previousValue: 'open', newValue: 'mitigating' },
-      { id: 3, timestamp: new Date('2024-01-17'), user: 'David Kim', action: 'mitigation_updated', notes: 'Succession plans for 3 key roles completed' },
-    ],
-    createdAt: new Date('2024-01-06'),
-    updatedAt: new Date('2024-01-17'),
-  },
-  {
-    id: 'RSK-008',
-    name: 'Documentation Quality Issues',
-    description: 'Inadequate documentation of policies and procedures.',
-    category: 'operational',
-    likelihood: 4,
-    impact: 2,
-    owner: { name: 'Ahmed Al-Rashid', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Ahmed', department: 'Compliance' },
-    status: 'closed',
-    mitigationPlan: 'Documentation standards and review process implemented',
-    mitigationProgress: 100,
-    monitoringFrequency: 'semi_annual',
-    lastReviewDate: new Date('2024-01-20'),
-    nextReviewDate: new Date('2024-07-20'),
-    history: [
-      { id: 1, timestamp: new Date('2024-01-02'), user: 'Ahmed Al-Rashid', action: 'created', newValue: 'Audit finding from internal review' },
-      { id: 2, timestamp: new Date('2024-01-08'), user: 'Ahmed Al-Rashid', action: 'status_changed', previousValue: 'open', newValue: 'mitigating' },
-      { id: 3, timestamp: new Date('2024-01-15'), user: 'Ahmed Al-Rashid', action: 'mitigation_updated', notes: 'Documentation standards published' },
-      { id: 4, timestamp: new Date('2024-01-20'), user: 'Ahmed Al-Rashid', action: 'status_changed', previousValue: 'mitigating', newValue: 'closed', notes: 'All documentation updated and approved' },
-    ],
-    createdAt: new Date('2024-01-02'),
-    updatedAt: new Date('2024-01-20'),
-  },
-]
+// Risk Register data - empty initially, will be populated via store
+const mockRiskRegister: RiskRegisterItem[] = []
 
 // Risk helper functions
 function getRiskScore(likelihood: number, impact: number): number {
@@ -413,293 +245,57 @@ function getRiskDotColor(score: number): string {
   return 'bg-emerald-400'
 }
 
-// Mock data
-const complianceTrend: ComplianceTrendData[] = [
-  { month: 'Jul', actual: 70, target: 90 },
-  { month: 'Aug', actual: 75, target: 90 },
-  { month: 'Sep', actual: 82, target: 90 },
-  { month: 'Oct', actual: 68, target: 90 },
-  { month: 'Nov', actual: 88, target: 90 },
-  { month: 'Dec', actual: 84, target: 90 },
-  { month: 'Jan', actual: 94, target: 90 },
-  { month: 'Feb', actual: 78, target: 90 },
-  { month: 'Mar', actual: 85, target: 90 },
-  { month: 'Apr', actual: 72, target: 90 },
-  { month: 'May', actual: 90, target: 90 },
-  { month: 'Jun', actual: 92, target: 90 },
-]
+// Empty data arrays - will be populated via stores in the future
+const riskDistribution: RiskDistribution[] = []
 
-const riskDistribution: RiskDistribution[] = [
-  { category: 'Data Privacy', percentage: 35, color: 'bg-emerald-500' },
-  { category: 'Internal Access', percentage: 22, color: 'bg-amber-400' },
-  { category: 'Infrastructure', percentage: 18, color: 'bg-rose-500' },
-  { category: 'Regulatory Compliance', percentage: 25, color: 'bg-blue-500' },
-]
-
-const audits: Audit[] = [
-  {
-    id: 'audit-1',
-    name: 'ISO 27001 Internal Review',
-    description: 'A.9 & A.12 Controls',
-    responsible: { name: 'Felix H.', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Felix' },
-    dueDate: new Date('2026-01-24'),
-    status: 'in_progress',
-    priority: 'critical',
-    progress: 60,
-    source: 'internal_audit',
-    frequency: 'annual',
-    category: 'security_compliance',
-  },
-  {
-    id: 'audit-2',
-    name: 'SOC2 Type II Readiness',
-    description: 'Trust Services Criteria',
-    responsible: { name: 'Sarah C.', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Sarah' },
-    dueDate: new Date('2026-02-15'),
-    status: 'pending',
-    priority: 'high',
-    progress: 0,
-    source: 'internal_audit',
-    frequency: 'annual',
-    category: 'operational_compliance',
-  },
-  {
-    id: 'audit-3',
-    name: 'GDPR Compliance Check',
-    description: 'Data Processing Records',
-    responsible: { name: 'Michael S.', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Michael' },
-    dueDate: new Date('2026-01-30'),
-    status: 'in_review',
-    priority: 'medium',
-    progress: 90,
-    source: 'internal_audit',
-    frequency: 'quarterly',
-    category: 'regulatory_compliance',
-  },
-  {
-    id: 'audit-4',
-    name: 'PCI-DSS Quarterly Scan',
-    description: 'Network Vulnerabilities',
-    responsible: { name: 'Sarah C.', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Sarah' },
-    dueDate: new Date('2026-01-12'),
-    status: 'completed',
-    priority: 'high',
-    progress: 100,
-    source: 'internal_audit',
-    frequency: 'quarterly',
-    category: 'security_compliance',
-  },
-  {
-    id: 'audit-5',
-    name: 'Vendor Risk Assessment',
-    description: 'Cloud Service Providers',
-    responsible: { name: 'Felix H.', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Felix' },
-    dueDate: new Date('2026-03-05'),
-    status: 'pending',
-    priority: 'low',
-    progress: 0,
-    source: 'internal_audit',
-    frequency: 'semi_annual',
-    category: 'operational_compliance',
-  },
-  {
-    id: 'audit-6',
-    name: 'SAMA Cybersecurity Framework',
-    description: 'Annual SAMA CSF Assessment',
-    responsible: { name: 'Ahmed A.', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Ahmed' },
-    dueDate: new Date('2026-02-28'),
-    status: 'in_progress',
-    priority: 'critical',
-    progress: 35,
-    source: 'sama_inspection',
-    frequency: 'annual',
-    category: 'regulatory_compliance',
-  },
-  {
-    id: 'audit-7',
-    name: 'Sharia Compliance Review',
-    description: 'Product & Service Compliance',
-    responsible: { name: 'Khalid M.', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Khalid' },
-    dueDate: new Date('2026-01-20'),
-    status: 'in_review',
-    priority: 'high',
-    progress: 85,
-    source: 'sharia_audit',
-    frequency: 'quarterly',
-    category: 'sharia_compliance',
-  },
-  {
-    id: 'audit-8',
-    name: 'Saudization Compliance',
-    description: 'HR Nitaqat Requirements',
-    responsible: { name: 'Sarah C.', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Sarah' },
-    dueDate: new Date('2026-03-15'),
-    status: 'pending',
-    priority: 'medium',
-    progress: 0,
-    source: 'sama_inspection',
-    frequency: 'monthly',
-    category: 'hr_compliance',
-  },
-  {
-    id: 'audit-9',
-    name: 'Financial Controls Review',
-    description: 'Q1 Financial Audit',
-    responsible: { name: 'Michael S.', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Michael' },
-    dueDate: new Date('2026-01-31'),
-    status: 'in_progress',
-    priority: 'high',
-    progress: 45,
-    source: 'internal_audit',
-    frequency: 'quarterly',
-    category: 'financial_compliance',
-  },
-  {
-    id: 'audit-10',
-    name: 'Ad-hoc Security Assessment',
-    description: 'Post-Incident Review',
-    responsible: { name: 'Felix H.', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Felix' },
-    dueDate: new Date('2026-01-18'),
-    status: 'completed',
-    priority: 'critical',
-    progress: 100,
-    source: 'internal_audit',
-    frequency: 'ad_hoc',
-    category: 'security_compliance',
-  },
-]
-
-const auditFindings: AuditFinding[] = [
-  {
-    id: 'AU-9021',
-    auditName: 'ISO 27001 Access Control Review',
-    category: 'Cloud Infrastructure',
-    severity: 'critical',
-    owner: { name: 'Sarah Connor', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Sarah' },
-    status: 'remediation',
-    dueDate: new Date('2026-01-25'),
-    description: 'Critical access control vulnerabilities identified in cloud infrastructure requiring immediate remediation.',
-  },
-  {
-    id: 'AU-8834',
-    auditName: 'GDPR Data Encryption Audit',
-    category: 'Data Privacy',
-    severity: 'medium',
-    owner: { name: 'Michael Scott', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Michael' },
-    status: 'resolved',
-    dueDate: new Date('2026-01-20'),
-    description: 'Data encryption audit findings related to GDPR compliance requirements.',
-  },
-  {
-    id: 'AU-8712',
-    auditName: 'Quarterly Financial Controls',
-    category: 'Finance',
-    severity: 'low',
-    owner: { name: 'Felix H.', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Felix' },
-    status: 'verified',
-    dueDate: new Date('2026-01-15'),
-    description: 'Standard quarterly review of financial control procedures.',
-  },
-  {
-    id: 'AU-9102',
-    auditName: 'SAMA Cybersecurity Assessment',
-    category: 'Regulatory',
-    severity: 'high',
-    owner: { name: 'Ahmed Al-Rashid', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Ahmed' },
-    status: 'open',
-    dueDate: new Date('2026-01-30'),
-    description: 'Annual SAMA cybersecurity framework assessment and gap analysis.',
-  },
-]
-
-const auditLogs: AuditLog[] = [
-  {
-    id: 'LOG-001',
-    timestamp: new Date('2026-01-16T14:32:00'),
-    user: { name: 'Sarah Chen', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Sarah' },
-    action: 'closed',
-    audit: 'ISO 27001 Access Control',
-    description: 'Audit closed after final verification',
-    status: 'completed',
-    duration: '4.2 hours',
-    context: 'All remediation items verified and signed off by compliance officer.',
-  },
-  {
-    id: 'LOG-002',
-    timestamp: new Date('2026-01-16T11:15:00'),
-    user: { name: 'Ahmed Al-Rashid', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Ahmed' },
-    action: 'commented',
-    audit: 'SAMA Cybersecurity Assessment',
-    description: 'Added findings summary comment',
-    status: 'info',
-    context: 'Initial assessment findings documented for team review.',
-  },
-  {
-    id: 'LOG-003',
-    timestamp: new Date('2026-01-16T09:45:00'),
-    user: { name: 'Maria Lopez', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Maria' },
-    action: 'uploaded',
-    audit: 'GDPR Data Encryption',
-    description: 'Uploaded evidence documents',
-    status: 'completed',
-    duration: '12 min',
-    context: 'Evidence package includes encryption certificates and configuration screenshots.',
-  },
-  {
-    id: 'LOG-004',
-    timestamp: new Date('2026-01-15T16:20:00'),
-    user: { name: 'David Kim', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=David' },
-    action: 'created',
-    audit: 'Q1 Internal Controls Review',
-    description: 'Created new audit task',
-    status: 'pending',
-    context: 'Quarterly internal controls review initiated for Q1 2026.',
-  },
-  {
-    id: 'LOG-005',
-    timestamp: new Date('2026-01-15T14:00:00'),
-    user: { name: 'Emma Wilson', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Emma' },
-    action: 'assigned',
-    audit: 'NCA ECC Assessment',
-    description: 'Assigned to IT Security team',
-    status: 'completed',
-    context: 'IT Security team assigned as primary owners for NCA ECC compliance assessment.',
-  },
-  {
-    id: 'LOG-006',
-    timestamp: new Date('2026-01-15T10:30:00'),
-    user: { name: 'John Smith', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=John' },
-    action: 'reviewed',
-    audit: 'Financial Controls Audit',
-    description: 'Completed management review',
-    status: 'completed',
-    duration: '2.5 hours',
-    context: 'Management review completed with no major findings.',
-  },
-  {
-    id: 'LOG-007',
-    timestamp: new Date('2026-01-14T15:45:00'),
-    user: { name: 'Sarah Chen', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Sarah' },
-    action: 'updated',
-    audit: 'ISO 27001 Access Control',
-    description: 'Updated remediation status',
-    status: 'pending',
-    context: 'Remediation progress updated to 85% complete.',
-  },
-  {
-    id: 'LOG-008',
-    timestamp: new Date('2026-01-14T11:00:00'),
-    user: { name: 'Felix H.', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Felix' },
-    action: 'opened',
-    audit: 'Vendor Risk Assessment',
-    description: 'Initiated vendor risk review',
-    status: 'info',
-    context: 'Annual vendor risk assessment process initiated for critical vendors.',
-  },
-]
+// Audit findings - empty initially
+const auditFindings: AuditFinding[] = []
 
 export default function ReportsPage() {
   const { t, isRTL } = useTranslation()
+
+  // Audit store connection
+  const { audits: storeAudits, fetchAll: fetchAudits, delete: deleteAudit } = useAuditStore()
+
+  // Audit edit/delete state
+  const [auditToEdit, setAuditToEdit] = useState<AuditType | null>(null)
+  const [auditToDelete, setAuditToDelete] = useState<AuditType | null>(null)
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [auditDropdownOpen, setAuditDropdownOpen] = useState<string | null>(null)
+
+  // Audit log store connection
+  const { logs: storeLogs } = useAuditLogStore()
+
+  // Transform store logs to match the local AuditLog interface
+  const auditLogs: AuditLog[] = useMemo(() => {
+    return storeLogs.map((log: AuditLogFromStore) => ({
+      id: log.id,
+      timestamp: new Date(log.timestamp),
+      user: log.user,
+      action: log.action,
+      audit: log.audit,
+      description: log.description,
+      status: log.status,
+      duration: log.duration,
+      context: log.context,
+    }))
+  }, [storeLogs])
+
+  // Fetch audits on mount
+  useEffect(() => {
+    fetchAudits()
+  }, [fetchAudits])
+
+  // Close audit dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = () => {
+      if (auditDropdownOpen) {
+        setAuditDropdownOpen(null)
+      }
+    }
+    document.addEventListener('click', handleClickOutside)
+    return () => document.removeEventListener('click', handleClickOutside)
+  }, [auditDropdownOpen])
 
   // Tab state for conditional header
   const [activeTab, setActiveTab] = useState<TabValue>('audits')
@@ -815,14 +411,66 @@ export default function ReportsPage() {
     })
   }, [riskSearchTerm, riskCategoryFilter, riskStatusFilter])
 
+  // Transform store audits to page audit format
+  const pageAudits: Audit[] = useMemo(() => {
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+
+    return storeAudits.map((audit) => {
+      // Map store audit type to page source
+      const sourceMap: Record<string, AuditSource> = {
+        internal: 'internal_audit',
+        sama: 'sama_inspection',
+        sharia: 'sharia_audit',
+      }
+
+      // Compute status - overdue takes priority if past due date and not completed
+      const dueDate = new Date(audit.dueDate)
+      dueDate.setHours(0, 0, 0, 0)
+      const isOverdue = audit.status !== 'completed' && dueDate < today
+
+      // Determine the display status
+      let displayStatus: AuditStatus
+      if (isOverdue) {
+        displayStatus = 'overdue'
+      } else if (audit.status === 'pending') {
+        displayStatus = 'pending'
+      } else if (audit.status === 'in_progress') {
+        displayStatus = 'in_progress'
+      } else if (audit.status === 'completed') {
+        displayStatus = 'completed'
+      } else {
+        displayStatus = 'pending'
+      }
+
+      return {
+        id: audit.id,
+        name: audit.title,
+        description: '',
+        responsible: {
+          name: audit.assignee?.name || 'Unassigned',
+          avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${audit.assignee?.name || 'default'}`,
+        },
+        dueDate: new Date(audit.dueDate),
+        status: displayStatus,
+        priority: 'medium' as AuditPriority, // Default priority
+        progress: audit.progress,
+        source: sourceMap[audit.type] || 'internal_audit',
+        frequency: 'annual' as AuditFrequency, // Default frequency
+        category: 'regulatory_compliance' as AuditCategory, // Default category
+        closedOverdue: audit.closedOverdue, // Pass through the closedOverdue flag
+      }
+    })
+  }, [storeAudits])
+
   // Filtered audits based on selected filters
   const filteredAudits = useMemo(() => {
-    return audits.filter(audit =>
+    return pageAudits.filter(audit =>
       selectedSources.has(audit.source) &&
       selectedFrequencies.has(audit.frequency) &&
       selectedCategories.has(audit.category)
     )
-  }, [selectedSources, selectedFrequencies, selectedCategories])
+  }, [pageAudits, selectedSources, selectedFrequencies, selectedCategories])
 
   // Filter data for Executive View - changes based on period filter
   const filterData: Record<string, { compliance: string; findings: string; audits: number; mttr: string }> = {
@@ -908,7 +556,6 @@ export default function ReportsPage() {
 
   // Stats
   const criticalCount = auditFindings.filter((f) => f.severity === 'critical').length
-  const openCount = auditFindings.filter((f) => f.status === 'open' || f.status === 'remediation').length
 
   // Create translated labels for configs
   const severityLabels: Record<Severity, string> = {
@@ -948,6 +595,7 @@ export default function ReportsPage() {
     pending: t('reports.pending'),
     in_review: t('reports.inReview'),
     completed: t('reports.completed'),
+    overdue: t('reports.overdue'),
   }
 
   const auditPriorityLabels: Record<AuditPriority, string> = {
@@ -1225,7 +873,7 @@ export default function ReportsPage() {
           </div>
 
           {/* Audit Filters */}
-          <Card className="overflow-hidden">
+          <Card>
             <div className="p-6 border-b border-slate-100 bg-slate-50/30">
               <h3 className={`text-sm font-bold text-slate-900 mb-4 ${isRTL ? 'text-right' : ''}`}>{t('reports.filterAudits')}</h3>
               <div className={`flex flex-wrap items-start gap-6 ${isRTL ? 'flex-row-reverse' : ''}`}>
@@ -1258,14 +906,14 @@ export default function ReportsPage() {
           </Card>
 
           {/* Audit Table */}
-          <Card className="overflow-hidden">
+          <Card>
             <div className={`p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/30 ${isRTL ? 'flex-row-reverse' : ''}`}>
               <h3 className="text-sm font-bold text-slate-900">{t('reports.activeAuditPipeline')}</h3>
               <span className="text-xs text-slate-500">
-                {t('reports.showingOfAudits').replace('{count}', filteredAudits.length.toString()).replace('{total}', audits.length.toString())}
+                {t('reports.showingOfAudits').replace('{count}', filteredAudits.length.toString()).replace('{total}', pageAudits.length.toString())}
               </span>
             </div>
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto overflow-y-visible">
               <table className={`w-full ${isRTL ? 'text-right' : 'text-left'}`}>
                 <thead>
                   <tr className="bg-slate-50/50 border-b border-slate-100">
@@ -1291,89 +939,168 @@ export default function ReportsPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {filteredAudits.map((audit) => {
-                    const statusStyle = auditStatusConfig[audit.status]
-                    const priorityStyle = auditPriorityConfig[audit.priority]
-                    return (
-                      <tr
-                        key={audit.id}
-                        className="hover:bg-slate-50/50 transition-colors group"
-                      >
-                        <td className="px-6 py-4">
-                          <Link href={`/reports/${audit.id}`} className="block">
-                            <p className="text-sm font-bold text-slate-900 group-hover:text-emerald-600 transition-colors">
-                              {audit.name}
-                            </p>
-                            <p className="text-[11px] text-slate-400">{audit.description}</p>
-                          </Link>
-                        </td>
-                        <td className="px-6 py-4">
-                          <div className={`flex items-center gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
-                            <img
-                              src={audit.responsible.avatar}
-                              className="w-7 h-7 rounded-full bg-slate-100"
-                              alt={audit.responsible.name}
-                            />
-                            <span className="text-sm text-slate-600 font-medium">
-                              {audit.responsible.name}
-                            </span>
+                  {filteredAudits.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="px-6 py-16 text-center">
+                        <div className="flex flex-col items-center gap-4">
+                          <div className="p-4 bg-slate-100 rounded-full">
+                            <Icon icon="lucide:clipboard-list" className="text-3xl text-slate-400" />
                           </div>
-                        </td>
-                        <td className="px-6 py-4">
-                          <p className="text-sm text-slate-600 font-medium">
-                            {audit.dueDate.toLocaleDateString(isRTL ? 'ar-SA' : 'en-US', {
-                              month: 'short',
-                              day: 'numeric',
-                              year: 'numeric',
-                              calendar: 'gregory',
-                            })}
-                          </p>
-                        </td>
-                        <td className="px-6 py-4">
-                          <span
-                            className={cn(
-                              'px-2.5 py-1 text-[10px] font-bold rounded-full border uppercase',
-                              statusStyle.bgColor,
-                              statusStyle.textColor,
-                              statusStyle.borderColor
-                            )}
+                          <div>
+                            <p className="text-sm font-bold text-slate-900 mb-1">{t('reports.noAuditsFound')}</p>
+                            <p className="text-xs text-slate-500">{t('reports.createFirstAudit')}</p>
+                          </div>
+                          <Button
+                            className="mt-2"
+                            onClick={() => setShowScheduleAuditModal(true)}
                           >
-                            {auditStatusLabels[audit.status]}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4">
-                          <span
-                            className={cn(
-                              'px-2.5 py-1 text-[10px] font-bold rounded-full border uppercase',
-                              priorityStyle.bgColor,
-                              priorityStyle.textColor,
-                              priorityStyle.borderColor
-                            )}
-                          >
-                            {auditPriorityLabels[audit.priority]}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4">
-                          <div className={`flex items-center gap-3 w-32 ${isRTL ? 'flex-row-reverse' : ''}`}>
-                            <div className={`flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden ${isRTL ? 'rotate-180' : ''}`}>
-                              <div
-                                className="h-full bg-emerald-500 transition-all"
-                                style={{ width: `${audit.progress}%` }}
+                            <Icon icon="lucide:plus" />
+                            {t('reports.scheduleAudit')}
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredAudits.map((audit) => {
+                      const statusStyle = auditStatusConfig[audit.status]
+                      const priorityStyle = auditPriorityConfig[audit.priority]
+                      return (
+                        <tr
+                          key={audit.id}
+                          className="hover:bg-slate-50/50 transition-colors group"
+                        >
+                          <td className="px-6 py-4">
+                            <Link href={`/reports/${audit.id}`} className="block">
+                              <p className="text-sm font-bold text-slate-900 group-hover:text-emerald-600 transition-colors">
+                                {audit.name}
+                              </p>
+                              <p className="text-[11px] text-slate-400">{audit.description}</p>
+                            </Link>
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className={`flex items-center gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                              <img
+                                src={audit.responsible.avatar}
+                                className="w-7 h-7 rounded-full bg-slate-100"
+                                alt={audit.responsible.name}
                               />
+                              <span className="text-sm text-slate-600 font-medium">
+                                {audit.responsible.name}
+                              </span>
                             </div>
-                            <span className="text-[10px] font-bold text-slate-500">
-                              {audit.progress}%
+                          </td>
+                          <td className="px-6 py-4">
+                            <p className="text-sm text-slate-600 font-medium">
+                              {audit.dueDate.toLocaleDateString(isRTL ? 'ar-SA' : 'en-US', {
+                                month: 'short',
+                                day: 'numeric',
+                                year: 'numeric',
+                                calendar: 'gregory',
+                              })}
+                            </p>
+                          </td>
+                          <td className="px-6 py-4">
+                            {audit.status === 'completed' && audit.closedOverdue ? (
+                              <span
+                                className={cn(
+                                  'px-2.5 py-1 text-[10px] font-bold rounded-full border uppercase',
+                                  'bg-amber-50 text-amber-600 border-amber-100'
+                                )}
+                              >
+                                {t('auditDetail.closedOverdue')}
+                              </span>
+                            ) : (
+                              <span
+                                className={cn(
+                                  'px-2.5 py-1 text-[10px] font-bold rounded-full border uppercase',
+                                  statusStyle.bgColor,
+                                  statusStyle.textColor,
+                                  statusStyle.borderColor
+                                )}
+                              >
+                                {auditStatusLabels[audit.status]}
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-6 py-4">
+                            <span
+                              className={cn(
+                                'px-2.5 py-1 text-[10px] font-bold rounded-full border uppercase',
+                                priorityStyle.bgColor,
+                                priorityStyle.textColor,
+                                priorityStyle.borderColor
+                              )}
+                            >
+                              {auditPriorityLabels[audit.priority]}
                             </span>
-                          </div>
-                        </td>
-                        <td className={`px-6 py-4 ${isRTL ? 'text-left' : 'text-right'}`}>
-                          <button className="p-1.5 text-slate-300 hover:text-slate-600 transition-colors cursor-pointer">
-                            <Icon icon="lucide:more-horizontal" />
-                          </button>
-                        </td>
-                      </tr>
-                    )
-                  })}
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className={`flex items-center gap-3 w-32 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                              <div className={`flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden ${isRTL ? 'rotate-180' : ''}`}>
+                                <div
+                                  className="h-full bg-emerald-500 transition-all"
+                                  style={{ width: `${audit.progress}%` }}
+                                />
+                              </div>
+                              <span className="text-[10px] font-bold text-slate-500">
+                                {audit.progress}%
+                              </span>
+                            </div>
+                          </td>
+                          <td className={`px-6 py-4 ${isRTL ? 'text-left' : 'text-right'}`}>
+                            <div className="relative">
+                              <button
+                                className="p-1.5 text-slate-300 hover:text-slate-600 transition-colors cursor-pointer"
+                                onClick={(e) => {
+                                  e.preventDefault()
+                                  e.stopPropagation()
+                                  setAuditDropdownOpen(auditDropdownOpen === audit.id ? null : audit.id)
+                                }}
+                              >
+                                <Icon icon="lucide:more-horizontal" />
+                              </button>
+                              {auditDropdownOpen === audit.id && (
+                                <div
+                                  className={`absolute ${isRTL ? 'left-0' : 'right-0'} mt-1 w-36 bg-white border border-slate-200 rounded-xl shadow-xl z-50 overflow-hidden`}
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  <button
+                                    onClick={() => {
+                                      // Find the corresponding store audit
+                                      const storeAudit = storeAudits.find(a => a.id === audit.id)
+                                      if (storeAudit) {
+                                        setAuditToEdit(storeAudit)
+                                      }
+                                      setAuditDropdownOpen(null)
+                                    }}
+                                    className={`w-full ${isRTL ? 'text-right' : 'text-left'} px-4 py-2.5 text-sm hover:bg-slate-50 font-medium border-b border-slate-100 transition-colors cursor-pointer flex items-center gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}
+                                  >
+                                    <Icon icon="lucide:edit-3" className="text-slate-400" />
+                                    {t('common.edit')}
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      // Find the corresponding store audit for delete
+                                      const storeAudit = storeAudits.find(a => a.id === audit.id)
+                                      if (storeAudit) {
+                                        setAuditToDelete(storeAudit)
+                                        setShowDeleteConfirm(true)
+                                      }
+                                      setAuditDropdownOpen(null)
+                                    }}
+                                    className={`w-full ${isRTL ? 'text-right' : 'text-left'} px-4 py-2.5 text-sm hover:bg-rose-50 font-medium text-rose-600 transition-colors cursor-pointer flex items-center gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}
+                                  >
+                                    <Icon icon="lucide:trash-2" className="text-rose-400" />
+                                    {t('common.delete')}
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      )
+                    })
+                  )}
                 </tbody>
               </table>
             </div>
@@ -2358,101 +2085,14 @@ export default function ReportsPage() {
         </div>
       </Modal>
 
-      {/* Schedule Audit Modal */}
-      <Modal
+      {/* Schedule Audit Modal - Using AddAuditModal component */}
+      <AddAuditModal
         isOpen={showScheduleAuditModal}
         onClose={() => setShowScheduleAuditModal(false)}
-        title={t('reports.scheduleNewAudit')}
-        subtitle={t('reports.createNewAudit')}
-        size="lg"
-      >
-        <div className={`space-y-6 ${isRTL ? 'rtl text-right' : ''}`}>
-          <div>
-            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 block">{t('reports.auditNameLabel')}</label>
-            <input
-              type="text"
-              placeholder={t('reports.auditNamePlaceholder')}
-              className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
-            />
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 block">{t('reports.framework')}</label>
-              <select className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500">
-                <option>ISO 27001</option>
-                <option>SOC 2 Type II</option>
-                <option>GDPR</option>
-                <option>PCI-DSS</option>
-                <option>SAMA CSF</option>
-                <option>NCA ECC</option>
-              </select>
-            </div>
-            <div>
-              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 block">{t('reports.priority')}</label>
-              <select className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500">
-                <option>{t('reports.critical')}</option>
-                <option>{t('reports.high')}</option>
-                <option>{t('reports.medium')}</option>
-                <option>{t('reports.low')}</option>
-              </select>
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 block">{t('reports.startDate')}</label>
-              <input
-                type="date"
-                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
-              />
-            </div>
-            <div>
-              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 block">{t('reports.dueDate')}</label>
-              <input
-                type="date"
-                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
-              />
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 block">{t('reports.frequency')}</label>
-              <select className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500">
-                <option value="annual">{t('reports.annual')}</option>
-                <option value="semi_annual">{t('reports.semiAnnual')}</option>
-                <option value="quarterly">{t('reports.quarterly')}</option>
-                <option value="monthly">{t('reports.monthly')}</option>
-                <option value="ad_hoc">{t('reports.adHoc')}</option>
-              </select>
-            </div>
-            <div>
-              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 block">{t('reports.leadAuditor')}</label>
-              <select className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500">
-                <option>Felix Henderson</option>
-                <option>Sarah Connor</option>
-                <option>Michael Scott</option>
-                <option>Ahmed Al-Rashid</option>
-              </select>
-            </div>
-          </div>
-          <div>
-            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 block">{t('reports.descriptionLabel')}</label>
-            <textarea
-              rows={3}
-              placeholder={t('reports.descriptionPlaceholder')}
-              className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 resize-none"
-            />
-          </div>
-        </div>
-        <div className={`flex justify-end gap-3 mt-8 pt-6 border-t border-slate-200 ${isRTL ? 'flex-row-reverse' : ''}`}>
-          <Button variant="outline" onClick={() => setShowScheduleAuditModal(false)}>
-            {t('common.cancel')}
-          </Button>
-          <Button onClick={() => setShowScheduleAuditModal(false)}>
-            <Icon icon="lucide:calendar-plus" className="w-4 h-4" />
-            {t('reports.scheduleAudit')}
-          </Button>
-        </div>
-      </Modal>
+        onSuccess={() => {
+          fetchAudits() // Refresh the audit list after creating a new audit
+        }}
+      />
 
       {/* Finding Detail Drawer - matches prototype 03 exactly */}
       <Drawer
@@ -2815,6 +2455,33 @@ export default function ReportsPage() {
           </div>
         </div>
       </Modal>
+
+      {/* Edit Audit Modal */}
+      <EditAuditModal
+        isOpen={!!auditToEdit}
+        onClose={() => setAuditToEdit(null)}
+        audit={auditToEdit}
+        onSuccess={() => {
+          fetchAudits()
+        }}
+      />
+
+      {/* Delete Audit Confirmation Dialog */}
+      <DeleteConfirmationDialog
+        isOpen={showDeleteConfirm}
+        onClose={() => {
+          setShowDeleteConfirm(false)
+          setAuditToDelete(null)
+        }}
+        onConfirm={async () => {
+          if (auditToDelete) {
+            await deleteAudit(auditToDelete.id)
+            fetchAudits()
+          }
+        }}
+        itemType={t('reports.audit')}
+        itemName={auditToDelete?.title || ''}
+      />
     </div>
   )
 }

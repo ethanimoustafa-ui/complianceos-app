@@ -240,3 +240,22 @@ export function canEditObservation(user: User | null, obs: { leaderId?: string }
   if (hasRole(user, 'manager')) return true   // Manager/Admin override
   return isObservationLeader(user, obs)
 }
+
+// Closure permissions
+/**
+ * Check if user can request closure of an observation
+ * Leaders and assignees can request closure
+ */
+export function canRequestClosure(user: User | null, obs: { assignees?: { id?: string }[]; leaderId?: string }): boolean {
+  if (!user) return false
+  if (isObservationLeader(user, obs)) return true
+  return obs.assignees?.some(a => a.id === user.id) ?? false
+}
+
+/**
+ * Check if user can review (approve/reject) a closure request
+ * Leaders and managers/admins can review closure
+ */
+export function canReviewClosure(user: User | null, obs: { leaderId?: string }): boolean {
+  return canManageObservation(user, obs)
+}
