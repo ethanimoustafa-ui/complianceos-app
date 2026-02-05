@@ -10,13 +10,14 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Modal } from '@/components/ui/modal'
 import { useTranslation } from '@/i18n'
-import { formatRelativeTime, formatLocalizedDateShort } from '@/lib/time-utils'
+import { formatRelativeTime, formatLocalizedDateShort, calculateNextOccurrence, formatFutureCountdown } from '@/lib/time-utils'
 import { useAuditStore } from '@/stores/audit-store'
 import { useAuditLogStore, type AuditLog } from '@/stores/audit-log-store'
 import { useAuditTaskStore, type AuditTask } from '@/stores/audit-task-store'
 import { useTeamStore } from '@/stores/team-store'
 import { useAuthStore } from '@/stores/auth-store'
 import { EditAuditModal } from '@/components/audits/edit-audit-modal'
+import { AddAuditModal } from '@/components/audits/add-audit-modal'
 import type { Audit, AuditDocument, AuditComment } from '@/types'
 import { canEditComment, canDeleteComment } from '@/lib/permissions'
 
@@ -55,6 +56,30 @@ export default function AuditDetailPage() {
     sharia: t('auditDetail.shariaAuditType'),
   }
 
+  const auditCategoryLabels: Record<string, string> = {
+    security_compliance: t('auditDetail.categorySecurityCompliance'),
+    financial_compliance: t('auditDetail.categoryFinancialCompliance'),
+    regulatory_compliance: t('auditDetail.categoryRegulatoryCompliance'),
+    operational_compliance: t('auditDetail.categoryOperationalCompliance'),
+    hr_compliance: t('auditDetail.categoryHrCompliance'),
+    sharia_compliance: t('auditDetail.categoryShariahCompliance'),
+  }
+
+  const auditFrequencyLabels: Record<string, string> = {
+    annual: t('auditDetail.frequencyAnnual'),
+    semi_annual: t('auditDetail.frequencySemiAnnual'),
+    quarterly: t('auditDetail.frequencyQuarterly'),
+    monthly: t('auditDetail.frequencyMonthly'),
+    ad_hoc: t('auditDetail.frequencyAdHoc'),
+  }
+
+  const auditPriorityLabels: Record<string, string> = {
+    critical: t('auditDetail.priorityCritical'),
+    high: t('auditDetail.priorityHigh'),
+    medium: t('auditDetail.priorityMedium'),
+    low: t('auditDetail.priorityLow'),
+  }
+
   // Stores
   const { audits, fetchById, update, addDocument, removeDocument, addTeamMember, removeTeamMember, addComment, editComment, deleteComment, updateStatus, isLoading } = useAuditStore()
   const { logs, getLogsByAuditId } = useAuditLogStore()
@@ -84,6 +109,28 @@ export default function AuditDetailPage() {
     dueDate.setHours(0, 0, 0, 0)
     return dueDate < today
   }, [audit?.dueDate, audit?.status])
+
+  // Next occurrence for recurring audits
+  const nextOccurrence = useMemo(() => {
+    if (!audit?.dueDate) return null
+    return calculateNextOccurrence(audit.dueDate, audit.frequency)
+  }, [audit?.dueDate, audit?.frequency])
+
+  // Pre-fill values for scheduling next audit
+  const scheduleNextInitialValues = useMemo(() => {
+    if (!audit || !nextOccurrence) return undefined
+    return {
+      type: audit.type,
+      category: audit.category,
+      frequency: audit.frequency,
+      priority: audit.priority,
+      dueDate: nextOccurrence.toISOString().split('T')[0],
+      assigneeId: audit.assignee?.id || '',
+      title: '',
+      description: audit.description || '',
+      status: 'pending' as const,
+    }
+  }, [audit, nextOccurrence])
 
   // Get documents from audit
   const documents = audit?.documents || []
@@ -249,6 +296,7 @@ export default function AuditDetailPage() {
   const [showAddMemberModal, setShowAddMemberModal] = useState(false)
   const [showTimelineModal, setShowTimelineModal] = useState(false)
   const [showUploadModal, setShowUploadModal] = useState(false)
+  const [showScheduleNextModal, setShowScheduleNextModal] = useState(false)
   const [selectedTimeline, setSelectedTimeline] = useState<TimelineItem | null>(null)
 
   // Add Task form state - category defaults to first option for current audit type
@@ -963,6 +1011,17 @@ export default function AuditDetailPage() {
                         </div>
                       )}
                     </div>
+                    {audit?.status === 'completed' && audit?.frequency && audit.frequency !== 'ad_hoc' && nextOccurrence && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="w-full mt-2"
+                        onClick={() => setShowScheduleNextModal(true)}
+                      >
+                        <Icon icon="lucide:calendar-plus" />
+                        {t('auditDetail.scheduleNextAudit')}
+                      </Button>
+                    )}
                   </div>
 
                   <div className={`flex justify-between items-center`}>
@@ -982,6 +1041,31 @@ export default function AuditDetailPage() {
                     <span className="text-xs text-slate-500 uppercase font-bold tracking-wider">{t('auditDetail.type')}</span>
                     <span className="text-sm font-bold text-slate-900">{audit?.type ? auditTypeLabels[audit.type] : '-'}</span>
                   </div>
+                  <div className={`flex justify-between items-center`}>
+                    <span className="text-xs text-slate-500 uppercase font-bold tracking-wider">{t('auditDetail.categoryLabel')}</span>
+                    <span className="text-sm font-bold text-slate-900">{audit?.category ? auditCategoryLabels[audit.category] : '-'}</span>
+                  </div>
+                  <div className={`flex justify-between items-center`}>
+                    <span className="text-xs text-slate-500 uppercase font-bold tracking-wider">{t('auditDetail.frequencyLabel')}</span>
+                    <span className="text-sm font-bold text-slate-900">{audit?.frequency ? auditFrequencyLabels[audit.frequency] : '-'}</span>
+                  </div>
+                  <div className={`flex justify-between items-center`}>
+                    <span className="text-xs text-slate-500 uppercase font-bold tracking-wider">{t('auditDetail.priority')}</span>
+                    <span className="text-sm font-bold text-slate-900">{audit?.priority ? auditPriorityLabels[audit.priority] : '-'}</span>
+                  </div>
+                  {nextOccurrence && (
+                    <div className={`flex justify-between items-center`}>
+                      <span className="text-xs text-slate-500 uppercase font-bold tracking-wider">
+                        {t('auditDetail.nextOccurrenceLabel')}
+                      </span>
+                      <span className="text-sm font-bold text-slate-900">
+                        {formatLocalizedDateShort(nextOccurrence, isRTL)}{' '}
+                        <span className="text-xs font-medium text-slate-500">
+                          ({formatFutureCountdown(nextOccurrence, t)})
+                        </span>
+                      </span>
+                    </div>
+                  )}
                 </div>
               </Card>
 
@@ -1207,6 +1291,12 @@ export default function AuditDetailPage() {
         audit={audit || null}
         calculatedProgress={calculatedProgress}
         onSuccess={() => showToast(t('auditDetail.auditDetailsUpdated'))}
+      />
+
+      <AddAuditModal
+        isOpen={showScheduleNextModal}
+        onClose={() => setShowScheduleNextModal(false)}
+        initialValues={scheduleNextInitialValues}
       />
 
       {/* Share Progress Modal */}

@@ -12,7 +12,7 @@ import { useAuditStore } from '@/stores/audit-store'
 import { useTeamStore } from '@/stores/team-store'
 import { useAuthStore } from '@/stores/auth-store'
 import { useTranslation } from '@/i18n'
-import type { Audit } from '@/types'
+import type { Audit, AuditCategory, AuditFrequency, AuditPriority } from '@/types'
 
 const auditSchema = z.object({
   title: z.string().min(3, 'Title must be at least 3 characters'),
@@ -21,6 +21,9 @@ const auditSchema = z.object({
   dueDate: z.string().min(1, 'Due date is required'),
   assigneeId: z.string().min(1, 'Lead author is required'),
   description: z.string().optional(),
+  category: z.enum(['security_compliance', 'financial_compliance', 'regulatory_compliance', 'operational_compliance', 'hr_compliance', 'sharia_compliance']).optional(),
+  frequency: z.enum(['annual', 'semi_annual', 'quarterly', 'monthly', 'ad_hoc']).optional(),
+  priority: z.enum(['critical', 'high', 'medium', 'low']).optional(),
 })
 
 type AuditFormData = z.infer<typeof auditSchema>
@@ -61,6 +64,9 @@ export function EditAuditModal({ isOpen, onClose, audit, onSuccess, calculatedPr
       dueDate: '',
       assigneeId: '',
       description: '',
+      category: undefined,
+      frequency: undefined,
+      priority: undefined,
     },
   })
 
@@ -73,6 +79,9 @@ export function EditAuditModal({ isOpen, onClose, audit, onSuccess, calculatedPr
         dueDate: audit.dueDate,
         assigneeId: audit.assignee?.id || '',
         description: audit.description || '',
+        category: audit.category,
+        frequency: audit.frequency,
+        priority: audit.priority,
       })
       setSelectedType(audit.type)
     }
@@ -103,6 +112,9 @@ export function EditAuditModal({ isOpen, onClose, audit, onSuccess, calculatedPr
         status: data.status,
         dueDate: data.dueDate,
         description: data.description,
+        category: data.category,
+        frequency: data.frequency,
+        priority: data.priority,
         assignee: selectedAssignee
           ? {
               id: selectedAssignee.id,
@@ -244,6 +256,81 @@ export function EditAuditModal({ isOpen, onClose, audit, onSuccess, calculatedPr
                       <option value="in_progress">{t('auditDetail.inProgress')}</option>
                       <option value="completed">{t('auditDetail.completed')}</option>
                       <option value="overdue">{t('auditDetail.overdue')}</option>
+                    </select>
+                  )}
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-black uppercase text-slate-500 tracking-widest mb-2 block">
+                  {t('auditDetail.categoryLabel')}
+                </label>
+                <Controller
+                  name="category"
+                  control={control}
+                  render={({ field }) => (
+                    <select
+                      {...field}
+                      value={field.value || ''}
+                      onChange={(e) => field.onChange(e.target.value || undefined)}
+                      className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    >
+                      <option value="">{t('auditDetail.selectCategory')}</option>
+                      <option value="security_compliance">{t('auditDetail.categorySecurityCompliance')}</option>
+                      <option value="financial_compliance">{t('auditDetail.categoryFinancialCompliance')}</option>
+                      <option value="regulatory_compliance">{t('auditDetail.categoryRegulatoryCompliance')}</option>
+                      <option value="operational_compliance">{t('auditDetail.categoryOperationalCompliance')}</option>
+                      <option value="hr_compliance">{t('auditDetail.categoryHrCompliance')}</option>
+                      <option value="sharia_compliance">{t('auditDetail.categoryShariahCompliance')}</option>
+                    </select>
+                  )}
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-black uppercase text-slate-500 tracking-widest mb-2 block">
+                  {t('auditDetail.frequencyLabel')}
+                </label>
+                <Controller
+                  name="frequency"
+                  control={control}
+                  render={({ field }) => (
+                    <select
+                      {...field}
+                      value={field.value || ''}
+                      onChange={(e) => field.onChange(e.target.value || undefined)}
+                      className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    >
+                      <option value="">{t('auditDetail.selectFrequency')}</option>
+                      <option value="annual">{t('auditDetail.frequencyAnnual')}</option>
+                      <option value="semi_annual">{t('auditDetail.frequencySemiAnnual')}</option>
+                      <option value="quarterly">{t('auditDetail.frequencyQuarterly')}</option>
+                      <option value="monthly">{t('auditDetail.frequencyMonthly')}</option>
+                      <option value="ad_hoc">{t('auditDetail.frequencyAdHoc')}</option>
+                    </select>
+                  )}
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-black uppercase text-slate-500 tracking-widest mb-2 block">
+                  {t('auditDetail.priority')}
+                </label>
+                <Controller
+                  name="priority"
+                  control={control}
+                  render={({ field }) => (
+                    <select
+                      {...field}
+                      value={field.value || ''}
+                      onChange={(e) => field.onChange(e.target.value || undefined)}
+                      className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    >
+                      <option value="">{t('auditDetail.selectPriority')}</option>
+                      <option value="critical">{t('auditDetail.priorityCritical')}</option>
+                      <option value="high">{t('auditDetail.priorityHigh')}</option>
+                      <option value="medium">{t('auditDetail.priorityMedium')}</option>
+                      <option value="low">{t('auditDetail.priorityLow')}</option>
                     </select>
                   )}
                 />

@@ -1,4 +1,5 @@
-import type { TranslationKey } from '@/i18n'
+import type { TranslationKey, InterpolationParams } from '@/i18n'
+import type { AuditFrequency } from '@/types'
 
 /**
  * Formats a timestamp into a localized relative time string.
@@ -198,4 +199,90 @@ export function formatLocalizedDateShort(
     day: 'numeric',
     calendar: 'gregory'
   })
+}
+
+/**
+ * Calculates the next occurrence date for a recurring audit.
+ * Advances from the due date by the frequency interval until the date is in the future.
+ *
+ * @param dueDate - The audit's due date as a string (YYYY-MM-DD or parseable date)
+ * @param frequency - The audit frequency (annual, semi_annual, quarterly, monthly, ad_hoc)
+ * @returns The next occurrence Date, or null for ad_hoc / missing values
+ */
+export function calculateNextOccurrence(
+  dueDate: string,
+  frequency: AuditFrequency | undefined
+): Date | null {
+  if (!dueDate || !frequency || frequency === 'ad_hoc') return null
+
+  const monthsToAdd: Record<string, number> = {
+    annual: 12,
+    semi_annual: 6,
+    quarterly: 3,
+    monthly: 1,
+  }
+
+  const interval = monthsToAdd[frequency]
+  if (!interval) return null
+
+  const base = new Date(dueDate)
+  if (isNaN(base.getTime())) return null
+
+  const now = new Date()
+  now.setHours(0, 0, 0, 0)
+
+  let next = new Date(base)
+  next.setMonth(next.getMonth() + interval)
+
+  while (next < now) {
+    next.setMonth(next.getMonth() + interval)
+  }
+
+  return next
+}
+
+/**
+ * Formats a future date as a localized countdown string.
+ * Examples: "today", "in 1 day", "in 3 months", "in 1 year, 2 months"
+ *
+ * @param futureDate - A Date in the future
+ * @param t - Translation function supporting interpolation params
+ * @returns Localized countdown string
+ */
+export function formatFutureCountdown(
+  futureDate: Date,
+  t: (key: TranslationKey, params?: InterpolationParams) => string
+): string {
+  const now = new Date()
+  now.setHours(0, 0, 0, 0)
+
+  const target = new Date(futureDate)
+  target.setHours(0, 0, 0, 0)
+
+  const diffMs = target.getTime() - now.getTime()
+  const diffDays = Math.round(diffMs / (1000 * 60 * 60 * 24))
+
+  if (diffDays <= 0) return t('auditDetail.nextOccurrenceToday')
+  if (diffDays === 1) return t('auditDetail.inOneDay')
+  if (diffDays < 30) return t('auditDetail.inDays', { count: String(diffDays) })
+
+  const totalMonths =
+    (target.getFullYear() - now.getFullYear()) * 12 +
+    (target.getMonth() - now.getMonth())
+
+  const years = Math.floor(totalMonths / 12)
+  const months = totalMonths % 12
+
+  if (years === 0) {
+    if (months === 1) return t('auditDetail.inOneMonth')
+    return t('auditDetail.inMonths', { count: String(months) })
+  }
+
+  if (months === 0) {
+    if (years === 1) return t('auditDetail.inOneYear')
+    return t('auditDetail.inYears', { count: String(years) })
+  }
+
+  if (years === 1) return t('auditDetail.inOneYearAndMonths', { months: String(months) })
+  return t('auditDetail.inYearsAndMonths', { years: String(years), months: String(months) })
 }

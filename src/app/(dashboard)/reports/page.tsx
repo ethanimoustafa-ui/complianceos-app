@@ -199,6 +199,21 @@ const auditCategoryColors: Record<AuditCategory, { dot: string; bg: string; text
   sharia_compliance: { dot: 'bg-violet-500', bg: 'bg-violet-50', text: 'text-violet-600', border: 'border-violet-200' },
 }
 
+const auditStatusColors: Record<AuditStatus, { dot: string; bg: string; text: string; border: string }> = {
+  in_progress: { dot: 'bg-amber-500', bg: 'bg-amber-50', text: 'text-amber-600', border: 'border-amber-200' },
+  pending: { dot: 'bg-slate-500', bg: 'bg-slate-50', text: 'text-slate-600', border: 'border-slate-200' },
+  in_review: { dot: 'bg-blue-500', bg: 'bg-blue-50', text: 'text-blue-600', border: 'border-blue-200' },
+  completed: { dot: 'bg-emerald-500', bg: 'bg-emerald-50', text: 'text-emerald-600', border: 'border-emerald-200' },
+  overdue: { dot: 'bg-rose-500', bg: 'bg-rose-50', text: 'text-rose-600', border: 'border-rose-200' },
+}
+
+const auditPriorityColors: Record<AuditPriority, { dot: string; bg: string; text: string; border: string }> = {
+  critical: { dot: 'bg-rose-500', bg: 'bg-rose-50', text: 'text-rose-600', border: 'border-rose-200' },
+  high: { dot: 'bg-amber-500', bg: 'bg-amber-50', text: 'text-amber-600', border: 'border-amber-200' },
+  medium: { dot: 'bg-slate-500', bg: 'bg-slate-50', text: 'text-slate-600', border: 'border-slate-200' },
+  low: { dot: 'bg-slate-400', bg: 'bg-slate-50', text: 'text-slate-500', border: 'border-slate-200' },
+}
+
 // Risk Register configs
 const riskCategoryConfig: Record<RiskCategory, { label: string; icon: string; color: string }> = {
   operational: { label: 'Operational', icon: 'lucide:settings', color: 'bg-blue-100 text-blue-700' },
@@ -330,6 +345,12 @@ export default function ReportsPage() {
   const [selectedCategories, setSelectedCategories] = useState<Set<AuditCategory>>(
     new Set(['security_compliance', 'financial_compliance', 'regulatory_compliance', 'operational_compliance', 'hr_compliance', 'sharia_compliance'])
   )
+  const [selectedStatuses, setSelectedStatuses] = useState<Set<AuditStatus>>(
+    new Set(['in_progress', 'pending', 'in_review', 'completed', 'overdue'])
+  )
+  const [selectedPriorities, setSelectedPriorities] = useState<Set<AuditPriority>>(
+    new Set(['critical', 'high', 'medium', 'low'])
+  )
 
   // Risk Register tab states
   const [riskSearchTerm, setRiskSearchTerm] = useState('')
@@ -453,11 +474,11 @@ export default function ReportsPage() {
         },
         dueDate: new Date(audit.dueDate),
         status: displayStatus,
-        priority: 'medium' as AuditPriority, // Default priority
+        priority: (audit.priority || 'medium') as AuditPriority,
         progress: audit.progress,
         source: sourceMap[audit.type] || 'internal_audit',
-        frequency: 'annual' as AuditFrequency, // Default frequency
-        category: 'regulatory_compliance' as AuditCategory, // Default category
+        frequency: (audit.frequency || 'annual') as AuditFrequency,
+        category: (audit.category || 'regulatory_compliance') as AuditCategory,
         closedOverdue: audit.closedOverdue, // Pass through the closedOverdue flag
       }
     })
@@ -468,9 +489,68 @@ export default function ReportsPage() {
     return pageAudits.filter(audit =>
       selectedSources.has(audit.source) &&
       selectedFrequencies.has(audit.frequency) &&
-      selectedCategories.has(audit.category)
+      selectedCategories.has(audit.category) &&
+      selectedStatuses.has(audit.status) &&
+      selectedPriorities.has(audit.priority)
     )
-  }, [pageAudits, selectedSources, selectedFrequencies, selectedCategories])
+  }, [pageAudits, selectedSources, selectedFrequencies, selectedCategories, selectedStatuses, selectedPriorities])
+
+  // Audit sort state
+  type AuditSortField = 'auditName' | 'dueDate' | 'status' | 'priority' | 'progress'
+  const [auditSortField, setAuditSortField] = useState<AuditSortField | null>(null)
+  const [auditSortDirection, setAuditSortDirection] = useState<'asc' | 'desc'>('asc')
+
+  const handleAuditSort = (field: AuditSortField) => {
+    if (auditSortField === field) {
+      setAuditSortDirection(auditSortDirection === 'asc' ? 'desc' : 'asc')
+    } else {
+      setAuditSortField(field)
+      setAuditSortDirection('asc')
+    }
+  }
+
+  const clearAuditSort = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    setAuditSortField(null)
+    setAuditSortDirection('asc')
+  }
+
+  const AuditSortIcon = ({ field }: { field: AuditSortField }) => {
+    if (auditSortField !== field) {
+      return <Icon icon="lucide:arrow-up-down" className={`text-[10px] inline ${isRTL ? 'mr-1' : 'ml-1'} opacity-30`} />
+    }
+    return (
+      <span className={`inline-flex items-center ${isRTL ? 'mr-1' : 'ml-1'} gap-0.5`}>
+        <Icon
+          icon={auditSortDirection === 'asc' ? 'lucide:arrow-up' : 'lucide:arrow-down'}
+          className="text-[10px] text-emerald-600"
+        />
+        <Icon
+          icon="lucide:x"
+          className="text-[10px] text-slate-400 hover:text-rose-500 cursor-pointer transition-colors"
+          onClick={clearAuditSort}
+        />
+      </span>
+    )
+  }
+
+  const statusOrder: Record<AuditStatus, number> = { pending: 0, in_progress: 1, in_review: 2, completed: 3, overdue: 4 }
+  const priorityOrder: Record<AuditPriority, number> = { critical: 0, high: 1, medium: 2, low: 3 }
+
+  const sortedAudits = useMemo(() => {
+    if (!auditSortField) return filteredAudits
+    return [...filteredAudits].sort((a, b) => {
+      let comparison = 0
+      switch (auditSortField) {
+        case 'auditName': comparison = a.name.localeCompare(b.name); break
+        case 'dueDate': comparison = a.dueDate.getTime() - b.dueDate.getTime(); break
+        case 'status': comparison = statusOrder[a.status] - statusOrder[b.status]; break
+        case 'priority': comparison = priorityOrder[a.priority] - priorityOrder[b.priority]; break
+        case 'progress': comparison = a.progress - b.progress; break
+      }
+      return auditSortDirection === 'asc' ? comparison : -comparison
+    })
+  }, [filteredAudits, auditSortField, auditSortDirection])
 
   // Filter data for Executive View - changes based on period filter
   const filterData: Record<string, { compliance: string; findings: string; audits: number; mttr: string }> = {
@@ -654,6 +734,21 @@ export default function ReportsPage() {
     { value: 'operational_compliance' as AuditCategory, label: t('reports.operational'), color: auditCategoryColors.operational_compliance },
     { value: 'hr_compliance' as AuditCategory, label: t('reports.hr'), color: auditCategoryColors.hr_compliance },
     { value: 'sharia_compliance' as AuditCategory, label: t('reports.sharia'), color: auditCategoryColors.sharia_compliance },
+  ], [t])
+
+  const auditStatusOptions: FilterOption<AuditStatus>[] = useMemo(() => [
+    { value: 'pending' as AuditStatus, label: t('reports.pending'), color: auditStatusColors.pending },
+    { value: 'in_progress' as AuditStatus, label: t('reports.inProgress'), color: auditStatusColors.in_progress },
+    { value: 'in_review' as AuditStatus, label: t('reports.inReview'), color: auditStatusColors.in_review },
+    { value: 'completed' as AuditStatus, label: t('reports.completed'), color: auditStatusColors.completed },
+    { value: 'overdue' as AuditStatus, label: t('reports.overdue'), color: auditStatusColors.overdue },
+  ], [t])
+
+  const auditPriorityOptions: FilterOption<AuditPriority>[] = useMemo(() => [
+    { value: 'critical' as AuditPriority, label: t('reports.critical'), color: auditPriorityColors.critical },
+    { value: 'high' as AuditPriority, label: t('reports.high'), color: auditPriorityColors.high },
+    { value: 'medium' as AuditPriority, label: t('reports.medium'), color: auditPriorityColors.medium },
+    { value: 'low' as AuditPriority, label: t('reports.low'), color: auditPriorityColors.low },
   ], [t])
 
   return (
@@ -901,6 +996,22 @@ export default function ReportsPage() {
                   showAllOption
                   allLabel={t('common.all')}
                 />
+                <MultiSelectFilter
+                  label={t('reports.status')}
+                  options={auditStatusOptions}
+                  selected={selectedStatuses}
+                  onChange={setSelectedStatuses}
+                  showAllOption
+                  allLabel={t('common.all')}
+                />
+                <MultiSelectFilter
+                  label={t('reports.priority')}
+                  options={auditPriorityOptions}
+                  selected={selectedPriorities}
+                  onChange={setSelectedPriorities}
+                  showAllOption
+                  allLabel={t('common.all')}
+                />
               </div>
             </div>
           </Card>
@@ -917,29 +1028,44 @@ export default function ReportsPage() {
               <table className={`w-full ${isRTL ? 'text-right' : 'text-left'}`}>
                 <thead>
                   <tr className="bg-slate-50/50 border-b border-slate-100">
-                    <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                      {t('reports.auditName')}
+                    <th
+                      className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest cursor-pointer hover:text-slate-600 transition-colors"
+                      onClick={() => handleAuditSort('auditName')}
+                    >
+                      {t('reports.auditName')} <AuditSortIcon field="auditName" />
                     </th>
                     <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">
                       {t('reports.responsible')}
                     </th>
-                    <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                      {t('reports.dueDate')}
+                    <th
+                      className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest cursor-pointer hover:text-slate-600 transition-colors"
+                      onClick={() => handleAuditSort('dueDate')}
+                    >
+                      {t('reports.dueDate')} <AuditSortIcon field="dueDate" />
                     </th>
-                    <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                      {t('reports.status')}
+                    <th
+                      className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest cursor-pointer hover:text-slate-600 transition-colors"
+                      onClick={() => handleAuditSort('status')}
+                    >
+                      {t('reports.status')} <AuditSortIcon field="status" />
                     </th>
-                    <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                      {t('reports.priority')}
+                    <th
+                      className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest cursor-pointer hover:text-slate-600 transition-colors"
+                      onClick={() => handleAuditSort('priority')}
+                    >
+                      {t('reports.priority')} <AuditSortIcon field="priority" />
                     </th>
-                    <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                      {t('reports.progress')}
+                    <th
+                      className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest cursor-pointer hover:text-slate-600 transition-colors"
+                      onClick={() => handleAuditSort('progress')}
+                    >
+                      {t('reports.progress')} <AuditSortIcon field="progress" />
                     </th>
                     <th className="px-6 py-4"></th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {filteredAudits.length === 0 ? (
+                  {sortedAudits.length === 0 ? (
                     <tr>
                       <td colSpan={7} className="px-6 py-16 text-center">
                         <div className="flex flex-col items-center gap-4">
@@ -961,7 +1087,7 @@ export default function ReportsPage() {
                       </td>
                     </tr>
                   ) : (
-                    filteredAudits.map((audit) => {
+                    sortedAudits.map((audit) => {
                       const statusStyle = auditStatusConfig[audit.status]
                       const priorityStyle = auditPriorityConfig[audit.priority]
                       return (
@@ -978,7 +1104,7 @@ export default function ReportsPage() {
                             </Link>
                           </td>
                           <td className="px-6 py-4">
-                            <div className={`flex items-center gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                            <div className={`flex items-center gap-2`}>
                               <img
                                 src={audit.responsible.avatar}
                                 className="w-7 h-7 rounded-full bg-slate-100"

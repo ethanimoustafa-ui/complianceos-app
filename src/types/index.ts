@@ -51,6 +51,10 @@ export interface AuditComment {
   isEdited?: boolean
 }
 
+export type AuditFrequency = 'annual' | 'semi_annual' | 'quarterly' | 'monthly' | 'ad_hoc'
+export type AuditCategory = 'security_compliance' | 'financial_compliance' | 'regulatory_compliance' | 'operational_compliance' | 'hr_compliance' | 'sharia_compliance'
+export type AuditPriority = 'critical' | 'high' | 'medium' | 'low'
+
 export interface Audit {
   id: string
   title: string
@@ -63,6 +67,9 @@ export interface Audit {
   team?: AuditTeamMember[]
   comments?: AuditComment[]
   description?: string
+  category?: AuditCategory
+  frequency?: AuditFrequency
+  priority?: AuditPriority
   closedOverdue?: boolean  // Flag indicating audit was completed after due date
   completedAt?: string     // Timestamp when audit was marked complete
   createdAt: string
