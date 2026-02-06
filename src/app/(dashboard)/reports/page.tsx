@@ -19,6 +19,7 @@ import { DeleteConfirmationDialog } from '@/components/ui/delete-confirmation-di
 import type { Audit as AuditType } from '@/types'
 import { useComplianceScore } from '@/hooks/useComplianceScore'
 import type { PeriodFilter } from '@/lib/compliance-engine.types'
+import { exportAuditLogsLocalized, exportSingleLog, exportAuditsLocalized, exportExecutiveReport, exportRisksLocalized } from '@/lib/export'
 
 import type { TranslationKey } from '@/i18n'
 
@@ -77,6 +78,7 @@ type LogStatus = 'completed' | 'pending' | 'info' | 'failed'
 
 interface AuditFinding {
   id: string
+  sourceAuditId: string
   auditName: string
   category: string
   severity: Severity
@@ -92,6 +94,7 @@ interface AuditLog {
   user: { name: string; avatar: string }
   action: ActionType
   audit: string
+  auditId: string
   description: string
   status: LogStatus
   duration?: string
@@ -279,11 +282,14 @@ const confidenceConfig = {
   high: { label: 'confidenceHigh', color: 'text-emerald-600', bg: 'bg-emerald-50' },
 }
 
-// Empty data arrays - will be populated via stores in the future
-const riskDistribution: RiskDistribution[] = []
-
-// Audit findings - empty initially
-const auditFindings: AuditFinding[] = []
+// Risk distribution category colors for bars
+const riskCategoryBarColors: Record<RiskCategory, string> = {
+  operational: 'bg-blue-500',
+  financial: 'bg-emerald-500',
+  compliance: 'bg-purple-500',
+  strategic: 'bg-amber-500',
+  reputational: 'bg-rose-500',
+}
 
 export default function ReportsPage() {
   const { t, isRTL } = useTranslation()
@@ -308,12 +314,52 @@ export default function ReportsPage() {
       user: log.user,
       action: log.action,
       audit: log.audit,
+      auditId: log.auditId,
       description: log.description,
       status: log.status,
       duration: log.duration,
       context: log.context,
     }))
   }, [storeLogs])
+
+  // Derive risk distribution from mockRiskRegister
+  const riskDistribution: RiskDistribution[] = useMemo(() => {
+    if (mockRiskRegister.length === 0) return []
+    const counts: Record<string, number> = {}
+    for (const risk of mockRiskRegister) {
+      counts[risk.category] = (counts[risk.category] || 0) + 1
+    }
+    const total = mockRiskRegister.length
+    return Object.entries(counts).map(([category, count]) => ({
+      category,
+      percentage: Math.round((count / total) * 100),
+      color: riskCategoryBarColors[category as RiskCategory] || 'bg-slate-400',
+    }))
+  }, [])
+
+  // Derive audit findings from audit store
+  const auditFindings: AuditFinding[] = useMemo(() => {
+    const statusMap: Record<string, FindingStatus> = {
+      pending: 'open',
+      in_progress: 'remediation',
+      completed: 'resolved',
+      overdue: 'open',
+    }
+    return storeAudits
+      .map((audit): AuditFinding => ({
+        id: audit.id.slice(0, 8),
+        sourceAuditId: audit.id,
+        auditName: audit.title,
+        category: audit.type,
+        severity: (audit.priority ?? 'medium') as Severity,
+        owner: { name: audit.assignee.name, avatar: audit.assignee.avatar || '' },
+        status: statusMap[audit.status] || 'open',
+        dueDate: new Date(audit.dueDate),
+        description: audit.description || audit.title,
+      }))
+      .sort((a, b) => b.dueDate.getTime() - a.dueDate.getTime())
+      .slice(0, 5)
+  }, [storeAudits])
 
   // Fetch audits on mount
   useEffect(() => {
@@ -345,11 +391,13 @@ export default function ReportsPage() {
 
   // New state for modals and features
   const [showBreakdownModal, setShowBreakdownModal] = useState(false)
+  const [showDeductionsModal, setShowDeductionsModal] = useState(false)
   const [showScheduleAuditModal, setShowScheduleAuditModal] = useState(false)
   const [auditSearchTerm, setAuditSearchTerm] = useState('')
   const [sortColumn, setSortColumn] = useState<string | null>('timestamp')
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc')
   const [dateRangeFilter, setDateRangeFilter] = useState('month')
+  const [logPage, setLogPage] = useState(1)
   const [hoveredTrendIdx, setHoveredTrendIdx] = useState<number | null>(null)
 
   // Custom filter dropdown state
@@ -598,8 +646,55 @@ export default function ReportsPage() {
       log.user.name.toLowerCase().includes(searchTerm.toLowerCase())
     const matchesAction = filterAction === 'all' || log.action === filterAction
     const matchesAudit = filterAudit === 'all' || log.audit === filterAudit
-    return matchesSearch && matchesAction && matchesAudit
+
+    // Date range filter
+    const now = new Date()
+    let matchesDate = true
+    if (dateRangeFilter === 'today') {
+      const start = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+      matchesDate = log.timestamp >= start
+    } else if (dateRangeFilter === 'week') {
+      const start = new Date(now)
+      start.setDate(now.getDate() - now.getDay())
+      start.setHours(0, 0, 0, 0)
+      matchesDate = log.timestamp >= start
+    } else if (dateRangeFilter === 'month') {
+      const start = new Date(now.getFullYear(), now.getMonth(), 1)
+      matchesDate = log.timestamp >= start
+    } else if (dateRangeFilter === 'quarter') {
+      const quarterStart = Math.floor(now.getMonth() / 3) * 3
+      const start = new Date(now.getFullYear(), quarterStart, 1)
+      matchesDate = log.timestamp >= start
+    }
+
+    return matchesSearch && matchesAction && matchesAudit && matchesDate
   })
+
+  // Sort logs
+  const sortedLogs = useMemo(() => {
+    if (!sortColumn) return filteredLogs
+    const lso: Record<LogStatus, number> = { failed: 0, pending: 1, info: 2, completed: 3 }
+    return [...filteredLogs].sort((a, b) => {
+      let comparison = 0
+      switch (sortColumn) {
+        case 'timestamp': comparison = a.timestamp.getTime() - b.timestamp.getTime(); break
+        case 'action': comparison = a.action.localeCompare(b.action); break
+        case 'audit': comparison = a.audit.localeCompare(b.audit); break
+        case 'status': comparison = lso[a.status] - lso[b.status]; break
+      }
+      return sortDirection === 'asc' ? comparison : -comparison
+    })
+  }, [filteredLogs, sortColumn, sortDirection])
+
+  // Pagination for logs
+  const LOGS_PER_PAGE = 10
+  const totalLogPages = Math.max(1, Math.ceil(filteredLogs.length / LOGS_PER_PAGE))
+  const paginatedLogs = sortedLogs.slice((logPage - 1) * LOGS_PER_PAGE, logPage * LOGS_PER_PAGE)
+
+  // Reset page when filters or sort change
+  useEffect(() => {
+    setLogPage(1)
+  }, [searchTerm, filterAction, filterAudit, dateRangeFilter, sortColumn, sortDirection])
 
   const toggleLogExpand = (logId: string) => {
     setExpandedLogs((prev) =>
@@ -684,10 +779,11 @@ export default function ReportsPage() {
   }
 
   const riskDistributionLabels: Record<string, string> = {
-    'Data Privacy': t('reports.dataPrivacy'),
-    'Internal Access': t('reports.internalAccess'),
-    'Infrastructure': t('reports.infrastructure'),
-    'Regulatory Compliance': t('reports.regulatoryCompliance'),
+    operational: t('reports.operational'),
+    financial: t('reports.financial'),
+    compliance: t('reports.compliance'),
+    strategic: t('reports.strategic'),
+    reputational: t('reports.reputational'),
   }
 
   // Localized filter options
@@ -791,7 +887,7 @@ export default function ReportsPage() {
           </div>
         </div>
         {/* Right side controls - conditional based on activeTab */}
-        <div className={`flex items-center gap-4 ${isRTL ? 'flex-row-reverse' : ''}`}>
+        <div className={`flex items-center gap-4`}>
           {activeTab === 'risks' ? (
             <>
               <div className="relative hidden md:block">
@@ -807,6 +903,7 @@ export default function ReportsPage() {
               <button
                 className="p-2.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-all cursor-pointer"
                 title={t('reports.exportReports')}
+                onClick={() => exportRisksLocalized(filteredRisks, 'risk-register', t, isRTL)}
               >
                 <Icon icon="lucide:download-cloud" className="text-lg" />
               </button>
@@ -830,6 +927,7 @@ export default function ReportsPage() {
               <button
                 className="p-2.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-all cursor-pointer"
                 title={t('reports.exportReports')}
+                onClick={() => exportAuditsLocalized(sortedAudits, 'audits', t, isRTL)}
               >
                 <Icon icon="lucide:download-cloud" className="text-lg" />
               </button>
@@ -844,7 +942,7 @@ export default function ReportsPage() {
               <div className="relative">
                 <button
                   onClick={() => setShowFilterDropdown(!showFilterDropdown)}
-                  className={`flex items-center gap-2 bg-white border border-slate-200 px-4 py-2 rounded-lg text-sm font-bold text-slate-900 hover:bg-slate-50 transition-colors cursor-pointer ${isRTL ? 'flex-row-reverse' : ''}`}
+                  className={`flex items-center gap-2 bg-white border border-slate-200 px-4 py-2 rounded-lg text-sm font-bold text-slate-900 hover:bg-slate-50 transition-colors cursor-pointer`}
                 >
                   <Icon icon="lucide:filter" className="text-slate-400" />
                   <span>{filterLabels[periodFilter]}</span>
@@ -907,7 +1005,23 @@ export default function ReportsPage() {
                   </div>
                 )}
               </div>
-              <Button className="shadow-lg shadow-emerald-100">
+              <Button
+                className="shadow-lg shadow-emerald-100"
+                onClick={() => {
+                  if (activeTab === 'executive') {
+                    exportExecutiveReport(
+                      complianceScore,
+                      auditFindings,
+                      riskDistribution,
+                      'executive-report',
+                      t,
+                      isRTL
+                    )
+                  } else {
+                    exportAuditLogsLocalized(filteredLogs, 'audit-logs', t, isRTL)
+                  }
+                }}
+              >
                 <Icon icon="lucide:download" />
                 {t('common.exportCsv')}
               </Button>
@@ -923,23 +1037,23 @@ export default function ReportsPage() {
           <div className="space-y-8">
           {/* Audit Stats */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div className={`bg-white p-4 rounded-xl border border-slate-200 shadow-sm ${isRTL ? 'text-right' : ''}`}>
+            <div className={`bg-white p-4 rounded-xl border border-slate-200 shadow-sm`}>
               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">{t('reports.filteredAudits')}</p>
               <p className="text-2xl font-bold text-slate-900">{filteredAudits.length}</p>
             </div>
-            <div className={`bg-white p-4 rounded-xl border border-slate-200 shadow-sm ${isRTL ? 'text-right' : ''}`}>
+            <div className={`bg-white p-4 rounded-xl border border-slate-200 shadow-sm`}>
               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">{t('reports.inProgress')}</p>
               <p className="text-2xl font-bold text-emerald-600">
                 {filteredAudits.filter((a) => a.status === 'in_progress').length}
               </p>
             </div>
-            <div className={`bg-white p-4 rounded-xl border border-slate-200 shadow-sm ${isRTL ? 'text-right' : ''}`}>
+            <div className={`bg-white p-4 rounded-xl border border-slate-200 shadow-sm`}>
               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">{t('reports.overdue')}</p>
               <p className="text-2xl font-bold text-rose-600">
                 {filteredAudits.filter((a) => a.dueDate < new Date() && a.status !== 'completed').length}
               </p>
             </div>
-            <div className={`bg-white p-4 rounded-xl border border-slate-200 shadow-sm ${isRTL ? 'text-right' : ''}`}>
+            <div className={`bg-white p-4 rounded-xl border border-slate-200 shadow-sm`}>
               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">{t('reports.complianceScore')}</p>
               <p className="text-2xl font-bold text-blue-600">94%</p>
             </div>
@@ -948,8 +1062,8 @@ export default function ReportsPage() {
           {/* Audit Filters */}
           <Card>
             <div className="p-6 border-b border-slate-100 bg-slate-50/30">
-              <h3 className={`text-sm font-bold text-slate-900 mb-4 ${isRTL ? 'text-right' : ''}`}>{t('reports.filterAudits')}</h3>
-              <div className={`flex flex-wrap items-start gap-6 ${isRTL ? 'flex-row-reverse' : ''}`}>
+              <h3 className={`text-sm font-bold text-slate-900 mb-4`}>{t('reports.filterAudits')}</h3>
+              <div className={`flex flex-wrap items-start gap-6`}>
                 <MultiSelectFilter
                   label={t('reports.source')}
                   options={auditSourceOptions}
@@ -996,7 +1110,7 @@ export default function ReportsPage() {
 
           {/* Audit Table */}
           <Card>
-            <div className={`p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/30 ${isRTL ? 'flex-row-reverse' : ''}`}>
+            <div className={`p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/30`}>
               <h3 className="text-sm font-bold text-slate-900">{t('reports.activeAuditPipeline')}</h3>
               <span className="text-xs text-slate-500">
                 {t('reports.showingOfAudits').replace('{count}', filteredAudits.length.toString()).replace('{total}', pageAudits.length.toString())}
@@ -1139,7 +1253,7 @@ export default function ReportsPage() {
                             </span>
                           </td>
                           <td className="px-6 py-4">
-                            <div className={`flex items-center gap-3 w-32 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                            <div className={`flex items-center gap-3 w-32`}>
                               <div className={`flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden ${isRTL ? 'rotate-180' : ''}`}>
                                 <div
                                   className="h-full bg-emerald-500 transition-all"
@@ -1177,7 +1291,7 @@ export default function ReportsPage() {
                                       }
                                       setAuditDropdownOpen(null)
                                     }}
-                                    className={`w-full ${isRTL ? 'text-right' : 'text-left'} px-4 py-2.5 text-sm hover:bg-slate-50 font-medium border-b border-slate-100 transition-colors cursor-pointer flex items-center gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}
+                                    className={`w-full ${isRTL ? 'text-right' : 'text-left'} px-4 py-2.5 text-sm hover:bg-slate-50 font-medium border-b border-slate-100 transition-colors cursor-pointer flex items-center gap-2`}
                                   >
                                     <Icon icon="lucide:edit-3" className="text-slate-400" />
                                     {t('common.edit')}
@@ -1192,7 +1306,7 @@ export default function ReportsPage() {
                                       }
                                       setAuditDropdownOpen(null)
                                     }}
-                                    className={`w-full ${isRTL ? 'text-right' : 'text-left'} px-4 py-2.5 text-sm hover:bg-rose-50 font-medium text-rose-600 transition-colors cursor-pointer flex items-center gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}
+                                    className={`w-full ${isRTL ? 'text-right' : 'text-left'} px-4 py-2.5 text-sm hover:bg-rose-50 font-medium text-rose-600 transition-colors cursor-pointer flex items-center gap-2`}
                                   >
                                     <Icon icon="lucide:trash-2" className="text-rose-400" />
                                     {t('common.delete')}
@@ -1208,11 +1322,11 @@ export default function ReportsPage() {
                 </tbody>
               </table>
             </div>
-            <div className={`p-6 border-t border-slate-100 flex items-center justify-between bg-slate-50/20 ${isRTL ? 'flex-row-reverse' : ''}`}>
+            <div className={`p-6 border-t border-slate-100 flex items-center justify-between bg-slate-50/20`}>
               <p className="text-xs text-slate-500 font-medium">
                 {t('reports.showingAudits').replace('{count}', filteredAudits.length.toString())}
               </p>
-              <div className={`flex gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
+              <div className={`flex gap-2`}>
                 <button
                   className="p-2 text-slate-400 hover:text-emerald-600 hover:bg-white rounded border border-transparent hover:border-slate-200 disabled:opacity-30 cursor-pointer"
                   disabled
@@ -1281,7 +1395,7 @@ export default function ReportsPage() {
               {/* Hero Compliance Score — spans 2 cols */}
               <Card className="col-span-2">
                 <CardContent className="pt-4 pb-3 px-4">
-                  <div className={`flex items-center gap-4 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                  <div className={`flex items-center gap-4`}>
                     {/* SVG Donut — compact */}
                     <div className="relative flex-shrink-0" style={{ width: 108, height: 108 }}>
                       <svg width="108" height="108" className="transform -rotate-90">
@@ -1303,15 +1417,15 @@ export default function ReportsPage() {
                     </div>
 
                     {/* Info stack — tighter */}
-                    <div className={`flex flex-col gap-1.5 min-w-0 ${isRTL ? 'items-end text-right' : ''}`}>
+                    <div className={`flex flex-col gap-1.5 min-w-0`}>
                       <h2 className="text-sm font-bold text-slate-900 leading-tight">{t('reports.overallComplianceScore' as TranslationKey)}</h2>
 
-                      <div className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border ${healthStatus.bgColor} ${healthStatus.borderColor} ${isRTL ? 'flex-row-reverse' : ''}`}>
+                      <div className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border ${healthStatus.bgColor} ${healthStatus.borderColor}`}>
                         <Icon icon={healthStatus.icon} className={`w-3 h-3 ${healthStatus.color}`} />
                         <span className={`text-[10px] font-bold ${healthStatus.color}`}>{t(('reports.' + healthStatus.label) as TranslationKey)}</span>
                       </div>
 
-                      <div className={`flex items-center gap-1 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                      <div className={`flex items-center gap-1`}>
                         {complianceScore.change >= 0 ? (
                           <Icon icon="lucide:trending-up" className="w-3.5 h-3.5 text-emerald-600" />
                         ) : (
@@ -1323,7 +1437,7 @@ export default function ReportsPage() {
                         <span className="text-[10px] text-slate-400">{t('reports.vsLastPeriod' as TranslationKey)}</span>
                       </div>
 
-                      <div className={`flex items-center gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                      <div className={`flex items-center gap-2`}>
                         <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${conf.bg} ${conf.color}`}>
                           {t(('reports.' + conf.label) as TranslationKey)}
                         </span>
@@ -1337,8 +1451,8 @@ export default function ReportsPage() {
               {/* Framework Scores — radial gauges, spans 3 cols */}
               <Card className="col-span-3">
                 <CardContent className="pt-3 pb-3 px-4">
-                  <h3 className={`text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2 ${isRTL ? 'text-right' : ''}`}>{t('reports.frameworkScores' as TranslationKey)}</h3>
-                  <div className={`flex items-center justify-around ${isRTL ? 'flex-row-reverse' : ''}`}>
+                  <h3 className={`text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2`}>{t('reports.frameworkScores' as TranslationKey)}</h3>
+                  <div className={`flex items-center justify-around`}>
                     {frameworkEntries.map(({ key, i18n, icon }) => {
                       const fwData = complianceScore.frameworks[key]
                       const fwScore = fwData.score
@@ -1363,7 +1477,7 @@ export default function ReportsPage() {
                               <span className="text-sm font-bold text-slate-900">{fwScore}%</span>
                             </div>
                           </div>
-                          <div className={`flex items-center gap-1 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                          <div className={`flex items-center gap-1`}>
                             <Icon icon={icon} className="w-3 h-3 text-slate-400" />
                             <span className="text-[10px] font-medium text-slate-600">{t(('reports.' + i18n) as TranslationKey)}</span>
                           </div>
@@ -1377,7 +1491,7 @@ export default function ReportsPage() {
 
             {/* ROW 2: Component Breakdown — radial gauges in a tight row */}
             <div>
-              <h3 className={`text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2 ${isRTL ? 'text-right' : ''}`}>{t('reports.componentBreakdown' as TranslationKey)}</h3>
+              <h3 className={`text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2`}>{t('reports.componentBreakdown' as TranslationKey)}</h3>
               <div className="grid grid-cols-5 gap-2">
                 {componentKeys.map(({ key, i18n }) => {
                   const comp = complianceScore.components[key]
@@ -1426,17 +1540,17 @@ export default function ReportsPage() {
               {/* Compliance Trend — slim bar chart */}
               <Card>
                 <CardContent className="pt-3 pb-3 px-4">
-                  <div className={`flex items-center justify-between mb-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                  <div className={`flex items-center justify-between mb-2`}>
                     <div className={isRTL ? 'text-right' : ''}>
                       <h3 className="text-xs font-bold text-slate-900">{t('reports.complianceTrend')}</h3>
                       <p className="text-[10px] text-slate-400">{t('reports.historicalPerformance')}</p>
                     </div>
-                    <div className={`flex gap-3 ${isRTL ? 'flex-row-reverse' : ''}`}>
-                      <div className={`flex items-center gap-1 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                    <div className={`flex gap-3`}>
+                      <div className={`flex items-center gap-1`}>
                         <div className="w-1.5 h-1.5 rounded-full bg-slate-200" />
                         <span className="text-[9px] font-bold text-slate-400 uppercase">{t('reports.target')}</span>
                       </div>
-                      <div className={`flex items-center gap-1 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                      <div className={`flex items-center gap-1`}>
                         <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
                         <span className="text-[9px] font-bold text-slate-400 uppercase">{t('reports.actual')}</span>
                       </div>
@@ -1550,25 +1664,33 @@ export default function ReportsPage() {
               {/* Score Deductions — heat-coded compact list */}
               <Card>
                 <CardContent className="pt-3 pb-3 px-4">
-                  <h3 className={`text-xs font-bold text-slate-900 mb-2 ${isRTL ? 'text-right' : ''}`}>{t('reports.whatsImpactingScore' as TranslationKey)}</h3>
+                  <h3 className={`text-xs font-bold text-slate-900 mb-2`}>{t('reports.whatsImpactingScore' as TranslationKey)}</h3>
                   <div className="space-y-1">
-                    {complianceScore.deductions.map((d, idx) => (
+                    {complianceScore.deductions.slice(0, 5).map((d, idx) => (
                       <div key={idx} className={cn(
                         'flex items-center gap-2 px-2 py-1.5 rounded border-l-[3px] bg-slate-50/50 transition-colors hover:bg-slate-50',
-                        deductionSeverityBorder[d.severity],
-                        isRTL ? 'flex-row-reverse border-l-0 border-r-[3px]' : ''
+                        deductionSeverityBorder[d.severity]
                       )}>
                         <span className={cn('text-[10px] font-bold min-w-[40px] text-center rounded px-1 py-0.5', deductionSeverityColors[d.severity])}>
                           {d.points}
                         </span>
-                        <span className={`text-[11px] text-slate-600 leading-tight ${isRTL ? 'text-right' : ''}`}>{d.descriptionKey ? t(d.descriptionKey as TranslationKey, d.descriptionParams) : d.description}</span>
+                        <span className={`text-[11px] text-slate-600 leading-tight`}>{d.descriptionKey ? t(d.descriptionKey as TranslationKey, d.descriptionParams) : d.description}</span>
                       </div>
                     ))}
                   </div>
-                  <div className={`flex items-center justify-between mt-2 pt-2 border-t border-slate-100 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                  <div className={`flex items-center justify-between mt-2 pt-2 border-t border-slate-100`}>
                     <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{t('reports.totalImpact' as TranslationKey)}</span>
                     <span className="text-xs font-bold text-rose-600">{totalDeduction} {t('reports.pts' as TranslationKey)}</span>
                   </div>
+                  {complianceScore.deductions.length > 5 && (
+                    <button
+                      onClick={() => setShowDeductionsModal(true)}
+                      className={`w-full mt-2 py-2 text-[10px] font-bold text-emerald-600 hover:text-emerald-700 transition-colors bg-emerald-50 rounded-lg flex items-center justify-center gap-1.5 cursor-pointer`}
+                    >
+                      {t('reports.viewScoreDetails' as TranslationKey)}
+                      <Icon icon="lucide:external-link" className="w-2.5 h-2.5" />
+                    </button>
+                  )}
                 </CardContent>
               </Card>
             </div>
@@ -1578,43 +1700,58 @@ export default function ReportsPage() {
               {/* Risk Distribution — horizontal stacked pills */}
               <Card>
                 <CardContent className="pt-3 pb-3 px-4">
-                  <h3 className={`text-xs font-bold text-slate-900 mb-3 ${isRTL ? 'text-right' : ''}`}>{t('reports.riskDistribution')}</h3>
-                  <div className="space-y-3">
-                    {riskDistribution.map((risk, idx) => (
-                      <div key={idx}>
-                        <div className={`flex justify-between text-[10px] font-bold mb-1 ${isRTL ? 'flex-row-reverse' : ''}`}>
-                          <span className="text-slate-600">{riskDistributionLabels[risk.category] || risk.category}</span>
-                          <span className="text-slate-900">{risk.percentage}%</span>
-                        </div>
-                        <div className={`h-1.5 bg-slate-100 rounded-full overflow-hidden ${isRTL ? 'rotate-180' : ''}`}>
-                          <div
-                            className={cn('h-full rounded-full transition-all', risk.color)}
-                            style={{ width: `${risk.percentage}%` }}
-                          />
-                        </div>
+                  <h3 className={`text-xs font-bold text-slate-900 mb-3`}>{t('reports.riskDistribution')}</h3>
+                  {riskDistribution.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-6 text-center">
+                      <Icon icon="lucide:shield-off" className="text-2xl text-slate-300 mb-2" />
+                      <p className="text-[11px] text-slate-400">{t('reports.noRiskData' as TranslationKey)}</p>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="space-y-3">
+                        {riskDistribution.map((risk, idx) => (
+                          <div key={idx}>
+                            <div className={`flex justify-between text-[10px] font-bold mb-1`}>
+                              <span className="text-slate-600">{riskDistributionLabels[risk.category] || risk.category}</span>
+                              <span className="text-slate-900">{risk.percentage}%</span>
+                            </div>
+                            <div className={`h-1.5 bg-slate-100 rounded-full overflow-hidden`}>
+                              <div
+                                className={cn('h-full rounded-full transition-all', risk.color)}
+                                style={{ width: `${risk.percentage}%` }}
+                              />
+                            </div>
+                          </div>
+                        ))}
                       </div>
-                    ))}
-                  </div>
-                  <button
-                    onClick={() => setShowBreakdownModal(true)}
-                    className={`w-full mt-4 py-2 text-[10px] font-bold text-emerald-600 hover:text-emerald-700 transition-colors bg-emerald-50 rounded-lg flex items-center justify-center gap-1.5 cursor-pointer ${isRTL ? 'flex-row-reverse' : ''}`}
-                  >
-                    {t('reports.viewFullBreakdown')}
-                    <Icon icon="lucide:external-link" className="w-2.5 h-2.5" />
-                  </button>
+                      <button
+                        onClick={() => setShowBreakdownModal(true)}
+                        className={`w-full mt-4 py-2 text-[10px] font-bold text-emerald-600 hover:text-emerald-700 transition-colors bg-emerald-50 rounded-lg flex items-center justify-center gap-1.5 cursor-pointer`}
+                      >
+                        {t('reports.viewFullBreakdown')}
+                        <Icon icon="lucide:external-link" className="w-2.5 h-2.5" />
+                      </button>
+                    </>
+                  )}
                 </CardContent>
               </Card>
 
               {/* Findings Table — dense */}
               <Card className="col-span-2">
                 <CardContent className="pt-3 pb-2 px-3">
-                  <div className={`flex items-center justify-between mb-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                  <div className={`flex items-center justify-between mb-2`}>
                     <h3 className="text-xs font-bold text-slate-900">{t('reports.recentAuditFindings')}</h3>
-                    <div className={`flex gap-1.5 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                    <div className={`flex gap-1.5`}>
                       <Badge className="bg-rose-50 text-rose-600 text-[10px] px-1.5 py-0">{criticalCount} {t('reports.critical')}</Badge>
                       <Badge className="bg-slate-100 text-slate-600 text-[10px] px-1.5 py-0">{auditFindings.length} {t('reports.total')}</Badge>
                     </div>
                   </div>
+                  {auditFindings.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-8 text-center">
+                      <Icon icon="lucide:clipboard-check" className="text-2xl text-slate-300 mb-2" />
+                      <p className="text-[11px] text-slate-400">{t('reports.noAuditFindings' as TranslationKey)}</p>
+                    </div>
+                  ) : (
                   <div className="overflow-x-auto">
                     <table className={`w-full ${isRTL ? 'text-right' : 'text-left'}`}>
                       <thead>
@@ -1647,19 +1784,23 @@ export default function ReportsPage() {
                               </Badge>
                             </td>
                             <td className="px-2 py-2">
-                              <div className={`flex items-center gap-1.5 ${isRTL ? 'flex-row-reverse' : ''}`}>
-                                <img src={finding.owner.avatar} className="w-5 h-5 rounded-full" alt={finding.owner.name} />
+                              <div className={`flex items-center gap-1.5`}>
+                                {finding.owner.avatar ? (
+                                  <img src={finding.owner.avatar} className="w-5 h-5 rounded-full" alt={finding.owner.name} />
+                                ) : (
+                                  <div className="w-5 h-5 rounded-full bg-slate-200 flex items-center justify-center text-[8px] font-bold text-slate-500">{finding.owner.name.charAt(0)}</div>
+                                )}
                                 <span className="text-[10px] font-medium text-slate-700">{finding.owner.name}</span>
                               </div>
                             </td>
                             <td className="px-2 py-2">
-                              <div className={`flex items-center gap-1 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                              <div className={`flex items-center gap-1`}>
                                 <div className={cn('w-1.5 h-1.5 rounded-full', statusConfig[finding.status].dotColor)} />
                                 <span className="text-[10px] font-bold text-slate-600">{statusLabels[finding.status]}</span>
                               </div>
                             </td>
                             <td className={`px-2 py-2 ${isRTL ? 'text-left' : 'text-right'}`}>
-                              <div className={`flex items-center ${isRTL ? 'justify-start flex-row-reverse' : 'justify-end'} text-emerald-600 opacity-0 group-hover:opacity-100 transition-opacity`}>
+                              <div className={`flex items-center justify-end text-emerald-600 opacity-0 group-hover:opacity-100 transition-opacity`}>
                                 <span className="text-[10px] font-bold">{t('reports.details')}</span>
                                 <Icon icon="lucide:chevron-right" className={cn("w-3.5 h-3.5", isRTL && "flip-x")} />
                               </div>
@@ -1669,6 +1810,7 @@ export default function ReportsPage() {
                       </tbody>
                     </table>
                   </div>
+                  )}
                 </CardContent>
               </Card>
             </div>
@@ -1684,7 +1826,7 @@ export default function ReportsPage() {
           <Card>
             <CardContent className="pt-6">
               <div className="grid grid-cols-4 gap-4 mb-4">
-                <div className={isRTL ? 'text-right' : ''}>
+                <div className={`min-w-0`}>
                   <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 block">{t('reports.search')}</label>
                   <div className="relative">
                     <Icon icon="lucide:search" className={`absolute ${isRTL ? 'right-3' : 'left-3'} top-1/2 -translate-y-1/2 text-slate-400`} />
@@ -1693,11 +1835,11 @@ export default function ReportsPage() {
                       placeholder={t('reports.searchLogs')}
                       value={searchTerm}
                       onChange={(e) => setSearchTerm(e.target.value)}
-                      className={`w-full ${isRTL ? 'pr-10 pl-4' : 'pl-10 pr-4'} py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500`}
+                      className={`w-full ${isRTL ? 'pr-2 pl-4 py-3.5' : 'pl-10 pr-4 py-2.5'} bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500`}
                     />
                   </div>
                 </div>
-                <div className={isRTL ? 'text-right' : ''}>
+                <div className={`min-w-0`}>
                   <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 block">{t('reports.actionType')}</label>
                   <select
                     value={filterAction}
@@ -1710,7 +1852,7 @@ export default function ReportsPage() {
                     ))}
                   </select>
                 </div>
-                <div className={isRTL ? 'text-right' : ''}>
+                <div className={`min-w-0`}>
                   <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 block">{t('reports.auditNameFilter')}</label>
                   <select
                     value={filterAudit}
@@ -1723,7 +1865,7 @@ export default function ReportsPage() {
                     ))}
                   </select>
                 </div>
-                <div className={isRTL ? 'text-right' : ''}>
+                <div className={`min-w-0`}>
                   <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 block">{t('reports.dateRange')}</label>
                   <select
                     value={dateRangeFilter}
@@ -1737,7 +1879,7 @@ export default function ReportsPage() {
                   </select>
                 </div>
               </div>
-              <div className={`flex items-center justify-between ${isRTL ? 'flex-row-reverse' : ''}`}>
+              <div className={`flex items-center justify-between`}>
                 <span className="text-xs text-slate-500">
                   {t('reports.logEntriesFound').replace('{count}', filteredLogs.length.toString())}
                 </span>
@@ -1756,10 +1898,10 @@ export default function ReportsPage() {
           {/* Logs Table with Live Tracking badge */}
           <Card>
             <CardHeader>
-              <div className={`flex items-center justify-between ${isRTL ? 'flex-row-reverse' : ''}`}>
-                <div className={`flex items-center gap-3 ${isRTL ? 'flex-row-reverse' : ''}`}>
+              <div className={`flex items-center justify-between`}>
+                <div className={`flex items-center gap-3`}>
                   <CardTitle>{t('reports.activityLogs')}</CardTitle>
-                  <span className={`px-2.5 py-1 bg-emerald-50 text-emerald-600 text-[10px] font-bold rounded-full border border-emerald-100 uppercase flex items-center gap-1.5 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                  <span className={`px-2.5 py-1 bg-emerald-50 text-emerald-600 text-[10px] font-bold rounded-full border border-emerald-100 uppercase flex items-center gap-1.5`}>
                     <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
                     {t('reports.liveTracking')}
                   </span>
@@ -1783,12 +1925,23 @@ export default function ReportsPage() {
                         }}
                         className="px-4 py-3 text-[10px] font-bold text-slate-400 uppercase tracking-widest cursor-pointer hover:bg-slate-100 transition-colors"
                       >
-                        <div className={`flex items-center gap-1 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                        <div className={`flex items-center gap-1`}>
                           {t('reports.timestamp')}
-                          <Icon
-                            icon={sortColumn === 'timestamp' ? (sortDirection === 'asc' ? 'lucide:arrow-up' : 'lucide:arrow-down') : 'lucide:arrow-up-down'}
-                            className={cn('w-3 h-3', sortColumn === 'timestamp' ? 'text-emerald-600' : 'text-slate-300')}
-                          />
+                          {sortColumn !== 'timestamp' ? (
+                            <Icon icon="lucide:arrow-up-down" className="w-3 h-3 text-slate-300" />
+                          ) : (
+                            <span className="inline-flex items-center gap-0.5">
+                              <Icon
+                                icon={sortDirection === 'asc' ? 'lucide:arrow-up' : 'lucide:arrow-down'}
+                                className="w-3 h-3 text-emerald-600"
+                              />
+                              <Icon
+                                icon="lucide:x"
+                                className="w-3 h-3 text-slate-400 hover:text-rose-500 cursor-pointer transition-colors"
+                                onClick={(e: React.MouseEvent) => { e.stopPropagation(); setSortColumn(null) }}
+                              />
+                            </span>
+                          )}
                         </div>
                       </th>
                       <th className="px-4 py-3 text-[10px] font-bold text-slate-400 uppercase tracking-widest">{t('reports.user')}</th>
@@ -1803,12 +1956,23 @@ export default function ReportsPage() {
                         }}
                         className="px-4 py-3 text-[10px] font-bold text-slate-400 uppercase tracking-widest cursor-pointer hover:bg-slate-100 transition-colors"
                       >
-                        <div className={`flex items-center gap-1 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                        <div className={`flex items-center gap-1`}>
                           {t('reports.action')}
-                          <Icon
-                            icon={sortColumn === 'action' ? (sortDirection === 'asc' ? 'lucide:arrow-up' : 'lucide:arrow-down') : 'lucide:arrow-up-down'}
-                            className={cn('w-3 h-3', sortColumn === 'action' ? 'text-emerald-600' : 'text-slate-300')}
-                          />
+                          {sortColumn !== 'action' ? (
+                            <Icon icon="lucide:arrow-up-down" className="w-3 h-3 text-slate-300" />
+                          ) : (
+                            <span className="inline-flex items-center gap-0.5">
+                              <Icon
+                                icon={sortDirection === 'asc' ? 'lucide:arrow-up' : 'lucide:arrow-down'}
+                                className="w-3 h-3 text-emerald-600"
+                              />
+                              <Icon
+                                icon="lucide:x"
+                                className="w-3 h-3 text-slate-400 hover:text-rose-500 cursor-pointer transition-colors"
+                                onClick={(e: React.MouseEvent) => { e.stopPropagation(); setSortColumn(null) }}
+                              />
+                            </span>
+                          )}
                         </div>
                       </th>
                       <th
@@ -1822,12 +1986,23 @@ export default function ReportsPage() {
                         }}
                         className="px-4 py-3 text-[10px] font-bold text-slate-400 uppercase tracking-widest cursor-pointer hover:bg-slate-100 transition-colors"
                       >
-                        <div className={`flex items-center gap-1 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                        <div className={`flex items-center gap-1`}>
                           {t('reports.audit')}
-                          <Icon
-                            icon={sortColumn === 'audit' ? (sortDirection === 'asc' ? 'lucide:arrow-up' : 'lucide:arrow-down') : 'lucide:arrow-up-down'}
-                            className={cn('w-3 h-3', sortColumn === 'audit' ? 'text-emerald-600' : 'text-slate-300')}
-                          />
+                          {sortColumn !== 'audit' ? (
+                            <Icon icon="lucide:arrow-up-down" className="w-3 h-3 text-slate-300" />
+                          ) : (
+                            <span className="inline-flex items-center gap-0.5">
+                              <Icon
+                                icon={sortDirection === 'asc' ? 'lucide:arrow-up' : 'lucide:arrow-down'}
+                                className="w-3 h-3 text-emerald-600"
+                              />
+                              <Icon
+                                icon="lucide:x"
+                                className="w-3 h-3 text-slate-400 hover:text-rose-500 cursor-pointer transition-colors"
+                                onClick={(e: React.MouseEvent) => { e.stopPropagation(); setSortColumn(null) }}
+                              />
+                            </span>
+                          )}
                         </div>
                       </th>
                       <th className="px-4 py-3 text-[10px] font-bold text-slate-400 uppercase tracking-widest">{t('reports.description')}</th>
@@ -1842,19 +2017,30 @@ export default function ReportsPage() {
                         }}
                         className="px-4 py-3 text-[10px] font-bold text-slate-400 uppercase tracking-widest cursor-pointer hover:bg-slate-100 transition-colors"
                       >
-                        <div className={`flex items-center gap-1 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                        <div className={`flex items-center gap-1`}>
                           {t('reports.status')}
-                          <Icon
-                            icon={sortColumn === 'status' ? (sortDirection === 'asc' ? 'lucide:arrow-up' : 'lucide:arrow-down') : 'lucide:arrow-up-down'}
-                            className={cn('w-3 h-3', sortColumn === 'status' ? 'text-emerald-600' : 'text-slate-300')}
-                          />
+                          {sortColumn !== 'status' ? (
+                            <Icon icon="lucide:arrow-up-down" className="w-3 h-3 text-slate-300" />
+                          ) : (
+                            <span className="inline-flex items-center gap-0.5">
+                              <Icon
+                                icon={sortDirection === 'asc' ? 'lucide:arrow-up' : 'lucide:arrow-down'}
+                                className="w-3 h-3 text-emerald-600"
+                              />
+                              <Icon
+                                icon="lucide:x"
+                                className="w-3 h-3 text-slate-400 hover:text-rose-500 cursor-pointer transition-colors"
+                                onClick={(e: React.MouseEvent) => { e.stopPropagation(); setSortColumn(null) }}
+                              />
+                            </span>
+                          )}
                         </div>
                       </th>
                       <th className="px-4 py-3"></th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-50">
-                    {filteredLogs.map((log) => (
+                    {paginatedLogs.map((log) => (
                       <React.Fragment key={log.id}>
                         <tr
                           onClick={() => toggleLogExpand(log.id)}
@@ -1873,7 +2059,7 @@ export default function ReportsPage() {
                             })}
                           </td>
                           <td className="px-4 py-4">
-                            <div className={`flex items-center gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                            <div className={`flex items-center gap-2`}>
                               <img src={log.user.avatar} className="w-6 h-6 rounded-full" alt={log.user.name} />
                               <span className="text-xs font-medium text-slate-700">{log.user.name}</span>
                             </div>
@@ -1902,7 +2088,7 @@ export default function ReportsPage() {
                             <td colSpan={7} className="px-4 py-4 bg-slate-50">
                               <div className={`${isRTL ? 'mr-8' : 'ml-8'} p-5 bg-white rounded-xl border border-slate-200 shadow-sm`}>
                                 <div className="grid grid-cols-4 gap-6">
-                                  <div className={`flex items-center gap-3 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                                  <div className={`flex items-center gap-3`}>
                                     <img src={log.user.avatar} className="w-10 h-10 rounded-full border-2 border-white shadow-sm" alt={log.user.name} />
                                     <div className={isRTL ? 'text-right' : ''}>
                                       <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{t('reports.performedBy')}</p>
@@ -1925,17 +2111,26 @@ export default function ReportsPage() {
                                   </div>
                                 </div>
                                 {log.context && (
-                                  <div className={`mt-4 pt-4 border-t border-slate-100 ${isRTL ? 'text-right' : ''}`}>
+                                  <div className={`mt-4 pt-4 border-t border-slate-100`}>
                                     <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">{t('reports.fullContext')}</p>
                                     <p className="text-sm text-slate-700 leading-relaxed">{log.context}</p>
                                   </div>
                                 )}
-                                <div className={`flex gap-3 mt-4 pt-4 border-t border-slate-100 ${isRTL ? 'flex-row-reverse' : ''}`}>
-                                  <Button variant="outline" size="sm">
-                                    <Icon icon="lucide:external-link" className="w-3 h-3" />
-                                    {t('reports.viewAuditDetails')}
-                                  </Button>
-                                  <Button variant="ghost" size="sm">
+                                <div className={`flex gap-3 mt-4 pt-4 border-t border-slate-100`}>
+                                  {log.auditId ? (
+                                    <Link href={`/audits/${log.auditId}`}>
+                                      <Button variant="outline" size="sm">
+                                        <Icon icon="lucide:external-link" className="w-3 h-3" />
+                                        {t('reports.viewAuditDetails')}
+                                      </Button>
+                                    </Link>
+                                  ) : (
+                                    <Button variant="outline" size="sm" disabled>
+                                      <Icon icon="lucide:external-link" className="w-3 h-3" />
+                                      {t('reports.viewAuditDetails')}
+                                    </Button>
+                                  )}
+                                  <Button variant="ghost" size="sm" onClick={() => exportSingleLog(log, `log-${log.id}`, t, isRTL)}>
                                     <Icon icon="lucide:download" className="w-3 h-3" />
                                     {t('reports.exportLogEntry')}
                                   </Button>
@@ -1949,6 +2144,31 @@ export default function ReportsPage() {
                   </tbody>
                 </table>
               </div>
+              {/* Pagination */}
+              {filteredLogs.length > LOGS_PER_PAGE && (
+                <div className={`flex items-center justify-between pt-4 mt-4 border-t border-slate-100`}>
+                  <span className="text-xs text-slate-500" dir="ltr">
+                    {(logPage - 1) * LOGS_PER_PAGE + 1}–{Math.min(logPage * LOGS_PER_PAGE, filteredLogs.length)} / {filteredLogs.length}
+                  </span>
+                  <div className={`flex items-center gap-2`}>
+                    <button
+                      onClick={() => setLogPage((p) => Math.max(1, p - 1))}
+                      disabled={logPage === 1}
+                      className="px-3 py-1.5 text-xs font-bold text-slate-600 bg-slate-100 rounded-lg hover:bg-slate-200 transition-colors disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                    >
+                      <Icon icon={isRTL ? 'lucide:chevron-right' : 'lucide:chevron-left'} className="w-3.5 h-3.5" />
+                    </button>
+                    <span className="text-xs font-bold text-slate-700" dir="ltr">{logPage} / {totalLogPages}</span>
+                    <button
+                      onClick={() => setLogPage((p) => Math.min(totalLogPages, p + 1))}
+                      disabled={logPage === totalLogPages}
+                      className="px-3 py-1.5 text-xs font-bold text-slate-600 bg-slate-100 rounded-lg hover:bg-slate-200 transition-colors disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                    >
+                      <Icon icon={isRTL ? 'lucide:chevron-left' : 'lucide:chevron-right'} className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
           </div>
@@ -1960,7 +2180,7 @@ export default function ReportsPage() {
             {/* Risk Stats */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
               <Card className="p-6">
-                <div className={`flex items-center gap-4 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                <div className={`flex items-center gap-4`}>
                   <div className="p-3 bg-rose-50 rounded-xl">
                     <Icon icon="lucide:alert-triangle" className="text-2xl text-rose-600" />
                   </div>
@@ -1971,7 +2191,7 @@ export default function ReportsPage() {
                 </div>
               </Card>
               <Card className="p-6">
-                <div className={`flex items-center gap-4 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                <div className={`flex items-center gap-4`}>
                   <div className="p-3 bg-amber-50 rounded-xl">
                     <Icon icon="lucide:clock" className="text-2xl text-amber-600" />
                   </div>
@@ -1982,7 +2202,7 @@ export default function ReportsPage() {
                 </div>
               </Card>
               <Card className="p-6">
-                <div className={`flex items-center gap-4 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                <div className={`flex items-center gap-4`}>
                   <div className="p-3 bg-blue-50 rounded-xl">
                     <Icon icon="lucide:check-circle" className="text-2xl text-blue-600" />
                   </div>
@@ -1993,7 +2213,7 @@ export default function ReportsPage() {
                 </div>
               </Card>
               <Card className="p-6">
-                <div className={`flex items-center gap-4 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                <div className={`flex items-center gap-4`}>
                   <div className="p-3 bg-emerald-50 rounded-xl">
                     <Icon icon="lucide:shield-check" className="text-2xl text-emerald-600" />
                   </div>
@@ -2010,7 +2230,7 @@ export default function ReportsPage() {
               {/* 5x5 Risk Matrix */}
               <Card className="p-6">
                 <CardHeader className="p-0 mb-6">
-                  <CardTitle className={`text-sm font-bold text-slate-900 flex items-center gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                  <CardTitle className={`text-sm font-bold text-slate-900 flex items-center gap-2`}>
                     <Icon icon="lucide:grid-3x3" className="text-slate-400" />
                     {t('reports.riskMatrix' as TranslationKey)}
                   </CardTitle>
@@ -2076,20 +2296,20 @@ export default function ReportsPage() {
                     </div>
                   </div>
                   {/* Legend */}
-                  <div className={`flex justify-center gap-4 mt-4 pt-4 border-t border-slate-100 ${isRTL ? 'flex-row-reverse' : ''}`}>
-                    <div className={`flex items-center gap-1 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                  <div className={`flex justify-center gap-4 mt-4 pt-4 border-t border-slate-100`}>
+                    <div className={`flex items-center gap-1`}>
                       <div className="w-3 h-3 rounded bg-rose-500" />
                       <span className="text-[10px] font-bold text-slate-500">{t('reports.critical' as TranslationKey)}</span>
                     </div>
-                    <div className={`flex items-center gap-1 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                    <div className={`flex items-center gap-1`}>
                       <div className="w-3 h-3 rounded bg-orange-500" />
                       <span className="text-[10px] font-bold text-slate-500">{t('reports.high' as TranslationKey)}</span>
                     </div>
-                    <div className={`flex items-center gap-1 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                    <div className={`flex items-center gap-1`}>
                       <div className="w-3 h-3 rounded bg-amber-400" />
                       <span className="text-[10px] font-bold text-slate-500">{t('reports.medium' as TranslationKey)}</span>
                     </div>
-                    <div className={`flex items-center gap-1 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                    <div className={`flex items-center gap-1`}>
                       <div className="w-3 h-3 rounded bg-emerald-400" />
                       <span className="text-[10px] font-bold text-slate-500">{t('reports.low' as TranslationKey)}</span>
                     </div>
@@ -2100,17 +2320,17 @@ export default function ReportsPage() {
               {/* Category Distribution with Monitoring */}
               <Card className="p-6">
                 <CardHeader className="p-0 mb-6">
-                  <div className={`flex items-center justify-between ${isRTL ? 'flex-row-reverse' : ''}`}>
-                    <CardTitle className={`text-sm font-bold text-slate-900 flex items-center gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                  <div className={`flex items-center justify-between`}>
+                    <CardTitle className={`text-sm font-bold text-slate-900 flex items-center gap-2`}>
                       <Icon icon="lucide:pie-chart" className="text-slate-400" />
                       {t('reports.risksByCategory' as TranslationKey)}
                     </CardTitle>
-                    <div className={`flex items-center gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                    <div className={`flex items-center gap-2`}>
                       <span className="text-[10px] font-bold text-slate-400 uppercase">{t('reports.monitoringFrequency' as TranslationKey)}:</span>
                       <select
                         value={monitoringFrequencyFilter}
                         onChange={(e) => setMonitoringFrequencyFilter(e.target.value as MonitoringFrequency | 'all')}
-                        className={`px-2 py-1 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 ${isRTL ? 'text-right' : ''}`}
+                        className={`px-2 py-1 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500`}
                       >
                         <option value="all">{t('common.all')}</option>
                         <option value="weekly">{t('reports.weekly' as TranslationKey)}</option>
@@ -2136,8 +2356,8 @@ export default function ReportsPage() {
 
                     return (
                       <div key={category} className="p-3 border border-slate-100 rounded-xl hover:border-emerald-200 transition-colors">
-                        <div className={`flex items-center justify-between mb-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
-                          <div className={`flex items-center gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                        <div className={`flex items-center justify-between mb-2`}>
+                          <div className={`flex items-center gap-2`}>
                             <div className={cn('w-8 h-8 rounded-lg flex items-center justify-center', config.color)}>
                               <Icon icon={config.icon} className="text-sm" />
                             </div>
@@ -2146,10 +2366,10 @@ export default function ReportsPage() {
                               <span className="text-xs text-slate-400 ml-2">{count} {t('reports.risk' as TranslationKey)}{count !== 1 ? 's' : ''}</span>
                             </div>
                           </div>
-                          <div className={`flex items-center gap-4 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                          <div className={`flex items-center gap-4`}>
                             {/* Due for review indicators */}
-                            <div className={`flex items-center gap-1.5 ${isRTL ? 'flex-row-reverse' : ''}`}>
-                              <div className={`flex gap-0.5 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                            <div className={`flex items-center gap-1.5`}>
+                              <div className={`flex gap-0.5`}>
                                 {[...Array(Math.min(count, 5))].map((_, i) => (
                                   <div
                                     key={i}
@@ -2176,7 +2396,7 @@ export default function ReportsPage() {
                         </div>
                         {/* Progress bar */}
                         <div className="mt-2">
-                          <div className={`flex items-center justify-between text-[10px] text-slate-400 mb-1 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                          <div className={`flex items-center justify-between text-[10px] text-slate-400 mb-1`}>
                             <span>{t('reports.progress' as TranslationKey)}</span>
                             <span className="font-bold text-slate-600">{avgProgress}%</span>
                           </div>
@@ -2196,13 +2416,13 @@ export default function ReportsPage() {
 
             {/* Risk List */}
             <Card>
-              <CardHeader className={`flex items-center justify-between ${isRTL ? 'flex-row-reverse' : ''}`}>
+              <CardHeader className={`flex items-center justify-between`}>
                 <CardTitle className="text-sm font-bold text-slate-900">{t('reports.riskList' as TranslationKey)}</CardTitle>
-                <div className={`flex items-center gap-3 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                <div className={`flex items-center gap-3`}>
                   <select
                     value={riskCategoryFilter}
                     onChange={(e) => setRiskCategoryFilter(e.target.value as RiskCategory | '')}
-                    className={`px-3 py-1.5 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 ${isRTL ? 'text-right' : ''}`}
+                    className={`px-3 py-1.5 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500`}
                   >
                     <option value="">{t('reports.allCategories' as TranslationKey)}</option>
                     <option value="operational">{t('reports.operational' as TranslationKey)}</option>
@@ -2214,7 +2434,7 @@ export default function ReportsPage() {
                   <select
                     value={riskStatusFilter}
                     onChange={(e) => setRiskStatusFilter(e.target.value as RiskStatus | '')}
-                    className={`px-3 py-1.5 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 ${isRTL ? 'text-right' : ''}`}
+                    className={`px-3 py-1.5 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500`}
                   >
                     <option value="">{t('reports.allStatuses' as TranslationKey)}</option>
                     <option value="open">{t('reports.open' as TranslationKey)}</option>
@@ -2259,7 +2479,7 @@ export default function ReportsPage() {
                               </span>
                             </td>
                             <td className="px-6 py-4">
-                              <div className={`flex items-center gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                              <div className={`flex items-center gap-2`}>
                                 <div className={cn('w-3 h-3 rounded', level.bgColor)} />
                                 <span className={cn('text-sm font-bold', level.color)}>{score}</span>
                                 <span className="text-xs text-slate-400">({level.label})</span>
@@ -2271,7 +2491,7 @@ export default function ReportsPage() {
                               </span>
                             </td>
                             <td className="px-6 py-4">
-                              <div className={`flex items-center gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                              <div className={`flex items-center gap-2`}>
                                 <img src={risk.owner.avatar} className="w-7 h-7 rounded-full border border-slate-200" alt={risk.owner.name} />
                                 <div className={isRTL ? 'text-right' : ''}>
                                   <p className="text-xs font-bold text-slate-700">{risk.owner.name}</p>
@@ -2310,7 +2530,7 @@ export default function ReportsPage() {
       >
         <div className={`flex flex-col max-h-[85vh] -m-6 ${isRTL ? 'rtl' : ''}`}>
           {/* Header with bg */}
-          <div className={`p-8 border-b border-slate-100 flex items-center justify-between bg-slate-50/50 ${isRTL ? 'flex-row-reverse' : ''}`}>
+          <div className={`p-8 border-b border-slate-100 flex items-center justify-between bg-slate-50/50`}>
             <div className={isRTL ? 'text-right' : ''}>
               <h2 className="text-xl font-bold font-display text-slate-900">{t('reports.detailedRiskBreakdown')}</h2>
               <p className="text-xs text-slate-500">{t('reports.comprehensiveAnalysis')}</p>
@@ -2325,86 +2545,156 @@ export default function ReportsPage() {
 
           {/* Content */}
           <div className="p-8 space-y-6 overflow-y-auto hide-scrollbar">
+            {mockRiskRegister.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-12 text-center">
+                <Icon icon="lucide:shield-off" className="text-4xl text-slate-300 mb-3" />
+                <p className="text-sm text-slate-400">{t('reports.noRiskData' as TranslationKey)}</p>
+              </div>
+            ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-              {/* Left Column - Primary Vectors */}
+              {/* Left Column - Risk Distribution by Category */}
               <div className="space-y-6">
-                <h3 className={`text-[10px] font-black text-slate-400 uppercase tracking-widest ${isRTL ? 'text-right' : ''}`}>{t('reports.primaryVectors')}</h3>
+                <h3 className={`text-[10px] font-black text-slate-400 uppercase tracking-widest`}>{t('reports.riskDistribution')}</h3>
                 <div className="space-y-4">
-                  <div className="flex flex-col gap-1">
-                    <div className={`flex justify-between items-center ${isRTL ? 'flex-row-reverse' : ''}`}>
-                      <span className="text-sm font-bold text-slate-700">{t('reports.cloudInfrastructure')}</span>
-                      <span className="text-xs font-bold text-emerald-600">42.5%</span>
+                  {riskDistribution.map((risk, idx) => (
+                    <div key={idx} className="flex flex-col gap-1">
+                      <div className={`flex justify-between items-center`}>
+                        <span className="text-sm font-bold text-slate-700">{riskDistributionLabels[risk.category] || risk.category}</span>
+                        <span className="text-xs font-bold text-slate-600">{risk.percentage}%</span>
+                      </div>
+                      <div className={`h-2 bg-slate-100 rounded-full ${isRTL ? 'rotate-180' : ''}`}>
+                        <div className={cn('h-full rounded-full', risk.color)} style={{ width: `${risk.percentage}%` }} />
+                      </div>
                     </div>
-                    <div className={`h-2 bg-slate-100 rounded-full ${isRTL ? 'rotate-180' : ''}`}>
-                      <div className="h-full bg-emerald-500 rounded-full" style={{ width: '42.5%' }} />
-                    </div>
-                    <p className={`text-[10px] text-slate-400 ${isRTL ? 'text-right' : ''}`}>{t('reports.includesVpcIam')}</p>
-                  </div>
-                  <div className="flex flex-col gap-1">
-                    <div className={`flex justify-between items-center ${isRTL ? 'flex-row-reverse' : ''}`}>
-                      <span className="text-sm font-bold text-slate-700">{t('reports.userManagement')}</span>
-                      <span className="text-xs font-bold text-amber-500">28.1%</span>
-                    </div>
-                    <div className={`h-2 bg-slate-100 rounded-full ${isRTL ? 'rotate-180' : ''}`}>
-                      <div className="h-full bg-amber-400 rounded-full" style={{ width: '28.1%' }} />
-                    </div>
-                    <p className={`text-[10px] text-slate-400 ${isRTL ? 'text-right' : ''}`}>{t('reports.mfaCompliance')}</p>
-                  </div>
-                  <div className="flex flex-col gap-1">
-                    <div className={`flex justify-between items-center ${isRTL ? 'flex-row-reverse' : ''}`}>
-                      <span className="text-sm font-bold text-slate-700">{t('reports.dataEncryption')}</span>
-                      <span className="text-xs font-bold text-blue-500">15.4%</span>
-                    </div>
-                    <div className={`h-2 bg-slate-100 rounded-full ${isRTL ? 'rotate-180' : ''}`}>
-                      <div className="h-full bg-blue-500 rounded-full" style={{ width: '15.4%' }} />
-                    </div>
-                    <p className={`text-[10px] text-slate-400 ${isRTL ? 'text-right' : ''}`}>{t('reports.atRestInTransit')}</p>
-                  </div>
+                  ))}
                 </div>
               </div>
 
-              {/* Right Column - Risk Trend Analysis */}
+              {/* Right Column - Risk Summary */}
               <div className="space-y-6">
-                <h3 className={`text-[10px] font-black text-slate-400 uppercase tracking-widest ${isRTL ? 'text-right' : ''}`}>{t('reports.riskTrendAnalysis')}</h3>
-                <div className="p-6 bg-slate-50 rounded-2xl border border-slate-100">
-                  <div className={`flex items-center gap-4 mb-4 ${isRTL ? 'flex-row-reverse' : ''}`}>
-                    <div className="p-3 bg-rose-100 text-rose-600 rounded-xl">
-                      <Icon icon="lucide:trending-up" className="text-2xl" />
-                    </div>
-                    <div className={isRTL ? 'text-right' : ''}>
-                      <p className="text-xs font-bold text-slate-900">{t('reports.trendIncrease')}</p>
-                      <p className="text-[10px] text-slate-500">+4.2% {t('reports.sinceLastMonth')}</p>
-                    </div>
-                  </div>
-                  <p className={`text-xs text-slate-600 leading-relaxed ${isRTL ? 'text-right' : ''}`}>
-                    {t('reports.riskShiftDescription')}
-                  </p>
-                </div>
+                <h3 className={`text-[10px] font-black text-slate-400 uppercase tracking-widest`}>{t('reports.riskSummary' as TranslationKey)}</h3>
                 <div className="grid grid-cols-2 gap-4">
-                  <div className={`p-4 bg-white border border-slate-100 rounded-xl shadow-sm ${isRTL ? 'text-right' : ''}`}>
-                    <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">{t('reports.worstPerformer')}</p>
-                    <p className="text-sm font-black text-rose-600">Mobile App v2</p>
+                  <div className={`p-4 bg-white border border-slate-100 rounded-xl shadow-sm`}>
+                    <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">{t('reports.totalRegisteredRisks' as TranslationKey)}</p>
+                    <p className="text-2xl font-black text-slate-900">{mockRiskRegister.length}</p>
                   </div>
-                  <div className={`p-4 bg-white border border-slate-100 rounded-xl shadow-sm ${isRTL ? 'text-right' : ''}`}>
-                    <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">{t('reports.bestPerformer')}</p>
-                    <p className="text-sm font-black text-emerald-600">Core API</p>
+                  <div className={`p-4 bg-white border border-slate-100 rounded-xl shadow-sm`}>
+                    <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">{t('reports.avgScore' as TranslationKey)}</p>
+                    <p className="text-2xl font-black text-slate-900">
+                      {Math.round(mockRiskRegister.reduce((sum, r) => sum + getRiskScore(r.likelihood, r.impact), 0) / mockRiskRegister.length)}
+                    </p>
                   </div>
+                  {(() => {
+                    const sorted = [...mockRiskRegister].sort((a, b) => getRiskScore(b.likelihood, b.impact) - getRiskScore(a.likelihood, a.impact))
+                    const highest = sorted[0]
+                    const lowest = sorted[sorted.length - 1]
+                    return (
+                      <>
+                        <div className={`p-4 bg-white border border-slate-100 rounded-xl shadow-sm`}>
+                          <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">{t('reports.highestRisk' as TranslationKey)}</p>
+                          <p className="text-sm font-black text-rose-600 truncate">{highest.name}</p>
+                          <p className="text-[10px] text-slate-500">{t('reports.score')}: {getRiskScore(highest.likelihood, highest.impact)}</p>
+                        </div>
+                        <div className={`p-4 bg-white border border-slate-100 rounded-xl shadow-sm`}>
+                          <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">{t('reports.lowestRisk' as TranslationKey)}</p>
+                          <p className="text-sm font-black text-emerald-600 truncate">{lowest.name}</p>
+                          <p className="text-[10px] text-slate-500">{t('reports.score')}: {getRiskScore(lowest.likelihood, lowest.impact)}</p>
+                        </div>
+                      </>
+                    )
+                  })()}
                 </div>
               </div>
             </div>
+            )}
           </div>
 
           {/* Footer */}
-          <div className={`p-8 border-t border-slate-100 bg-slate-50/30 flex gap-3 ${isRTL ? 'flex-row-reverse' : ''}`}>
+          <div className={`p-8 border-t border-slate-100 bg-slate-50/30 flex gap-3`}>
             <button
               onClick={() => setShowBreakdownModal(false)}
               className="px-6 py-3 bg-white border border-slate-200 text-slate-600 rounded-xl font-bold text-sm hover:bg-slate-50 transition-all cursor-pointer"
             >
               {t('reports.dismiss')}
             </button>
-            <button className={`flex-1 bg-emerald-600 text-white py-3 rounded-xl font-bold text-sm hover:bg-emerald-700 transition-all shadow-lg flex items-center justify-center gap-2 cursor-pointer ${isRTL ? 'flex-row-reverse' : ''}`}>
+            <button className={`flex-1 bg-emerald-600 text-white py-3 rounded-xl font-bold text-sm hover:bg-emerald-700 transition-all shadow-lg flex items-center justify-center gap-2 cursor-pointer`}>
               <Icon icon="lucide:file-text" />
               {t('reports.generateDetailedReportPdf')}
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* All Deductions Modal */}
+      <Modal
+        isOpen={showDeductionsModal}
+        onClose={() => setShowDeductionsModal(false)}
+        size="lg"
+      >
+        <div className={`flex flex-col max-h-[85vh] -m-6 ${isRTL ? 'rtl' : ''}`}>
+          {/* Header */}
+          <div className={`p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/50`}>
+            <div className={isRTL ? 'text-right' : ''}>
+              <h2 className="text-lg font-bold font-display text-slate-900">{t('reports.allDeductions' as TranslationKey)}</h2>
+              <p className="text-xs text-slate-500">{t('reports.deductionsSummary' as TranslationKey)}</p>
+            </div>
+            <button
+              onClick={() => setShowDeductionsModal(false)}
+              className="text-slate-400 hover:text-slate-600 transition-colors p-2 cursor-pointer"
+            >
+              <Icon icon="lucide:x" className="text-2xl" />
+            </button>
+          </div>
+
+          {/* Content */}
+          <div className="p-6 overflow-y-auto hide-scrollbar space-y-1.5">
+            {complianceScore.deductions.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-8 text-center">
+                <Icon icon="lucide:shield-check" className="text-3xl text-emerald-400 mb-2" />
+                <p className="text-sm text-slate-500">{t('reports.noDeductions' as TranslationKey)}</p>
+              </div>
+            ) : (
+              complianceScore.deductions.map((d, idx) => {
+                const deductionSeverityColors: Record<string, string> = {
+                  critical: 'bg-rose-100 text-rose-700',
+                  high: 'bg-amber-100 text-amber-700',
+                  medium: 'bg-slate-100 text-slate-600',
+                  low: 'bg-slate-100 text-slate-600',
+                }
+                const deductionSeverityBorder: Record<string, string> = {
+                  critical: 'border-l-rose-500',
+                  high: 'border-l-amber-500',
+                  medium: 'border-l-slate-300',
+                  low: 'border-l-slate-200',
+                }
+                return (
+                  <div key={idx} className={cn(
+                    'flex items-center gap-2 px-3 py-2 rounded border-l-[3px] bg-slate-50/50 transition-colors hover:bg-slate-50',
+                    deductionSeverityBorder[d.severity]
+                  )}>
+                    <span className={cn('text-[10px] font-bold min-w-[44px] text-center rounded px-1.5 py-0.5', deductionSeverityColors[d.severity])}>
+                      {d.points}
+                    </span>
+                    <span className={`text-xs text-slate-600 leading-tight`}>{d.descriptionKey ? t(d.descriptionKey as TranslationKey, d.descriptionParams) : d.description}</span>
+                  </div>
+                )
+              })
+            )}
+          </div>
+
+          {/* Footer */}
+          <div className={`p-6 border-t border-slate-100 bg-slate-50/30 flex items-center justify-between`}>
+            <div>
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{t('reports.totalImpact' as TranslationKey)}</span>
+              <span className="text-sm font-bold text-rose-600 ml-2">
+                {complianceScore.deductions.reduce((sum, d) => sum + d.points, 0)} {t('reports.pts' as TranslationKey)}
+              </span>
+            </div>
+            <button
+              onClick={() => setShowDeductionsModal(false)}
+              className="px-6 py-2.5 bg-white border border-slate-200 text-slate-600 rounded-xl font-bold text-sm hover:bg-slate-50 transition-all cursor-pointer"
+            >
+              {t('reports.dismiss')}
             </button>
           </div>
         </div>
@@ -2419,7 +2709,7 @@ export default function ReportsPage() {
         }}
       />
 
-      {/* Finding Detail Drawer - matches prototype 03 exactly */}
+      {/* Finding Detail Drawer - connected to real audit data */}
       <Drawer
         isOpen={isDrawerOpen}
         onClose={() => setIsDrawerOpen(false)}
@@ -2427,11 +2717,28 @@ export default function ReportsPage() {
         hideBackdrop
         isRTL={isRTL}
       >
-        {selectedFinding && (
+        {selectedFinding && (() => {
+          const sourceAudit = storeAudits.find(a => a.id === selectedFinding.sourceAuditId)
+          const auditTypeLabels: Record<string, string> = {
+            sama: t('reports.samaInspection'),
+            internal: t('reports.internalAudit'),
+            sharia: t('reports.shariaAudit'),
+          }
+          const docTypeIcons: Record<string, string> = {
+            pdf: 'lucide:file-text',
+            image: 'lucide:image',
+            doc: 'lucide:file',
+          }
+          const docTypeColors: Record<string, string> = {
+            pdf: 'text-rose-500',
+            image: 'text-blue-500',
+            doc: 'text-emerald-500',
+          }
+          return (
           <div className={`flex flex-col h-full ${isRTL ? 'rtl' : ''}`}>
             {/* Header */}
-            <div className={`pb-6 border-b border-slate-100 ${isRTL ? 'text-right' : ''}`}>
-              <div className={`flex items-center justify-between mb-4 ${isRTL ? 'flex-row-reverse' : ''}`}>
+            <div className={`pb-6 border-b border-slate-100`}>
+              <div className={`flex items-center justify-between mb-4`}>
                 <span className="text-[10px] font-black text-emerald-600 uppercase tracking-[0.2em]">{t('reports.findingDetail')}</span>
                 <button
                   onClick={() => setIsDrawerOpen(false)}
@@ -2440,21 +2747,71 @@ export default function ReportsPage() {
                   <Icon icon="lucide:x" className="text-xl" />
                 </button>
               </div>
-              <h2 className="text-2xl font-bold font-display text-slate-900">{selectedFinding.id}</h2>
-              <p className="text-sm text-slate-500">{selectedFinding.category} {t('reports.reviewAnalysis')}</p>
+              <h2 className="text-xl font-bold font-display text-slate-900">{selectedFinding.auditName}</h2>
+              <p className="text-sm text-slate-500">{auditTypeLabels[selectedFinding.category] || selectedFinding.category}</p>
             </div>
 
             {/* Scrollable Content */}
-            <div className="flex-1 overflow-y-auto py-6 space-y-10 hide-scrollbar">
-              {/* Issue Summary */}
+            <div className="flex-1 overflow-y-auto py-6 space-y-8 hide-scrollbar">
+              {/* Meta info row */}
+              <section>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="p-3 bg-slate-50 rounded-lg">
+                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1">{t('reports.severity')}</p>
+                    <Badge className={cn(severityConfig[selectedFinding.severity].color, 'text-[10px] px-2 py-0.5')}>
+                      {severityLabels[selectedFinding.severity].toUpperCase()}
+                    </Badge>
+                  </div>
+                  <div className="p-3 bg-slate-50 rounded-lg">
+                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1">{t('reports.status')}</p>
+                    <div className={`flex items-center gap-1.5`}>
+                      <div className={cn('w-2 h-2 rounded-full', statusConfig[selectedFinding.status].dotColor)} />
+                      <span className="text-xs font-bold text-slate-700">{statusLabels[selectedFinding.status]}</span>
+                    </div>
+                  </div>
+                  <div className="p-3 bg-slate-50 rounded-lg">
+                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1">{t('reports.dueDate')}</p>
+                    <span className="text-xs font-bold text-slate-700">{selectedFinding.dueDate.toLocaleDateString()}</span>
+                  </div>
+                  <div className="p-3 bg-slate-50 rounded-lg">
+                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1">{t('reports.progress')}</p>
+                    <div className={`flex items-center gap-2`}>
+                      <div className="flex-1 h-1.5 bg-slate-200 rounded-full overflow-hidden">
+                        <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${sourceAudit?.progress ?? 0}%` }} />
+                      </div>
+                      <span className="text-[10px] font-bold text-slate-600">{sourceAudit?.progress ?? 0}%</span>
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              {/* Assignee */}
               <section className={isRTL ? 'text-right' : ''}>
-                <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">{t('reports.issueSummary')}</h3>
+                <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">{t('reports.owner')}</h3>
+                <div className={`flex items-center gap-3 p-3 bg-slate-50 rounded-lg`}>
+                  {selectedFinding.owner.avatar ? (
+                    <img src={selectedFinding.owner.avatar} className="w-8 h-8 rounded-full" alt={selectedFinding.owner.name} />
+                  ) : (
+                    <div className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center text-xs font-bold text-slate-500">{selectedFinding.owner.name.charAt(0)}</div>
+                  )}
+                  <div>
+                    <p className="text-sm font-bold text-slate-900">{selectedFinding.owner.name}</p>
+                    {sourceAudit?.assignee.department && (
+                      <p className="text-[10px] text-slate-500">{sourceAudit.assignee.department}</p>
+                    )}
+                  </div>
+                </div>
+              </section>
+
+              {/* Description */}
+              <section className={isRTL ? 'text-right' : ''}>
+                <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">{t('reports.issueSummary')}</h3>
                 <p className="text-sm text-slate-600 leading-relaxed">{selectedFinding.description}</p>
 
                 {/* Priority Action Box */}
                 {selectedFinding.severity === 'critical' && (
                   <div className="mt-4 p-4 bg-rose-50 border border-rose-100 rounded-xl">
-                    <div className={`flex items-center gap-2 text-rose-700 font-bold text-xs mb-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                    <div className={`flex items-center gap-2 text-rose-700 font-bold text-xs mb-2`}>
                       <Icon icon="lucide:alert-circle" />
                       {t('reports.priorityActionRequired')}
                     </div>
@@ -2463,54 +2820,87 @@ export default function ReportsPage() {
                 )}
               </section>
 
-              {/* Remediation Plan */}
-              <section className={isRTL ? 'text-right' : ''}>
-                <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">{t('reports.remediationPlan')}</h3>
-                <div className="space-y-4">
-                  <div className={`flex gap-4 ${isRTL ? 'flex-row-reverse' : ''}`}>
-                    <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-[10px] font-bold shrink-0">01</div>
-                    <div>
-                      <p className="text-xs font-bold text-slate-900">{t('reports.identifyUsers')}</p>
-                      <p className="text-[10px] text-slate-500">{t('reports.identifyUsersDesc')}</p>
-                    </div>
+              {/* Team Members */}
+              {sourceAudit?.team && sourceAudit.team.length > 0 && (
+                <section className={isRTL ? 'text-right' : ''}>
+                  <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">{t('navigation.team' as TranslationKey)}</h3>
+                  <div className="space-y-2">
+                    {sourceAudit.team.map((member) => (
+                      <div key={member.id} className={`flex items-center gap-3 p-2 rounded-lg hover:bg-slate-50 transition-colors`}>
+                        {member.avatar ? (
+                          <img src={member.avatar} className="w-6 h-6 rounded-full" alt={member.name} />
+                        ) : (
+                          <div className="w-6 h-6 rounded-full bg-slate-200 flex items-center justify-center text-[9px] font-bold text-slate-500">{member.name.charAt(0)}</div>
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-bold text-slate-700 truncate">{member.name}</p>
+                          <p className="text-[10px] text-slate-400">{member.role}</p>
+                        </div>
+                        {member.isOwner && (
+                          <Badge className="bg-emerald-50 text-emerald-600 text-[8px] px-1.5 py-0">{t('audits.owner' as TranslationKey)}</Badge>
+                        )}
+                      </div>
+                    ))}
                   </div>
-                  <div className={`flex gap-4 ${isRTL ? 'flex-row-reverse' : ''}`}>
-                    <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-[10px] font-bold shrink-0">02</div>
-                    <div>
-                      <p className="text-xs font-bold text-slate-900">{t('reports.enforcePolicy')}</p>
-                      <p className="text-[10px] text-slate-500">{t('reports.enforcePolicyDesc')}</p>
-                    </div>
-                  </div>
-                </div>
-              </section>
+                </section>
+              )}
 
-              {/* Evidence Artifacts */}
-              <section className={isRTL ? 'text-right' : ''}>
-                <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">{t('reports.evidenceArtifacts')}</h3>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className={`p-3 border border-slate-100 rounded-lg flex items-center gap-2 hover:bg-slate-50 cursor-pointer transition-colors ${isRTL ? 'flex-row-reverse' : ''}`}>
-                    <Icon icon="lucide:file" className="text-emerald-500" />
-                    <span className="text-[10px] font-bold truncate">iam_log_v2.pdf</span>
+              {/* Documents */}
+              {sourceAudit?.documents && sourceAudit.documents.length > 0 && (
+                <section className={isRTL ? 'text-right' : ''}>
+                  <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">{t('reports.evidenceArtifacts')}</h3>
+                  <div className="grid grid-cols-2 gap-3">
+                    {sourceAudit.documents.map((doc) => (
+                      <div key={doc.id} className={`p-3 border border-slate-100 rounded-lg flex items-center gap-2 hover:bg-slate-50 cursor-pointer transition-colors`}>
+                        <Icon icon={docTypeIcons[doc.type] || 'lucide:file'} className={docTypeColors[doc.type] || 'text-slate-500'} />
+                        <span className="text-[10px] font-bold truncate">{doc.name}</span>
+                      </div>
+                    ))}
                   </div>
-                  <div className={`p-3 border border-slate-100 rounded-lg flex items-center gap-2 hover:bg-slate-50 cursor-pointer transition-colors ${isRTL ? 'flex-row-reverse' : ''}`}>
-                    <Icon icon="lucide:image" className="text-blue-500" />
-                    <span className="text-[10px] font-bold truncate">screenshot.png</span>
+                </section>
+              )}
+
+              {/* Comments */}
+              {sourceAudit?.comments && sourceAudit.comments.length > 0 && (
+                <section className={isRTL ? 'text-right' : ''}>
+                  <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">{t('audits.comments' as TranslationKey)}</h3>
+                  <div className="space-y-3">
+                    {sourceAudit.comments.map((comment) => (
+                      <div key={comment.id} className="p-3 bg-slate-50 rounded-lg">
+                        <div className={`flex items-center gap-2 mb-2`}>
+                          {comment.author.avatar ? (
+                            <img src={comment.author.avatar} className="w-5 h-5 rounded-full" alt={comment.author.name} />
+                          ) : (
+                            <div className="w-5 h-5 rounded-full bg-slate-200 flex items-center justify-center text-[8px] font-bold text-slate-500">{comment.author.name.charAt(0)}</div>
+                          )}
+                          <span className="text-[10px] font-bold text-slate-700">{comment.author.name}</span>
+                          <span className="text-[9px] text-slate-400">{new Date(comment.createdAt).toLocaleDateString()}</span>
+                        </div>
+                        <p className="text-[11px] text-slate-600 leading-relaxed">{comment.content}</p>
+                      </div>
+                    ))}
                   </div>
-                </div>
-              </section>
+                </section>
+              )}
             </div>
 
             {/* Footer */}
-            <div className={`pt-6 border-t border-slate-100 flex gap-3 ${isRTL ? 'flex-row-reverse' : ''}`}>
+            <div className={`pt-6 border-t border-slate-100 flex gap-3`}>
               <button className="flex-1 bg-slate-100 text-slate-900 py-3 rounded-xl font-bold text-xs uppercase tracking-widest hover:bg-slate-200 transition-all cursor-pointer">
                 {t('reports.shareReport')}
               </button>
-              <button className={`flex-1 bg-slate-900 text-white py-3 rounded-xl font-bold text-xs uppercase tracking-widest shadow-lg hover:bg-slate-800 transition-all flex items-center justify-center gap-2 cursor-pointer ${isRTL ? 'flex-row-reverse' : ''}`}>
-                {t('reports.editFinding')} <Icon icon="lucide:edit-3" />
-              </button>
+              {sourceAudit && (
+                <Link
+                  href={`/audits/${sourceAudit.id}`}
+                  className={`flex-1 bg-slate-900 text-white py-3 px-4 rounded-xl font-bold text-xs uppercase tracking-wider shadow-lg hover:bg-slate-800 transition-all flex items-center justify-center gap-2 text-center`}
+                >
+                  {t('reports.viewAuditDetails')} <Icon icon="lucide:external-link" className="w-3 h-3 shrink-0" />
+                </Link>
+              )}
             </div>
           </div>
-        )}
+          )
+        })()}
       </Drawer>
 
       {/* Risk Detail Drawer */}
@@ -2529,8 +2919,8 @@ export default function ReportsPage() {
           return (
             <div className="space-y-6">
               {/* Risk Score */}
-              <div className={`flex items-center justify-between ${isRTL ? 'flex-row-reverse' : ''}`}>
-                <div className={`flex items-center gap-3 ${isRTL ? 'flex-row-reverse' : ''}`}>
+              <div className={`flex items-center justify-between`}>
+                <div className={`flex items-center gap-3`}>
                   <div className={cn('w-12 h-12 rounded-xl flex items-center justify-center text-white font-bold text-lg', level.bgColor)}>
                     {score}
                   </div>
@@ -2545,7 +2935,7 @@ export default function ReportsPage() {
               </div>
 
               {/* Category */}
-              <div className={`p-4 bg-slate-50 rounded-xl ${isRTL ? 'text-right' : ''}`}>
+              <div className={`p-4 bg-slate-50 rounded-xl`}>
                 <p className="text-xs font-bold text-slate-400 uppercase mb-2">{t('reports.category' as TranslationKey)}</p>
                 <span className={cn('text-xs font-bold px-3 py-1.5 rounded-full inline-flex items-center gap-1', categoryConfig.color)}>
                   <Icon icon={categoryConfig.icon} />
@@ -2555,11 +2945,11 @@ export default function ReportsPage() {
 
               {/* Likelihood & Impact */}
               <div className="grid grid-cols-2 gap-4">
-                <div className={`p-4 bg-slate-50 rounded-xl ${isRTL ? 'text-right' : ''}`}>
+                <div className={`p-4 bg-slate-50 rounded-xl`}>
                   <p className="text-xs font-bold text-slate-400 uppercase mb-1">{t('reports.likelihood' as TranslationKey)}</p>
                   <p className="text-lg font-bold text-slate-900">{selectedRisk.likelihood}/5</p>
                 </div>
-                <div className={`p-4 bg-slate-50 rounded-xl ${isRTL ? 'text-right' : ''}`}>
+                <div className={`p-4 bg-slate-50 rounded-xl`}>
                   <p className="text-xs font-bold text-slate-400 uppercase mb-1">{t('reports.impact' as TranslationKey)}</p>
                   <p className="text-lg font-bold text-slate-900">{selectedRisk.impact}/5</p>
                 </div>
@@ -2572,7 +2962,7 @@ export default function ReportsPage() {
               </div>
 
               {/* Owner */}
-              <div className={`p-4 bg-slate-50 rounded-xl flex items-center gap-3 ${isRTL ? 'flex-row-reverse' : ''}`}>
+              <div className={`p-4 bg-slate-50 rounded-xl flex items-center gap-3`}>
                 <img src={selectedRisk.owner.avatar} className="w-10 h-10 rounded-full border-2 border-white" alt={selectedRisk.owner.name} />
                 <div className={isRTL ? 'text-right' : ''}>
                   <p className="text-xs font-bold text-slate-400 uppercase">{t('reports.owner' as TranslationKey)}</p>
@@ -2587,7 +2977,7 @@ export default function ReportsPage() {
                   <p className="text-xs font-bold text-slate-400 uppercase mb-2">{t('reports.mitigationPlan' as TranslationKey)}</p>
                   <p className="text-sm text-slate-600">{selectedRisk.mitigationPlan}</p>
                   <div className="mt-3">
-                    <div className={`flex justify-between items-center mb-1 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                    <div className={`flex justify-between items-center mb-1`}>
                       <span className="text-xs font-bold text-slate-500">{t('reports.progress' as TranslationKey)}</span>
                       <span className="text-xs font-bold text-emerald-600">{selectedRisk.mitigationProgress}%</span>
                     </div>
@@ -2600,13 +2990,13 @@ export default function ReportsPage() {
 
               {/* Monitoring Info */}
               <div className="grid grid-cols-2 gap-4">
-                <div className={`p-4 bg-slate-50 rounded-xl ${isRTL ? 'text-right' : ''}`}>
+                <div className={`p-4 bg-slate-50 rounded-xl`}>
                   <p className="text-xs font-bold text-slate-400 uppercase mb-1">{t('reports.monitoringFrequency' as TranslationKey)}</p>
                   <span className="text-sm font-bold text-slate-700 bg-slate-100 px-2 py-1 rounded">
                     {monitoringFrequencyLabels[selectedRisk.monitoringFrequency]}
                   </span>
                 </div>
-                <div className={`p-4 bg-slate-50 rounded-xl ${isRTL ? 'text-right' : ''}`}>
+                <div className={`p-4 bg-slate-50 rounded-xl`}>
                   <p className="text-xs font-bold text-slate-400 uppercase mb-1">{t('reports.nextReview' as TranslationKey)}</p>
                   <p className="text-sm font-bold text-slate-900">
                     {selectedRisk.nextReviewDate?.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) || '-'}
@@ -2623,7 +3013,7 @@ export default function ReportsPage() {
 
                   <div className="space-y-4">
                     {[...selectedRisk.history].reverse().map((entry) => (
-                      <div key={entry.id} className={`relative flex gap-3 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                      <div key={entry.id} className={`relative flex gap-3`}>
                         {/* Dot */}
                         <div className={cn(
                           'w-4 h-4 rounded-full shrink-0 z-10 border-2 border-white',
@@ -2631,8 +3021,8 @@ export default function ReportsPage() {
                         )} />
 
                         {/* Content */}
-                        <div className={`flex-1 pb-2 ${isRTL ? 'text-right' : ''}`}>
-                          <div className={`flex items-center gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                        <div className={`flex-1 pb-2`}>
+                          <div className={`flex items-center gap-2`}>
                             <span className="text-[10px] text-slate-400">
                               {entry.timestamp.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                             </span>
@@ -2659,7 +3049,7 @@ export default function ReportsPage() {
               </div>
 
               {/* Actions */}
-              <div className={`pt-4 border-t border-slate-100 flex gap-3 ${isRTL ? 'flex-row-reverse' : ''}`}>
+              <div className={`pt-4 border-t border-slate-100 flex gap-3`}>
                 <button className="flex-1 bg-slate-100 text-slate-700 py-3 rounded-xl font-bold text-xs hover:bg-slate-200 transition-all cursor-pointer">
                   {t('reports.exportRisk' as TranslationKey)}
                 </button>
@@ -2682,21 +3072,21 @@ export default function ReportsPage() {
       >
         <div className="space-y-4">
           <div>
-            <label className={`text-xs font-bold text-slate-700 uppercase mb-2 block ${isRTL ? 'text-right' : ''}`}>
+            <label className={`text-xs font-bold text-slate-700 uppercase mb-2 block`}>
               {t('reports.riskName' as TranslationKey)} *
             </label>
             <input
               type="text"
               placeholder={t('reports.enterRiskName' as TranslationKey)}
-              className={`w-full px-4 py-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 ${isRTL ? 'text-right' : ''}`}
+              className={`w-full px-4 py-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500`}
             />
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className={`text-xs font-bold text-slate-700 uppercase mb-2 block ${isRTL ? 'text-right' : ''}`}>
+              <label className={`text-xs font-bold text-slate-700 uppercase mb-2 block`}>
                 {t('reports.category' as TranslationKey)} *
               </label>
-              <select className={`w-full px-4 py-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 ${isRTL ? 'text-right' : ''}`}>
+              <select className={`w-full px-4 py-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500`}>
                 <option value="">{t('reports.selectCategory' as TranslationKey)}</option>
                 <option value="operational">{t('reports.operational' as TranslationKey)}</option>
                 <option value="financial">{t('reports.financial' as TranslationKey)}</option>
@@ -2706,10 +3096,10 @@ export default function ReportsPage() {
               </select>
             </div>
             <div>
-              <label className={`text-xs font-bold text-slate-700 uppercase mb-2 block ${isRTL ? 'text-right' : ''}`}>
+              <label className={`text-xs font-bold text-slate-700 uppercase mb-2 block`}>
                 {t('reports.owner' as TranslationKey)} *
               </label>
-              <select className={`w-full px-4 py-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 ${isRTL ? 'text-right' : ''}`}>
+              <select className={`w-full px-4 py-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500`}>
                 <option value="">{t('reports.selectOwner' as TranslationKey)}</option>
                 <option value="sarah">Sarah Chen - IT Security</option>
                 <option value="ahmed">Ahmed Al-Rashid - Compliance</option>
@@ -2719,10 +3109,10 @@ export default function ReportsPage() {
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className={`text-xs font-bold text-slate-700 uppercase mb-2 block ${isRTL ? 'text-right' : ''}`}>
+              <label className={`text-xs font-bold text-slate-700 uppercase mb-2 block`}>
                 {t('reports.likelihood' as TranslationKey)} *
               </label>
-              <select className={`w-full px-4 py-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 ${isRTL ? 'text-right' : ''}`}>
+              <select className={`w-full px-4 py-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500`}>
                 <option value="1">1 - Rare</option>
                 <option value="2">2 - Unlikely</option>
                 <option value="3">3 - Possible</option>
@@ -2731,10 +3121,10 @@ export default function ReportsPage() {
               </select>
             </div>
             <div>
-              <label className={`text-xs font-bold text-slate-700 uppercase mb-2 block ${isRTL ? 'text-right' : ''}`}>
+              <label className={`text-xs font-bold text-slate-700 uppercase mb-2 block`}>
                 {t('reports.impact' as TranslationKey)} *
               </label>
-              <select className={`w-full px-4 py-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 ${isRTL ? 'text-right' : ''}`}>
+              <select className={`w-full px-4 py-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500`}>
                 <option value="1">1 - Negligible</option>
                 <option value="2">2 - Minor</option>
                 <option value="3">3 - Moderate</option>
@@ -2744,26 +3134,26 @@ export default function ReportsPage() {
             </div>
           </div>
           <div>
-            <label className={`text-xs font-bold text-slate-700 uppercase mb-2 block ${isRTL ? 'text-right' : ''}`}>
+            <label className={`text-xs font-bold text-slate-700 uppercase mb-2 block`}>
               {t('reports.description' as TranslationKey)} *
             </label>
             <textarea
               rows={3}
               placeholder={t('reports.enterRiskDescription' as TranslationKey)}
-              className={`w-full px-4 py-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 ${isRTL ? 'text-right' : ''}`}
+              className={`w-full px-4 py-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500`}
             />
           </div>
           <div>
-            <label className={`text-xs font-bold text-slate-700 uppercase mb-2 block ${isRTL ? 'text-right' : ''}`}>
+            <label className={`text-xs font-bold text-slate-700 uppercase mb-2 block`}>
               {t('reports.mitigationPlan' as TranslationKey)}
             </label>
             <textarea
               rows={2}
               placeholder={t('reports.enterMitigationPlan' as TranslationKey)}
-              className={`w-full px-4 py-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 ${isRTL ? 'text-right' : ''}`}
+              className={`w-full px-4 py-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500`}
             />
           </div>
-          <div className={`flex gap-3 mt-6 ${isRTL ? 'flex-row-reverse' : ''}`}>
+          <div className={`flex gap-3 mt-6`}>
             <Button
               className="flex-1"
               onClick={() => setShowAddRiskModal(false)}

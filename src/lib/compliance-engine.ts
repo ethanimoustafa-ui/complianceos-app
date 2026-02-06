@@ -403,23 +403,6 @@ function generateDeductions(
   // Sort by absolute points descending
   deductions.sort((a, b) => Math.abs(b.points) - Math.abs(a.points))
 
-  // Cap at 6 displayed, last becomes summary
-  const MAX_DISPLAY = 6
-  if (deductions.length > MAX_DISPLAY) {
-    const shown = deductions.slice(0, MAX_DISPLAY - 1)
-    const remaining = deductions.slice(MAX_DISPLAY - 1)
-    const remainingPts = remaining.reduce((sum, d) => sum + d.points, 0)
-    shown.push({
-      points: remainingPts,
-      description: `+${remaining.length} more deductions (${remainingPts} pts)`,
-      descriptionKey: 'reports.deduction.moreDeductions',
-      descriptionParams: { count: String(remaining.length), total: String(remainingPts) },
-      severity: 'low',
-      component: 'summary',
-    })
-    return shown
-  }
-
   return deductions
 }
 

@@ -266,6 +266,421 @@ export function exportAuditLogs(
 }
 
 /**
+ * Export audit logs to CSV with localization support
+ */
+export function exportAuditLogsLocalized(
+  logs: Array<{
+    id: string
+    timestamp: Date
+    user: { name: string }
+    action: string
+    audit: string
+    description: string
+    status: string
+  }>,
+  filename = 'audit-logs',
+  t?: TranslationFunction,
+  isRTL = false
+): void {
+  const getText = (key: string, fallback: string) => t ? t(key) : fallback
+
+  const headers = [
+    getText('export.timestamp', 'Timestamp'),
+    getText('export.user', 'User'),
+    getText('export.action', 'Action'),
+    getText('export.audit', 'Audit'),
+    getText('export.description', 'Description'),
+    getText('export.status', 'Status'),
+  ]
+
+  const exportData = logs.map((log) => {
+    const translatedAction = t ? t(`reports.${log.action}`) : log.action
+    const translatedStatus = t ? t(`reports.${log.status}`) : log.status
+    const ts = log.timestamp instanceof Date
+      ? log.timestamp.toLocaleString(isRTL ? 'ar-SA' : 'en-US')
+      : String(log.timestamp)
+
+    return {
+      [headers[0]]: ts,
+      [headers[1]]: log.user.name,
+      [headers[2]]: translatedAction,
+      [headers[3]]: log.audit,
+      [headers[4]]: log.description,
+      [headers[5]]: translatedStatus,
+    }
+  })
+
+  exportToCSV(exportData, { filename, headers })
+}
+
+/**
+ * Export a single audit log entry to CSV
+ */
+export function exportSingleLog(
+  log: {
+    id: string
+    timestamp: Date
+    user: { name: string }
+    action: string
+    audit: string
+    description: string
+    status: string
+  },
+  filename = 'audit-log-entry',
+  t?: TranslationFunction,
+  isRTL = false
+): void {
+  exportAuditLogsLocalized([log], filename, t, isRTL)
+}
+
+/**
+ * Export audits to CSV with localization support
+ */
+export function exportAuditsLocalized(
+  audits: Array<{
+    id: string
+    name: string
+    responsible: { name: string }
+    dueDate: Date
+    status: string
+    priority: string
+    progress: number
+    source: string
+    frequency: string
+    category: string
+  }>,
+  filename = 'audits',
+  t?: TranslationFunction,
+  isRTL = false
+): void {
+  const getText = (key: string, fallback: string) => t ? t(key) : fallback
+
+  const sourceLabels: Record<string, string> = {
+    sama_inspection: t ? t('reports.samaInspection') : 'SAMA Inspection',
+    internal_audit: t ? t('reports.internalAudit') : 'Internal Audit',
+    sharia_audit: t ? t('reports.shariaAudit') : 'Sharia Audit',
+  }
+
+  const statusLabels: Record<string, string> = {
+    in_progress: t ? t('reports.inProgress') : 'In Progress',
+    pending: t ? t('reports.pending') : 'Pending',
+    in_review: t ? t('reports.inReview') : 'In Review',
+    completed: t ? t('reports.completed') : 'Completed',
+    overdue: t ? t('reports.overdue') : 'Overdue',
+  }
+
+  const priorityLabels: Record<string, string> = {
+    critical: t ? t('reports.critical') : 'Critical',
+    high: t ? t('reports.high') : 'High',
+    medium: t ? t('reports.medium') : 'Medium',
+    low: t ? t('reports.low') : 'Low',
+  }
+
+  const frequencyLabels: Record<string, string> = {
+    annual: t ? t('reports.annual') : 'Annual',
+    semi_annual: t ? t('reports.semiAnnual') : 'Semi-Annual',
+    quarterly: t ? t('reports.quarterly') : 'Quarterly',
+    monthly: t ? t('reports.monthly') : 'Monthly',
+    ad_hoc: t ? t('reports.adHoc') : 'Ad Hoc',
+  }
+
+  const categoryLabels: Record<string, string> = {
+    security_compliance: t ? t('reports.security') : 'Security',
+    financial_compliance: t ? t('reports.financial') : 'Financial',
+    regulatory_compliance: t ? t('reports.regulatory') : 'Regulatory',
+    operational_compliance: t ? t('reports.operational') : 'Operational',
+    hr_compliance: t ? t('reports.hr') : 'HR',
+    sharia_compliance: t ? t('reports.sharia') : 'Sharia',
+  }
+
+  const headers = [
+    getText('export.auditName', 'Audit Name'),
+    getText('export.responsible', 'Responsible'),
+    getText('export.dueDate', 'Due Date'),
+    getText('export.status', 'Status'),
+    getText('export.priority', 'Priority'),
+    getText('export.progress', 'Progress'),
+    getText('export.source', 'Source'),
+    getText('export.frequency', 'Frequency'),
+    getText('export.category', 'Category'),
+  ]
+
+  const exportData = audits.map((audit) => ({
+    [headers[0]]: audit.name,
+    [headers[1]]: audit.responsible.name,
+    [headers[2]]: formatExportDate(audit.dueDate.toISOString(), isRTL, ''),
+    [headers[3]]: statusLabels[audit.status] || audit.status,
+    [headers[4]]: priorityLabels[audit.priority] || audit.priority,
+    [headers[5]]: `${audit.progress}%`,
+    [headers[6]]: sourceLabels[audit.source] || audit.source,
+    [headers[7]]: frequencyLabels[audit.frequency] || audit.frequency,
+    [headers[8]]: categoryLabels[audit.category] || audit.category,
+  }))
+
+  exportToCSV(exportData, { filename, headers })
+}
+
+/**
+ * Export executive compliance report to CSV with localization support
+ */
+export function exportExecutiveReport(
+  scoreData: {
+    overall: number
+    confidence: string
+    change: number
+    components: Record<string, { score: number; weight: number; confidence: string }>
+    frameworks: Record<string, { score: number; confidence: string }>
+    deductions: Array<{ points: number; description: string; descriptionKey?: string; descriptionParams?: Record<string, string>; severity: string }>
+  },
+  findings: Array<{
+    auditName: string
+    severity: string
+    status: string
+    dueDate: Date
+    owner: { name: string }
+  }>,
+  riskDistribution: Array<{ category: string; percentage: number }>,
+  filename = 'executive-report',
+  t?: TranslationFunction,
+  isRTL = false
+): void {
+  const getText = (key: string, fallback: string) => t ? t(key) : fallback
+  const naText = getText('export.na', 'N/A')
+
+  const sectionHeader = getText('export.section', 'Section')
+  const rows: ExportableData[] = []
+
+  // Section 1: Overview
+  const overviewSection = getText('export.overallScore', 'Overall Score')
+  rows.push({
+    [sectionHeader]: overviewSection,
+    [getText('export.component', 'Component')]: getText('export.overallScore', 'Overall Score'),
+    [getText('export.score', 'Score')]: `${scoreData.overall}%`,
+    [getText('export.confidence', 'Confidence')]: t ? t(`reports.confidence${scoreData.confidence.charAt(0).toUpperCase() + scoreData.confidence.slice(1)}`) : scoreData.confidence,
+    [getText('export.weight', 'Weight')]: '',
+    [getText('export.severity', 'Severity')]: '',
+    [getText('export.points', 'Points')]: '',
+    [getText('export.percentage', 'Percentage')]: '',
+  })
+  rows.push({
+    [sectionHeader]: overviewSection,
+    [getText('export.component', 'Component')]: getText('export.change', 'Change vs Last Period'),
+    [getText('export.score', 'Score')]: `${scoreData.change > 0 ? '+' : ''}${scoreData.change}%`,
+    [getText('export.confidence', 'Confidence')]: '',
+    [getText('export.weight', 'Weight')]: '',
+    [getText('export.severity', 'Severity')]: '',
+    [getText('export.points', 'Points')]: '',
+    [getText('export.percentage', 'Percentage')]: '',
+  })
+
+  // Section 2: Components
+  const compSection = getText('export.components', 'Components')
+  const componentLabels: Record<string, string> = {
+    auditCompletion: t ? t('reports.compAuditCompletion') : 'Audit Completion',
+    observationClosure: t ? t('reports.compObservationClosure') : 'Observation Closure',
+    riskPosture: t ? t('reports.compRiskPosture') : 'Risk Posture',
+    policyCurrency: t ? t('reports.compPolicyCurrency') : 'Policy Currency',
+    trainingCompletion: t ? t('reports.compTrainingCompletion') : 'Training Completion',
+  }
+  for (const [key, comp] of Object.entries(scoreData.components)) {
+    rows.push({
+      [sectionHeader]: compSection,
+      [getText('export.component', 'Component')]: componentLabels[key] || key,
+      [getText('export.score', 'Score')]: `${comp.score}%`,
+      [getText('export.confidence', 'Confidence')]: t ? t(`reports.confidence${comp.confidence.charAt(0).toUpperCase() + comp.confidence.slice(1)}`) : comp.confidence,
+      [getText('export.weight', 'Weight')]: `${comp.weight}%`,
+      [getText('export.severity', 'Severity')]: '',
+      [getText('export.points', 'Points')]: '',
+      [getText('export.percentage', 'Percentage')]: '',
+    })
+  }
+
+  // Section 3: Frameworks
+  const fwSection = getText('export.frameworks', 'Frameworks')
+  const frameworkLabels: Record<string, string> = {
+    sama: 'SAMA',
+    internal: t ? t('reports.internalAudit') : 'Internal Audit',
+    sharia: t ? t('reports.shariaAudit') : 'Sharia Audit',
+  }
+  for (const [key, fw] of Object.entries(scoreData.frameworks)) {
+    rows.push({
+      [sectionHeader]: fwSection,
+      [getText('export.component', 'Component')]: frameworkLabels[key] || key,
+      [getText('export.score', 'Score')]: `${fw.score}%`,
+      [getText('export.confidence', 'Confidence')]: t ? t(`reports.confidence${fw.confidence.charAt(0).toUpperCase() + fw.confidence.slice(1)}`) : fw.confidence,
+      [getText('export.weight', 'Weight')]: '',
+      [getText('export.severity', 'Severity')]: '',
+      [getText('export.points', 'Points')]: '',
+      [getText('export.percentage', 'Percentage')]: '',
+    })
+  }
+
+  // Section 4: Deductions
+  const dedSection = getText('export.deductions', 'Deductions')
+  for (const ded of scoreData.deductions) {
+    const description = ded.descriptionKey && t
+      ? t(ded.descriptionKey, ded.descriptionParams)
+      : ded.description
+    rows.push({
+      [sectionHeader]: dedSection,
+      [getText('export.component', 'Component')]: description,
+      [getText('export.score', 'Score')]: '',
+      [getText('export.confidence', 'Confidence')]: '',
+      [getText('export.weight', 'Weight')]: '',
+      [getText('export.severity', 'Severity')]: t ? t(`reports.${ded.severity}`) : ded.severity,
+      [getText('export.points', 'Points')]: `-${ded.points}`,
+      [getText('export.percentage', 'Percentage')]: '',
+    })
+  }
+
+  // Section 5: Risk Distribution
+  const riskSection = getText('export.riskDistribution', 'Risk Distribution')
+  const riskCatLabels: Record<string, string> = {
+    operational: t ? t('reports.operational') : 'Operational',
+    financial: t ? t('reports.financial') : 'Financial',
+    compliance: t ? t('reports.compliance') : 'Compliance',
+    strategic: t ? t('reports.strategic') : 'Strategic',
+    reputational: t ? t('reports.reputational') : 'Reputational',
+  }
+  for (const rd of riskDistribution) {
+    rows.push({
+      [sectionHeader]: riskSection,
+      [getText('export.component', 'Component')]: riskCatLabels[rd.category] || rd.category,
+      [getText('export.score', 'Score')]: '',
+      [getText('export.confidence', 'Confidence')]: '',
+      [getText('export.weight', 'Weight')]: '',
+      [getText('export.severity', 'Severity')]: '',
+      [getText('export.points', 'Points')]: '',
+      [getText('export.percentage', 'Percentage')]: `${rd.percentage}%`,
+    })
+  }
+
+  // Section 6: Audit Findings
+  const findSection = getText('export.findings', 'Audit Findings')
+  for (const f of findings) {
+    rows.push({
+      [sectionHeader]: findSection,
+      [getText('export.component', 'Component')]: f.auditName,
+      [getText('export.score', 'Score')]: '',
+      [getText('export.confidence', 'Confidence')]: '',
+      [getText('export.weight', 'Weight')]: '',
+      [getText('export.severity', 'Severity')]: t ? t(`reports.${f.severity}`) : f.severity,
+      [getText('export.points', 'Points')]: '',
+      [getText('export.percentage', 'Percentage')]: '',
+      [getText('export.status', 'Status')]: t ? t(`reports.${f.status}`) : f.status,
+      [getText('export.dueDate', 'Due Date')]: formatExportDate(f.dueDate.toISOString(), isRTL, naText),
+      [getText('export.owner', 'Owner')]: f.owner.name,
+    })
+  }
+
+  const headers = [
+    sectionHeader,
+    getText('export.component', 'Component'),
+    getText('export.score', 'Score'),
+    getText('export.confidence', 'Confidence'),
+    getText('export.weight', 'Weight'),
+    getText('export.severity', 'Severity'),
+    getText('export.points', 'Points'),
+    getText('export.percentage', 'Percentage'),
+    getText('export.status', 'Status'),
+    getText('export.dueDate', 'Due Date'),
+    getText('export.owner', 'Owner'),
+  ]
+
+  exportToCSV(rows, { filename, headers })
+}
+
+/**
+ * Export risk register to CSV with localization support
+ */
+export function exportRisksLocalized(
+  risks: Array<{
+    id: string
+    name: string
+    description: string
+    category: string
+    likelihood: number
+    impact: number
+    owner: { name: string; department: string }
+    status: string
+    mitigationProgress: number
+    monitoringFrequency: string
+  }>,
+  filename = 'risk-register',
+  t?: TranslationFunction,
+  isRTL = false
+): void {
+  const getText = (key: string, fallback: string) => t ? t(key) : fallback
+
+  const categoryLabels: Record<string, string> = {
+    operational: t ? t('reports.operational') : 'Operational',
+    financial: t ? t('reports.financial') : 'Financial',
+    compliance: t ? t('reports.compliance') : 'Compliance',
+    strategic: t ? t('reports.strategic') : 'Strategic',
+    reputational: t ? t('reports.reputational') : 'Reputational',
+  }
+
+  const statusLabels: Record<string, string> = {
+    open: t ? t('reports.open') : 'Open',
+    mitigating: t ? t('reports.mitigating') : 'Mitigating',
+    accepted: t ? t('reports.accepted') : 'Accepted',
+    closed: t ? t('reports.closed') : 'Closed',
+  }
+
+  const freqLabels: Record<string, string> = {
+    weekly: t ? t('reports.weekly') : 'Weekly',
+    monthly: t ? t('reports.monthly') : 'Monthly',
+    quarterly: t ? t('reports.quarterly') : 'Quarterly',
+    semi_annual: t ? t('reports.semiAnnual') : 'Semi-Annual',
+    annual: t ? t('reports.annual') : 'Annual',
+  }
+
+  function getRiskLevelLabel(score: number): string {
+    if (score >= 20) return t ? t('reports.critical') : 'Critical'
+    if (score >= 12) return t ? t('reports.high') : 'High'
+    if (score >= 6) return t ? t('reports.medium') : 'Medium'
+    return t ? t('reports.low') : 'Low'
+  }
+
+  const headers = [
+    'ID',
+    getText('export.riskName', 'Risk Name'),
+    getText('export.description', 'Description'),
+    getText('export.category', 'Category'),
+    getText('export.likelihood', 'Likelihood'),
+    getText('export.impact', 'Impact'),
+    getText('export.score', 'Score'),
+    getText('export.riskLevel', 'Risk Level'),
+    getText('export.status', 'Status'),
+    getText('export.owner', 'Owner'),
+    getText('export.department', 'Department'),
+    getText('export.mitigationProgress', 'Mitigation Progress'),
+    getText('export.monitoringFrequency', 'Monitoring Frequency'),
+  ]
+
+  const exportData = risks.map((risk) => {
+    const score = risk.likelihood * risk.impact
+    return {
+      [headers[0]]: risk.id,
+      [headers[1]]: risk.name,
+      [headers[2]]: risk.description,
+      [headers[3]]: categoryLabels[risk.category] || risk.category,
+      [headers[4]]: risk.likelihood,
+      [headers[5]]: risk.impact,
+      [headers[6]]: score,
+      [headers[7]]: getRiskLevelLabel(score),
+      [headers[8]]: statusLabels[risk.status] || risk.status,
+      [headers[9]]: risk.owner.name,
+      [headers[10]]: risk.owner.department,
+      [headers[11]]: `${risk.mitigationProgress}%`,
+      [headers[12]]: freqLabels[risk.monitoringFrequency] || risk.monitoringFrequency,
+    }
+  })
+
+  exportToCSV(exportData, { filename, headers })
+}
+
+/**
  * Generate a simple HTML-based printable report (can be saved as PDF via browser print)
  */
 export function generatePrintableReport(
