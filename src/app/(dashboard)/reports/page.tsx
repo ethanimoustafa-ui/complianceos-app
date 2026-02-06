@@ -1301,11 +1301,11 @@ export default function ReportsPage() {
         </div>
         )}
 
-        {/* Executive View — Compliance Health Center */}
+        {/* Executive View — Compliance Health Center (Redesigned: Compact + Unique Viz) */}
         {activeTab === 'executive' && (() => {
           const healthStatus = getHealthStatus(complianceScore.overall)
           const conf = confidenceConfig[complianceScore.confidence]
-          const radius = 54
+          const radius = 46
           const circumference = 2 * Math.PI * radius
           const offset = circumference - (complianceScore.overall / 100) * circumference
           const totalDeduction = complianceScore.deductions.reduce((sum, d) => sum + d.points, 0)
@@ -1314,6 +1314,12 @@ export default function ReportsPage() {
             high: 'bg-amber-100 text-amber-700',
             medium: 'bg-slate-100 text-slate-600',
             low: 'bg-slate-100 text-slate-600',
+          }
+          const deductionSeverityBorder: Record<string, string> = {
+            critical: 'border-l-rose-500',
+            high: 'border-l-amber-500',
+            medium: 'border-l-slate-300',
+            low: 'border-l-slate-200',
           }
           const componentKeys: { key: keyof typeof complianceScore.components; i18n: string }[] = [
             { key: 'auditCompletion', i18n: 'compAuditCompletion' },
@@ -1327,98 +1333,154 @@ export default function ReportsPage() {
             { key: 'internal', i18n: 'frameworkInternal', icon: 'lucide:clipboard-check' },
             { key: 'sharia', i18n: 'frameworkSharia', icon: 'lucide:moon' },
           ]
-          const getBarColor = (score: number): string => {
-            if (score >= 90) return 'bg-emerald-500'
-            if (score >= 75) return 'bg-blue-500'
-            if (score >= 60) return 'bg-amber-500'
-            return 'bg-rose-500'
+          // Mini radial gauge helper
+          const miniRadius = 28
+          const miniCirc = 2 * Math.PI * miniRadius
+          const getGaugeColor = (score: number): string => {
+            if (score >= 90) return '#10b981'
+            if (score >= 75) return '#3b82f6'
+            if (score >= 60) return '#f59e0b'
+            return '#ef4444'
           }
 
           return (
-          <div className="space-y-8">
+          <div className="space-y-3">
 
-            {/* SECTION 1: Hero Compliance Score */}
-            <Card>
-              <CardContent className="pt-6">
-                <div className={`flex items-center gap-8 ${isRTL ? 'flex-row-reverse' : ''}`}>
-                  {/* Left: SVG Donut */}
-                  <div className="relative flex-shrink-0" style={{ width: 140, height: 140 }}>
-                    <svg width="140" height="140" className="transform -rotate-90">
-                      <circle cx="70" cy="70" r={radius} fill="none" stroke="#e2e8f0" strokeWidth="12" />
-                      <circle
-                        cx="70" cy="70" r={radius}
-                        fill="none"
-                        stroke={getScoreColor(complianceScore.overall)}
-                        strokeWidth="12"
-                        strokeLinecap="round"
-                        strokeDasharray={circumference}
-                        strokeDashoffset={offset}
-                        className="transition-all duration-1000"
-                      />
-                    </svg>
-                    <div className="absolute inset-0 flex flex-col items-center justify-center">
-                      <span className="text-2xl font-bold text-slate-900">{complianceScore.overall}%</span>
+            {/* ROW 1: Hero Score + Frameworks side by side */}
+            <div className="grid grid-cols-5 gap-3">
+              {/* Hero Compliance Score — spans 2 cols */}
+              <Card className="col-span-2">
+                <CardContent className="pt-4 pb-3 px-4">
+                  <div className={`flex items-center gap-4 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                    {/* SVG Donut — compact */}
+                    <div className="relative flex-shrink-0" style={{ width: 108, height: 108 }}>
+                      <svg width="108" height="108" className="transform -rotate-90">
+                        <circle cx="54" cy="54" r={radius} fill="none" stroke="#e2e8f0" strokeWidth="10" />
+                        <circle
+                          cx="54" cy="54" r={radius}
+                          fill="none"
+                          stroke={getScoreColor(complianceScore.overall)}
+                          strokeWidth="10"
+                          strokeLinecap="round"
+                          strokeDasharray={circumference}
+                          strokeDashoffset={offset}
+                          className="transition-all duration-1000"
+                        />
+                      </svg>
+                      <div className="absolute inset-0 flex flex-col items-center justify-center">
+                        <span className="text-xl font-bold text-slate-900">{complianceScore.overall}%</span>
+                      </div>
+                    </div>
+
+                    {/* Info stack — tighter */}
+                    <div className={`flex flex-col gap-1.5 min-w-0 ${isRTL ? 'items-end text-right' : ''}`}>
+                      <h2 className="text-sm font-bold text-slate-900 leading-tight">{t('reports.overallComplianceScore' as TranslationKey)}</h2>
+
+                      <div className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border ${healthStatus.bgColor} ${healthStatus.borderColor} ${isRTL ? 'flex-row-reverse' : ''}`}>
+                        <Icon icon={healthStatus.icon} className={`w-3 h-3 ${healthStatus.color}`} />
+                        <span className={`text-[10px] font-bold ${healthStatus.color}`}>{t(('reports.' + healthStatus.label) as TranslationKey)}</span>
+                      </div>
+
+                      <div className={`flex items-center gap-1 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                        {complianceScore.change >= 0 ? (
+                          <Icon icon="lucide:trending-up" className="w-3.5 h-3.5 text-emerald-600" />
+                        ) : (
+                          <Icon icon="lucide:trending-down" className="w-3.5 h-3.5 text-rose-600" />
+                        )}
+                        <span className={`text-xs font-bold ${complianceScore.change >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                          {complianceScore.change >= 0 ? '+' : ''}{complianceScore.change}%
+                        </span>
+                        <span className="text-[10px] text-slate-400">{t('reports.vsLastPeriod' as TranslationKey)}</span>
+                      </div>
+
+                      <div className={`flex items-center gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                        <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${conf.bg} ${conf.color}`}>
+                          {t(('reports.' + conf.label) as TranslationKey)}
+                        </span>
+                        <span className="text-[10px] text-slate-400">{filterLabels[periodFilter]}</span>
+                      </div>
                     </div>
                   </div>
+                </CardContent>
+              </Card>
 
-                  {/* Right: Info stack */}
-                  <div className={`flex flex-col gap-3 ${isRTL ? 'items-end text-right' : ''}`}>
-                    <h2 className="text-lg font-bold text-slate-900">{t('reports.overallComplianceScore' as TranslationKey)}</h2>
-
-                    {/* Health status badge */}
-                    <div className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full border ${healthStatus.bgColor} ${healthStatus.borderColor} ${isRTL ? 'flex-row-reverse' : ''}`}>
-                      <Icon icon={healthStatus.icon} className={`w-4 h-4 ${healthStatus.color}`} />
-                      <span className={`text-xs font-bold ${healthStatus.color}`}>{t(('reports.' + healthStatus.label) as TranslationKey)}</span>
-                    </div>
-
-                    {/* Change indicator */}
-                    <div className={`flex items-center gap-1.5 ${isRTL ? 'flex-row-reverse' : ''}`}>
-                      {complianceScore.change >= 0 ? (
-                        <Icon icon="lucide:trending-up" className="w-4 h-4 text-emerald-600" />
-                      ) : (
-                        <Icon icon="lucide:trending-down" className="w-4 h-4 text-rose-600" />
-                      )}
-                      <span className={`text-sm font-bold ${complianceScore.change >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
-                        {complianceScore.change >= 0 ? '+' : ''}{complianceScore.change}%
-                      </span>
-                      <span className="text-xs text-slate-400">{t('reports.vsLastPeriod' as TranslationKey)}</span>
-                    </div>
-
-                    {/* Confidence badge */}
-                    <span className={`inline-flex text-[10px] font-bold px-2 py-0.5 rounded-full ${conf.bg} ${conf.color}`}>
-                      {t(('reports.' + conf.label) as TranslationKey)}
-                    </span>
-
-                    {/* Rolling window subtitle */}
-                    <span className="text-xs text-slate-400">{filterLabels[periodFilter]}</span>
+              {/* Framework Scores — radial gauges, spans 3 cols */}
+              <Card className="col-span-3">
+                <CardContent className="pt-3 pb-3 px-4">
+                  <h3 className={`text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2 ${isRTL ? 'text-right' : ''}`}>{t('reports.frameworkScores' as TranslationKey)}</h3>
+                  <div className={`flex items-center justify-around ${isRTL ? 'flex-row-reverse' : ''}`}>
+                    {frameworkEntries.map(({ key, i18n, icon }) => {
+                      const score = complianceScore.frameworks[key]
+                      const fwOffset = miniCirc - (score / 100) * miniCirc
+                      return (
+                        <div key={key} className="flex flex-col items-center gap-1">
+                          <div className="relative" style={{ width: 68, height: 68 }}>
+                            <svg width="68" height="68" className="transform -rotate-90">
+                              <circle cx="34" cy="34" r={miniRadius} fill="none" stroke="#f1f5f9" strokeWidth="5" />
+                              <circle
+                                cx="34" cy="34" r={miniRadius}
+                                fill="none"
+                                stroke={getGaugeColor(score)}
+                                strokeWidth="5"
+                                strokeLinecap="round"
+                                strokeDasharray={miniCirc}
+                                strokeDashoffset={fwOffset}
+                                className="transition-all duration-700"
+                              />
+                            </svg>
+                            <div className="absolute inset-0 flex items-center justify-center">
+                              <span className="text-sm font-bold text-slate-900">{score}%</span>
+                            </div>
+                          </div>
+                          <div className={`flex items-center gap-1 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                            <Icon icon={icon} className="w-3 h-3 text-slate-400" />
+                            <span className="text-[10px] font-medium text-slate-600">{t(('reports.' + i18n) as TranslationKey)}</span>
+                          </div>
+                        </div>
+                      )
+                    })}
                   </div>
-                </div>
-              </CardContent>
-            </Card>
+                </CardContent>
+              </Card>
+            </div>
 
-            {/* SECTION 2: Component Breakdown */}
+            {/* ROW 2: Component Breakdown — radial gauges in a tight row */}
             <div>
-              <h3 className={`text-sm font-bold text-slate-700 mb-4 ${isRTL ? 'text-right' : ''}`}>{t('reports.componentBreakdown' as TranslationKey)}</h3>
-              <div className="grid grid-cols-5 gap-4">
+              <h3 className={`text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2 ${isRTL ? 'text-right' : ''}`}>{t('reports.componentBreakdown' as TranslationKey)}</h3>
+              <div className="grid grid-cols-5 gap-2">
                 {componentKeys.map(({ key, i18n }) => {
                   const comp = complianceScore.components[key]
                   const isWarning = comp.score < 75
+                  const compRadius = 24
+                  const compCirc = 2 * Math.PI * compRadius
+                  const compOffset = compCirc - (comp.score / 100) * compCirc
+                  const strokeColor = isWarning ? '#f59e0b' : '#10b981'
                   return (
-                    <Card key={key} className={isWarning ? 'border-amber-200 bg-amber-50/30' : ''}>
-                      <CardContent className="pt-5 pb-4">
-                        <h4 className={`text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3 ${isRTL ? 'text-right' : ''}`}>
+                    <Card key={key} className={cn('transition-all', isWarning ? 'border-amber-200 bg-amber-50/30' : 'hover:border-slate-200')}>
+                      <CardContent className="pt-3 pb-2 px-3 flex flex-col items-center gap-1">
+                        {/* Mini radial gauge */}
+                        <div className="relative" style={{ width: 56, height: 56 }}>
+                          <svg width="56" height="56" className="transform -rotate-90">
+                            <circle cx="28" cy="28" r={compRadius} fill="none" stroke="#f1f5f9" strokeWidth="4" />
+                            <circle
+                              cx="28" cy="28" r={compRadius}
+                              fill="none"
+                              stroke={strokeColor}
+                              strokeWidth="4"
+                              strokeLinecap="round"
+                              strokeDasharray={compCirc}
+                              strokeDashoffset={compOffset}
+                              className="transition-all duration-500"
+                            />
+                          </svg>
+                          <div className="absolute inset-0 flex items-center justify-center">
+                            <span className="text-xs font-bold text-slate-900">{comp.score}%</span>
+                          </div>
+                        </div>
+                        <h4 className="text-[9px] font-bold text-slate-500 uppercase tracking-wider text-center leading-tight">
                           {t(('reports.' + i18n) as TranslationKey)}
                         </h4>
-                        <div className={`flex items-baseline gap-2 mb-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
-                          <span className="text-2xl font-bold text-slate-900">{comp.score}%</span>
-                        </div>
-                        <div className={`h-2 bg-slate-100 rounded-full overflow-hidden mb-2 ${isRTL ? 'rotate-180' : ''}`}>
-                          <div
-                            className={cn('h-full rounded-full transition-all duration-500', isWarning ? 'bg-amber-500' : 'bg-emerald-500')}
-                            style={{ width: `${comp.score}%` }}
-                          />
-                        </div>
-                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-500 ${isRTL ? 'float-left' : 'float-right'}`}>
+                        <span className="text-[9px] font-medium text-slate-400">
                           {t('reports.weight' as TranslationKey)}: {comp.weight}%
                         </span>
                       </CardContent>
@@ -1428,128 +1490,121 @@ export default function ReportsPage() {
               </div>
             </div>
 
-            {/* SECTION 3: Framework Scores */}
-            <Card>
-              <CardHeader className={isRTL ? 'text-right' : ''}>
-                <CardTitle>{t('reports.frameworkScores' as TranslationKey)}</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-5">
-                  {frameworkEntries.map(({ key, i18n, icon }) => {
-                    const score = complianceScore.frameworks[key]
-                    return (
-                      <div key={key} className="space-y-2">
-                        <div className={`flex items-center justify-between ${isRTL ? 'flex-row-reverse' : ''}`}>
-                          <div className={`flex items-center gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
-                            <Icon icon={icon} className="w-4 h-4 text-slate-500" />
-                            <span className="text-xs font-bold text-slate-700">{t(('reports.' + i18n) as TranslationKey)}</span>
-                          </div>
-                          <span className="text-sm font-bold text-slate-900">{score}%</span>
-                        </div>
-                        <div className={`h-2.5 bg-slate-100 rounded-full overflow-hidden ${isRTL ? 'rotate-180' : ''}`}>
-                          <div
-                            className={cn('h-full rounded-full transition-all duration-500', getBarColor(score))}
-                            style={{ width: `${score}%` }}
-                          />
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* SECTION 4: Two-Column (Trend + Deductions) */}
-            <div className="grid grid-cols-2 gap-6">
-              {/* Left: Compliance Trend Chart */}
+            {/* ROW 3: Trend + Deductions — compact two-column */}
+            <div className="grid grid-cols-2 gap-3">
+              {/* Compliance Trend — slim bar chart */}
               <Card>
-                <CardHeader>
-                  <div className={`flex items-center justify-between ${isRTL ? 'flex-row-reverse' : ''}`}>
+                <CardContent className="pt-3 pb-3 px-4">
+                  <div className={`flex items-center justify-between mb-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
                     <div className={isRTL ? 'text-right' : ''}>
-                      <CardTitle>{t('reports.complianceTrend')}</CardTitle>
-                      <p className="text-xs text-slate-500 mt-1">{t('reports.historicalPerformance')}</p>
+                      <h3 className="text-xs font-bold text-slate-900">{t('reports.complianceTrend')}</h3>
+                      <p className="text-[10px] text-slate-400">{t('reports.historicalPerformance')}</p>
                     </div>
-                    <div className={`flex gap-4 ${isRTL ? 'flex-row-reverse' : ''}`}>
-                      <div className={`flex items-center gap-1.5 ${isRTL ? 'flex-row-reverse' : ''}`}>
-                        <div className="w-2 h-2 rounded-full bg-slate-200" />
-                        <span className="text-[10px] font-bold text-slate-400 uppercase">{t('reports.target')}</span>
+                    <div className={`flex gap-3 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                      <div className={`flex items-center gap-1 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                        <div className="w-1.5 h-1.5 rounded-full bg-slate-200" />
+                        <span className="text-[9px] font-bold text-slate-400 uppercase">{t('reports.target')}</span>
                       </div>
-                      <div className={`flex items-center gap-1.5 ${isRTL ? 'flex-row-reverse' : ''}`}>
-                        <div className="w-2 h-2 rounded-full bg-emerald-500" />
-                        <span className="text-[10px] font-bold text-slate-400 uppercase">{t('reports.actual')}</span>
+                      <div className={`flex items-center gap-1 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                        <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                        <span className="text-[9px] font-bold text-slate-400 uppercase">{t('reports.actual')}</span>
                       </div>
                     </div>
                   </div>
-                </CardHeader>
-                <CardContent>
-                  <div className={`h-64 flex items-end justify-between gap-2 border-b border-slate-100 pb-4 ${isRTL ? 'flex-row-reverse' : ''}`}>
-                    {currentTrend.map((data, idx) => (
-                      <div key={idx} className="flex-1 flex flex-col items-center gap-1 group">
-                        <div className="relative w-full h-48 flex flex-col justify-end">
-                          <div
-                            className="absolute bottom-0 w-full bg-slate-100 rounded-t-md"
-                            style={{ height: `${data.target}%` }}
-                          />
-                          <div
-                            className={cn(
-                              'relative w-full rounded-t-md transition-all duration-500',
-                              data.actual >= data.target ? 'bg-emerald-500' : 'bg-emerald-400'
-                            )}
-                            style={{ height: `${data.actual}%` }}
-                          />
-                        </div>
-                        <span className={cn(
-                          'text-[9px] font-bold text-slate-400',
+                  {/* Sparkline-style area + target line */}
+                  <div className="relative h-32">
+                    <svg width="100%" height="100%" viewBox={`0 0 ${currentTrend.length * 40} 100`} preserveAspectRatio="none" className="overflow-visible">
+                      {/* Target line */}
+                      <line x1="0" y1={100 - currentTrend[0]?.target} x2={currentTrend.length * 40} y2={100 - currentTrend[0]?.target} stroke="#e2e8f0" strokeWidth="1" strokeDasharray="4 3" />
+                      {/* Area fill */}
+                      <path
+                        d={`M0,${100 - currentTrend[0]?.actual} ${currentTrend.map((d, i) => `L${i * 40 + 20},${100 - d.actual}`).join(' ')} L${(currentTrend.length - 1) * 40 + 20},100 L0,100 Z`}
+                        fill="url(#trendGradient)"
+                        opacity="0.3"
+                      />
+                      {/* Line */}
+                      <polyline
+                        points={currentTrend.map((d, i) => `${i * 40 + 20},${100 - d.actual}`).join(' ')}
+                        fill="none"
+                        stroke="#10b981"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                      {/* Dots */}
+                      {currentTrend.map((d, i) => (
+                        <circle
+                          key={i}
+                          cx={i * 40 + 20}
+                          cy={100 - d.actual}
+                          r={i === currentTrend.length - 1 ? 4 : 2.5}
+                          fill={d.actual >= d.target ? '#10b981' : '#f59e0b'}
+                          stroke="white"
+                          strokeWidth="1.5"
+                        />
+                      ))}
+                      <defs>
+                        <linearGradient id="trendGradient" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="#10b981" stopOpacity="0.4" />
+                          <stop offset="100%" stopColor="#10b981" stopOpacity="0.02" />
+                        </linearGradient>
+                      </defs>
+                    </svg>
+                    {/* X-axis labels */}
+                    <div className={`flex justify-between px-1 mt-1 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                      {currentTrend.map((data, idx) => (
+                        <span key={idx} className={cn(
+                          'text-[8px] font-bold text-slate-400',
                           idx === currentTrend.length - 1 && 'text-slate-600'
                         )}>
                           {monthLabels[data.month] || data.month}
                         </span>
-                      </div>
-                    ))}
+                      ))}
+                    </div>
                   </div>
                 </CardContent>
               </Card>
 
-              {/* Right: Score Deductions */}
+              {/* Score Deductions — heat-coded compact list */}
               <Card>
-                <CardHeader className={isRTL ? 'text-right' : ''}>
-                  <CardTitle>{t('reports.whatsImpactingScore' as TranslationKey)}</CardTitle>
-                </CardHeader>
-                <CardContent>
+                <CardContent className="pt-3 pb-3 px-4">
+                  <h3 className={`text-xs font-bold text-slate-900 mb-2 ${isRTL ? 'text-right' : ''}`}>{t('reports.whatsImpactingScore' as TranslationKey)}</h3>
                   <div className="space-y-1">
                     {complianceScore.deductions.map((d, idx) => (
-                      <div key={idx} className={`flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-slate-50 transition-colors ${isRTL ? 'flex-row-reverse' : ''}`}>
-                        <Badge className={cn('font-bold text-xs min-w-[56px] justify-center', deductionSeverityColors[d.severity])}>
-                          {d.points} {t('reports.pts' as TranslationKey)}
-                        </Badge>
-                        <span className={`text-sm text-slate-700 ${isRTL ? 'text-right' : ''}`}>{d.description}</span>
+                      <div key={idx} className={cn(
+                        'flex items-center gap-2 px-2 py-1.5 rounded border-l-[3px] bg-slate-50/50 transition-colors hover:bg-slate-50',
+                        deductionSeverityBorder[d.severity],
+                        isRTL ? 'flex-row-reverse border-l-0 border-r-[3px]' : ''
+                      )}>
+                        <span className={cn('text-[10px] font-bold min-w-[40px] text-center rounded px-1 py-0.5', deductionSeverityColors[d.severity])}>
+                          {d.points}
+                        </span>
+                        <span className={`text-[11px] text-slate-600 leading-tight ${isRTL ? 'text-right' : ''}`}>{d.description}</span>
                       </div>
                     ))}
                   </div>
-                  <div className={`flex items-center justify-between mt-4 pt-4 border-t border-slate-100 ${isRTL ? 'flex-row-reverse' : ''}`}>
-                    <span className="text-xs font-bold text-slate-500 uppercase tracking-widest">{t('reports.totalImpact' as TranslationKey)}</span>
-                    <span className="text-sm font-bold text-rose-600">{totalDeduction} {t('reports.pts' as TranslationKey)}</span>
+                  <div className={`flex items-center justify-between mt-2 pt-2 border-t border-slate-100 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{t('reports.totalImpact' as TranslationKey)}</span>
+                    <span className="text-xs font-bold text-rose-600">{totalDeduction} {t('reports.pts' as TranslationKey)}</span>
                   </div>
                 </CardContent>
               </Card>
             </div>
 
-            {/* SECTION 5: Risk Distribution + Findings Table (kept from original) */}
-            <div className="grid grid-cols-3 gap-6">
-              {/* Risk Distribution */}
+            {/* ROW 4: Risk Distribution + Findings Table — tighter grid */}
+            <div className="grid grid-cols-3 gap-3">
+              {/* Risk Distribution — horizontal stacked pills */}
               <Card>
-                <CardHeader className={isRTL ? 'text-right' : ''}>
-                  <CardTitle>{t('reports.riskDistribution')}</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-6">
+                <CardContent className="pt-3 pb-3 px-4">
+                  <h3 className={`text-xs font-bold text-slate-900 mb-3 ${isRTL ? 'text-right' : ''}`}>{t('reports.riskDistribution')}</h3>
+                  <div className="space-y-3">
                     {riskDistribution.map((risk, idx) => (
-                      <div key={idx} className="space-y-2">
-                        <div className={`flex justify-between text-xs font-bold ${isRTL ? 'flex-row-reverse' : ''}`}>
+                      <div key={idx}>
+                        <div className={`flex justify-between text-[10px] font-bold mb-1 ${isRTL ? 'flex-row-reverse' : ''}`}>
                           <span className="text-slate-600">{riskDistributionLabels[risk.category] || risk.category}</span>
                           <span className="text-slate-900">{risk.percentage}%</span>
                         </div>
-                        <div className={`h-2 bg-slate-100 rounded-full overflow-hidden ${isRTL ? 'rotate-180' : ''}`}>
+                        <div className={`h-1.5 bg-slate-100 rounded-full overflow-hidden ${isRTL ? 'rotate-180' : ''}`}>
                           <div
                             className={cn('h-full rounded-full transition-all', risk.color)}
                             style={{ width: `${risk.percentage}%` }}
@@ -1560,36 +1615,34 @@ export default function ReportsPage() {
                   </div>
                   <button
                     onClick={() => setShowBreakdownModal(true)}
-                    className={`w-full mt-8 py-3 text-xs font-bold text-emerald-600 hover:text-emerald-700 transition-colors bg-emerald-50 rounded-xl flex items-center justify-center gap-2 cursor-pointer ${isRTL ? 'flex-row-reverse' : ''}`}
+                    className={`w-full mt-4 py-2 text-[10px] font-bold text-emerald-600 hover:text-emerald-700 transition-colors bg-emerald-50 rounded-lg flex items-center justify-center gap-1.5 cursor-pointer ${isRTL ? 'flex-row-reverse' : ''}`}
                   >
                     {t('reports.viewFullBreakdown')}
-                    <Icon icon="lucide:external-link" className="w-3 h-3" />
+                    <Icon icon="lucide:external-link" className="w-2.5 h-2.5" />
                   </button>
                 </CardContent>
               </Card>
 
-              {/* Findings Table */}
+              {/* Findings Table — dense */}
               <Card className="col-span-2">
-                <CardHeader>
-                  <div className={`flex items-center justify-between ${isRTL ? 'flex-row-reverse' : ''}`}>
-                    <CardTitle>{t('reports.recentAuditFindings')}</CardTitle>
-                    <div className={`flex gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
-                      <Badge className="bg-rose-50 text-rose-600">{criticalCount} {t('reports.critical')}</Badge>
-                      <Badge className="bg-slate-100 text-slate-600">{auditFindings.length} {t('reports.total')}</Badge>
+                <CardContent className="pt-3 pb-2 px-3">
+                  <div className={`flex items-center justify-between mb-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                    <h3 className="text-xs font-bold text-slate-900">{t('reports.recentAuditFindings')}</h3>
+                    <div className={`flex gap-1.5 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                      <Badge className="bg-rose-50 text-rose-600 text-[10px] px-1.5 py-0">{criticalCount} {t('reports.critical')}</Badge>
+                      <Badge className="bg-slate-100 text-slate-600 text-[10px] px-1.5 py-0">{auditFindings.length} {t('reports.total')}</Badge>
                     </div>
                   </div>
-                </CardHeader>
-                <CardContent>
                   <div className="overflow-x-auto">
                     <table className={`w-full ${isRTL ? 'text-right' : 'text-left'}`}>
                       <thead>
                         <tr className="border-b border-slate-100">
-                          <th className="px-4 py-3 text-[10px] font-bold text-slate-400 uppercase tracking-widest">{t('reports.id')}</th>
-                          <th className="px-4 py-3 text-[10px] font-bold text-slate-400 uppercase tracking-widest">{t('reports.auditName')}</th>
-                          <th className="px-4 py-3 text-[10px] font-bold text-slate-400 uppercase tracking-widest">{t('reports.severity')}</th>
-                          <th className="px-4 py-3 text-[10px] font-bold text-slate-400 uppercase tracking-widest">{t('reports.owner')}</th>
-                          <th className="px-4 py-3 text-[10px] font-bold text-slate-400 uppercase tracking-widest">{t('reports.status')}</th>
-                          <th className="px-4 py-3"></th>
+                          <th className="px-2 py-1.5 text-[9px] font-bold text-slate-400 uppercase tracking-widest">{t('reports.id')}</th>
+                          <th className="px-2 py-1.5 text-[9px] font-bold text-slate-400 uppercase tracking-widest">{t('reports.auditName')}</th>
+                          <th className="px-2 py-1.5 text-[9px] font-bold text-slate-400 uppercase tracking-widest">{t('reports.severity')}</th>
+                          <th className="px-2 py-1.5 text-[9px] font-bold text-slate-400 uppercase tracking-widest">{t('reports.owner')}</th>
+                          <th className="px-2 py-1.5 text-[9px] font-bold text-slate-400 uppercase tracking-widest">{t('reports.status')}</th>
+                          <th className="px-2 py-1.5"></th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-50">
@@ -1599,34 +1652,34 @@ export default function ReportsPage() {
                             onClick={() => handleFindingClick(finding)}
                             className="group hover:bg-slate-50/50 cursor-pointer transition-colors"
                           >
-                            <td className="px-4 py-4 text-xs font-bold text-slate-400">#{finding.id}</td>
-                            <td className="px-4 py-4">
+                            <td className="px-2 py-2 text-[10px] font-bold text-slate-400">#{finding.id}</td>
+                            <td className="px-2 py-2">
                               <div className="flex flex-col">
-                                <span className="text-sm font-bold text-slate-900">{finding.auditName}</span>
-                                <span className="text-[10px] text-slate-500 uppercase tracking-tight">{finding.category}</span>
+                                <span className="text-[11px] font-bold text-slate-900">{finding.auditName}</span>
+                                <span className="text-[9px] text-slate-500 uppercase tracking-tight">{finding.category}</span>
                               </div>
                             </td>
-                            <td className="px-4 py-4">
-                              <Badge className={severityConfig[finding.severity].color}>
+                            <td className="px-2 py-2">
+                              <Badge className={cn(severityConfig[finding.severity].color, 'text-[9px] px-1.5 py-0')}>
                                 {severityLabels[finding.severity].toUpperCase()}
                               </Badge>
                             </td>
-                            <td className="px-4 py-4">
-                              <div className={`flex items-center gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
-                                <img src={finding.owner.avatar} className="w-6 h-6 rounded-full" alt={finding.owner.name} />
-                                <span className="text-xs font-medium text-slate-700">{finding.owner.name}</span>
-                              </div>
-                            </td>
-                            <td className="px-4 py-4">
+                            <td className="px-2 py-2">
                               <div className={`flex items-center gap-1.5 ${isRTL ? 'flex-row-reverse' : ''}`}>
-                                <div className={cn('w-1.5 h-1.5 rounded-full', statusConfig[finding.status].dotColor)} />
-                                <span className="text-xs font-bold text-slate-600">{statusLabels[finding.status]}</span>
+                                <img src={finding.owner.avatar} className="w-5 h-5 rounded-full" alt={finding.owner.name} />
+                                <span className="text-[10px] font-medium text-slate-700">{finding.owner.name}</span>
                               </div>
                             </td>
-                            <td className={`px-4 py-4 ${isRTL ? 'text-left' : 'text-right'}`}>
+                            <td className="px-2 py-2">
+                              <div className={`flex items-center gap-1 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                                <div className={cn('w-1.5 h-1.5 rounded-full', statusConfig[finding.status].dotColor)} />
+                                <span className="text-[10px] font-bold text-slate-600">{statusLabels[finding.status]}</span>
+                              </div>
+                            </td>
+                            <td className={`px-2 py-2 ${isRTL ? 'text-left' : 'text-right'}`}>
                               <div className={`flex items-center ${isRTL ? 'justify-start flex-row-reverse' : 'justify-end'} text-emerald-600 opacity-0 group-hover:opacity-100 transition-opacity`}>
-                                <span className="text-xs font-bold">{t('reports.details')}</span>
-                                <Icon icon="lucide:chevron-right" className={cn("w-4 h-4", isRTL && "flip-x")} />
+                                <span className="text-[10px] font-bold">{t('reports.details')}</span>
+                                <Icon icon="lucide:chevron-right" className={cn("w-3.5 h-3.5", isRTL && "flip-x")} />
                               </div>
                             </td>
                           </tr>
