@@ -1,0 +1,135 @@
+// ── Period Configuration ──────────────────────────────────────────────
+export type PeriodFilter = '3months' | '6months' | '12months' | 'fiscal'
+
+export interface PeriodConfig {
+  filter: PeriodFilter
+  startDate: Date
+  endDate: Date
+}
+
+// ── Weight Configuration ─────────────────────────────────────────────
+export interface ComponentWeights {
+  auditCompletion: number
+  observationClosure: number
+  riskPosture: number
+  policyCurrency: number
+  trainingCompletion: number
+}
+
+export interface ComplianceConfig {
+  weights: ComponentWeights
+  targetScore: number
+}
+
+// ── Confidence ───────────────────────────────────────────────────────
+export type ConfidenceLevel = 'insufficient' | 'low' | 'moderate' | 'high'
+
+// ── Component Score ──────────────────────────────────────────────────
+export interface ComponentScore {
+  score: number
+  weight: number
+  confidence: ConfidenceLevel
+  dataPoints: number
+}
+
+// ── Deductions ───────────────────────────────────────────────────────
+export type DeductionSeverity = 'critical' | 'high' | 'medium' | 'low'
+
+export interface ScoreDeduction {
+  points: number
+  description: string
+  descriptionKey: string
+  descriptionParams: Record<string, string>
+  severity: DeductionSeverity
+  component: string
+}
+
+// ── Framework Score ──────────────────────────────────────────────────
+export interface FrameworkScore {
+  score: number
+  confidence: ConfidenceLevel
+  dataPoints: number
+}
+
+// ── Trend ────────────────────────────────────────────────────────────
+export interface TrendDataPoint {
+  month: string
+  actual: number
+  target: number
+}
+
+// ── Engine Result ────────────────────────────────────────────────────
+export interface ComplianceScoreResult {
+  overall: number
+  change: number
+  confidence: ConfidenceLevel
+  components: {
+    auditCompletion: ComponentScore
+    observationClosure: ComponentScore
+    riskPosture: ComponentScore
+    policyCurrency: ComponentScore
+    trainingCompletion: ComponentScore
+  }
+  frameworks: {
+    sama: FrameworkScore
+    internal: FrameworkScore
+    sharia: FrameworkScore
+  }
+  deductions: ScoreDeduction[]
+  trend: TrendDataPoint[]
+}
+
+// ── Slim data slices (only fields the engine needs) ──────────────────
+export interface AuditSlice {
+  id: string
+  type: 'internal' | 'sama' | 'sharia'
+  status: 'pending' | 'in_progress' | 'completed' | 'overdue'
+  dueDate: string
+  completedAt?: string
+  closedOverdue?: boolean
+  createdAt: string
+  progress: number
+  priority?: 'critical' | 'high' | 'medium' | 'low'
+}
+
+export interface ObservationSlice {
+  id: string
+  source: 'sama' | 'internal' | 'sharia'
+  severity: 'critical' | 'high' | 'medium' | 'low'
+  status: 'open' | 'in_progress' | 'resolved' | 'closed'
+  dueDate: string
+  createdAt?: string
+}
+
+export interface RiskSlice {
+  id: string
+  likelihood: 1 | 2 | 3 | 4 | 5
+  impact: 1 | 2 | 3 | 4 | 5
+  status: 'identified' | 'mitigating' | 'accepted' | 'resolved'
+  createdAt: string
+}
+
+export interface PolicySlice {
+  id: string
+  status: 'draft' | 'active' | 'archived'
+  nextReviewDate: string
+  createdAt: string
+}
+
+export interface TrainingSlice {
+  id: string
+  completionRate: number
+  status: 'active' | 'completed' | 'overdue'
+  createdAt: string
+}
+
+// ── Engine Input ─────────────────────────────────────────────────────
+export interface ComplianceEngineInput {
+  audits: AuditSlice[]
+  observations: ObservationSlice[]
+  risks: RiskSlice[]
+  policies: PolicySlice[]
+  trainings: TrainingSlice[]
+  config: ComplianceConfig
+  period: PeriodConfig
+}

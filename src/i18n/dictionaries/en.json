@@ -1770,7 +1770,17 @@
     "confidenceInsufficient": "Insufficient Data",
     "frameworkSama": "SAMA Compliance",
     "frameworkInternal": "Internal Audit",
-    "frameworkSharia": "Sharia Compliance"
+    "frameworkSharia": "Sharia Compliance",
+    "deduction": {
+      "criticalObsOpen": "{{count}} critical {{source}} observation(s) open",
+      "highObsOpen": "{{count}} high severity observation(s) open",
+      "overdueAudits": "{{count}} overdue compliance audit(s)",
+      "lateAudits": "{{count}} audit(s) completed past due date",
+      "mediumObsOpen": "{{count}} medium observation(s) open",
+      "insufficientData": "{{component}} has insufficient data",
+      "componentLow": "{{component}} score critically low ({{score}}%)",
+      "moreDeductions": "+{{count}} more deductions ({{total}} pts)"
+    }
   },
   "correspondence": {
     "tabs": {

@@ -1766,7 +1766,17 @@
     "confidenceInsufficient": "بيانات غير كافية",
     "frameworkSama": "امتثال ساما",
     "frameworkInternal": "التدقيق الداخلي",
-    "frameworkSharia": "الامتثال الشرعي"
+    "frameworkSharia": "الامتثال الشرعي",
+    "deduction": {
+      "criticalObsOpen": "{{count}} ملاحظة {{source}} حرجة مفتوحة",
+      "highObsOpen": "{{count}} ملاحظة عالية الخطورة مفتوحة",
+      "overdueAudits": "{{count}} تدقيق امتثال متأخر",
+      "lateAudits": "{{count}} تدقيق مكتمل بعد تاريخ الاستحقاق",
+      "mediumObsOpen": "{{count}} ملاحظة متوسطة مفتوحة",
+      "insufficientData": "{{component}} لا يملك بيانات كافية",
+      "componentLow": "درجة {{component}} منخفضة بشكل حرج ({{score}}%)",
+      "moreDeductions": "+{{count}} خصومات إضافية ({{total}} نقطة)"
+    }
   },
   "correspondence": {
     "tabs": {

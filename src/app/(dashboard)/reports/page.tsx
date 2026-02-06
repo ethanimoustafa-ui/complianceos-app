@@ -17,6 +17,8 @@ import { AddAuditModal } from '@/components/audits/add-audit-modal'
 import { EditAuditModal } from '@/components/audits/edit-audit-modal'
 import { DeleteConfirmationDialog } from '@/components/ui/delete-confirmation-dialog'
 import type { Audit as AuditType } from '@/types'
+import { useComplianceScore } from '@/hooks/useComplianceScore'
+import type { PeriodFilter } from '@/lib/compliance-engine.types'
 
 import type { TranslationKey } from '@/i18n'
 
@@ -94,12 +96,6 @@ interface AuditLog {
   status: LogStatus
   duration?: string
   context?: string
-}
-
-interface ComplianceTrendData {
-  month: string
-  actual: number
-  target: number
 }
 
 interface RiskDistribution {
@@ -354,6 +350,7 @@ export default function ReportsPage() {
   const [sortColumn, setSortColumn] = useState<string | null>('timestamp')
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc')
   const [dateRangeFilter, setDateRangeFilter] = useState('month')
+  const [hoveredTrendIdx, setHoveredTrendIdx] = useState<number | null>(null)
 
   // Custom filter dropdown state
   const [showFilterDropdown, setShowFilterDropdown] = useState(false)
@@ -575,38 +572,8 @@ export default function ReportsPage() {
     })
   }, [filteredAudits, auditSortField, auditSortDirection])
 
-  // Filter data for Executive View - changes based on period filter
-  const filterData: Record<string, { compliance: string; findings: string; audits: number; mttr: string }> = {
-    '3months': { compliance: '96.8%', findings: '03', audits: 18, mttr: '3.8d' },
-    '6months': { compliance: '95.1%', findings: '05', audits: 21, mttr: '4.0d' },
-    '12months': { compliance: '94.2%', findings: '08', audits: 24, mttr: '4.2d' },
-    'fiscal': { compliance: '93.5%', findings: '10', audits: 26, mttr: '4.5d' },
-  }
-
-  // TODO: Replace with real compliance score calculation (weighted component scores)
-  const complianceScore = {
-    overall: 84.2,
-    change: +3.2,
-    confidence: 'high' as const, // 'insufficient' | 'low' | 'moderate' | 'high'
-    components: {
-      auditCompletion: { score: 92, weight: 25 },
-      observationClosure: { score: 71, weight: 25 },
-      riskPosture: { score: 88, weight: 20 },
-      policyCurrency: { score: 95, weight: 15 },
-      trainingCompletion: { score: 82, weight: 15 },
-    },
-    frameworks: {
-      sama: 72,
-      internal: 94,
-      sharia: 88,
-    },
-    deductions: [
-      { points: -8, description: '1 Critical SAMA observation open', severity: 'critical' as const },
-      { points: -5, description: '2 overdue compliance audits', severity: 'high' as const },
-      { points: -4, description: 'Training completion below target', severity: 'medium' as const },
-      { points: -3, description: '1 High observation (Internal Audit)', severity: 'high' as const },
-    ],
-  }
+  // Real compliance score from engine (weighted component scores from actual data)
+  const complianceScore = useComplianceScore(periodFilter as PeriodFilter)
 
   // Filter labels for display
   const filterLabels: Record<string, string> = {
@@ -622,45 +589,8 @@ export default function ReportsPage() {
     setShowFilterDropdown(false)
   }
 
-  // Compliance trend data per filter - changes chart based on selection
-  const complianceTrendData: Record<string, ComplianceTrendData[]> = {
-    '3months': [
-      { month: 'Nov', actual: 88, target: 90 },
-      { month: 'Dec', actual: 92, target: 90 },
-      { month: 'Jan', actual: 97, target: 90 },
-    ],
-    '6months': [
-      { month: 'Aug', actual: 75, target: 90 },
-      { month: 'Sep', actual: 82, target: 90 },
-      { month: 'Oct', actual: 85, target: 90 },
-      { month: 'Nov', actual: 88, target: 90 },
-      { month: 'Dec', actual: 92, target: 90 },
-      { month: 'Jan', actual: 95, target: 90 },
-    ],
-    '12months': [
-      { month: 'Feb', actual: 70, target: 90 },
-      { month: 'Mar', actual: 75, target: 90 },
-      { month: 'Apr', actual: 78, target: 90 },
-      { month: 'May', actual: 82, target: 90 },
-      { month: 'Jun', actual: 80, target: 90 },
-      { month: 'Jul', actual: 85, target: 90 },
-      { month: 'Aug', actual: 83, target: 90 },
-      { month: 'Sep', actual: 88, target: 90 },
-      { month: 'Oct', actual: 86, target: 90 },
-      { month: 'Nov', actual: 90, target: 90 },
-      { month: 'Dec', actual: 92, target: 90 },
-      { month: 'Jan', actual: 94, target: 90 },
-    ],
-    'fiscal': [
-      { month: 'Q1', actual: 72, target: 90 },
-      { month: 'Q2', actual: 80, target: 90 },
-      { month: 'Q3', actual: 88, target: 90 },
-      { month: 'Q4', actual: 93, target: 90 },
-    ],
-  }
-
-  // Get current trend data based on filter
-  const currentTrend = complianceTrendData[periodFilter]
+  // Get current trend data from engine
+  const currentTrend = complianceScore.trend
 
   // Filter logs
   const filteredLogs = auditLogs.filter((log) => {
@@ -1410,8 +1340,9 @@ export default function ReportsPage() {
                   <h3 className={`text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2 ${isRTL ? 'text-right' : ''}`}>{t('reports.frameworkScores' as TranslationKey)}</h3>
                   <div className={`flex items-center justify-around ${isRTL ? 'flex-row-reverse' : ''}`}>
                     {frameworkEntries.map(({ key, i18n, icon }) => {
-                      const score = complianceScore.frameworks[key]
-                      const fwOffset = miniCirc - (score / 100) * miniCirc
+                      const fwData = complianceScore.frameworks[key]
+                      const fwScore = fwData.score
+                      const fwOffset = miniCirc - (fwScore / 100) * miniCirc
                       return (
                         <div key={key} className="flex flex-col items-center gap-1">
                           <div className="relative" style={{ width: 68, height: 68 }}>
@@ -1420,7 +1351,7 @@ export default function ReportsPage() {
                               <circle
                                 cx="34" cy="34" r={miniRadius}
                                 fill="none"
-                                stroke={getGaugeColor(score)}
+                                stroke={getGaugeColor(fwScore)}
                                 strokeWidth="5"
                                 strokeLinecap="round"
                                 strokeDasharray={miniCirc}
@@ -1429,7 +1360,7 @@ export default function ReportsPage() {
                               />
                             </svg>
                             <div className="absolute inset-0 flex items-center justify-center">
-                              <span className="text-sm font-bold text-slate-900">{score}%</span>
+                              <span className="text-sm font-bold text-slate-900">{fwScore}%</span>
                             </div>
                           </div>
                           <div className={`flex items-center gap-1 ${isRTL ? 'flex-row-reverse' : ''}`}>
@@ -1512,56 +1443,107 @@ export default function ReportsPage() {
                     </div>
                   </div>
                   {/* Sparkline-style area + target line */}
-                  <div className="relative h-32">
-                    <svg width="100%" height="100%" viewBox={`0 0 ${currentTrend.length * 40} 100`} preserveAspectRatio="none" className="overflow-visible">
-                      {/* Target line */}
-                      <line x1="0" y1={100 - currentTrend[0]?.target} x2={currentTrend.length * 40} y2={100 - currentTrend[0]?.target} stroke="#e2e8f0" strokeWidth="1" strokeDasharray="4 3" />
-                      {/* Area fill */}
-                      <path
-                        d={`M0,${100 - currentTrend[0]?.actual} ${currentTrend.map((d, i) => `L${i * 40 + 20},${100 - d.actual}`).join(' ')} L${(currentTrend.length - 1) * 40 + 20},100 L0,100 Z`}
-                        fill="url(#trendGradient)"
-                        opacity="0.3"
-                      />
-                      {/* Line */}
-                      <polyline
-                        points={currentTrend.map((d, i) => `${i * 40 + 20},${100 - d.actual}`).join(' ')}
-                        fill="none"
-                        stroke="#10b981"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
-                      {/* Dots */}
-                      {currentTrend.map((d, i) => (
-                        <circle
-                          key={i}
-                          cx={i * 40 + 20}
-                          cy={100 - d.actual}
-                          r={i === currentTrend.length - 1 ? 4 : 2.5}
-                          fill={d.actual >= d.target ? '#10b981' : '#f59e0b'}
-                          stroke="white"
-                          strokeWidth="1.5"
-                        />
-                      ))}
-                      <defs>
-                        <linearGradient id="trendGradient" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" stopColor="#10b981" stopOpacity="0.4" />
-                          <stop offset="100%" stopColor="#10b981" stopOpacity="0.02" />
-                        </linearGradient>
-                      </defs>
-                    </svg>
-                    {/* X-axis labels */}
-                    <div className={`flex justify-between px-1 mt-1 ${isRTL ? 'flex-row-reverse' : ''}`}>
-                      {currentTrend.map((data, idx) => (
-                        <span key={idx} className={cn(
-                          'text-[8px] font-bold text-slate-400',
-                          idx === currentTrend.length - 1 && 'text-slate-600'
-                        )}>
-                          {monthLabels[data.month] || data.month}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
+                  {(() => {
+                    if (currentTrend.length === 0) {
+                      return (
+                        <div className="h-32 flex items-center justify-center text-[11px] text-slate-400">
+                          {t('reports.confidenceInsufficient' as TranslationKey)}
+                        </div>
+                      )
+                    }
+                    const allVals = currentTrend.flatMap((d) => [d.actual, d.target])
+                    const rawMin = Math.min(...allVals)
+                    const rawMax = Math.max(...allVals)
+                    const yPad = Math.max((rawMax - rawMin) * 0.2, 5)
+                    const yMin = Math.max(0, Math.floor(rawMin - yPad))
+                    const yMax = Math.min(100, Math.ceil(rawMax + yPad))
+                    const yRange = yMax - yMin || 1
+
+                    // Percentages: X = left%, Y = top% of the chart area
+                    const padXPct = 4 // % from edges
+                    const chartTopPct = 8  // % from top where chart starts
+                    const chartBotPct = 78 // % from top where chart ends (leaves room for labels)
+                    const chartHPct = chartBotPct - chartTopPct
+
+                    const toXPct = (i: number) => padXPct + (currentTrend.length === 1 ? (100 - padXPct * 2) / 2 : (i / (currentTrend.length - 1)) * (100 - padXPct * 2))
+                    const toYPct = (val: number) => chartTopPct + chartHPct - ((val - yMin) / yRange) * chartHPct
+                    const targetYPct = toYPct(currentTrend[0].target)
+
+                    // SVG uses same percentage units (viewBox 0 0 100 100, maps to %)
+                    const linePoints = currentTrend.map((d, i) => `${toXPct(i)},${toYPct(d.actual)}`).join(' ')
+                    const firstX = toXPct(0)
+                    const lastX = toXPct(currentTrend.length - 1)
+                    const areaPath = `M${firstX},${toYPct(currentTrend[0].actual)} ${currentTrend.map((d, i) => `L${toXPct(i)},${toYPct(d.actual)}`).join(' ')} L${lastX},${chartBotPct} L${firstX},${chartBotPct} Z`
+
+                    return (
+                      <div className="relative h-36" onMouseLeave={() => setHoveredTrendIdx(null)}>
+                        {/* SVG only for line, area fill, target — stretches freely */}
+                        <svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none" className="absolute inset-0">
+                          <defs>
+                            <linearGradient id="trendGradient" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="0%" stopColor="#10b981" stopOpacity="0.4" />
+                              <stop offset="100%" stopColor="#10b981" stopOpacity="0.02" />
+                            </linearGradient>
+                          </defs>
+                          <line x1={padXPct} y1={targetYPct} x2={100 - padXPct} y2={targetYPct} stroke="#e2e8f0" strokeWidth="0.5" strokeDasharray="1.5 1" />
+                          <path d={areaPath} fill="url(#trendGradient)" opacity="0.3" />
+                          <polyline points={linePoints} fill="none" stroke="#10b981" strokeWidth="0.7" strokeLinecap="round" strokeLinejoin="round" />
+                        </svg>
+                        {/* HTML overlay for dots, labels, tooltips — never deformed */}
+                        {currentTrend.map((d, i) => {
+                          const leftPct = toXPct(i)
+                          const topPct = toYPct(d.actual)
+                          const isHovered = hoveredTrendIdx === i
+                          const isLast = i === currentTrend.length - 1
+                          const label = monthLabels[d.month] || d.month
+                          const dotColor = d.actual >= d.target ? '#10b981' : '#f59e0b'
+                          return (
+                            <React.Fragment key={i}>
+                              {/* Dot + hit area */}
+                              <div
+                                className="absolute -translate-x-1/2 -translate-y-1/2 cursor-pointer"
+                                style={{ left: `${leftPct}%`, top: `${topPct}%`, width: 24, height: 24 }}
+                                onMouseEnter={() => setHoveredTrendIdx(i)}
+                                onMouseLeave={() => setHoveredTrendIdx(null)}
+                              >
+                                <div
+                                  className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full border-[1.5px] border-white transition-all duration-150"
+                                  style={{
+                                    width: isHovered ? 10 : isLast ? 8 : 5,
+                                    height: isHovered ? 10 : isLast ? 8 : 5,
+                                    backgroundColor: dotColor,
+                                  }}
+                                />
+                              </div>
+                              {/* Tooltip */}
+                              {isHovered && (
+                                <div
+                                  className="absolute -translate-x-1/2 pointer-events-none z-10"
+                                  style={{ left: `${leftPct}%`, top: `calc(${topPct}% - 28px)` }}
+                                >
+                                  <div className="bg-slate-800/90 text-white text-[10px] font-bold px-2 py-0.5 rounded whitespace-nowrap">
+                                    {d.actual}%
+                                  </div>
+                                </div>
+                              )}
+                              {/* Month label */}
+                              <div
+                                className="absolute -translate-x-1/2"
+                                style={{ left: `${leftPct}%`, top: `calc(${chartBotPct}% + 6px)` }}
+                              >
+                                <span className={cn(
+                                  'text-[8px] font-bold uppercase',
+                                  isHovered ? 'text-slate-700' : isLast ? 'text-slate-600' : 'text-slate-400'
+                                )}>
+                                  {label}
+                                </span>
+                              </div>
+                            </React.Fragment>
+                          )
+                        })}
+                      </div>
+                    )
+                  })()}
                 </CardContent>
               </Card>
 
@@ -1579,7 +1561,7 @@ export default function ReportsPage() {
                         <span className={cn('text-[10px] font-bold min-w-[40px] text-center rounded px-1 py-0.5', deductionSeverityColors[d.severity])}>
                           {d.points}
                         </span>
-                        <span className={`text-[11px] text-slate-600 leading-tight ${isRTL ? 'text-right' : ''}`}>{d.description}</span>
+                        <span className={`text-[11px] text-slate-600 leading-tight ${isRTL ? 'text-right' : ''}`}>{d.descriptionKey ? t(d.descriptionKey as TranslationKey, d.descriptionParams) : d.description}</span>
                       </div>
                     ))}
                   </div>
