@@ -215,6 +215,8 @@
 | RSK-017 | Sequential human-readable risk IDs (RSK-001, RSK-002, ...) | ✅ | P1 | S | BRD | Done — Auto-incrementing from highest existing ID, zero-padded to 3 digits |
 | RSK-018 | Full i18n for risk labels (categories, statuses, likelihood/impact scales) | ✅ | P0 | S | BRD | Done — All labels use `t()` with `reports.*` / `riskRegister.*` keys, Arabic translations verified |
 | RSK-019 | Review reminder notifications (email risk owners when review date approaches) | 📋 | P2 | S | REC | Depends on notification delivery system (SET-009) |
+| RSK-020 | Delete risk from list and drawer (with confirmation dialog) | ✅ | P1 | S | BRD | Done — Trash icon in risk list rows + delete button in drawer, uses `DeleteConfirmationDialog`, calls store `delete` action, closes drawer if deleted risk was selected |
+| RSK-021 | Risk list pagination (10 per page) | ✅ | P1 | S | BRD | Done — Page controls below table (prev/next, page X/Y, range display), resets to page 1 on filter/search change, follows audit logs pagination pattern |
 
 ---
 
@@ -395,36 +397,67 @@
 
 ---
 
+## Epic 20: LaTeX PDF Generation System
+
+> Universal export system — every page offers CSV or styled PDF via server-side LaTeX compilation. Design doc: `latex-pdf-generation-design.md`.
+
+| ID | Feature | Status | Priority | Arch | Source | Notes |
+|---|---|---|---|---|---|---|
+| PDF-001 | Backend LaTeX compilation service (Handlebars → .tex → pdflatex → PDF) | 📋 | P1 | S | REC | Node.js service with temp dir lifecycle, Docker-ready. See design doc §5.1 |
+| PDF-002 | LaTeX input sanitization (escape special chars, block command injection) | 📋 | P1 | S | REC | Security-critical. `sanitizeForLatex()` + recursive `sanitizeData()`. See design doc §5.3 |
+| PDF-003 | POST /api/export/pdf endpoint (template + data + meta + options) | 📋 | P1 | S | REC | Returns PDF binary. Auth middleware + audit logging. See design doc §5.2 |
+| PDF-004 | Shared LaTeX preamble (base.tex — brand colors, page layout, severity/status badges) | 📋 | P1 | S | REC | ComplianceOS visual identity in LaTeX matching Tailwind design system |
+| PDF-005 | Cover page component (cover.tex — title, org, author, date, classification) | 📋 | P1 | S | REC | Reusable across all templates |
+| PDF-006 | Template: observation-list.tex (executive summary + severity chart + detail table) | 📋 | P1 | S | REC | pgfplots bar chart + longtable |
+| PDF-007 | Template: compliance-report.tex (framework scores + trend chart + open observations) | 📋 | P1 | S | REC | Executive dashboard export |
+| PDF-008 | Template: audit-report.tex (metadata + findings summary + detail + activity log) | 📋 | P1 | S | REC | |
+| PDF-009 | Template: risk-register.tex (landscape, summary + longtable + 5×5 TikZ heat map) | 📋 | P1 | S | REC | Plots actual risks as dots on heat map |
+| PDF-010 | Template: sama-letter.tex (formal letterhead format matching SAMA correspondence standards) | 📋 | P1 | A | REC | Letterhead, metadata, body paragraphs, attachments, signature block |
+| PDF-011 | Template: generic-table.tex (fallback for any tabular data) | 📋 | P2 | S | REC | Dynamic column count/widths |
+| PDF-012 | Frontend ExportModal component (shared CSV/PDF chooser) | 📋 | P1 | S | REC | Two-card UI, wired to every page with export |
+| PDF-013 | Frontend export-service.ts (API client for PDF endpoint + blob download) | 📋 | P1 | S | REC | |
+| PDF-014 | Wire ExportModal to all pages (observations, audits, reports, correspondence, risk register, calendar, team/training, dashboard) | 📋 | P2 | S | REC | 9 pages listed in design doc §3.3 |
+| PDF-015 | Watermark support (DRAFT, CONFIDENTIAL) | 📋 | P2 | S | REC | `draftwatermark` package, conditional rendering |
+| PDF-016 | Company logo upload and inclusion in templates | 📋 | P2 | S | REC | Base64 → logo.png in temp dir |
+| PDF-017 | Arabic/RTL template variants (xelatex + polyglossia + Amiri font) | 📋 | P3 | S | REC | Swap pdflatex → xelatex, add `\begin{Arabic}` wrappers |
+| PDF-018 | Template: correspondence-tracker.tex | 📋 | P2 | A | REC | |
+| PDF-019 | Template: training-report.tex | 📋 | P2 | S | REC | |
+| PDF-020 | Template: calendar-export.tex | 📋 | P2 | S | REC | |
+| PDF-021 | Email delivery of generated reports (for scheduled reports) | 🗺️ | P3 | S | REC | |
+| PDF-022 | Performance optimization (template caching, pre-compiled Handlebars) | 🗺️ | P3 | S | REC | |
+
+---
+
 ## Summary Dashboard
 
 ### By Status
 
 | Status | Count | % |
 |---|---|---|
-| ✅ Done | 63 | 36% |
-| 🔧 In Progress (UI built, logic pending) | 26 | 15% |
-| 📋 To Do (defined, not started) | 48 | 27% |
-| 💡 New Recommendation | 24 | 14% |
-| 🗺️ Roadmap (future phase) | 16 | 9% |
-| **Total** | **177** | **100%** |
+| ✅ Done | 65 | 33% |
+| 🔧 In Progress (UI built, logic pending) | 26 | 13% |
+| 📋 To Do (defined, not started) | 68 | 34% |
+| 💡 New Recommendation | 24 | 12% |
+| 🗺️ Roadmap (future phase) | 18 | 9% |
+| **Total** | **201** | **100%** |
 
 ### By Priority
 
 | Priority | Count | Description |
 |---|---|---|
 | P0 — Critical | 30 | Blocks launch. Stores, engine integration, core workflows |
-| P1 — High | 69 | Needed for launch. Onboarding, framework layer, correspondence logic |
-| P2 — Medium | 48 | Post-launch. Multi-authority, advanced features, Sharia workflows |
-| P3 — Low | 30 | Future phase. ZATCA, SAFIU, MISA, advanced versioning |
+| P1 — High | 83 | Needed for launch. Onboarding, framework layer, correspondence logic, PDF export |
+| P2 — Medium | 55 | Post-launch. Multi-authority, advanced features, Sharia workflows |
+| P3 — Low | 33 | Future phase. ZATCA, SAFIU, MISA, advanced versioning, Arabic PDF |
 
 ### By Archetype
 
 | Archetype | Count | Description |
 |---|---|---|
-| A — Correspondence | 47 | Authority communication, letters, circulars, submissions |
+| A — Correspondence | 49 | Authority communication, letters, circulars, submissions |
 | B — Framework | 35 | Framework metadata, tagging, versioning, assessments |
 | C — Internal Governance | 10 | Internal audit, Sharia compliance |
-| S — Shared/Platform | 78 | Core modules, engine, calendar, settings, RBAC, i18n |
+| S — Shared/Platform | 100 | Core modules, engine, calendar, settings, RBAC, i18n, PDF export |
 
 ### Critical Path (P0 items)
 

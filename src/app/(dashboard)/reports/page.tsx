@@ -321,6 +321,7 @@ export default function ReportsPage() {
   const createRisk = useRiskStore((s) => s.create)
   const updateRisk = useRiskStore((s) => s.update)
   const updateRiskStatus = useRiskStore((s) => s.updateStatus)
+  const deleteRisk = useRiskStore((s) => s.delete)
   const addMitigationItem = useRiskStore((s) => s.addMitigationItem)
   const editMitigationItem = useRiskStore((s) => s.editMitigationItem)
   const toggleMitigationItem = useRiskStore((s) => s.toggleMitigationItem)
@@ -503,6 +504,12 @@ export default function ReportsPage() {
   const [monitoringFrequencyFilter, setMonitoringFrequencyFilter] = useState<MonitoringFrequency | 'all'>('all')
   // State for tracking selected risk index within matrix cells with multiple risks
   const [matrixCellSelection, setMatrixCellSelection] = useState<{ cellKey: string; index: number } | null>(null)
+  // Risk delete state
+  const [riskToDelete, setRiskToDelete] = useState<RiskRegisterItem | null>(null)
+  const [showRiskDeleteConfirm, setShowRiskDeleteConfirm] = useState(false)
+  // Risk list pagination
+  const [riskPage, setRiskPage] = useState(1)
+  const RISKS_PER_PAGE = 10
 
   // Monitoring frequency labels
   const monitoringFrequencyLabels: Record<MonitoringFrequency, string> = {
@@ -747,6 +754,14 @@ export default function ReportsPage() {
       return riskSortDirection === 'asc' ? comparison : -comparison
     })
   }, [filteredRisks, riskSortField, riskSortDirection])
+
+  const totalRiskPages = Math.max(1, Math.ceil(sortedRisks.length / RISKS_PER_PAGE))
+  const paginatedRisks = sortedRisks.slice((riskPage - 1) * RISKS_PER_PAGE, riskPage * RISKS_PER_PAGE)
+
+  // Reset to page 1 when filters/search change
+  useEffect(() => {
+    setRiskPage(1)
+  }, [riskSearchTerm, riskCategoryFilter, riskStatusFilter])
 
   // Transform store audits to page audit format
   const pageAudits: Audit[] = useMemo(() => {
@@ -2731,7 +2746,7 @@ export default function ReportsPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {sortedRisks.map(risk => {
+                      {paginatedRisks.map(risk => {
                         const score = getRiskScore(risk.likelihood, risk.impact)
                         const level = getRiskLevel(score)
                         const categoryConfig = riskCategoryConfig[risk.category]
@@ -2773,15 +2788,26 @@ export default function ReportsPage() {
                               </div>
                             </td>
                             <td className="px-6 py-4">
-                              <button
-                                onClick={() => {
-                                  setSelectedRisk(risk)
-                                  setIsRiskDrawerOpen(true)
-                                }}
-                                className="text-emerald-600 hover:text-emerald-700 p-2 hover:bg-emerald-50 rounded-lg transition-all cursor-pointer"
-                              >
-                                <Icon icon="lucide:eye" className="text-lg" />
-                              </button>
+                              <div className={`flex items-center gap-1`}>
+                                <button
+                                  onClick={() => {
+                                    setSelectedRisk(risk)
+                                    setIsRiskDrawerOpen(true)
+                                  }}
+                                  className="text-emerald-600 hover:text-emerald-700 p-2 hover:bg-emerald-50 rounded-lg transition-all cursor-pointer"
+                                >
+                                  <Icon icon="lucide:eye" className="text-lg" />
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    setRiskToDelete(risk)
+                                    setShowRiskDeleteConfirm(true)
+                                  }}
+                                  className="text-slate-400 hover:text-rose-600 p-2 hover:bg-rose-50 rounded-lg transition-all cursor-pointer"
+                                >
+                                  <Icon icon="lucide:trash-2" className="text-lg" />
+                                </button>
+                              </div>
                             </td>
                           </tr>
                         )
@@ -2789,6 +2815,30 @@ export default function ReportsPage() {
                     </tbody>
                   </table>
                 </div>
+                {sortedRisks.length > RISKS_PER_PAGE && (
+                  <div className={`flex items-center justify-between px-6 py-4 border-t border-slate-100`}>
+                    <span className="text-xs text-slate-500" dir="ltr">
+                      {(riskPage - 1) * RISKS_PER_PAGE + 1}–{Math.min(riskPage * RISKS_PER_PAGE, sortedRisks.length)} / {sortedRisks.length}
+                    </span>
+                    <div className={`flex items-center gap-2`}>
+                      <button
+                        onClick={() => setRiskPage((p) => Math.max(1, p - 1))}
+                        disabled={riskPage === 1}
+                        className="px-3 py-1.5 text-xs font-bold text-slate-600 bg-slate-100 rounded-lg hover:bg-slate-200 transition-colors disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                      >
+                        <Icon icon={isRTL ? 'lucide:chevron-right' : 'lucide:chevron-left'} className="w-3.5 h-3.5" />
+                      </button>
+                      <span className="text-xs font-bold text-slate-700" dir="ltr">{riskPage} / {totalRiskPages}</span>
+                      <button
+                        onClick={() => setRiskPage((p) => Math.min(totalRiskPages, p + 1))}
+                        disabled={riskPage === totalRiskPages}
+                        className="px-3 py-1.5 text-xs font-bold text-slate-600 bg-slate-100 rounded-lg hover:bg-slate-200 transition-colors disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                      >
+                        <Icon icon={isRTL ? 'lucide:chevron-left' : 'lucide:chevron-right'} className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </div>
@@ -3396,6 +3446,15 @@ export default function ReportsPage() {
                 >
                   {t('reports.editRisk' as TranslationKey)}
                 </button>
+                <button
+                  className="bg-rose-100 text-rose-600 py-3 px-4 rounded-xl font-bold text-xs hover:bg-rose-200 transition-all cursor-pointer"
+                  onClick={() => {
+                    setRiskToDelete(selectedRisk)
+                    setShowRiskDeleteConfirm(true)
+                  }}
+                >
+                  <Icon icon="lucide:trash-2" className="text-base" />
+                </button>
               </div>
             </div>
           )
@@ -3563,6 +3622,24 @@ export default function ReportsPage() {
       />
 
       {/* Delete Audit Confirmation Dialog */}
+      <DeleteConfirmationDialog
+        isOpen={showRiskDeleteConfirm}
+        onClose={() => {
+          setShowRiskDeleteConfirm(false)
+          setRiskToDelete(null)
+        }}
+        onConfirm={async () => {
+          if (riskToDelete) {
+            await deleteRisk(riskToDelete.id)
+            if (selectedRisk?.id === riskToDelete.id) {
+              setSelectedRisk(null)
+              setIsRiskDrawerOpen(false)
+            }
+          }
+        }}
+        itemType={t('reports.risk' as TranslationKey)}
+        itemName={riskToDelete?.name || ''}
+      />
       <DeleteConfirmationDialog
         isOpen={showDeleteConfirm}
         onClose={() => {
