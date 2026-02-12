@@ -207,16 +207,43 @@ export interface Observation {
 }
 
 // Risk types
+export type RiskCategory = 'operational' | 'financial' | 'compliance' | 'strategic' | 'reputational'
+export type RiskStatus = 'identified' | 'mitigating' | 'accepted' | 'resolved'
+export type MonitoringFrequency = 'weekly' | 'monthly' | 'quarterly' | 'semi_annual' | 'annual'
+
+export interface MitigationChecklistItem {
+  id: string
+  text: string
+  completed: boolean
+}
+
+export interface RiskHistoryEntry {
+  id: string
+  timestamp: string
+  user: string
+  action: 'created' | 'status_changed' | 'score_updated' | 'mitigation_updated' | 'reviewed' | 'assigned' | 'note_added' | 'checklist_added' | 'checklist_toggled' | 'checklist_edited' | 'checklist_removed'
+  previousValue?: string
+  newValue?: string
+  notes?: string
+}
+
 export interface Risk {
   id: string
   title: string
   description: string
-  category: string
+  category: RiskCategory
   likelihood: 1 | 2 | 3 | 4 | 5
   impact: 1 | 2 | 3 | 4 | 5
   riskScore: number
-  status: 'identified' | 'mitigating' | 'accepted' | 'resolved'
+  status: RiskStatus
   owner: User
+  mitigationPlan?: string
+  mitigationChecklist?: MitigationChecklistItem[]
+  mitigationProgress: number
+  monitoringFrequency: MonitoringFrequency
+  lastReviewDate?: string
+  nextReviewDate?: string
+  history: RiskHistoryEntry[]
   createdAt: string
   updatedAt: string
 }
@@ -494,6 +521,29 @@ export interface PaginationState {
   pageSize: number
   total: number
   totalPages: number
+}
+
+// Risk filters
+export interface RiskFilters {
+  status?: RiskStatus[]
+  category?: RiskCategory[]
+  monitoringFrequency?: MonitoringFrequency[]
+  dateRange?: { from: string; to: string }
+}
+
+// Policy filters
+export interface PolicyFilters {
+  status?: Policy['status'][]
+  department?: string
+  dateRange?: { from: string; to: string }
+}
+
+// Training filters
+export interface TrainingFilters {
+  status?: Training['status'][]
+  type?: Training['type'][]
+  department?: string
+  dateRange?: { from: string; to: string }
 }
 
 // Sort type

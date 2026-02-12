@@ -2,7 +2,7 @@
 
 **Version:** 1.0
 **Date:** February 2026
-**Last Updated:** February 9, 2026
+**Last Updated:** February 12, 2026
 
 ---
 
@@ -166,7 +166,7 @@
 | RPT-009 | Executive view tab | ✅ | P0 | S | BRD | Done |
 | RPT-010 | Audits tab (CRUD, filtering, sorting, CSV export) | ✅ | P0 | S | BRD | Done |
 | RPT-011 | Detailed logs tab (activity logs, CSV export) | ✅ | P0 | S | BRD | Done |
-| RPT-012 | Replace hardcoded risk data in Risks tab with Risk Store | 📋 | P0 | S | BRD | Blocked by RSK-001 |
+| RPT-012 | Replace hardcoded risk data in Risks tab with Risk Store | ✅ | P0 | S | BRD | Done — `risks` useMemo maps store data to page format, all UI driven by `useRiskStore` |
 | RPT-013 | Replace hardcoded executive view details with live data | 📋 | P1 | S | BRD | |
 | RPT-014 | Framework-aligned reporting (per-framework coverage %) | 📋 | P1 | B | BRD | See Epic 11. Show coverage per control |
 | RPT-015 | Control-level drill-down (all tagged entities per control) | 📋 | P2 | B | BRD | |
@@ -196,17 +196,25 @@
 
 | ID | Feature | Status | Priority | Arch | Source | Notes |
 |---|---|---|---|---|---|---|
-| RSK-001 | Risk store (Zustand with persistence) | 📋 | P0 | S | BRD | Required for compliance engine |
-| RSK-002 | 5×5 risk matrix (likelihood × impact) | 🔧 | P1 | S | BRD | UI built, needs live data |
-| RSK-003 | Risk categories (Operational, Financial, Compliance, Strategic, Reputational) | 🔧 | P1 | S | BRD | UI built |
-| RSK-004 | Status lifecycle (Open → Mitigating → Accepted → Closed) | 🔧 | P1 | S | BRD | UI built |
-| RSK-005 | Mitigation tracking (plan + percentage progress) | 🔧 | P1 | S | BRD | UI built |
-| RSK-006 | Risk owner assignment | 🔧 | P1 | S | BRD | UI built |
-| RSK-007 | Monitoring frequency with review date tracking | 🔧 | P1 | S | BRD | UI built |
-| RSK-008 | Audit trail (status, score, mitigation, review, assignment changes) | 📋 | P1 | S | BRD | |
-| RSK-009 | Compliance engine integration (Risk Posture = 20% weight) | 📋 | P0 | S | BRD | Currently returns 0 |
+| RSK-001 | Risk store (Zustand with persistence) | ✅ | P0 | S | BRD | Done — `risk-store.ts` with create, update, updateStatus, delete actions + localStorage persistence |
+| RSK-002 | 5×5 risk matrix (likelihood × impact) | ✅ | P1 | S | BRD | Done — Interactive matrix driven by live store data, click-to-select with multi-risk cell cycling |
+| RSK-003 | Risk categories (Operational, Financial, Compliance, Strategic, Reputational) | ✅ | P1 | S | BRD | Done — Category filtering, i18n labels (EN/AR), category distribution card with monitoring stats |
+| RSK-004 | Status lifecycle (Open → Mitigating → Accepted → Closed) | ✅ | P1 | S | BRD | Done — Status dropdown in drawer calls `updateStatus`, maps UI↔store statuses, i18n labels |
+| RSK-005 | Mitigation tracking (plan + checklist-driven progress) | ✅ | P1 | S | BRD | Done — Hybrid: free-text plan for context + action item checklist (add/edit/toggle/remove), progress auto-computed from completed/total items, reuses `ChecklistSection` component with domain-agnostic label overrides |
+| RSK-006 | Risk owner assignment | ✅ | P1 | S | BRD | Done — Owner from team store, selectable in add/edit modal, displayed with avatar/department |
+| RSK-007 | Monitoring frequency with auto-computed review dates | ✅ | P1 | S | BRD | Done — `nextReviewDate = lastReviewDate + monitoringFrequency` (7d/1mo/3mo/6mo/1yr), "Mark as Reviewed" button resets cycle, dates auto-set on risk creation, category card filters by frequency |
+| RSK-008 | Audit trail (status, score, mitigation, review, checklist changes) | ✅ | P1 | S | BRD | Done — History timeline in drawer with colored dots, 11 action types including 4 checklist actions (added/toggled/edited/removed), all changes append entries automatically |
+| RSK-009 | Compliance engine integration (Risk Posture = 20% weight) | 📋 | P0 | S | BRD | Currently returns 0 — engine receives empty arrays for risk data |
 | RSK-010 | Dashboard widget integration | 📋 | P1 | S | BRD | |
 | RSK-011 | Framework principle tagging on risks | 📋 | P1 | B | BRD | `frameworkTags[]` field. See Epic 11 |
+| RSK-012 | Risk list search (name, description, category, owner) | ✅ | P1 | S | BRD | Done — Search input in risk list card header, case-insensitive across 4 fields |
+| RSK-013 | Risk list sorting (name, category, score, status, owner) | ✅ | P1 | S | BRD | Done — Clickable column headers with asc/desc chevron indicators, clear button |
+| RSK-014 | Edit risk (populate modal from existing risk, update via store) | ✅ | P1 | S | BRD | Done — Edit button in drawer pre-fills all 8 form fields, saves via `update` action, appends history entry |
+| RSK-015 | Export single risk to CSV | ✅ | P1 | S | BRD | Done — Export button in drawer, filename: `risk-{name}-{date}.csv`, uses `exportRisksLocalized` |
+| RSK-016 | Bulk risk list CSV export | ✅ | P1 | S | BRD | Done — Header export button exports sorted/filtered risk list via `exportRisksLocalized` with i18n |
+| RSK-017 | Sequential human-readable risk IDs (RSK-001, RSK-002, ...) | ✅ | P1 | S | BRD | Done — Auto-incrementing from highest existing ID, zero-padded to 3 digits |
+| RSK-018 | Full i18n for risk labels (categories, statuses, likelihood/impact scales) | ✅ | P0 | S | BRD | Done — All labels use `t()` with `reports.*` / `riskRegister.*` keys, Arabic translations verified |
+| RSK-019 | Review reminder notifications (email risk owners when review date approaches) | 📋 | P2 | S | REC | Depends on notification delivery system (SET-009) |
 
 ---
 
@@ -393,20 +401,20 @@
 
 | Status | Count | % |
 |---|---|---|
-| ✅ Done | 47 | 28% |
-| 🔧 In Progress (UI built, logic pending) | 32 | 19% |
-| 📋 To Do (defined, not started) | 50 | 30% |
+| ✅ Done | 63 | 36% |
+| 🔧 In Progress (UI built, logic pending) | 26 | 15% |
+| 📋 To Do (defined, not started) | 48 | 27% |
 | 💡 New Recommendation | 24 | 14% |
 | 🗺️ Roadmap (future phase) | 16 | 9% |
-| **Total** | **169** | **100%** |
+| **Total** | **177** | **100%** |
 
 ### By Priority
 
 | Priority | Count | Description |
 |---|---|---|
 | P0 — Critical | 30 | Blocks launch. Stores, engine integration, core workflows |
-| P1 — High | 62 | Needed for launch. Onboarding, framework layer, correspondence logic |
-| P2 — Medium | 47 | Post-launch. Multi-authority, advanced features, Sharia workflows |
+| P1 — High | 69 | Needed for launch. Onboarding, framework layer, correspondence logic |
+| P2 — Medium | 48 | Post-launch. Multi-authority, advanced features, Sharia workflows |
 | P3 — Low | 30 | Future phase. ZATCA, SAFIU, MISA, advanced versioning |
 
 ### By Archetype
@@ -416,15 +424,15 @@
 | A — Correspondence | 47 | Authority communication, letters, circulars, submissions |
 | B — Framework | 35 | Framework metadata, tagging, versioning, assessments |
 | C — Internal Governance | 10 | Internal audit, Sharia compliance |
-| S — Shared/Platform | 77 | Core modules, engine, calendar, settings, RBAC, i18n |
+| S — Shared/Platform | 78 | Core modules, engine, calendar, settings, RBAC, i18n |
 
 ### Critical Path (P0 items)
 
-These 30 items must be completed before launch:
+These 30 items must be completed before launch (2 now done):
 
-1. **Stores:** Risk Store (RSK-001), Policy Store (POL-002), Training Store (TRN-004), Framework Store (FRM-018)
+1. **Stores:** ~~Risk Store (RSK-001)~~ ✅, Policy Store (POL-002), Training Store (TRN-004), Framework Store (FRM-018)
 2. **Engine Integration:** Risk Posture (RSK-009), Policy Currency (POL-009), Training Completion (TRN-013)
-3. **Live Data:** Replace hardcoded risk data (RPT-012)
+3. **Live Data:** ~~Replace hardcoded risk data (RPT-012)~~ ✅
 4. **Correspondence:** Letter approval chain (COR-005, COR-006), reference numbering (COR-009)
 5. **Rules & Circulars:** Registration logic (RUL-001), applicability (RUL-002), CAP creation (RUL-003), Business Owner assignment (RUL-004)
 6. **Onboarding:** Org profile (ONB-001), entity type (ONB-002), authority selection (ONB-003), framework selection (ONB-006), pre-selection logic (ONB-004, ONB-007), Constant C (ONB-008), entity map data (ONB-012)

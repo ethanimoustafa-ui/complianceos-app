@@ -17,6 +17,10 @@ export interface ChecklistSectionProps {
   onRemove: (itemId: string) => void
   onToggle: (itemId: string, currentState: boolean) => void
   isRTL: boolean
+  titleKey?: string
+  completionKey?: string
+  addPlaceholderKey?: string
+  removeTooltipKey?: string
 }
 
 export const ChecklistSection = memo(function ChecklistSection({
@@ -26,6 +30,10 @@ export const ChecklistSection = memo(function ChecklistSection({
   onRemove,
   onToggle,
   isRTL,
+  titleKey,
+  completionKey,
+  addPlaceholderKey,
+  removeTooltipKey,
 }: ChecklistSectionProps) {
   const { t } = useTranslation()
   const [newItemText, setNewItemText] = useState('')
@@ -79,11 +87,11 @@ export const ChecklistSection = memo(function ChecklistSection({
     <section>
       <div className={`flex items-center justify-between mb-4`}>
         <h3 className="text-xs font-black uppercase text-slate-400 tracking-widest">
-          {t('observations.detail.remediationChecklist')}
+          {t((titleKey || 'observations.detail.remediationChecklist') as Parameters<typeof t>[0])}
         </h3>
         {items.length > 0 ? (
           <span className="text-xs font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">
-            {t('observations.detail.complete', { percent: progressPercent })}
+            {t((completionKey || 'observations.detail.complete') as Parameters<typeof t>[0], { percent: progressPercent })}
           </span>
         ) : null}
       </div>
@@ -92,7 +100,7 @@ export const ChecklistSection = memo(function ChecklistSection({
       <div className={`flex items-center gap-2 mb-4 ${isRTL ? 'flex-row-reverse' : ''}`}>
         <input
           type="text"
-          placeholder={t('observations.detail.addChecklistItem')}
+          placeholder={t((addPlaceholderKey || 'observations.detail.addChecklistItem') as Parameters<typeof t>[0])}
           value={newItemText}
           onChange={(e) => setNewItemText(e.target.value)}
           onKeyDown={handleKeyDown}
@@ -177,7 +185,7 @@ export const ChecklistSection = memo(function ChecklistSection({
                   <button
                     onClick={() => onRemove(item.id)}
                     className="p-1 text-slate-300 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-all cursor-pointer"
-                    title={t('observations.detail.removeItem')}
+                    title={t((removeTooltipKey || 'observations.detail.removeItem') as Parameters<typeof t>[0])}
                   >
                     <Icon icon="lucide:x" className="text-lg" />
                   </button>

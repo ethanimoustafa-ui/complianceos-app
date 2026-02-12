@@ -12,6 +12,8 @@ import { MultiSelectFilter, FilterOption } from '@/components/ui/multi-select-fi
 import { cn } from '@/lib/utils'
 import { useTranslation } from '@/i18n'
 import { useAuditStore } from '@/stores/audit-store'
+import { useRiskStore } from '@/stores/risk-store'
+import { useTeamStore } from '@/stores/team-store'
 import { useAuditLogStore, type AuditLog as AuditLogFromStore } from '@/stores/audit-log-store'
 import { AddAuditModal } from '@/components/audits/add-audit-modal'
 import { EditAuditModal } from '@/components/audits/edit-audit-modal'
@@ -22,6 +24,7 @@ import type { PeriodFilter } from '@/lib/compliance-engine.types'
 import { exportAuditLogsLocalized, exportSingleLog, exportAuditsLocalized, exportExecutiveReport, exportRisksLocalized } from '@/lib/export'
 
 import type { TranslationKey } from '@/i18n'
+import { ChecklistSection } from '@/components/observations/detail/checklist-section'
 
 // Tab type for header switching
 type TabValue = 'audits' | 'executive' | 'detailed' | 'risks'
@@ -30,7 +33,7 @@ type TabValue = 'audits' | 'executive' | 'detailed' | 'risks'
 type RiskCategory = 'operational' | 'financial' | 'compliance' | 'strategic' | 'reputational'
 type RiskStatus = 'open' | 'mitigating' | 'accepted' | 'closed'
 type MonitoringFrequency = 'weekly' | 'monthly' | 'quarterly' | 'semi_annual' | 'annual'
-type HistoryAction = 'created' | 'status_changed' | 'score_updated' | 'mitigation_updated' | 'reviewed' | 'assigned' | 'note_added'
+type HistoryAction = 'created' | 'status_changed' | 'score_updated' | 'mitigation_updated' | 'reviewed' | 'assigned' | 'note_added' | 'checklist_added' | 'checklist_toggled' | 'checklist_edited' | 'checklist_removed'
 
 interface RiskHistoryEntry {
   id: number
@@ -56,6 +59,7 @@ interface RiskRegisterItem {
   }
   status: RiskStatus
   mitigationPlan?: string
+  mitigationChecklist?: { id: string; text: string; completed: boolean }[]
   mitigationProgress: number
   monitoringFrequency: MonitoringFrequency
   lastReviewDate?: Date
@@ -229,19 +233,34 @@ const riskStatusConfig: Record<RiskStatus, { label: string; color: string }> = {
   closed: { label: 'Closed', color: 'bg-emerald-100 text-emerald-700' },
 }
 
-// Risk Register data - empty initially, will be populated via store
-const mockRiskRegister: RiskRegisterItem[] = []
+// risks removed — replaced by `risks` useMemo from useRiskStore in component
 
 // Risk helper functions
 function getRiskScore(likelihood: number, impact: number): number {
   return likelihood * impact
 }
 
-function getRiskLevel(score: number): { label: string; color: string; bgColor: string } {
-  if (score >= 20) return { label: 'Critical', color: 'text-rose-700', bgColor: 'bg-rose-500' }
-  if (score >= 12) return { label: 'High', color: 'text-orange-700', bgColor: 'bg-orange-500' }
-  if (score >= 6) return { label: 'Medium', color: 'text-amber-700', bgColor: 'bg-amber-400' }
-  return { label: 'Low', color: 'text-emerald-700', bgColor: 'bg-emerald-400' }
+function getRiskLevel(score: number): { labelKey: string; color: string; bgColor: string } {
+  if (score >= 20) return { labelKey: 'reports.critical', color: 'text-rose-700', bgColor: 'bg-rose-500' }
+  if (score >= 12) return { labelKey: 'reports.high', color: 'text-orange-700', bgColor: 'bg-orange-500' }
+  if (score >= 6) return { labelKey: 'reports.medium', color: 'text-amber-700', bgColor: 'bg-amber-400' }
+  return { labelKey: 'reports.low', color: 'text-emerald-700', bgColor: 'bg-emerald-400' }
+}
+
+// i18n key maps for risk configs (labels resolved at render time via t())
+const riskCategoryLabelKeys: Record<RiskCategory, string> = {
+  operational: 'reports.operational',
+  financial: 'reports.financial',
+  compliance: 'reports.compliance',
+  strategic: 'reports.strategic',
+  reputational: 'reports.reputational',
+}
+
+const riskStatusLabelKeys: Record<RiskStatus, string> = {
+  open: 'reports.open',
+  mitigating: 'reports.mitigating',
+  accepted: 'reports.accepted',
+  closed: 'reports.closed',
 }
 
 function getMatrixCellColor(likelihood: number, impact: number): string {
@@ -297,6 +316,61 @@ export default function ReportsPage() {
   // Audit store connection
   const { audits: storeAudits, fetchAll: fetchAudits, delete: deleteAudit } = useAuditStore()
 
+  // Risk store connection
+  const storeRisks = useRiskStore((s) => s.risks)
+  const createRisk = useRiskStore((s) => s.create)
+  const updateRisk = useRiskStore((s) => s.update)
+  const updateRiskStatus = useRiskStore((s) => s.updateStatus)
+  const addMitigationItem = useRiskStore((s) => s.addMitigationItem)
+  const editMitigationItem = useRiskStore((s) => s.editMitigationItem)
+  const toggleMitigationItem = useRiskStore((s) => s.toggleMitigationItem)
+  const removeMitigationItem = useRiskStore((s) => s.removeMitigationItem)
+  const markReviewed = useRiskStore((s) => s.markReviewed)
+
+  // Team store — for owner dropdown in Add Risk modal
+  const teamMembers = useTeamStore((s) => s.members)
+
+  // Map Risk[] from store → RiskRegisterItem[] for the risks tab
+  const risks: RiskRegisterItem[] = useMemo(() => {
+    const statusMap: Record<string, RiskStatus> = {
+      identified: 'open',
+      mitigating: 'mitigating',
+      accepted: 'accepted',
+      resolved: 'closed',
+    }
+    return storeRisks.map((r) => ({
+      id: r.id,
+      name: r.title,
+      description: r.description,
+      category: r.category as RiskCategory,
+      likelihood: r.likelihood,
+      impact: r.impact,
+      owner: {
+        name: r.owner.name,
+        avatar: r.owner.avatar || '',
+        department: r.owner.department,
+      },
+      status: statusMap[r.status] || ('open' as RiskStatus),
+      mitigationPlan: r.mitigationPlan,
+      mitigationChecklist: r.mitigationChecklist,
+      mitigationProgress: r.mitigationProgress,
+      monitoringFrequency: r.monitoringFrequency,
+      lastReviewDate: r.lastReviewDate ? new Date(r.lastReviewDate) : undefined,
+      nextReviewDate: r.nextReviewDate ? new Date(r.nextReviewDate) : undefined,
+      history: r.history.map((h, idx) => ({
+        id: idx + 1,
+        timestamp: new Date(h.timestamp),
+        user: h.user,
+        action: h.action as HistoryAction,
+        previousValue: h.previousValue,
+        newValue: h.newValue,
+        notes: h.notes,
+      })),
+      createdAt: new Date(r.createdAt),
+      updatedAt: new Date(r.updatedAt),
+    }))
+  }, [storeRisks])
+
   // Audit edit/delete state
   const [auditToEdit, setAuditToEdit] = useState<AuditType | null>(null)
   const [auditToDelete, setAuditToDelete] = useState<AuditType | null>(null)
@@ -322,20 +396,20 @@ export default function ReportsPage() {
     }))
   }, [storeLogs])
 
-  // Derive risk distribution from mockRiskRegister
+  // Derive risk distribution from risks
   const riskDistribution: RiskDistribution[] = useMemo(() => {
-    if (mockRiskRegister.length === 0) return []
+    if (risks.length === 0) return []
     const counts: Record<string, number> = {}
-    for (const risk of mockRiskRegister) {
+    for (const risk of risks) {
       counts[risk.category] = (counts[risk.category] || 0) + 1
     }
-    const total = mockRiskRegister.length
+    const total = risks.length
     return Object.entries(counts).map(([category, count]) => ({
       category,
       percentage: Math.round((count / total) * 100),
       color: riskCategoryBarColors[category as RiskCategory] || 'bg-slate-400',
     }))
-  }, [])
+  }, [risks])
 
   // Derive audit findings from audit store
   const auditFindings: AuditFinding[] = useMemo(() => {
@@ -448,6 +522,10 @@ export default function ReportsPage() {
     reviewed: t('reports.reviewed' as TranslationKey),
     assigned: t('reports.assigned' as TranslationKey),
     note_added: t('reports.noteAdded' as TranslationKey),
+    checklist_added: t('reports.checklistAdded' as TranslationKey),
+    checklist_toggled: t('reports.checklistToggled' as TranslationKey),
+    checklist_edited: t('reports.checklistEdited' as TranslationKey),
+    checklist_removed: t('reports.checklistRemoved' as TranslationKey),
   }
 
   // History action colors
@@ -459,10 +537,14 @@ export default function ReportsPage() {
     reviewed: 'bg-indigo-500',
     assigned: 'bg-slate-500',
     note_added: 'bg-teal-500',
+    checklist_added: 'bg-emerald-400',
+    checklist_toggled: 'bg-sky-500',
+    checklist_edited: 'bg-orange-400',
+    checklist_removed: 'bg-rose-400',
   }
 
   // Filter risks by monitoring frequency for category card
-  const filteredByMonitoringFrequency = mockRiskRegister.filter(risk =>
+  const filteredByMonitoringFrequency = risks.filter(risk =>
     monitoringFrequencyFilter === 'all' || risk.monitoringFrequency === monitoringFrequencyFilter
   )
 
@@ -488,17 +570,183 @@ export default function ReportsPage() {
     return Math.round(risks.reduce((sum, r) => sum + r.mitigationProgress, 0) / risks.length)
   }
   const [showAddRiskModal, setShowAddRiskModal] = useState(false)
+  const [editingRiskId, setEditingRiskId] = useState<string | null>(null)
+
+  // Add/Edit Risk form state
+  const [newRiskName, setNewRiskName] = useState('')
+  const [newRiskCategory, setNewRiskCategory] = useState<RiskCategory | ''>('')
+  const [newRiskOwnerId, setNewRiskOwnerId] = useState('')
+  const [newRiskLikelihood, setNewRiskLikelihood] = useState<1 | 2 | 3 | 4 | 5>(3)
+  const [newRiskImpact, setNewRiskImpact] = useState<1 | 2 | 3 | 4 | 5>(3)
+  const [newRiskDescription, setNewRiskDescription] = useState('')
+  const [newRiskMitigation, setNewRiskMitigation] = useState('')
+  const [newRiskMonitoringFrequency, setNewRiskMonitoringFrequency] = useState<MonitoringFrequency>('monthly')
+
+  const resetAddRiskForm = () => {
+    setNewRiskName('')
+    setNewRiskCategory('')
+    setNewRiskOwnerId('')
+    setNewRiskLikelihood(3)
+    setNewRiskImpact(3)
+    setNewRiskDescription('')
+    setNewRiskMitigation('')
+    setNewRiskMonitoringFrequency('monthly')
+    setEditingRiskId(null)
+  }
+
+  const handleCreateRisk = async () => {
+    if (!newRiskName || !newRiskCategory || !newRiskOwnerId || !newRiskDescription) return
+
+    const owner = teamMembers.find(m => m.id === newRiskOwnerId)
+    if (!owner) return
+
+    if (editingRiskId) {
+      // Build history entry for edit
+      const existingStoreRisk = storeRisks.find(r => r.id === editingRiskId)
+      const editHistoryEntry = {
+        id: crypto.randomUUID(),
+        timestamp: new Date().toISOString(),
+        user: owner.name,
+        action: 'mitigation_updated' as const,
+        notes: 'Risk details updated',
+      }
+      // Update existing risk
+      await updateRisk(editingRiskId, {
+        title: newRiskName,
+        description: newRiskDescription,
+        category: newRiskCategory,
+        likelihood: newRiskLikelihood,
+        impact: newRiskImpact,
+        owner: {
+          id: owner.id,
+          name: owner.name,
+          email: owner.email,
+          role: owner.role,
+          department: owner.department,
+          workload: owner.workload,
+        },
+        mitigationPlan: newRiskMitigation || undefined,
+        monitoringFrequency: newRiskMonitoringFrequency,
+        history: [...(existingStoreRisk?.history || []), editHistoryEntry],
+      })
+    } else {
+      // Create new risk
+      await createRisk({
+        title: newRiskName,
+        description: newRiskDescription,
+        category: newRiskCategory,
+        likelihood: newRiskLikelihood,
+        impact: newRiskImpact,
+        status: 'identified',
+        owner: {
+          id: owner.id,
+          name: owner.name,
+          email: owner.email,
+          role: owner.role,
+          department: owner.department,
+          workload: owner.workload,
+        },
+        mitigationPlan: newRiskMitigation || undefined,
+        mitigationProgress: 0,
+        monitoringFrequency: newRiskMonitoringFrequency,
+      })
+    }
+
+    resetAddRiskForm()
+    setShowAddRiskModal(false)
+  }
+
+  // Sync selectedRisk when risks change (after status update, edit, etc.)
+  useEffect(() => {
+    if (selectedRisk) {
+      const updated = risks.find(r => r.id === selectedRisk.id)
+      if (updated && (updated.status !== selectedRisk.status || updated.updatedAt.getTime() !== selectedRisk.updatedAt.getTime())) {
+        setSelectedRisk(updated)
+      }
+    }
+  }, [risks]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Map UI risk status back to store status for updateStatus calls
+  const uiStatusToStoreStatus = (uiStatus: RiskStatus): 'identified' | 'mitigating' | 'accepted' | 'resolved' => {
+    const map: Record<RiskStatus, 'identified' | 'mitigating' | 'accepted' | 'resolved'> = {
+      open: 'identified',
+      mitigating: 'mitigating',
+      accepted: 'accepted',
+      closed: 'resolved',
+    }
+    return map[uiStatus]
+  }
 
   // Filter risks
   const filteredRisks = useMemo(() => {
-    return mockRiskRegister.filter(risk => {
-      const matchesSearch = risk.name.toLowerCase().includes(riskSearchTerm.toLowerCase()) ||
-                            risk.description.toLowerCase().includes(riskSearchTerm.toLowerCase())
+    return risks.filter(risk => {
+      const q = riskSearchTerm.toLowerCase()
+      const matchesSearch = !q ||
+        risk.name.toLowerCase().includes(q) ||
+        risk.description.toLowerCase().includes(q) ||
+        risk.category.toLowerCase().includes(q) ||
+        risk.owner.name.toLowerCase().includes(q)
       const matchesCategory = !riskCategoryFilter || risk.category === riskCategoryFilter
       const matchesStatus = !riskStatusFilter || risk.status === riskStatusFilter
       return matchesSearch && matchesCategory && matchesStatus
     })
-  }, [riskSearchTerm, riskCategoryFilter, riskStatusFilter])
+  }, [risks, riskSearchTerm, riskCategoryFilter, riskStatusFilter])
+
+  // Risk sort state
+  type RiskSortField = 'name' | 'category' | 'riskScore' | 'status' | 'owner'
+  const [riskSortField, setRiskSortField] = useState<RiskSortField | null>(null)
+  const [riskSortDirection, setRiskSortDirection] = useState<'asc' | 'desc'>('desc')
+
+  const handleRiskSort = (field: RiskSortField) => {
+    if (riskSortField === field) {
+      setRiskSortDirection(riskSortDirection === 'asc' ? 'desc' : 'asc')
+    } else {
+      setRiskSortField(field)
+      setRiskSortDirection('desc')
+    }
+  }
+
+  const clearRiskSort = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    setRiskSortField(null)
+    setRiskSortDirection('desc')
+  }
+
+  const RiskSortIcon = ({ field }: { field: RiskSortField }) => {
+    if (riskSortField !== field) {
+      return <Icon icon="lucide:arrow-up-down" className={`text-[10px] inline ${isRTL ? 'mr-1' : 'ml-1'} opacity-30`} />
+    }
+    return (
+      <span className={`inline-flex items-center ${isRTL ? 'mr-1' : 'ml-1'} gap-0.5`}>
+        <Icon
+          icon={riskSortDirection === 'asc' ? 'lucide:arrow-up' : 'lucide:arrow-down'}
+          className="text-[10px] text-emerald-600"
+        />
+        <Icon
+          icon="lucide:x"
+          className="text-[10px] text-slate-400 hover:text-rose-500 cursor-pointer transition-colors"
+          onClick={clearRiskSort}
+        />
+      </span>
+    )
+  }
+
+  const riskStatusOrder: Record<RiskStatus, number> = { open: 0, mitigating: 1, accepted: 2, closed: 3 }
+
+  const sortedRisks = useMemo(() => {
+    if (!riskSortField) return filteredRisks
+    return [...filteredRisks].sort((a, b) => {
+      let comparison = 0
+      switch (riskSortField) {
+        case 'name': comparison = a.name.localeCompare(b.name); break
+        case 'category': comparison = a.category.localeCompare(b.category); break
+        case 'riskScore': comparison = getRiskScore(a.likelihood, a.impact) - getRiskScore(b.likelihood, b.impact); break
+        case 'status': comparison = riskStatusOrder[a.status] - riskStatusOrder[b.status]; break
+        case 'owner': comparison = a.owner.name.localeCompare(b.owner.name); break
+      }
+      return riskSortDirection === 'asc' ? comparison : -comparison
+    })
+  }, [filteredRisks, riskSortField, riskSortDirection])
 
   // Transform store audits to page audit format
   const pageAudits: Audit[] = useMemo(() => {
@@ -890,20 +1138,10 @@ export default function ReportsPage() {
         <div className={`flex items-center gap-4`}>
           {activeTab === 'risks' ? (
             <>
-              <div className="relative hidden md:block">
-                <Icon icon="lucide:search" className={`absolute ${isRTL ? 'right-3' : 'left-3'} top-1/2 -translate-y-1/2 text-slate-400`} />
-                <input
-                  type="text"
-                  placeholder={t('reports.searchRisks' as TranslationKey)}
-                  value={riskSearchTerm}
-                  onChange={(e) => setRiskSearchTerm(e.target.value)}
-                  className={`${isRTL ? 'pr-10 pl-4' : 'pl-10 pr-4'} py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 w-64 transition-all`}
-                />
-              </div>
               <button
                 className="p-2.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-all cursor-pointer"
                 title={t('reports.exportReports')}
-                onClick={() => exportRisksLocalized(filteredRisks, 'risk-register', t, isRTL)}
+                onClick={() => exportRisksLocalized(sortedRisks, 'risk-register', t, isRTL)}
               >
                 <Icon icon="lucide:download-cloud" className="text-lg" />
               </button>
@@ -2185,7 +2423,7 @@ export default function ReportsPage() {
                     <Icon icon="lucide:alert-triangle" className="text-2xl text-rose-600" />
                   </div>
                   <div className={isRTL ? 'text-right' : ''}>
-                    <p className="text-2xl font-bold text-slate-900">{mockRiskRegister.filter(r => r.status === 'open').length}</p>
+                    <p className="text-2xl font-bold text-slate-900">{risks.filter(r => r.status === 'open').length}</p>
                     <p className="text-xs text-slate-500 font-bold uppercase">{t('reports.openRisks' as TranslationKey)}</p>
                   </div>
                 </div>
@@ -2196,7 +2434,7 @@ export default function ReportsPage() {
                     <Icon icon="lucide:clock" className="text-2xl text-amber-600" />
                   </div>
                   <div className={isRTL ? 'text-right' : ''}>
-                    <p className="text-2xl font-bold text-slate-900">{mockRiskRegister.filter(r => r.status === 'mitigating').length}</p>
+                    <p className="text-2xl font-bold text-slate-900">{risks.filter(r => r.status === 'mitigating').length}</p>
                     <p className="text-xs text-slate-500 font-bold uppercase">{t('reports.mitigating' as TranslationKey)}</p>
                   </div>
                 </div>
@@ -2207,7 +2445,7 @@ export default function ReportsPage() {
                     <Icon icon="lucide:check-circle" className="text-2xl text-blue-600" />
                   </div>
                   <div className={isRTL ? 'text-right' : ''}>
-                    <p className="text-2xl font-bold text-slate-900">{mockRiskRegister.filter(r => r.status === 'accepted').length}</p>
+                    <p className="text-2xl font-bold text-slate-900">{risks.filter(r => r.status === 'accepted').length}</p>
                     <p className="text-xs text-slate-500 font-bold uppercase">{t('reports.accepted' as TranslationKey)}</p>
                   </div>
                 </div>
@@ -2218,7 +2456,7 @@ export default function ReportsPage() {
                     <Icon icon="lucide:shield-check" className="text-2xl text-emerald-600" />
                   </div>
                   <div className={isRTL ? 'text-right' : ''}>
-                    <p className="text-2xl font-bold text-slate-900">{mockRiskRegister.filter(r => r.status === 'closed').length}</p>
+                    <p className="text-2xl font-bold text-slate-900">{risks.filter(r => r.status === 'closed').length}</p>
                     <p className="text-xs text-slate-500 font-bold uppercase">{t('reports.closed' as TranslationKey)}</p>
                   </div>
                 </div>
@@ -2245,7 +2483,7 @@ export default function ReportsPage() {
                     <div className="grid grid-cols-5 gap-1">
                       {[5, 4, 3, 2, 1].map(impact => (
                         [1, 2, 3, 4, 5].map(likelihood => {
-                          const risksInCell = mockRiskRegister.filter(r => r.likelihood === likelihood && r.impact === impact)
+                          const risksInCell = risks.filter(r => r.likelihood === likelihood && r.impact === impact)
                           const cellKey = `${impact}-${likelihood}`
                           const currentSelection = matrixCellSelection?.cellKey === cellKey ? matrixCellSelection.index : 0
                           return (
@@ -2362,7 +2600,7 @@ export default function ReportsPage() {
                               <Icon icon={config.icon} className="text-sm" />
                             </div>
                             <div className={isRTL ? 'text-right' : ''}>
-                              <span className="text-sm font-bold text-slate-700">{config.label}</span>
+                              <span className="text-sm font-bold text-slate-700">{t(riskCategoryLabelKeys[category] as TranslationKey)}</span>
                               <span className="text-xs text-slate-400 ml-2">{count} {t('reports.risk' as TranslationKey)}{count !== 1 ? 's' : ''}</span>
                             </div>
                           </div>
@@ -2419,6 +2657,16 @@ export default function ReportsPage() {
               <CardHeader className={`flex items-center justify-between`}>
                 <CardTitle className="text-sm font-bold text-slate-900">{t('reports.riskList' as TranslationKey)}</CardTitle>
                 <div className={`flex items-center gap-3`}>
+                  <div className="relative">
+                    <Icon icon="lucide:search" className={`absolute ${isRTL ? 'right-3' : 'left-3'} top-1/2 -translate-y-1/2 text-slate-400 text-sm`} />
+                    <input
+                      type="text"
+                      placeholder={t('reports.searchRisks' as TranslationKey)}
+                      value={riskSearchTerm}
+                      onChange={(e) => setRiskSearchTerm(e.target.value)}
+                      className={`${isRTL ? 'pr-9 pl-3' : 'pl-9 pr-3'} py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 w-48 transition-all`}
+                    />
+                  </div>
                   <select
                     value={riskCategoryFilter}
                     onChange={(e) => setRiskCategoryFilter(e.target.value as RiskCategory | '')}
@@ -2449,16 +2697,41 @@ export default function ReportsPage() {
                   <table className="w-full">
                     <thead className="bg-slate-50 border-y border-slate-100">
                       <tr>
-                        <th className={`px-6 py-3 text-[10px] font-black text-slate-400 uppercase tracking-wider ${isRTL ? 'text-right' : 'text-left'}`}>{t('reports.risk' as TranslationKey)}</th>
-                        <th className={`px-6 py-3 text-[10px] font-black text-slate-400 uppercase tracking-wider ${isRTL ? 'text-right' : 'text-left'}`}>{t('reports.category' as TranslationKey)}</th>
-                        <th className={`px-6 py-3 text-[10px] font-black text-slate-400 uppercase tracking-wider ${isRTL ? 'text-right' : 'text-left'}`}>{t('reports.score' as TranslationKey)}</th>
-                        <th className={`px-6 py-3 text-[10px] font-black text-slate-400 uppercase tracking-wider ${isRTL ? 'text-right' : 'text-left'}`}>{t('common.status')}</th>
-                        <th className={`px-6 py-3 text-[10px] font-black text-slate-400 uppercase tracking-wider ${isRTL ? 'text-right' : 'text-left'}`}>{t('reports.owner' as TranslationKey)}</th>
-                        <th className={`px-6 py-3 text-[10px] font-black text-slate-400 uppercase tracking-wider ${isRTL ? 'text-right' : 'text-left'}`}>{t('common.actions')}</th>
+                        <th
+                          className={`px-6 py-3 text-[10px] font-black text-slate-400 uppercase tracking-wider text-left cursor-pointer hover:text-slate-600 transition-colors select-none`}
+                          onClick={() => handleRiskSort('name')}
+                        >
+                          {t('reports.risk' as TranslationKey)} <RiskSortIcon field="name" />
+                        </th>
+                        <th
+                          className={`px-6 py-3 text-[10px] font-black text-slate-400 uppercase tracking-wider text-left cursor-pointer hover:text-slate-600 transition-colors select-none`}
+                          onClick={() => handleRiskSort('category')}
+                        >
+                          {t('reports.category' as TranslationKey)} <RiskSortIcon field="category" />
+                        </th>
+                        <th
+                          className={`px-6 py-3 text-[10px] font-black text-slate-400 uppercase tracking-wider text-left cursor-pointer hover:text-slate-600 transition-colors select-none`}
+                          onClick={() => handleRiskSort('riskScore')}
+                        >
+                          {t('reports.score' as TranslationKey)} <RiskSortIcon field="riskScore" />
+                        </th>
+                        <th
+                          className={`px-6 py-3 text-[10px] font-black text-slate-400 uppercase tracking-wider text-left cursor-pointer hover:text-slate-600 transition-colors select-none`}
+                          onClick={() => handleRiskSort('status')}
+                        >
+                          {t('common.status')} <RiskSortIcon field="status" />
+                        </th>
+                        <th
+                          className={`px-6 py-3 text-[10px] font-black text-slate-400 uppercase tracking-wider text-left cursor-pointer hover:text-slate-600 transition-colors select-none`}
+                          onClick={() => handleRiskSort('owner')}
+                        >
+                          {t('reports.owner' as TranslationKey)} <RiskSortIcon field="owner" />
+                        </th>
+                        <th className={`px-6 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widertext-left`}>{t('common.actions')}</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {filteredRisks.map(risk => {
+                      {sortedRisks.map(risk => {
                         const score = getRiskScore(risk.likelihood, risk.impact)
                         const level = getRiskLevel(score)
                         const categoryConfig = riskCategoryConfig[risk.category]
@@ -2466,7 +2739,7 @@ export default function ReportsPage() {
                         return (
                           <tr key={risk.id} className="border-b border-slate-50 hover:bg-slate-50 transition-colors">
                             <td className="px-6 py-4">
-                              <div className={isRTL ? 'text-right' : ''}>
+                              <div>
                                 <span className="text-xs font-bold text-slate-400">{risk.id}</span>
                                 <p className="text-sm font-bold text-slate-900">{risk.name}</p>
                                 <p className="text-xs text-slate-500 line-clamp-1">{risk.description}</p>
@@ -2475,19 +2748,19 @@ export default function ReportsPage() {
                             <td className="px-6 py-4">
                               <span className={cn('text-xs font-bold px-2.5 py-1 rounded-full flex items-center gap-1 w-fit', categoryConfig.color)}>
                                 <Icon icon={categoryConfig.icon} className="text-xs" />
-                                {categoryConfig.label}
+                                {t(riskCategoryLabelKeys[risk.category] as TranslationKey)}
                               </span>
                             </td>
                             <td className="px-6 py-4">
                               <div className={`flex items-center gap-2`}>
                                 <div className={cn('w-3 h-3 rounded', level.bgColor)} />
                                 <span className={cn('text-sm font-bold', level.color)}>{score}</span>
-                                <span className="text-xs text-slate-400">({level.label})</span>
+                                <span className="text-xs text-slate-400">({t(level.labelKey as TranslationKey)})</span>
                               </div>
                             </td>
                             <td className="px-6 py-4">
                               <span className={cn('text-xs font-bold px-2.5 py-1 rounded-full', statusConf.color)}>
-                                {statusConf.label}
+                                {t(riskStatusLabelKeys[risk.status] as TranslationKey)}
                               </span>
                             </td>
                             <td className="px-6 py-4">
@@ -2545,7 +2818,7 @@ export default function ReportsPage() {
 
           {/* Content */}
           <div className="p-8 space-y-6 overflow-y-auto hide-scrollbar">
-            {mockRiskRegister.length === 0 ? (
+            {risks.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-12 text-center">
                 <Icon icon="lucide:shield-off" className="text-4xl text-slate-300 mb-3" />
                 <p className="text-sm text-slate-400">{t('reports.noRiskData' as TranslationKey)}</p>
@@ -2576,16 +2849,16 @@ export default function ReportsPage() {
                 <div className="grid grid-cols-2 gap-4">
                   <div className={`p-4 bg-white border border-slate-100 rounded-xl shadow-sm`}>
                     <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">{t('reports.totalRegisteredRisks' as TranslationKey)}</p>
-                    <p className="text-2xl font-black text-slate-900">{mockRiskRegister.length}</p>
+                    <p className="text-2xl font-black text-slate-900">{risks.length}</p>
                   </div>
                   <div className={`p-4 bg-white border border-slate-100 rounded-xl shadow-sm`}>
                     <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">{t('reports.avgScore' as TranslationKey)}</p>
                     <p className="text-2xl font-black text-slate-900">
-                      {Math.round(mockRiskRegister.reduce((sum, r) => sum + getRiskScore(r.likelihood, r.impact), 0) / mockRiskRegister.length)}
+                      {Math.round(risks.reduce((sum, r) => sum + getRiskScore(r.likelihood, r.impact), 0) / risks.length)}
                     </p>
                   </div>
                   {(() => {
-                    const sorted = [...mockRiskRegister].sort((a, b) => getRiskScore(b.likelihood, b.impact) - getRiskScore(a.likelihood, a.impact))
+                    const sorted = [...risks].sort((a, b) => getRiskScore(b.likelihood, b.impact) - getRiskScore(a.likelihood, a.impact))
                     const highest = sorted[0]
                     const lowest = sorted[sorted.length - 1]
                     return (
@@ -2926,12 +3199,22 @@ export default function ReportsPage() {
                   </div>
                   <div className={isRTL ? 'text-right' : ''}>
                     <p className="text-xs font-bold text-slate-400 uppercase">{t('reports.riskScore' as TranslationKey)}</p>
-                    <p className={cn('text-sm font-bold', level.color)}>{level.label} {t('reports.risk' as TranslationKey)}</p>
+                    <p className={cn('text-sm font-bold', level.color)}>{t(level.labelKey as TranslationKey)} {t('reports.risk' as TranslationKey)}</p>
                   </div>
                 </div>
-                <span className={cn('px-3 py-1 text-xs font-bold rounded-full', statusConf.color)}>
-                  {statusConf.label}
-                </span>
+                <select
+                  value={selectedRisk.status}
+                  onChange={(e) => {
+                    const newUiStatus = e.target.value as RiskStatus
+                    updateRiskStatus(selectedRisk.id, uiStatusToStoreStatus(newUiStatus))
+                  }}
+                  className={cn('px-3 py-1 text-xs font-bold rounded-full border-0 cursor-pointer focus:outline-none focus:ring-2 focus:ring-emerald-500', statusConf.color)}
+                >
+                  <option value="open">{t('reports.open' as TranslationKey)}</option>
+                  <option value="mitigating">{t('reports.mitigating' as TranslationKey)}</option>
+                  <option value="accepted">{t('reports.accepted' as TranslationKey)}</option>
+                  <option value="closed">{t('reports.closed' as TranslationKey)}</option>
+                </select>
               </div>
 
               {/* Category */}
@@ -2939,7 +3222,7 @@ export default function ReportsPage() {
                 <p className="text-xs font-bold text-slate-400 uppercase mb-2">{t('reports.category' as TranslationKey)}</p>
                 <span className={cn('text-xs font-bold px-3 py-1.5 rounded-full inline-flex items-center gap-1', categoryConfig.color)}>
                   <Icon icon={categoryConfig.icon} />
-                  {categoryConfig.label}
+                  {t(riskCategoryLabelKeys[selectedRisk.category] as TranslationKey)}
                 </span>
               </div>
 
@@ -2971,22 +3254,36 @@ export default function ReportsPage() {
                 </div>
               </div>
 
-              {/* Mitigation Plan */}
-              {selectedRisk.mitigationPlan && (
-                <div className={isRTL ? 'text-right' : ''}>
-                  <p className="text-xs font-bold text-slate-400 uppercase mb-2">{t('reports.mitigationPlan' as TranslationKey)}</p>
-                  <p className="text-sm text-slate-600">{selectedRisk.mitigationPlan}</p>
-                  <div className="mt-3">
-                    <div className={`flex justify-between items-center mb-1`}>
-                      <span className="text-xs font-bold text-slate-500">{t('reports.progress' as TranslationKey)}</span>
-                      <span className="text-xs font-bold text-emerald-600">{selectedRisk.mitigationProgress}%</span>
-                    </div>
-                    <div className="h-2 bg-slate-200 rounded-full overflow-hidden">
-                      <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${selectedRisk.mitigationProgress}%` }} />
-                    </div>
+              {/* Mitigation Plan & Checklist */}
+              <div className={isRTL ? 'text-right' : ''}>
+                {selectedRisk.mitigationPlan && (
+                  <div className="mb-4">
+                    <p className="text-xs font-bold text-slate-400 uppercase mb-2">{t('reports.mitigationPlan' as TranslationKey)}</p>
+                    <p className="text-sm text-slate-600">{selectedRisk.mitigationPlan}</p>
+                  </div>
+                )}
+                <div className="mb-4">
+                  <div className={`flex justify-between items-center mb-1`}>
+                    <span className="text-xs font-bold text-slate-500">{t('reports.progress' as TranslationKey)}</span>
+                    <span className="text-xs font-bold text-emerald-600">{selectedRisk.mitigationProgress}%</span>
+                  </div>
+                  <div className="h-2 bg-slate-200 rounded-full overflow-hidden">
+                    <div className="h-full bg-emerald-500 rounded-full transition-all" style={{ width: `${selectedRisk.mitigationProgress}%` }} />
                   </div>
                 </div>
-              )}
+                <ChecklistSection
+                  items={selectedRisk.mitigationChecklist || []}
+                  onAdd={(text) => addMitigationItem(selectedRisk.id, text)}
+                  onEdit={(itemId, newText) => editMitigationItem(selectedRisk.id, itemId, newText)}
+                  onRemove={(itemId) => removeMitigationItem(selectedRisk.id, itemId)}
+                  onToggle={(itemId) => toggleMitigationItem(selectedRisk.id, itemId)}
+                  isRTL={isRTL}
+                  titleKey="reports.mitigationChecklist"
+                  completionKey="reports.mitigationComplete"
+                  addPlaceholderKey="reports.addMitigationItem"
+                  removeTooltipKey="reports.removeMitigationItem"
+                />
+              </div>
 
               {/* Monitoring Info */}
               <div className="grid grid-cols-2 gap-4">
@@ -3001,6 +3298,24 @@ export default function ReportsPage() {
                   <p className="text-sm font-bold text-slate-900">
                     {selectedRisk.nextReviewDate?.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) || '-'}
                   </p>
+                </div>
+              </div>
+
+              {/* Last Review & Mark as Reviewed */}
+              <div className={`p-4 bg-slate-50 rounded-xl`}>
+                <div className={`flex items-center justify-between ${isRTL ? 'flex-row-reverse' : ''}`}>
+                  <div className={isRTL ? 'text-right' : ''}>
+                    <p className="text-xs font-bold text-slate-400 uppercase mb-1">{t('reports.lastReview' as TranslationKey)}</p>
+                    <p className="text-sm font-bold text-slate-900">
+                      {selectedRisk.lastReviewDate?.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) || '-'}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => markReviewed(selectedRisk.id)}
+                    className="px-4 py-2 bg-indigo-600 text-white text-xs font-bold rounded-xl hover:bg-indigo-700 transition-all cursor-pointer"
+                  >
+                    {t('reports.markAsReviewed' as TranslationKey)}
+                  </button>
                 </div>
               </div>
 
@@ -3050,10 +3365,35 @@ export default function ReportsPage() {
 
               {/* Actions */}
               <div className={`pt-4 border-t border-slate-100 flex gap-3`}>
-                <button className="flex-1 bg-slate-100 text-slate-700 py-3 rounded-xl font-bold text-xs hover:bg-slate-200 transition-all cursor-pointer">
+                <button
+                  className="flex-1 bg-slate-100 text-slate-700 py-3 rounded-xl font-bold text-xs hover:bg-slate-200 transition-all cursor-pointer"
+                  onClick={() => {
+                    const sanitizedName = selectedRisk.name.replace(/[^a-zA-Z0-9]/g, '-').toLowerCase()
+                    const dateStr = new Date().toISOString().slice(0, 10)
+                    exportRisksLocalized([selectedRisk], `risk-${sanitizedName}-${dateStr}`, t, isRTL)
+                  }}
+                >
                   {t('reports.exportRisk' as TranslationKey)}
                 </button>
-                <button className="flex-1 bg-emerald-600 text-white py-3 rounded-xl font-bold text-xs hover:bg-emerald-700 transition-all cursor-pointer">
+                <button
+                  className="flex-1 bg-emerald-600 text-white py-3 rounded-xl font-bold text-xs hover:bg-emerald-700 transition-all cursor-pointer"
+                  onClick={() => {
+                    // Populate form with selected risk data
+                    setEditingRiskId(selectedRisk.id)
+                    setNewRiskName(selectedRisk.name)
+                    setNewRiskCategory(selectedRisk.category)
+                    setNewRiskDescription(selectedRisk.description)
+                    setNewRiskLikelihood(selectedRisk.likelihood)
+                    setNewRiskImpact(selectedRisk.impact)
+                    setNewRiskMitigation(selectedRisk.mitigationPlan || '')
+                    setNewRiskMonitoringFrequency(selectedRisk.monitoringFrequency)
+                    // Find the owner in team members to set the ID
+                    const matchingMember = teamMembers.find(m => m.name === selectedRisk.owner.name)
+                    setNewRiskOwnerId(matchingMember?.id || '')
+                    setShowAddRiskModal(true)
+                    setIsRiskDrawerOpen(false)
+                  }}
+                >
                   {t('reports.editRisk' as TranslationKey)}
                 </button>
               </div>
@@ -3062,12 +3402,12 @@ export default function ReportsPage() {
         })()}
       </Drawer>
 
-      {/* Add Risk Modal */}
+      {/* Add/Edit Risk Modal */}
       <Modal
         isOpen={showAddRiskModal}
-        onClose={() => setShowAddRiskModal(false)}
-        title={t('reports.addNewRisk' as TranslationKey)}
-        subtitle={t('reports.createNewRiskEntry' as TranslationKey)}
+        onClose={() => { resetAddRiskForm(); setShowAddRiskModal(false) }}
+        title={editingRiskId ? t('reports.editRisk' as TranslationKey) : t('reports.addNewRisk' as TranslationKey)}
+        subtitle={editingRiskId ? undefined : t('reports.createNewRiskEntry' as TranslationKey)}
         size="lg"
       >
         <div className="space-y-4">
@@ -3077,6 +3417,8 @@ export default function ReportsPage() {
             </label>
             <input
               type="text"
+              value={newRiskName}
+              onChange={(e) => setNewRiskName(e.target.value)}
               placeholder={t('reports.enterRiskName' as TranslationKey)}
               className={`w-full px-4 py-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500`}
             />
@@ -3086,7 +3428,11 @@ export default function ReportsPage() {
               <label className={`text-xs font-bold text-slate-700 uppercase mb-2 block`}>
                 {t('reports.category' as TranslationKey)} *
               </label>
-              <select className={`w-full px-4 py-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500`}>
+              <select
+                value={newRiskCategory}
+                onChange={(e) => setNewRiskCategory(e.target.value as RiskCategory | '')}
+                className={`w-full px-4 py-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500`}
+              >
                 <option value="">{t('reports.selectCategory' as TranslationKey)}</option>
                 <option value="operational">{t('reports.operational' as TranslationKey)}</option>
                 <option value="financial">{t('reports.financial' as TranslationKey)}</option>
@@ -3099,11 +3445,17 @@ export default function ReportsPage() {
               <label className={`text-xs font-bold text-slate-700 uppercase mb-2 block`}>
                 {t('reports.owner' as TranslationKey)} *
               </label>
-              <select className={`w-full px-4 py-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500`}>
+              <select
+                value={newRiskOwnerId}
+                onChange={(e) => setNewRiskOwnerId(e.target.value)}
+                className={`w-full px-4 py-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500`}
+              >
                 <option value="">{t('reports.selectOwner' as TranslationKey)}</option>
-                <option value="sarah">Sarah Chen - IT Security</option>
-                <option value="ahmed">Ahmed Al-Rashid - Compliance</option>
-                <option value="maria">Maria Lopez - Procurement</option>
+                {teamMembers.filter(m => m.status === 'active').map((member) => (
+                  <option key={member.id} value={member.id}>
+                    {member.name} - {member.department}
+                  </option>
+                ))}
               </select>
             </div>
           </div>
@@ -3112,24 +3464,32 @@ export default function ReportsPage() {
               <label className={`text-xs font-bold text-slate-700 uppercase mb-2 block`}>
                 {t('reports.likelihood' as TranslationKey)} *
               </label>
-              <select className={`w-full px-4 py-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500`}>
-                <option value="1">1 - Rare</option>
-                <option value="2">2 - Unlikely</option>
-                <option value="3">3 - Possible</option>
-                <option value="4">4 - Likely</option>
-                <option value="5">5 - Almost Certain</option>
+              <select
+                value={newRiskLikelihood}
+                onChange={(e) => setNewRiskLikelihood(Number(e.target.value) as 1 | 2 | 3 | 4 | 5)}
+                className={`w-full px-4 py-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500`}
+              >
+                <option value="1">1 - {t('riskRegister.rare' as TranslationKey)}</option>
+                <option value="2">2 - {t('riskRegister.unlikely' as TranslationKey)}</option>
+                <option value="3">3 - {t('riskRegister.possible' as TranslationKey)}</option>
+                <option value="4">4 - {t('riskRegister.likely' as TranslationKey)}</option>
+                <option value="5">5 - {t('riskRegister.almostCertain' as TranslationKey)}</option>
               </select>
             </div>
             <div>
               <label className={`text-xs font-bold text-slate-700 uppercase mb-2 block`}>
                 {t('reports.impact' as TranslationKey)} *
               </label>
-              <select className={`w-full px-4 py-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500`}>
-                <option value="1">1 - Negligible</option>
-                <option value="2">2 - Minor</option>
-                <option value="3">3 - Moderate</option>
-                <option value="4">4 - Major</option>
-                <option value="5">5 - Catastrophic</option>
+              <select
+                value={newRiskImpact}
+                onChange={(e) => setNewRiskImpact(Number(e.target.value) as 1 | 2 | 3 | 4 | 5)}
+                className={`w-full px-4 py-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500`}
+              >
+                <option value="1">1 - {t('riskRegister.negligible' as TranslationKey)}</option>
+                <option value="2">2 - {t('riskRegister.minor' as TranslationKey)}</option>
+                <option value="3">3 - {t('riskRegister.moderate' as TranslationKey)}</option>
+                <option value="4">4 - {t('riskRegister.major' as TranslationKey)}</option>
+                <option value="5">5 - {t('riskRegister.catastrophic' as TranslationKey)}</option>
               </select>
             </div>
           </div>
@@ -3139,6 +3499,8 @@ export default function ReportsPage() {
             </label>
             <textarea
               rows={3}
+              value={newRiskDescription}
+              onChange={(e) => setNewRiskDescription(e.target.value)}
               placeholder={t('reports.enterRiskDescription' as TranslationKey)}
               className={`w-full px-4 py-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500`}
             />
@@ -3149,20 +3511,39 @@ export default function ReportsPage() {
             </label>
             <textarea
               rows={2}
+              value={newRiskMitigation}
+              onChange={(e) => setNewRiskMitigation(e.target.value)}
               placeholder={t('reports.enterMitigationPlan' as TranslationKey)}
               className={`w-full px-4 py-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500`}
             />
           </div>
+          <div>
+            <label className={`text-xs font-bold text-slate-700 uppercase mb-2 block`}>
+              {t('reports.monitoringFrequency' as TranslationKey)}
+            </label>
+            <select
+              value={newRiskMonitoringFrequency}
+              onChange={(e) => setNewRiskMonitoringFrequency(e.target.value as MonitoringFrequency)}
+              className={`w-full px-4 py-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500`}
+            >
+              <option value="weekly">{t('reports.weekly' as TranslationKey)}</option>
+              <option value="monthly">{t('reports.monthly' as TranslationKey)}</option>
+              <option value="quarterly">{t('reports.quarterly' as TranslationKey)}</option>
+              <option value="semi_annual">{t('reports.semiAnnual' as TranslationKey)}</option>
+              <option value="annual">{t('reports.annual' as TranslationKey)}</option>
+            </select>
+          </div>
           <div className={`flex gap-3 mt-6`}>
             <Button
               className="flex-1"
-              onClick={() => setShowAddRiskModal(false)}
+              disabled={!newRiskName || !newRiskCategory || !newRiskOwnerId || !newRiskDescription}
+              onClick={handleCreateRisk}
             >
-              <Icon icon="lucide:plus" />
-              {t('reports.createRisk' as TranslationKey)}
+              <Icon icon={editingRiskId ? 'lucide:save' : 'lucide:plus'} />
+              {editingRiskId ? t('common.saveChanges') : t('reports.createRisk' as TranslationKey)}
             </Button>
             <button
-              onClick={() => setShowAddRiskModal(false)}
+              onClick={() => { resetAddRiskForm(); setShowAddRiskModal(false) }}
               className="px-6 bg-slate-100 text-slate-700 py-3 rounded-lg font-bold hover:bg-slate-200 transition-colors cursor-pointer"
             >
               {t('common.cancel')}
