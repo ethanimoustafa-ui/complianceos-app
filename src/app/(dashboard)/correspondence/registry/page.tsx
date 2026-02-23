@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { Icon } from '@iconify/react'
 import { Modal } from '@/components/ui/modal'
@@ -9,6 +10,7 @@ import { useTranslation } from '@/i18n'
 import type { TranslationKey } from '@/i18n'
 import { useRequirementStore } from '@/stores/requirement-store'
 import { exportRequirementsLocalized } from '@/lib/export'
+import { AddRequirementModal } from '@/components/correspondence/add-requirement-modal'
 import type { Requirement as RequirementType, ChecklistItem } from '@/types'
 
 // Toast component
@@ -102,6 +104,7 @@ function calcProgress(req: RequirementType): number {
 export default function RegistryPage() {
   const { t, isRTL } = useTranslation()
   const requirementStore = useRequirementStore()
+  const searchParams = useSearchParams()
 
   const [isAddRequirementOpen, setIsAddRequirementOpen] = useState(false)
   const [isViewModalOpen, setIsViewModalOpen] = useState(false)
@@ -115,6 +118,14 @@ export default function RegistryPage() {
   const [categoryFilter, setCategoryFilter] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
   const [sort, setSort] = useState<SortState>(null)
+
+  // Deep-link: auto-open view modal when ?id= is present
+  useEffect(() => {
+    const id = searchParams.get('id')
+    if (!id) return
+    const req = requirementStore.requirements.find(r => r.id === id)
+    if (req) { setSelectedRequirement(req); setIsViewModalOpen(true) }
+  }, [searchParams, requirementStore.requirements])
 
   const handleSort = (col: SortCol) => {
     setSort(prev => prev?.col === col ? { col, dir: prev.dir === 'asc' ? 'desc' : 'asc' } : { col, dir: 'asc' })
@@ -386,21 +397,11 @@ export default function RegistryPage() {
       {toastMessage && <Toast message={toastMessage} onClose={() => setToastMessage(null)} />}
 
       {/* Add Requirement Modal */}
-      <Modal
+      <AddRequirementModal
         isOpen={isAddRequirementOpen}
         onClose={() => setIsAddRequirementOpen(false)}
-        title={t('correspondence.addNewRequirement')}
-        subtitle={t('correspondence.createNewEntry')}
-        size="lg"
-      >
-        <AddRequirementForm
-          t={t}
-          isRTL={isRTL}
-          onSuccess={() => { setIsAddRequirementOpen(false); showToast(t('correspondence.requirementAdded')) }}
-          onClose={() => setIsAddRequirementOpen(false)}
-          onValidationError={() => showToast(t('correspondence.fillRequiredFields'))}
-        />
-      </Modal>
+        onSuccess={() => showToast(t('correspondence.requirementAdded'))}
+      />
 
       {/* View Requirement Modal */}
       <Modal
@@ -563,202 +564,8 @@ export default function RegistryPage() {
   )
 }
 
-// Add Requirement Form Component
-const predefinedDepartments = ['Compliance', 'IT', 'Finance', 'Operations', 'Risk Management', 'HR', 'Legal']
-
-function AddRequirementForm({
-  t,
-  isRTL,
-  onSuccess,
-  onClose,
-  onValidationError,
-}: {
-  t: (key: TranslationKey) => string
-  isRTL: boolean
-  onSuccess: () => void
-  onClose: () => void
-  onValidationError: () => void
-}) {
-  const requirementStore = useRequirementStore()
-  const [isSubmitting, setIsSubmitting] = useState(false)
-  const [formData, setFormData] = useState({
-    name: '',
-    category: '',
-    affectedDepartment: '',
-    releaseDate: '',
-    status: '',
-    dueDate: '',
-    description: '',
-    referenceUrl: '',
-  })
-
-  const handleSubmit = () => {
-    if (!formData.name || !formData.category || !formData.releaseDate || !formData.status) {
-      onValidationError()
-      return
-    }
-
-    setIsSubmitting(true)
-    requirementStore.create({
-      name: formData.name,
-      category: formData.category,
-      affectedDepartment: formData.affectedDepartment || undefined,
-      releaseDate: formData.releaseDate,
-      status: formData.status as RequirementType['status'],
-      dueDate: formData.dueDate || formData.releaseDate,
-      description: formData.description,
-      referenceUrl: formData.referenceUrl || undefined,
-      progress: formData.status === 'completed' ? 100 : formData.status === 'pending' ? 0 : 10,
-    })
-    setIsSubmitting(false)
-    onSuccess()
-  }
-
-  return (
-    <>
-      <div className="space-y-4">
-        <div>
-          <label className={`text-xs font-bold text-slate-700 uppercase mb-2 block`}>{t('correspondence.requirementName')} *</label>
-          <input
-            type="text"
-            value={formData.name}
-            onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
-            placeholder="e.g., SAMA Circular 44321/2024 - Cybersecurity Framework"
-            className={`w-full px-4 py-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500`}
-          />
-        </div>
-
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className={`text-xs font-bold text-slate-700 uppercase mb-2 block`}>{t('correspondence.category')} *</label>
-            <select
-              value={formData.category}
-              onChange={(e) => setFormData(prev => ({ ...prev, category: e.target.value }))}
-              className={`w-full px-4 py-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500`}
-            >
-              <option value="">{t('common.selectCategory')}</option>
-              <option value="Cybersecurity">{t('correspondence.cybersecurity')}</option>
-              <option value="AML/CTF">{t('correspondence.amlCtf')}</option>
-              <option value="Consumer Protection">{t('correspondence.consumerProtection')}</option>
-              <option value="Risk Management">{t('correspondence.riskManagement')}</option>
-              <option value="Data Protection">{t('correspondence.dataProtection')}</option>
-              <option value="Governance">{t('correspondence.governance')}</option>
-            </select>
-          </div>
-          <div>
-            <label className={`text-xs font-bold text-slate-700 uppercase mb-2 block`}>{t('correspondence.releaseDate')} *</label>
-            <input
-              type="date"
-              value={formData.releaseDate}
-              onChange={(e) => setFormData(prev => ({ ...prev, releaseDate: e.target.value }))}
-              className={`w-full px-4 py-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500`}
-            />
-          </div>
-        </div>
-
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className={`text-xs font-bold text-slate-700 uppercase mb-2 block`}>{t('correspondence.complianceStatus' as TranslationKey)} *</label>
-            <select
-              value={formData.status}
-              onChange={(e) => setFormData(prev => ({ ...prev, status: e.target.value }))}
-              className={`w-full px-4 py-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500`}
-            >
-              <option value="">{t('common.selectStatus')}</option>
-              <option value="pending">{t('common.pending')}</option>
-              <option value="drafting">{t('correspondence.drafting')}</option>
-              <option value="implementing">{t('correspondence.implementing')}</option>
-              <option value="completed">{t('common.completed')}</option>
-            </select>
-          </div>
-          <div>
-            <label className={`text-xs font-bold text-slate-700 uppercase mb-2 block`}>{t('observations.dueDate')}</label>
-            <input
-              type="date"
-              value={formData.dueDate}
-              onChange={(e) => setFormData(prev => ({ ...prev, dueDate: e.target.value }))}
-              className={`w-full px-4 py-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500`}
-            />
-          </div>
-        </div>
-
-        <div>
-          <label className={`text-xs font-bold text-slate-700 uppercase mb-2 block`}>{t('correspondence.affectedDepartment' as TranslationKey)}</label>
-          <select
-            value={formData.affectedDepartment}
-            onChange={(e) => setFormData(prev => ({ ...prev, affectedDepartment: e.target.value }))}
-            className={`w-full px-4 py-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500`}
-          >
-            <option value="">—</option>
-            {predefinedDepartments.map(dept => (
-              <option key={dept} value={dept}>{dept}</option>
-            ))}
-          </select>
-        </div>
-
-        <div>
-          <label className={`text-xs font-bold text-slate-700 uppercase mb-2 block`}>{t('correspondence.descriptionOptional')}</label>
-          <textarea
-            rows={3}
-            value={formData.description}
-            onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
-            placeholder={t('correspondence.addDetailedDescription')}
-            className={`w-full px-4 py-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500`}
-          />
-        </div>
-
-        <div>
-          <label className={`text-xs font-bold text-slate-700 uppercase mb-2 block`}>{t('correspondence.referenceUrl' as TranslationKey)}</label>
-          <input
-            type="url"
-            value={formData.referenceUrl}
-            onChange={(e) => setFormData(prev => ({ ...prev, referenceUrl: e.target.value }))}
-            placeholder={t('correspondence.referenceUrlPlaceholder' as TranslationKey)}
-            className={`w-full px-4 py-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500`}
-          />
-        </div>
-      </div>
-
-      <div className={`mt-6 bg-blue-50 p-4 rounded-lg border border-blue-200`}>
-        <div className={`flex items-start gap-3`}>
-          <Icon icon="lucide:info" className="text-blue-600 text-xl shrink-0 mt-0.5" />
-          <div>
-            <p className="text-sm font-bold text-blue-900">{t('correspondence.requiredFields')}</p>
-            <p className="text-xs text-blue-700 mt-1">{t('correspondence.requiredFieldsNote')}</p>
-          </div>
-        </div>
-      </div>
-
-      <div className={`flex gap-3 mt-6`}>
-        <button
-          onClick={handleSubmit}
-          disabled={isSubmitting}
-          className={`flex-1 bg-emerald-600 text-white py-3 rounded-lg font-bold hover:bg-emerald-700 transition-colors flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer`}
-        >
-          {isSubmitting ? (
-            <>
-              <Icon icon="lucide:loader-2" className="text-lg animate-spin" />
-              {t('common.saving')}
-            </>
-          ) : (
-            <>
-              <Icon icon="lucide:check" className="text-lg" />
-              {t('correspondence.addRequirement')}
-            </>
-          )}
-        </button>
-        <button
-          onClick={onClose}
-          className="px-6 bg-slate-100 text-slate-700 py-3 rounded-lg font-bold hover:bg-slate-200 transition-colors cursor-pointer"
-        >
-          {t('common.cancel')}
-        </button>
-      </div>
-    </>
-  )
-}
-
 // Edit Requirement Form Component
+const predefinedDepartments = ['Compliance', 'IT', 'Finance', 'Operations', 'Risk Management', 'HR', 'Legal']
 const predefinedCategories = ['Cybersecurity', 'AML/CTF', 'Consumer Protection', 'Risk Management', 'Data Protection', 'Governance']
 
 function EditRequirementForm({

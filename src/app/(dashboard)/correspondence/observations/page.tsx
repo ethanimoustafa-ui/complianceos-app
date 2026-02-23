@@ -1,6 +1,7 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
+import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { Icon } from '@iconify/react'
 import { Button } from '@/components/ui/button'
@@ -27,6 +28,7 @@ import type {
 
 export default function ObservationsPage() {
   const { t, isRTL } = useTranslation()
+  const searchParams = useSearchParams()
 
   // Zustand store - single source of truth
   const {
@@ -102,6 +104,15 @@ export default function ObservationsPage() {
     setStoreSelected(observation as any) // Sync with store for timeline updates
     setIsDetailModalOpen(true)
   }
+
+  // Deep-link: auto-open detail modal when ?id= is present
+  useEffect(() => {
+    const id = searchParams.get('id')
+    if (!id) return
+    const obs = observations.find(o => o.id === id)
+    if (obs) handleRowClick(obs)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams, observations])
 
   // Handle add observation - calls Zustand store
   const handleAddObservation = async (data: ObservationFormData) => {

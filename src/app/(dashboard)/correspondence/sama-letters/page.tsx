@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { Icon } from '@iconify/react'
 import { Modal } from '@/components/ui/modal'
@@ -256,6 +257,7 @@ function Toast({ message, onClose }: { message: string; onClose: () => void }) {
 
 export default function SAMALettersPage() {
   const { t, isRTL } = useTranslation()
+  const searchParams = useSearchParams()
 
   // Helper to get translated template name and description based on template ID
   const getTranslatedTemplateName = useCallback((templateId: string, originalName: string) => {
@@ -412,6 +414,15 @@ export default function SAMALettersPage() {
     setView('detail')
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
+
+  // Deep-link: auto-switch to detail view when ?id= is present
+  useEffect(() => {
+    const id = searchParams.get('id')
+    if (!id) return
+    const letter = mockLetters.find(l => l.id === id)
+    if (letter) handleViewLetter(letter)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams])
 
   const handleBackToDashboard = () => {
     setView('dashboard')

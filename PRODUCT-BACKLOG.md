@@ -87,9 +87,10 @@
 | COR-020 | IA-specific: Actuarial submission templates | 🗺️ | P3 | A | REC | Technical documents, not standard letters |
 | COR-021 | IA-specific: Solvency filing templates | 🗺️ | P3 | A | REC | Structured financial data |
 | COR-022 | IA-specific: Insurance product approval workflow | 🗺️ | P3 | A | REC | Pricing, terms, coverage data |
-| COR-023 | Correspondence store with persistence, archive field, reference number, assignee | ✅ | P1 | A | FEEDBACK | Done — Zustand + persist, `archived`, `reference`, `assignee` fields, seed data, `getNextReference()` |
-| COR-024 | Correspondence hub feed page with live multi-module metric cards | ✅ | P1 | A | FEEDBACK | Done — SAMA submissions, audit observations, saudization rate, training completion; integrates 9 stores |
+| COR-023 | Correspondence store with persistence, archive field, reference number, assignee | ✅ | P1 | A | FEEDBACK | Done — Zustand + persist, `archived`, `reference`, `assignee` fields, seed data, `getNextReference()`. `Correspondence.type` expanded to 7 types: sama, cma, internal, external_auditor, sharia_board, vendor, other — aligned across store, add/edit modals, and feed filters |
+| COR-024 | Correspondence hub feed page with live multi-module metric cards | ✅ | P1 | A | FEEDBACK | Done — SAMA submissions, audit observations, saudization rate, training completion; integrates 9 stores. Feed improvements: Team Capacity "View All" link to `/team`; Upcoming Submission card pulls from all three sources (registry, SAMA letters, observations) with source colour chips and per-item Review navigation; Regulatory Tracker rows clickable with deep-link; Policy Review card overdue logic fixed (active policies past `nextReviewDate`); Rules & Circulars section added with same stats pattern; Next Deadline footer clusters all requirements sharing the nearest calendar day |
 | COR-025 | Letter list view with archive/unarchive workflow and CSV export | ✅ | P1 | A | FEEDBACK | Done — Active/archived/all filter, reply composer, letter detail modal, localized CSV export |
+| COR-026 | Deep-link navigation: feed → registry / SAMA letters / observations with auto-open detail view | ✅ | P1 | A | FEEDBACK | Done — All three destination pages read `?id=` from `useSearchParams` on mount and auto-open the matching detail view (registry view modal, SAMA letters detail view, observations detail modal). Feed "Review" buttons and Regulatory Tracker rows push `?id=` param |
 
 ---
 

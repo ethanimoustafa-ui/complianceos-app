@@ -2,14 +2,17 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { usePathname } from 'next/navigation'
+import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Icon } from '@iconify/react'
 import { Modal } from '@/components/ui/modal'
 import { cn } from '@/lib/utils'
 import { useTranslation } from '@/i18n'
 import type { TranslationKey } from '@/i18n'
+import { AddRequirementModal } from '@/components/correspondence/add-requirement-modal'
 import { useCorrespondenceStore } from '@/stores/correspondence-store'
 import { useRequirementStore } from '@/stores/requirement-store'
+import { useSAMALetterStore } from '@/stores/sama-letter-store'
 import { useRiskStore } from '@/stores/risk-store'
 import { useTeamStore } from '@/stores/team-store'
 import { useObservationStore } from '@/stores/observation-store'
@@ -44,9 +47,18 @@ function Toast({ message, onClose }: { message: string; onClose: () => void }) {
   )
 }
 
+type UpcomingItem = {
+  id: string
+  name: string
+  subtitle: string
+  dueDate: string
+  source: 'registry' | 'sama-letter' | 'observation'
+}
+
 export default function CorrespondenceFeedPage() {
   const { t, isRTL } = useTranslation()
   const pathname = usePathname()
+  const router = useRouter()
 
   // Stores
   const correspondenceStore = useCorrespondenceStore()
@@ -54,6 +66,7 @@ export default function CorrespondenceFeedPage() {
   const riskStore = useRiskStore()
   const teamStore = useTeamStore()
   const observationStore = useObservationStore()
+  const samaLetterStore = useSAMALetterStore()
   const policyStore = usePolicyStore()
   const trainingStore = useTrainingStore()
   const authStore = useAuthStore()
@@ -62,7 +75,6 @@ export default function CorrespondenceFeedPage() {
   const [isNewCorrespondenceOpen, setIsNewCorrespondenceOpen] = useState(false)
   const [isRiskMatrixOpen, setIsRiskMatrixOpen] = useState(false)
   const [isLetterDetailOpen, setIsLetterDetailOpen] = useState(false)
-  const [isReplyComposerOpen, setIsReplyComposerOpen] = useState(false)
   const [isAddRequirementOpen, setIsAddRequirementOpen] = useState(false)
   const [selectedLetter, setSelectedLetter] = useState<Correspondence | null>(null)
   const [selectedCellRisks, setSelectedCellRisks] = useState<HeatmapRisk[] | null>(null)
@@ -72,9 +84,12 @@ export default function CorrespondenceFeedPage() {
   const [newCorrespondenceTo, setNewCorrespondenceTo] = useState('')
   const [newCorrespondenceSubject, setNewCorrespondenceSubject] = useState('')
   const [newCorrespondenceBody, setNewCorrespondenceBody] = useState('')
+  const [newCorrespondenceType, setNewCorrespondenceType] = useState<Correspondence['type']>('internal')
+  const [newCorrespondenceAssignee, setNewCorrespondenceAssignee] = useState('')
 
   // Correspondence feed filter
   const [correspondenceFilter, setCorrespondenceFilter] = useState<'active' | 'archived' | 'all'>('active')
+  const [typeFilter, setTypeFilter] = useState<Correspondence['type'] | 'all'>('all')
 
   const showToast = useCallback((message: string) => {
     setToastMessage(message)
@@ -140,22 +155,69 @@ export default function CorrespondenceFeedPage() {
 
   const policyStats = useMemo(() => {
     const policies = policyStore.policies
-    if (policies.length === 0) return { currentPct: 0, expiredCount: 0 }
+    if (policies.length === 0) return { currentPct: 0, overdueCount: 0 }
+    const now = new Date()
     const active = policies.filter(p => p.status === 'active').length
-    const archived = policies.filter(p => p.status === 'archived').length
+    const overdue = policies.filter(p => p.status === 'active' && new Date(p.nextReviewDate) < now).length
     return {
-      currentPct: policies.length > 0 ? Math.round((active / policies.length) * 100) : 0,
-      expiredCount: archived,
+      currentPct: Math.round((active / policies.length) * 100),
+      overdueCount: overdue,
     }
   }, [policyStore.policies])
 
-  // Nearest upcoming requirement
-  const nearestDueRequirement = useMemo(() => {
+  const requirementStats = useMemo(() => {
+    const reqs = requirementStore.requirements
+    if (reqs.length === 0) return { currentPct: 0, overdueCount: 0 }
     const now = new Date()
-    return requirementStore.requirements
-      .filter(r => r.status !== 'completed' && new Date(r.dueDate) > now)
-      .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime())[0] || null
+    const completed = reqs.filter(r => r.status === 'completed').length
+    const overdue = reqs.filter(r => r.status !== 'completed' && new Date(r.dueDate) < now).length
+    return {
+      currentPct: Math.round((completed / reqs.length) * 100),
+      overdueCount: overdue,
+    }
   }, [requirementStore.requirements])
+
+  const nextRequirementsDue = useMemo(() => {
+    const now = new Date()
+    const upcoming = requirementStore.requirements
+      .filter(r => r.status !== 'completed' && new Date(r.dueDate) > now)
+      .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime())
+    if (upcoming.length === 0) return []
+    const nearestDay = new Date(upcoming[0].dueDate).setHours(0, 0, 0, 0)
+    return upcoming.filter(r => new Date(r.dueDate).setHours(0, 0, 0, 0) === nearestDay)
+  }, [requirementStore.requirements])
+
+  // Upcoming items from all sources
+  const upcomingItems = useMemo((): UpcomingItem[] => {
+    const now = new Date()
+    const items: UpcomingItem[] = []
+
+    // Requirements / Registry
+    requirementStore.requirements
+      .filter(r => r.status !== 'completed' && new Date(r.dueDate) > now)
+      .forEach(r => items.push({
+        id: r.id, name: r.name, subtitle: r.category,
+        dueDate: r.dueDate, source: 'registry'
+      }))
+
+    // SAMA Letters (responseDeadline)
+    samaLetterStore.letters
+      .filter(l => l.responseDeadline && new Date(l.responseDeadline) > now && l.status !== 'closed')
+      .forEach(l => items.push({
+        id: l.id, name: l.subject, subtitle: l.type,
+        dueDate: l.responseDeadline!, source: 'sama-letter'
+      }))
+
+    // Observations (dueDate)
+    observationStore.observations
+      .filter(o => !['resolved', 'closed'].includes(o.status) && new Date(o.dueDate) > now)
+      .forEach(o => items.push({
+        id: o.id, name: o.title, subtitle: o.source,
+        dueDate: o.dueDate, source: 'observation'
+      }))
+
+    return items.sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime()).slice(0, 3)
+  }, [requirementStore.requirements, samaLetterStore.letters, observationStore.observations])
 
   // Next policy review
   const nextPolicyReview = useMemo(() => {
@@ -175,11 +237,6 @@ export default function CorrespondenceFeedPage() {
     setIsLetterDetailOpen(true)
   }
 
-  const handleReply = (letter: Correspondence) => {
-    setSelectedLetter(letter)
-    setIsReplyComposerOpen(true)
-  }
-
   const handleArchive = (letterId: string) => {
     const letter = correspondenceStore.correspondence.find(l => l.id === letterId)
     if (letter) {
@@ -189,8 +246,13 @@ export default function CorrespondenceFeedPage() {
     setIsLetterDetailOpen(false)
   }
 
-  const handleReviewFile = () => {
-    showToast(t('correspondence.openingPrmReport'))
+  const handleReviewItem = (item: UpcomingItem) => {
+    const routes: Record<UpcomingItem['source'], string> = {
+      'registry':    '/correspondence/registry',
+      'sama-letter': '/correspondence/sama-letters',
+      'observation': '/correspondence/observations',
+    }
+    router.push(`${routes[item.source]}?id=${item.id}`)
   }
 
   // Risk counts for heatmap display
@@ -275,7 +337,7 @@ export default function CorrespondenceFeedPage() {
             className={`bg-emerald-600 text-white px-5 py-2.5 rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-emerald-700 transition-colors shadow-lg shadow-emerald-100 cursor-pointer ${isRTL ? 'flex-row-reverse' : ''}`}
           >
             <Icon icon="lucide:plus" />
-            {t('correspondence.newCorrespondence')}
+            {t('correspondence.logCommunication' as TranslationKey)}
           </button>
         </div>
       </header>
@@ -364,7 +426,13 @@ export default function CorrespondenceFeedPage() {
 
                 <div className="space-y-4">
                   {topRequirements.map((req) => (
-                    <RequirementRow key={req.id} requirement={req} t={t} isRTL={isRTL} />
+                    <RequirementRow
+                      key={req.id}
+                      requirement={req}
+                      t={t}
+                      isRTL={isRTL}
+                      onClick={() => router.push(`/correspondence/registry?id=${req.id}`)}
+                    />
                   ))}
                   {topRequirements.length === 0 && (
                     <p className="text-sm text-slate-400 text-center py-4">{t('correspondence.noRequirements')}</p>
@@ -391,6 +459,20 @@ export default function CorrespondenceFeedPage() {
                         <option value="archived">{t('correspondence.filterArchived')}</option>
                         <option value="all">{t('correspondence.filterAll')}</option>
                       </select>
+                      <select
+                        value={typeFilter}
+                        onChange={(e) => setTypeFilter(e.target.value as Correspondence['type'] | 'all')}
+                        className="text-[10px] font-bold text-slate-600 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                      >
+                        <option value="all">{t('correspondence.allTypes' as TranslationKey)}</option>
+                        <option value="sama">{t('correspondence.typeSama' as TranslationKey)}</option>
+                        <option value="cma">{t('correspondence.typeCma' as TranslationKey)}</option>
+                        <option value="internal">{t('correspondence.typeInternal' as TranslationKey)}</option>
+                        <option value="external_auditor">{t('correspondence.typeExternalAuditor' as TranslationKey)}</option>
+                        <option value="sharia_board">{t('correspondence.typeShariaBoard' as TranslationKey)}</option>
+                        <option value="vendor">{t('correspondence.typeVendor' as TranslationKey)}</option>
+                        <option value="other">{t('correspondence.typeOther' as TranslationKey)}</option>
+                      </select>
                       {correspondenceStore.correspondence.length > 0 && (
                         <button
                           onClick={() => {
@@ -407,12 +489,12 @@ export default function CorrespondenceFeedPage() {
                   <div className="space-y-4">
                     {correspondenceStore.correspondence
                       .filter(l => correspondenceFilter === 'all' ? true : correspondenceFilter === 'archived' ? l.archived : !l.archived)
+                      .filter(l => typeFilter === 'all' ? true : l.type === typeFilter)
                       .map((letter) => (
-                        <CorrespondenceItem
+                        <CommunicationLogItem
                           key={letter.id}
                           letter={letter}
                           onView={() => handleViewLetter(letter)}
-                          onReply={() => handleReply(letter)}
                           onArchive={() => handleArchive(letter.id)}
                           t={t}
                           isRTL={isRTL}
@@ -420,14 +502,16 @@ export default function CorrespondenceFeedPage() {
                       ))}
                     {correspondenceStore.correspondence
                       .filter(l => correspondenceFilter === 'all' ? true : correspondenceFilter === 'archived' ? l.archived : !l.archived)
+                      .filter(l => typeFilter === 'all' ? true : l.type === typeFilter)
                       .length === 0 && (
                       <p className="text-sm text-slate-400 text-center py-4">{t('correspondence.noCorrespondence')}</p>
                     )}
                   </div>
                 </section>
 
-                {/* Policy Status */}
+                {/* Policy Status + Rules & Circulars */}
                 <section className="glass-card rounded-3xl p-6">
+                  {/* Policy Review */}
                   <h3 className={`text-sm font-bold text-slate-900 mb-4 flex items-center gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
                     <Icon icon="lucide:scroll-text" className="text-slate-400" />
                     {t('correspondence.policyReview')}
@@ -441,9 +525,9 @@ export default function CorrespondenceFeedPage() {
                     </div>
                     <div className={`bg-slate-50 p-3 rounded-xl border border-slate-100 ${isRTL ? 'text-right' : ''}`}>
                       <span className="text-[10px] font-black text-rose-500 uppercase">
-                        {t('correspondence.expired')}
+                        {t('correspondence.overdue' as TranslationKey)}
                       </span>
-                      <p className="text-xl font-bold text-rose-600">{policyStats.expiredCount}</p>
+                      <p className="text-xl font-bold text-rose-600">{policyStats.overdueCount}</p>
                     </div>
                   </div>
                   <div className={`mt-4 flex items-center justify-between text-[10px] font-bold text-slate-500 ${isRTL ? 'flex-row-reverse' : ''}`}>
@@ -453,6 +537,47 @@ export default function CorrespondenceFeedPage() {
                         <span className="text-blue-600">
                           {new Date(nextPolicyReview.nextReviewDate).toLocaleDateString(isRTL ? 'ar-SA' : 'en-US', { month: 'short', day: 'numeric' })}
                         </span>
+                      </>
+                    ) : (
+                      <span className="text-slate-400">{t('correspondence.noUpcomingReviews')}</span>
+                    )}
+                  </div>
+
+                  <div className="my-5 border-t border-slate-100" />
+
+                  {/* Rules & Circulars Review */}
+                  <h3 className={`text-sm font-bold text-slate-900 mb-4 flex items-center gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                    <Icon icon="lucide:landmark" className="text-slate-400" />
+                    {t('correspondence.rulesAndCirculars' as TranslationKey)}
+                  </h3>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className={`bg-slate-50 p-3 rounded-xl border border-slate-100 ${isRTL ? 'text-right' : ''}`}>
+                      <span className="text-[10px] font-black text-slate-400 uppercase">
+                        {t('correspondence.current')}
+                      </span>
+                      <p className="text-xl font-bold text-slate-900">{requirementStats.currentPct}%</p>
+                    </div>
+                    <div className={`bg-slate-50 p-3 rounded-xl border border-slate-100 ${isRTL ? 'text-right' : ''}`}>
+                      <span className="text-[10px] font-black text-rose-500 uppercase">
+                        {t('correspondence.overdue' as TranslationKey)}
+                      </span>
+                      <p className="text-xl font-bold text-rose-600">{requirementStats.overdueCount}</p>
+                    </div>
+                  </div>
+                  <div className={`mt-4 text-[10px] font-bold text-slate-500`}>
+                    {nextRequirementsDue.length > 0 ? (
+                      <>
+                        <div className={`flex items-center justify-between mb-1.5 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                          <span>{t('correspondence.nextDeadline' as TranslationKey)}</span>
+                          <span className="text-blue-600">
+                            {new Date(nextRequirementsDue[0].dueDate).toLocaleDateString(isRTL ? 'ar-SA' : 'en-US', { month: 'short', day: 'numeric' })}
+                          </span>
+                        </div>
+                        <ul className={`space-y-0.5 ${isRTL ? 'text-right' : ''}`}>
+                          {nextRequirementsDue.map(r => (
+                            <li key={r.id} className="text-slate-600 truncate">· {r.name}</li>
+                          ))}
+                        </ul>
                       </>
                     ) : (
                       <span className="text-slate-400">{t('correspondence.noUpcomingReviews')}</span>
@@ -515,12 +640,13 @@ export default function CorrespondenceFeedPage() {
                   <h2 className="text-sm font-bold text-slate-900 uppercase tracking-widest">
                     {t('correspondence.teamCapacity')}
                   </h2>
-                  <button onClick={() => showToast('Team options menu')} className="cursor-pointer">
-                    <Icon
-                      icon="lucide:more-horizontal"
-                      className="text-slate-400 hover:text-slate-600 cursor-pointer"
-                    />
-                  </button>
+                  <Link
+                    href="/team"
+                    className={`text-xs font-bold text-slate-500 hover:text-slate-700 flex items-center gap-1 ${isRTL ? 'flex-row-reverse' : ''}`}
+                  >
+                    {t('correspondence.viewAll' as TranslationKey)}
+                    <Icon icon={isRTL ? 'lucide:arrow-left' : 'lucide:arrow-right'} className="text-sm" />
+                  </Link>
                 </div>
                 <div className="space-y-5">
                   {teamStore.members.map((member) => (
@@ -537,21 +663,39 @@ export default function CorrespondenceFeedPage() {
                 <h2 className={`text-[10px] font-black text-emerald-600 uppercase tracking-widest mb-4 ${isRTL ? 'text-right' : ''}`}>
                   {t('correspondence.upcomingSubmission')}
                 </h2>
-                {nearestDueRequirement ? (
-                  <div className={`bg-white p-4 rounded-2xl border border-emerald-100 shadow-sm ${isRTL ? 'text-right' : ''}`}>
-                    <p className="text-sm font-bold text-slate-900">{nearestDueRequirement.name}</p>
-                    <p className="text-xs text-slate-500 mt-1">{nearestDueRequirement.category}</p>
-                    <div className={`flex items-center justify-between mt-4 pt-4 border-t border-slate-100 ${isRTL ? 'flex-row-reverse' : ''}`}>
-                      <span className="text-xs font-bold text-rose-500">
-                        {new Date(nearestDueRequirement.dueDate).toLocaleDateString(isRTL ? 'ar-SA' : 'en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                      </span>
-                      <button
-                        onClick={handleReviewFile}
-                        className="text-[10px] px-3 py-1 bg-emerald-600 text-white rounded-lg font-bold hover:bg-emerald-700 transition-colors cursor-pointer"
-                      >
-                        {t('correspondence.reviewFile')}
-                      </button>
-                    </div>
+                {upcomingItems.length > 0 ? (
+                  <div className="space-y-3">
+                    {upcomingItems.map(item => {
+                      const sourceChip: Record<UpcomingItem['source'], string> = {
+                        'registry':    'bg-emerald-100 text-emerald-700',
+                        'sama-letter': 'bg-blue-100 text-blue-700',
+                        'observation': 'bg-rose-100 text-rose-700',
+                      }
+                      return (
+                        <div key={item.id} className={`bg-white p-4 rounded-2xl border border-emerald-100 shadow-sm ${isRTL ? 'text-right' : ''}`}>
+                          <div className={`flex items-start justify-between gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-bold text-slate-900 truncate">{item.name}</p>
+                              <p className="text-xs text-slate-500 mt-0.5">{item.subtitle}</p>
+                            </div>
+                            <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full shrink-0 ${sourceChip[item.source]}`}>
+                              {item.source === 'registry' ? 'Registry' : item.source === 'sama-letter' ? 'SAMA' : 'Obs'}
+                            </span>
+                          </div>
+                          <div className={`flex items-center justify-between mt-3 pt-3 border-t border-slate-100 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                            <span className="text-xs font-bold text-rose-500">
+                              {new Date(item.dueDate).toLocaleDateString(isRTL ? 'ar-SA' : 'en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                            </span>
+                            <button
+                              onClick={() => handleReviewItem(item)}
+                              className="text-[10px] px-3 py-1 bg-emerald-600 text-white rounded-lg font-bold hover:bg-emerald-700 transition-colors cursor-pointer"
+                            >
+                              {t('correspondence.reviewFile')}
+                            </button>
+                          </div>
+                        </div>
+                      )
+                    })}
                   </div>
                 ) : (
                   <div className={`bg-white p-4 rounded-2xl border border-slate-100 shadow-sm ${isRTL ? 'text-right' : ''}`}>
@@ -571,11 +715,29 @@ export default function CorrespondenceFeedPage() {
       <Modal
         isOpen={isNewCorrespondenceOpen}
         onClose={() => setIsNewCorrespondenceOpen(false)}
-        title={t('correspondence.newCorrespondence')}
+        title={t('correspondence.logCommunication' as TranslationKey)}
         subtitle={t('common.createNew')}
         size="lg"
       >
         <div className="space-y-4">
+          <div>
+            <label className={`text-xs font-bold text-slate-700 uppercase mb-2 block ${isRTL ? 'text-right' : ''}`}>
+              {t('correspondence.typeLabel' as TranslationKey)}
+            </label>
+            <select
+              value={newCorrespondenceType}
+              onChange={(e) => setNewCorrespondenceType(e.target.value as Correspondence['type'])}
+              className={`w-full px-4 py-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 ${isRTL ? 'text-right' : ''}`}
+            >
+              <option value="sama">{t('correspondence.typeSama' as TranslationKey)}</option>
+              <option value="cma">{t('correspondence.typeCma' as TranslationKey)}</option>
+              <option value="internal">{t('correspondence.typeInternal' as TranslationKey)}</option>
+              <option value="external_auditor">{t('correspondence.typeExternalAuditor' as TranslationKey)}</option>
+              <option value="sharia_board">{t('correspondence.typeShariaBoard' as TranslationKey)}</option>
+              <option value="vendor">{t('correspondence.typeVendor' as TranslationKey)}</option>
+              <option value="other">{t('correspondence.typeOther' as TranslationKey)}</option>
+            </select>
+          </div>
           <div>
             <label className={`text-xs font-bold text-slate-700 uppercase mb-2 block ${isRTL ? 'text-right' : ''}`}>{t('correspondence.to')}</label>
             <input
@@ -595,6 +757,21 @@ export default function CorrespondenceFeedPage() {
               placeholder={t('common.enterSubject')}
               className={`w-full px-4 py-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 ${isRTL ? 'text-right' : ''}`}
             />
+          </div>
+          <div>
+            <label className={`text-xs font-bold text-slate-700 uppercase mb-2 block ${isRTL ? 'text-right' : ''}`}>
+              {t('correspondence.assignedTo')}
+            </label>
+            <select
+              value={newCorrespondenceAssignee}
+              onChange={(e) => setNewCorrespondenceAssignee(e.target.value)}
+              className={`w-full px-4 py-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 ${isRTL ? 'text-right' : ''}`}
+            >
+              <option value="">{t('common.unassigned' as TranslationKey)}</option>
+              {teamStore.members.map((m) => (
+                <option key={m.id} value={m.name}>{m.name} — {m.role}</option>
+              ))}
+            </select>
           </div>
           <div>
             <label className={`text-xs font-bold text-slate-700 uppercase mb-2 block ${isRTL ? 'text-right' : ''}`}>{t('correspondence.message')}</label>
@@ -618,7 +795,8 @@ export default function CorrespondenceFeedPage() {
                   from: authStore.user?.name || 'Compliance Department',
                   to: [newCorrespondenceTo],
                   date: new Date().toISOString(),
-                  type: 'external',
+                  type: newCorrespondenceType,
+                  assignee: newCorrespondenceAssignee || undefined,
                   status: 'sent',
                   body: newCorrespondenceBody,
                   attachments: [],
@@ -627,6 +805,8 @@ export default function CorrespondenceFeedPage() {
                 setNewCorrespondenceTo('')
                 setNewCorrespondenceSubject('')
                 setNewCorrespondenceBody('')
+                setNewCorrespondenceType('internal')
+                setNewCorrespondenceAssignee('')
                 setIsNewCorrespondenceOpen(false)
                 showToast(t('correspondence.correspondenceSent'))
               }}
@@ -643,7 +823,8 @@ export default function CorrespondenceFeedPage() {
                     from: authStore.user?.name || 'Compliance Department',
                     to: newCorrespondenceTo ? [newCorrespondenceTo] : [],
                     date: new Date().toISOString(),
-                    type: 'external',
+                    type: newCorrespondenceType,
+                    assignee: newCorrespondenceAssignee || undefined,
                     status: 'draft',
                     body: newCorrespondenceBody,
                     attachments: [],
@@ -653,64 +834,14 @@ export default function CorrespondenceFeedPage() {
                 setNewCorrespondenceTo('')
                 setNewCorrespondenceSubject('')
                 setNewCorrespondenceBody('')
+                setNewCorrespondenceType('internal')
+                setNewCorrespondenceAssignee('')
                 setIsNewCorrespondenceOpen(false)
                 showToast(t('correspondence.saveAsDraft'))
               }}
               className="px-6 bg-slate-100 text-slate-700 py-3 rounded-lg font-bold hover:bg-slate-200 transition-colors cursor-pointer"
             >
               {t('correspondence.saveAsDraft')}
-            </button>
-          </div>
-        </div>
-      </Modal>
-
-      {/* Reply Composer Modal */}
-      <Modal
-        isOpen={isReplyComposerOpen}
-        onClose={() => setIsReplyComposerOpen(false)}
-        title={t('correspondence.reply')}
-        subtitle={`RE: ${selectedLetter?.reference || t('correspondence.newCorrespondence')}`}
-        size="lg"
-      >
-        <div className="space-y-4">
-          <div>
-            <label className={`text-xs font-bold text-slate-700 uppercase mb-2 block ${isRTL ? 'text-right' : ''}`}>{t('correspondence.to')}</label>
-            <input
-              type="text"
-              value="SAMA - Compliance Department"
-              readOnly
-              className={`w-full px-4 py-3 border border-slate-200 rounded-lg text-sm bg-slate-50 ${isRTL ? 'text-right' : ''}`}
-            />
-          </div>
-          <div>
-            <label className={`text-xs font-bold text-slate-700 uppercase mb-2 block ${isRTL ? 'text-right' : ''}`}>{t('common.subject')}</label>
-            <input
-              type="text"
-              placeholder={t('common.enterSubject')}
-              className={`w-full px-4 py-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 ${isRTL ? 'text-right' : ''}`}
-            />
-          </div>
-          <div>
-            <label className={`text-xs font-bold text-slate-700 uppercase mb-2 block ${isRTL ? 'text-right' : ''}`}>{t('correspondence.message')}</label>
-            <textarea
-              rows={8}
-              placeholder={t('common.typeReply')}
-              className={`w-full px-4 py-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 ${isRTL ? 'text-right' : ''}`}
-            />
-          </div>
-          <div className={`flex gap-3 mt-6 ${isRTL ? 'flex-row-reverse' : ''}`}>
-            <button
-              onClick={() => { setIsReplyComposerOpen(false); showToast(t('correspondence.replySentSuccess')); }}
-              className={`flex-1 bg-emerald-600 text-white py-3 rounded-lg font-bold hover:bg-emerald-700 transition-colors flex items-center justify-center gap-2 cursor-pointer ${isRTL ? 'flex-row-reverse' : ''}`}
-            >
-              <Icon icon="lucide:send" className="text-lg" />
-              {t('correspondence.sendReply')}
-            </button>
-            <button
-              onClick={() => setIsReplyComposerOpen(false)}
-              className="px-6 bg-slate-100 text-slate-700 py-3 rounded-lg font-bold hover:bg-slate-200 transition-colors cursor-pointer"
-            >
-              {t('common.cancel')}
             </button>
           </div>
         </div>
@@ -903,15 +1034,8 @@ export default function CorrespondenceFeedPage() {
             )}
             <div className={`flex gap-3 pt-4 ${isRTL ? 'flex-row-reverse' : ''}`}>
               <button
-                onClick={() => { setIsLetterDetailOpen(false); handleReply(selectedLetter); }}
-                className={`flex-1 bg-emerald-600 text-white py-3 rounded-lg font-bold hover:bg-emerald-700 transition-colors flex items-center justify-center gap-2 cursor-pointer ${isRTL ? 'flex-row-reverse' : ''}`}
-              >
-                <Icon icon="lucide:reply" className="text-lg" />
-                {t('correspondence.reply')}
-              </button>
-              <button
                 onClick={() => handleArchive(selectedLetter.id)}
-                className="px-6 bg-slate-100 text-slate-700 py-3 rounded-lg font-bold hover:bg-slate-200 transition-colors cursor-pointer"
+                className="flex-1 bg-slate-100 text-slate-700 py-3 rounded-lg font-bold hover:bg-slate-200 transition-colors cursor-pointer"
               >
                 {selectedLetter.archived ? t('correspondence.unarchive') : t('correspondence.archive')}
               </button>
@@ -921,189 +1045,12 @@ export default function CorrespondenceFeedPage() {
       </Modal>
 
       {/* Add Requirement Modal */}
-      <Modal
+      <AddRequirementModal
         isOpen={isAddRequirementOpen}
         onClose={() => setIsAddRequirementOpen(false)}
-        title={t('correspondence.addNewRequirement')}
-        subtitle={t('correspondence.createNewEntry')}
-        size="lg"
-      >
-        <AddRequirementForm
-          t={t}
-          isRTL={isRTL}
-          onSuccess={() => { setIsAddRequirementOpen(false); showToast(t('correspondence.requirementAdded')); }}
-          onValidationError={() => showToast(t('correspondence.fillRequiredFields'))}
-        />
-      </Modal>
+        onSuccess={() => showToast(t('correspondence.requirementAdded'))}
+      />
     </div>
-  )
-}
-
-// Add Requirement Form Component
-function AddRequirementForm({ t, isRTL, onSuccess, onValidationError }: { t: (key: TranslationKey) => string; isRTL: boolean; onSuccess: () => void; onValidationError: () => void }) {
-  const requirementStore = useRequirementStore()
-  const [isSubmitting, setIsSubmitting] = useState(false)
-  const [showCustomCategory, setShowCustomCategory] = useState(false)
-  const [formData, setFormData] = useState({
-    name: '',
-    category: '',
-    releaseDate: '',
-    status: '',
-    dueDate: '',
-    description: ''
-  })
-
-  const handleSubmit = () => {
-    // Validation
-    if (!formData.name || !formData.category || !formData.releaseDate || !formData.status) {
-      onValidationError()
-      return
-    }
-
-    setIsSubmitting(true)
-    requirementStore.create({
-      name: formData.name,
-      category: formData.category,
-      releaseDate: formData.releaseDate,
-      status: formData.status as RequirementType['status'],
-      dueDate: formData.dueDate || formData.releaseDate,
-      description: formData.description,
-      progress: formData.status === 'completed' ? 100 : formData.status === 'pending' ? 0 : 10,
-    })
-    setIsSubmitting(false)
-    onSuccess()
-  }
-
-  return (
-    <>
-      <div className="space-y-4">
-        <div>
-          <label className={`text-xs font-bold text-slate-700 uppercase mb-2 block ${isRTL ? 'text-right' : ''}`}>{t('correspondence.requirementName')} *</label>
-          <input
-            type="text"
-            value={formData.name}
-            onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
-            placeholder="e.g., SAMA Circular 44321/2024 - Cybersecurity Framework"
-            className={`w-full px-4 py-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 ${isRTL ? 'text-right' : ''}`}
-          />
-        </div>
-
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className={`text-xs font-bold text-slate-700 uppercase mb-2 block ${isRTL ? 'text-right' : ''}`}>{t('correspondence.category')} *</label>
-            <select
-              value={formData.category}
-              onChange={(e) => {
-                setShowCustomCategory(e.target.value === 'custom')
-                setFormData(prev => ({ ...prev, category: e.target.value === 'custom' ? '' : e.target.value }))
-              }}
-              className={`w-full px-4 py-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 ${isRTL ? 'text-right' : ''}`}
-            >
-              <option value="">{t('common.selectCategory')}</option>
-              <option value="Cybersecurity">{t('correspondence.cybersecurity')}</option>
-              <option value="AML/CTF">{t('correspondence.amlCtf')}</option>
-              <option value="Consumer Protection">{t('correspondence.consumerProtection')}</option>
-              <option value="Risk Management">{t('correspondence.riskManagement')}</option>
-              <option value="Data Protection">{t('correspondence.dataProtection')}</option>
-              <option value="Governance">{t('correspondence.governance')}</option>
-              <option value="custom">{t('correspondence.addNewCategory')}</option>
-            </select>
-          </div>
-          {showCustomCategory ? (
-            <div>
-              <label className={`text-xs font-bold text-slate-700 uppercase mb-2 block ${isRTL ? 'text-right' : ''}`}>{t('correspondence.newCategoryName')}</label>
-              <input
-                type="text"
-                value={formData.category}
-                onChange={(e) => setFormData(prev => ({ ...prev, category: e.target.value }))}
-                placeholder={t('common.enterCategory')}
-                className={`w-full px-4 py-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 ${isRTL ? 'text-right' : ''}`}
-              />
-            </div>
-          ) : (
-            <div>
-              <label className={`text-xs font-bold text-slate-700 uppercase mb-2 block ${isRTL ? 'text-right' : ''}`}>{t('correspondence.releaseDate')} *</label>
-              <input
-                type="date"
-                value={formData.releaseDate}
-                onChange={(e) => setFormData(prev => ({ ...prev, releaseDate: e.target.value }))}
-                className={`w-full px-4 py-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 ${isRTL ? 'text-right' : ''}`}
-              />
-            </div>
-          )}
-        </div>
-
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className={`text-xs font-bold text-slate-700 uppercase mb-2 block ${isRTL ? 'text-right' : ''}`}>{t('correspondence.complianceStatus')} *</label>
-            <select
-              value={formData.status}
-              onChange={(e) => setFormData(prev => ({ ...prev, status: e.target.value }))}
-              className={`w-full px-4 py-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 ${isRTL ? 'text-right' : ''}`}
-            >
-              <option value="">{t('common.selectStatus')}</option>
-              <option value="pending">{t('common.pending')}</option>
-              <option value="drafting">{t('correspondence.drafting')}</option>
-              <option value="implementing">{t('correspondence.implementing')}</option>
-              <option value="completed">{t('common.completed')}</option>
-            </select>
-          </div>
-          <div>
-            <label className={`text-xs font-bold text-slate-700 uppercase mb-2 block ${isRTL ? 'text-right' : ''}`}>{t('observations.dueDate')}</label>
-            <input
-              type="date"
-              value={formData.dueDate}
-              onChange={(e) => setFormData(prev => ({ ...prev, dueDate: e.target.value }))}
-              className={`w-full px-4 py-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 ${isRTL ? 'text-right' : ''}`}
-            />
-          </div>
-        </div>
-
-        <div>
-          <label className={`text-xs font-bold text-slate-700 uppercase mb-2 block ${isRTL ? 'text-right' : ''}`}>{t('correspondence.descriptionOptional')}</label>
-          <textarea
-            rows={4}
-            value={formData.description}
-            onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
-            placeholder={t('correspondence.addDetailedDescription')}
-            className={`w-full px-4 py-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 ${isRTL ? 'text-right' : ''}`}
-          />
-        </div>
-      </div>
-
-      <div className={`mt-6 bg-blue-50 p-4 rounded-lg border border-blue-200 ${isRTL ? 'text-right' : ''}`}>
-        <div className={`flex items-start gap-3 ${isRTL ? 'flex-row-reverse' : ''}`}>
-          <Icon icon="lucide:info" className="text-blue-600 text-xl shrink-0 mt-0.5" />
-          <div>
-            <p className="text-sm font-bold text-blue-900">{t('correspondence.requiredFields')}</p>
-            <p className="text-xs text-blue-700 mt-1">{t('correspondence.requiredFieldsNote')}</p>
-          </div>
-        </div>
-      </div>
-
-      <div className={`flex gap-3 mt-6 ${isRTL ? 'flex-row-reverse' : ''}`}>
-        <button
-          onClick={handleSubmit}
-          disabled={isSubmitting}
-          className={`flex-1 bg-emerald-600 text-white py-3 rounded-lg font-bold hover:bg-emerald-700 transition-colors flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer ${isRTL ? 'flex-row-reverse' : ''}`}
-        >
-          {isSubmitting ? (
-            <>
-              <Icon icon="lucide:loader-2" className="text-lg animate-spin" />
-              {t('common.saving')}
-            </>
-          ) : (
-            <>
-              <Icon icon="lucide:check" className="text-lg" />
-              {t('correspondence.addRequirement')}
-            </>
-          )}
-        </button>
-        <button className="px-6 bg-slate-100 text-slate-700 py-3 rounded-lg font-bold hover:bg-slate-200 transition-colors cursor-pointer">
-          {t('common.cancel')}
-        </button>
-      </div>
-    </>
   )
 }
 
@@ -1180,7 +1127,7 @@ function MetricCard({
   )
 }
 
-function RequirementRow({ requirement, t, isRTL }: { requirement: RequirementType; t: (key: TranslationKey, params?: Record<string, string | number>) => string; isRTL: boolean }) {
+function RequirementRow({ requirement, t, isRTL, onClick }: { requirement: RequirementType; t: (key: TranslationKey, params?: Record<string, string | number>) => string; isRTL: boolean; onClick?: () => void }) {
   const statusConfig = {
     implementing: { bg: 'bg-amber-100', text: 'text-amber-700', label: t('correspondence.implementing') },
     drafting: { bg: 'bg-blue-100', text: 'text-blue-700', label: t('correspondence.drafting') },
@@ -1200,7 +1147,8 @@ function RequirementRow({ requirement, t, isRTL }: { requirement: RequirementTyp
 
   return (
     <div
-      className={`flex items-center justify-between p-4 rounded-xl border ${isCompleted ? 'bg-emerald-50/50 border-emerald-100' : 'bg-slate-50 border-slate-100'} ${isRTL ? 'flex-row-reverse' : ''}`}
+      onClick={onClick}
+      className={`flex items-center justify-between p-4 rounded-xl border ${isCompleted ? 'bg-emerald-50/50 border-emerald-100' : 'bg-slate-50 border-slate-100'} ${isRTL ? 'flex-row-reverse' : ''} ${onClick ? 'cursor-pointer hover:bg-slate-100/80' : ''}`}
     >
       <div className={`flex items-center gap-4 ${isRTL ? 'flex-row-reverse' : ''}`}>
         <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center border border-slate-200 shadow-sm">
@@ -1236,17 +1184,15 @@ function RequirementRow({ requirement, t, isRTL }: { requirement: RequirementTyp
   )
 }
 
-function CorrespondenceItem({
+function CommunicationLogItem({
   letter,
   onView,
-  onReply,
   onArchive,
   t,
   isRTL
 }: {
   letter: Correspondence
   onView: () => void
-  onReply: () => void
   onArchive: () => void
   t: (key: TranslationKey, params?: Record<string, string | number>) => string
   isRTL: boolean
@@ -1295,14 +1241,6 @@ function CorrespondenceItem({
           >
             {t('common.view')}
           </button>
-          {isSent && (
-            <button
-              onClick={onReply}
-              className="text-[9px] font-bold text-blue-600 hover:text-blue-700 cursor-pointer"
-            >
-              {t('correspondence.reply')}
-            </button>
-          )}
           <button
             onClick={onArchive}
             className="text-[9px] font-bold text-slate-500 hover:text-slate-700 cursor-pointer"

@@ -14,7 +14,7 @@ import type { Correspondence } from '@/types'
 
 const correspondenceSchema = z.object({
   subject: z.string().min(3, 'Subject must be at least 3 characters'),
-  type: z.enum(['internal', 'external', 'sama']),
+  type: z.enum(['sama', 'cma', 'internal', 'external_auditor', 'sharia_board', 'vendor', 'other']),
   status: z.enum(['draft', 'sent', 'received']),
   from: z.string().min(1, 'From is required'),
   to: z.string().min(1, 'At least one recipient is required'),
@@ -30,14 +30,18 @@ interface AddCorrespondenceModalProps {
 }
 
 const correspondenceTypes = [
-  { id: 'internal', label: 'Internal', icon: 'lucide:building-2', color: 'blue' },
-  { id: 'external', label: 'External', icon: 'lucide:globe', color: 'emerald' },
   { id: 'sama', label: 'SAMA', icon: 'lucide:landmark', color: 'purple' },
+  { id: 'cma', label: 'CMA', icon: 'lucide:landmark', color: 'blue' },
+  { id: 'internal', label: 'Internal', icon: 'lucide:building-2', color: 'blue' },
+  { id: 'external_auditor', label: 'External Auditor', icon: 'lucide:search', color: 'emerald' },
+  { id: 'sharia_board', label: 'Sharia Board', icon: 'lucide:star', color: 'purple' },
+  { id: 'vendor', label: 'Vendor / Third Party', icon: 'lucide:truck', color: 'emerald' },
+  { id: 'other', label: 'Other', icon: 'lucide:more-horizontal', color: 'blue' },
 ] as const
 
 export function AddCorrespondenceModal({ isOpen, onClose, onSuccess }: AddCorrespondenceModalProps) {
   const { create, isLoading } = useCorrespondenceStore()
-  const [selectedType, setSelectedType] = useState<'internal' | 'external' | 'sama'>('internal')
+  const [selectedType, setSelectedType] = useState<Correspondence['type']>('internal')
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([])
 
   const {
@@ -58,7 +62,7 @@ export function AddCorrespondenceModal({ isOpen, onClose, onSuccess }: AddCorres
     },
   })
 
-  const handleTypeSelect = (type: 'internal' | 'external' | 'sama') => {
+  const handleTypeSelect = (type: Correspondence['type']) => {
     setSelectedType(type)
     setValue('type', type)
   }

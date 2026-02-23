@@ -13,7 +13,7 @@ import type { Correspondence } from '@/types'
 
 const correspondenceSchema = z.object({
   subject: z.string().min(3, 'Subject must be at least 3 characters'),
-  type: z.enum(['internal', 'external', 'sama']),
+  type: z.enum(['sama', 'cma', 'internal', 'external_auditor', 'sharia_board', 'vendor', 'other']),
   status: z.enum(['draft', 'sent', 'received']),
   from: z.string().min(1, 'From is required'),
   to: z.string().min(1, 'At least one recipient is required'),
@@ -146,9 +146,13 @@ export function EditCorrespondenceModal({
                       {...field}
                       className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
                     >
-                      <option value="internal">Internal</option>
-                      <option value="external">External</option>
                       <option value="sama">SAMA</option>
+                      <option value="cma">CMA</option>
+                      <option value="internal">Internal</option>
+                      <option value="external_auditor">External Auditor</option>
+                      <option value="sharia_board">Sharia Board</option>
+                      <option value="vendor">Vendor / Third Party</option>
+                      <option value="other">Other</option>
                     </select>
                   )}
                 />

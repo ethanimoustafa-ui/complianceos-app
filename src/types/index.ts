@@ -347,7 +347,7 @@ export interface Correspondence {
   from: string
   to: string[]
   date: string
-  type: 'internal' | 'external' | 'sama'
+  type: 'sama' | 'cma' | 'internal' | 'external_auditor' | 'sharia_board' | 'vendor' | 'other'
   status: 'draft' | 'sent' | 'received'
   body: string
   attachments: Attachment[]
