@@ -53,6 +53,7 @@ function AddRequirementForm({
   const [validationError, setValidationError] = useState(false)
   const [formData, setFormData] = useState({
     name: '',
+    kind: 'rule',
     category: '',
     affectedDepartment: '',
     releaseDate: '',
@@ -63,7 +64,7 @@ function AddRequirementForm({
   })
 
   const handleSubmit = () => {
-    if (!formData.name || !formData.category || !formData.releaseDate || !formData.status) {
+    if (!formData.name || !formData.kind || !formData.category || !formData.releaseDate || !formData.status) {
       setValidationError(true)
       return
     }
@@ -72,6 +73,7 @@ function AddRequirementForm({
     setIsSubmitting(true)
     requirementStore.create({
       name: formData.name,
+      kind: formData.kind as 'rule' | 'policy',
       category: formData.category,
       affectedDepartment: formData.affectedDepartment || undefined,
       releaseDate: formData.releaseDate,
@@ -99,6 +101,20 @@ function AddRequirementForm({
             placeholder="e.g., SAMA Circular 44321/2024 - Cybersecurity Framework"
             className={`w-full px-4 py-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 ${isRTL ? 'text-right' : ''}`}
           />
+        </div>
+
+        <div>
+          <label className={`text-xs font-bold text-slate-700 uppercase mb-2 block ${isRTL ? 'text-right' : ''}`}>
+            Type *
+          </label>
+          <select
+            value={formData.kind}
+            onChange={(e) => setFormData(prev => ({ ...prev, kind: e.target.value }))}
+            className={`w-full px-4 py-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 ${isRTL ? 'text-right' : ''}`}
+          >
+            <option value="rule">Rule / Circular</option>
+            <option value="policy">Policy / Procedure</option>
+          </select>
         </div>
 
         <div className="grid grid-cols-2 gap-4">

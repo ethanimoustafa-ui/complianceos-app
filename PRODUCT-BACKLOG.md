@@ -2,7 +2,7 @@
 
 **Version:** 1.0
 **Date:** February 2026
-**Last Updated:** February 12, 2026
+**Last Updated:** February 23, 2026
 
 ---
 
@@ -91,6 +91,7 @@
 | COR-024 | Correspondence hub feed page with live multi-module metric cards | ✅ | P1 | A | FEEDBACK | Done — SAMA submissions, audit observations, saudization rate, training completion; integrates 9 stores. Feed improvements: Team Capacity "View All" link to `/team`; Upcoming Submission card pulls from all three sources (registry, SAMA letters, observations) with source colour chips and per-item Review navigation; Regulatory Tracker rows clickable with deep-link; Policy Review card overdue logic fixed (active policies past `nextReviewDate`); Rules & Circulars section added with same stats pattern; Next Deadline footer clusters all requirements sharing the nearest calendar day |
 | COR-025 | Letter list view with archive/unarchive workflow and CSV export | ✅ | P1 | A | FEEDBACK | Done — Active/archived/all filter, reply composer, letter detail modal, localized CSV export |
 | COR-026 | Deep-link navigation: feed → registry / SAMA letters / observations with auto-open detail view | ✅ | P1 | A | FEEDBACK | Done — All three destination pages read `?id=` from `useSearchParams` on mount and auto-open the matching detail view (registry view modal, SAMA letters detail view, observations detail modal). Feed "Review" buttons and Regulatory Tracker rows push `?id=` param |
+| COR-027 | Deep-link navigation: feed risk heatmap → risk register with auto-open drawer | ✅ | P1 | A | FEEDBACK | Done — Heatmap cell detail view risk cards converted to full-row `<button>` elements; clicking any risk navigates to `/reports/risks?id={risk.id}`. Risk register reads `?id=` via `useSearchParams` + `useRef` on mount and auto-opens the matching risk drawer. Closes heatmap panel and cell detail before navigating |
 
 ---
 
@@ -119,7 +120,9 @@
 | RUL-019 | Reference URL per requirement (external link to source document) | ✅ | P1 | A | FEEDBACK | Done — `referenceUrl` field, protocol guard on href, "View Reference" link in view modal |
 | RUL-020 | Affected department field with color-coded department chips | ✅ | P1 | A | FEEDBACK | Done — 7 predefined departments (Compliance, IT, Finance, Operations, Risk Management, HR, Legal), each with distinct color |
 | RUL-021 | Color-coded category badges (Cybersecurity=blue, AML/CTF=rose, Risk=amber, etc.) | ✅ | P1 | A | FEEDBACK | Done — 6 category colors + fallback, department chip stacked below in table |
-| RUL-022 | CSV export for requirements | ✅ | P1 | A | FEEDBACK | Done — `exportRequirementsLocalized()`, UTF-8 BOM, localized headers, i18n values |
+| RUL-022 | CSV export for requirements | ✅ | P1 | A | FEEDBACK | Done — `exportRequirementsLocalized()`, UTF-8 BOM, localized headers, i18n values, enriched with ID, Affected Department, Type, Checklist Progress, Checklist Items, Reference URL columns; checklist-derived progress overrides raw progress field |
+| RUL-023 | Requirement type classification (Rule/Circular vs Policy/Procedure) | ✅ | P1 | A | FEEDBACK | Done — `kind?: 'rule' | 'policy'` field on `Requirement` type and `RequirementFilters`; kind selector in create modal and edit form; "Type" column with colored badges in registry table; kind filter dropdown (All / Rule / Policy) in registry filter bar; all 15 seed items tagged `kind: 'rule'`; i18n keys added (EN + AR) |
+| RUL-024 | Registry cross-navigation links (to Regulatory Updates and Policies pages) | ✅ | P2 | A | FEEDBACK | Done — Quick-nav link buttons in registry header: "View Regulatory Updates" → `/correspondence/regulatory-updates/rules`, "View Policies" → `/correspondence/regulatory-updates/policies`; reciprocal "View Registry" link added to both regulatory-updates sub-pages |
 
 ---
 
@@ -401,7 +404,7 @@
 | GOV-004 | Sharia product review workflow | 📋 | P2 | C | BRD | |
 | GOV-005 | Sharia transaction sampling and fatwa verification | 🗺️ | P3 | C | BRD | |
 | GOV-006 | Annual Sharia compliance certification | 🗺️ | P3 | C | BRD | |
-| GOV-007 | Advisory log (internal advisories per department) | ✅ | P2 | C | BRD | Done — `advisory-store.ts` (Zustand + persist, CRUD, note threads, reassignment), full advisory page with multi-filter, pagination, status/priority/business-unit filters, localized CSV export |
+| GOV-007 | Advisory log (internal advisories per department) | ✅ | P2 | C | BRD | Done — `advisory-store.ts` (Zustand + persist, CRUD, note threads, reassignment), full advisory page with multi-filter, pagination, status/priority/business-unit filters, localized CSV export; new advisory form extended with editable "Requested By" field (pre-filled from auth user) and "Assigned To" team member dropdown; note refresh bug fixed using `useAdvisoryStore.getState()` instead of stale closure |
 | GOV-008 | Internal weekly/monthly task tracker | 📋 | P2 | C | BRD | From Compliance_Processes.xlsx |
 | GOV-009 | Link Internal Audit to both Archetype A observations and Archetype B assessments | 💡 | P1 | C | REC | Bridges correspondence and framework models |
 | GOV-010 | Link Sharia to SAMA annual Sharia report + product approvals | 💡 | P2 | C | REC | |
@@ -445,12 +448,12 @@
 
 | Status | Count | % |
 |---|---|---|
-| ✅ Done | 76 | 36% |
+| ✅ Done | 79 | 36% |
 | 🔧 In Progress (UI built, logic pending) | 26 | 12% |
-| 📋 To Do (defined, not started) | 67 | 32% |
+| 📋 To Do (defined, not started) | 67 | 31% |
 | 💡 New Recommendation | 24 | 11% |
-| 🗺️ Roadmap (future phase) | 18 | 9% |
-| **Total** | **211** | **100%** |
+| 🗺️ Roadmap (future phase) | 18 | 8% |
+| **Total** | **214** | **100%** |
 
 ### By Priority
 

@@ -867,7 +867,16 @@ export default function CorrespondenceFeedPage() {
                   low: 'bg-blue-100 text-blue-700 border-blue-200'
                 }
                 return (
-                  <div key={risk.id} className={cn('p-4 border rounded-lg', severityColors[risk.severity])}>
+                  <button
+                    key={risk.id}
+                    onClick={() => {
+                      setIsRiskMatrixOpen(false)
+                      setSelectedCellRisks(null)
+                      router.push(`/reports/risks?id=${risk.id}`)
+                    }}
+                    className={cn('w-full p-4 border rounded-lg text-left cursor-pointer transition-opacity hover:opacity-80', severityColors[risk.severity])}
+                    title="View in Risk Register"
+                  >
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex-1">
                         <p className="text-sm font-bold text-slate-900">{risk.name}</p>
@@ -876,11 +885,9 @@ export default function CorrespondenceFeedPage() {
                           <span className="text-[10px] font-bold uppercase px-2 py-0.5 bg-white rounded-full">{t('correspondence.impact')}: {risk.impact}</span>
                         </div>
                       </div>
-                      <button className="text-slate-600 hover:text-slate-900 cursor-pointer">
-                        <Icon icon="lucide:arrow-right" className="text-lg" />
-                      </button>
+                      <Icon icon="lucide:arrow-right" className="text-lg text-slate-600 shrink-0 mt-0.5" />
                     </div>
-                  </div>
+                  </button>
                 )
               })}
             </div>

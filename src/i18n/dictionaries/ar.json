@@ -647,8 +647,8 @@
   },
   "regulatoryUpdates": {
     "tabs": {
-      "rules": "القواعد والتعميمات",
-      "policies": "السياسات والإجراءات"
+      "rules": "القواعد",
+      "policies": "السياسات"
     },
     "title": "التحديثات التنظيمية",
     "subtitle": "متتبع القواعد الجديدة",
@@ -1959,7 +1959,13 @@
     "sent": "مرسل",
     "received": "مستلم",
     "internal": "داخلي",
-    "external": "خارجي"
+    "external": "خارجي",
+    "ruleCircular": "قاعدة / تعميم",
+    "policyProcedure": "سياسة",
+    "itemType": "النوع",
+    "viewRegulatoryUpdates": "عرض التحديثات التنظيمية",
+    "viewPolicies": "عرض السياسات",
+    "viewRegistry": "عرض السجل"
   },
   "advisory": {
     "title": "طلبات الاستشارة",

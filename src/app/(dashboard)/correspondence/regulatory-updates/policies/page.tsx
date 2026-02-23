@@ -255,12 +255,12 @@ export default function RegulatoryUpdatesPoliciesPage() {
           </div>
           <div className="hidden lg:block h-8 w-px bg-slate-200" />
           <div className={`flex bg-slate-100 p-1 rounded-lg ${isRTL ? 'flex-row-reverse' : ''}`}>
-            <Link href="/correspondence/regulatory-updates/rules" className={cn('px-4 py-1.5 text-sm font-bold rounded-md transition-all flex items-center gap-2 text-slate-500 hover:text-slate-700', isRTL ? 'flex-row-reverse' : '')}>
-              <Icon icon="lucide:scale" className="text-base" />
+            <Link href="/correspondence/regulatory-updates/rules" className={cn('px-9.5 py-1.5 text-xs font-bold rounded-md transition-all flex items-center gap-1.5 text-slate-500 hover:text-slate-700', isRTL ? 'flex-row-reverse' : '')}>
+              <Icon icon="lucide:scale" className="text-sm" />
               {t('regulatoryUpdates.tabs.rules')}
             </Link>
-            <Link href="/correspondence/regulatory-updates/policies" className={cn('px-4 py-1.5 text-sm font-bold rounded-md transition-all flex items-center gap-2 bg-white text-slate-900 shadow-sm', isRTL ? 'flex-row-reverse' : '')}>
-              <Icon icon="lucide:file-text" className="text-base" />
+            <Link href="/correspondence/regulatory-updates/policies" className={cn('px-9.5 py-1.5 text-xs font-bold rounded-md transition-all flex items-center gap-1.5 bg-white text-slate-900 shadow-sm', isRTL ? 'flex-row-reverse' : '')}>
+              <Icon icon="lucide:file-text" className="text-sm" />
               {t('regulatoryUpdates.tabs.policies')}
             </Link>
           </div>
@@ -357,8 +357,17 @@ export default function RegulatoryUpdatesPoliciesPage() {
               <option value="expired">{t('policies.statusExpired')}</option>
             </select>
           </div>
-          <div className={`text-xs font-bold text-slate-500 ${isRTL ? 'text-right' : ''}`}>
-            {filteredPolicies.length} {t('policies.policiesFound')}
+          <div className={`flex items-center gap-3 ${isRTL ? 'flex-row-reverse' : ''}`}>
+            <span className={`text-xs font-bold text-slate-500 ${isRTL ? 'text-right' : ''}`}>
+              {filteredPolicies.length} {t('policies.policiesFound')}
+            </span>
+            <Link
+              href="/correspondence/registry"
+              className={`px-3 py-2 text-xs font-bold text-slate-700 bg-white border border-slate-200 rounded-lg flex items-center gap-1.5 hover:bg-slate-50 transition-colors shadow-sm ${isRTL ? 'flex-row-reverse' : ''}`}
+            >
+              <Icon icon="lucide:book-open" className="text-slate-500 text-sm" />
+              {t('correspondence.viewRegistry')}
+            </Link>
           </div>
         </div>
 

@@ -1,7 +1,7 @@
 'use client'
 
-import React, { useState, useMemo, useEffect } from 'react'
-import { usePathname } from 'next/navigation'
+import React, { useState, useMemo, useEffect, useRef } from 'react'
+import { usePathname, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { Icon } from '@iconify/react'
 import { Button } from '@/components/ui/button'
@@ -192,6 +192,20 @@ export default function ReportsRisksPage() {
     }
     resetAddRiskForm(); setShowAddRiskModal(false)
   }
+
+  // Deep-link: open a specific risk from ?id= query param
+  const searchParams = useSearchParams()
+  const deepLinkIdRef = useRef(searchParams.get('id'))
+  useEffect(() => {
+    const id = deepLinkIdRef.current
+    if (!id || risks.length === 0) return
+    const target = risks.find(r => r.id === id)
+    if (target) {
+      deepLinkIdRef.current = null
+      setSelectedRisk(target)
+      setIsRiskDrawerOpen(true)
+    }
+  }, [risks]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Sync selectedRisk
   useEffect(() => {

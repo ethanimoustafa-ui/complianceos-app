@@ -814,12 +814,17 @@ export function exportAdvisoryLocalized(
  */
 export function exportRequirementsLocalized(
   requirements: Array<{
+    id: string
     name: string
     category: string
+    affectedDepartment?: string
+    kind?: string
     releaseDate: string
     status: string
     dueDate: string
     progress: number
+    checklist?: Array<{ title: string; completed: boolean }>
+    referenceUrl?: string
   }>,
   filename = 'requirements',
   t?: TranslationFunction,
@@ -834,23 +839,51 @@ export function exportRequirementsLocalized(
     completed: t ? t('common.completed') : 'Completed',
   }
 
+  const kindLabels: Record<string, string> = {
+    rule: t ? t('correspondence.ruleCircular') : 'Rule / Circular',
+    policy: t ? t('correspondence.policyProcedure') : 'Policy',
+  }
+
   const headers = [
+    'ID',
     getText('export.name', 'Name'),
     getText('export.category', 'Category'),
+    getText('correspondence.affectedDepartment', 'Affected Department'),
+    getText('correspondence.itemType', 'Type'),
     getText('export.releaseDate', 'Release Date'),
     getText('export.status', 'Status'),
     getText('export.dueDate', 'Due Date'),
     getText('export.progress', 'Progress'),
+    getText('correspondence.complianceChecklist', 'Checklist Progress'),
+    'Checklist Items',
+    getText('correspondence.referenceUrl', 'Reference URL'),
   ]
 
-  const exportData = requirements.map((req) => ({
-    [headers[0]]: req.name,
-    [headers[1]]: req.category,
-    [headers[2]]: formatExportDate(req.releaseDate, isRTL, ''),
-    [headers[3]]: statusLabels[req.status] || req.status,
-    [headers[4]]: formatExportDate(req.dueDate, isRTL, ''),
-    [headers[5]]: `${req.progress}%`,
-  }))
+  const exportData = requirements.map((req) => {
+    const checklistTotal = req.checklist?.length ?? 0
+    const checklistDone = req.checklist?.filter(i => i.completed).length ?? 0
+    const effectiveProgress = checklistTotal > 0
+      ? Math.round((checklistDone / checklistTotal) * 100)
+      : req.progress
+    const checklistItems = req.checklist && req.checklist.length > 0
+      ? req.checklist.map(i => `[${i.completed ? 'x' : ' '}] ${i.title}`).join(' | ')
+      : ''
+
+    return {
+      [headers[0]]: req.id,
+      [headers[1]]: req.name,
+      [headers[2]]: req.category,
+      [headers[3]]: req.affectedDepartment || '',
+      [headers[4]]: kindLabels[req.kind ?? 'rule'] ?? (req.kind || 'Rule / Circular'),
+      [headers[5]]: formatExportDate(req.releaseDate, isRTL, ''),
+      [headers[6]]: statusLabels[req.status] || req.status,
+      [headers[7]]: formatExportDate(req.dueDate, isRTL, ''),
+      [headers[8]]: `${effectiveProgress}%`,
+      [headers[9]]: checklistTotal > 0 ? `${checklistDone} of ${checklistTotal}` : '',
+      [headers[10]]: checklistItems,
+      [headers[11]]: req.referenceUrl || '',
+    }
+  })
 
   exportToCSV(exportData, { filename, headers })
 }

@@ -647,8 +647,8 @@
   },
   "regulatoryUpdates": {
     "tabs": {
-      "rules": "Rules & Circulars",
-      "policies": "Policies & Procedures"
+      "rules": "Rules",
+      "policies": "Policies"
     },
     "title": "Regulatory Updates",
     "subtitle": "New Rules Tracker",
@@ -1963,7 +1963,13 @@
     "sent": "Sent",
     "received": "Received",
     "internal": "Internal",
-    "external": "External"
+    "external": "External",
+    "ruleCircular": "Rule / Circular",
+    "policyProcedure": "Policy",
+    "itemType": "Type",
+    "viewRegulatoryUpdates": "View Regulatory Updates",
+    "viewPolicies": "View Policies",
+    "viewRegistry": "View Registry"
   },
   "advisory": {
     "title": "Advisory Requests",

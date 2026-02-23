@@ -60,6 +60,8 @@ export default function AdvisoryPage() {
   const [newAdvBusinessUnit, setNewAdvBusinessUnit] = useState<BusinessUnit | ''>('')
   const [newAdvPriority, setNewAdvPriority] = useState<AdvisoryPriority | ''>('')
   const [newAdvDescription, setNewAdvDescription] = useState('')
+  const [newAdvRequestedBy, setNewAdvRequestedBy] = useState<string>(authStore.user?.name || '')
+  const [newAdvAssignedTo, setNewAdvAssignedTo] = useState<string>('')
 
   // Advisory detail state
   const [newNoteContent, setNewNoteContent] = useState('')
@@ -503,6 +505,34 @@ export default function AdvisoryPage() {
               </select>
             </div>
           </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className={`text-xs font-bold text-slate-700 uppercase mb-2 block ${isRTL ? 'text-right' : ''}`}>
+                {t('advisory.requestedBy' as TranslationKey)}
+              </label>
+              <input
+                type="text"
+                value={newAdvRequestedBy}
+                onChange={(e) => setNewAdvRequestedBy(e.target.value)}
+                className={`w-full px-4 py-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 ${isRTL ? 'text-right' : ''}`}
+              />
+            </div>
+            <div>
+              <label className={`text-xs font-bold text-slate-700 uppercase mb-2 block ${isRTL ? 'text-right' : ''}`}>
+                {t('advisory.assignedTo' as TranslationKey)}
+              </label>
+              <select
+                value={newAdvAssignedTo}
+                onChange={(e) => setNewAdvAssignedTo(e.target.value)}
+                className={`w-full px-4 py-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 ${isRTL ? 'text-right' : ''}`}
+              >
+                <option value="">—</option>
+                {teamStore.members.map(m => (
+                  <option key={m.id} value={m.name}>{m.name}</option>
+                ))}
+              </select>
+            </div>
+          </div>
           <div>
             <label className={`text-xs font-bold text-slate-700 uppercase mb-2 block ${isRTL ? 'text-right' : ''}`}>
               {t('advisory.description')} *
@@ -528,13 +558,16 @@ export default function AdvisoryPage() {
                   businessUnit: newAdvBusinessUnit as BusinessUnit,
                   status: 'pending',
                   priority: newAdvPriority as AdvisoryPriority,
-                  requestedBy: authStore.user?.name || 'Unknown',
+                  requestedBy: newAdvRequestedBy || authStore.user?.name || 'Unknown',
+                  assignedTo: newAdvAssignedTo || undefined,
                   requestedDate: new Date().toISOString().split('T')[0],
                 })
                 setNewAdvSubject('')
                 setNewAdvBusinessUnit('')
                 setNewAdvPriority('')
                 setNewAdvDescription('')
+                setNewAdvRequestedBy(authStore.user?.name || '')
+                setNewAdvAssignedTo('')
                 setIsNewAdvisoryOpen(false)
                 showToast(t('advisory.requestSubmitted'))
               }}
@@ -640,7 +673,7 @@ export default function AdvisoryPage() {
                       content: newNoteContent.trim(),
                     })
                     // Update local selectedAdvisory to reflect the new note
-                    const updated = advisoryStore.advisoryRequests.find(r => r.id === selectedAdvisory.id)
+                    const updated = useAdvisoryStore.getState().advisoryRequests.find(r => r.id === selectedAdvisory.id)
                     if (updated) setSelectedAdvisory(updated)
                     setNewNoteContent('')
                     showToast(t('advisory.noteAdded'))

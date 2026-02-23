@@ -401,6 +401,7 @@ export type RequirementStatus = 'implementing' | 'drafting' | 'completed' | 'pen
 export interface Requirement {
   id: string
   name: string
+  kind?: 'rule' | 'policy'
   category: string
   affectedDepartment?: string
   releaseDate: string
@@ -417,6 +418,7 @@ export interface Requirement {
 export interface RequirementFilters {
   status?: RequirementStatus[]
   category?: string[]
+  kind?: ('rule' | 'policy')[]
   search?: string
   dateRange?: { from: string; to: string }
 }

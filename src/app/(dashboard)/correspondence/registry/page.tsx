@@ -117,6 +117,7 @@ export default function RegistryPage() {
   const [searchTerm, setSearchTerm] = useState('')
   const [categoryFilter, setCategoryFilter] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
+  const [kindFilter, setKindFilter] = useState('')
   const [sort, setSort] = useState<SortState>(null)
 
   // Deep-link: auto-open view modal when ?id= is present
@@ -175,7 +176,8 @@ export default function RegistryPage() {
       const matchesSearch = req.name.toLowerCase().includes(searchTerm.toLowerCase())
       const matchesCategory = !categoryFilter || req.category === categoryFilter
       const matchesStatus = !statusFilter || req.status === statusFilter
-      return matchesSearch && matchesCategory && matchesStatus
+      const matchesKind = !kindFilter || (req.kind ?? 'rule') === kindFilter
+      return matchesSearch && matchesCategory && matchesStatus && matchesKind
     })
     if (!sort) return filtered
     const { col, dir } = sort
@@ -191,7 +193,7 @@ export default function RegistryPage() {
         default:         return 0
       }
     })
-  }, [requirementStore.requirements, searchTerm, categoryFilter, statusFilter, sort])
+  }, [requirementStore.requirements, searchTerm, categoryFilter, statusFilter, kindFilter, sort])
 
   const uniqueCategories = useMemo(() =>
     [...new Set(requirementStore.requirements.map(r => r.category))],
@@ -215,6 +217,14 @@ export default function RegistryPage() {
                 <h1 className="text-2xl font-bold font-display text-slate-900">{t('correspondence.regulatoryRequirements')}</h1>
               </div>
               <p className={`text-sm text-slate-500 ${isRTL ? 'mr-11' : 'ml-11'}`}>{t('correspondence.comprehensiveList')}</p>
+              <div className={`flex gap-2 mt-2 ${isRTL ? 'mr-11 flex-row-reverse' : 'ml-11'}`}>
+                <Link href="/correspondence/regulatory-updates/rules" className={`px-3 py-1 text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 rounded-lg border border-emerald-200 flex items-center gap-1 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                  {t('correspondence.viewRegulatoryUpdates' as TranslationKey)} <Icon icon="lucide:arrow-right" className="text-xs" />
+                </Link>
+                <Link href="/correspondence/regulatory-updates/policies" className={`px-3 py-1 text-xs font-bold text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-lg border border-blue-200 flex items-center gap-1 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                  {t('correspondence.viewPolicies' as TranslationKey)} <Icon icon="lucide:arrow-right" className="text-xs" />
+                </Link>
+              </div>
             </div>
             <button
               onClick={() => setIsAddRequirementOpen(true)}
@@ -268,10 +278,22 @@ export default function RegistryPage() {
                   <option value="pending">{t('common.pending')}</option>
                 </select>
               </div>
+              <div>
+                <label className={`text-xs font-bold text-slate-700 uppercase mb-2 block`}>{t('correspondence.itemType' as TranslationKey)}</label>
+                <select
+                  value={kindFilter}
+                  onChange={(e) => setKindFilter(e.target.value)}
+                  className={`w-full px-4 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500`}
+                >
+                  <option value="">All Types</option>
+                  <option value="rule">{t('correspondence.ruleCircular' as TranslationKey)}</option>
+                  <option value="policy">{t('correspondence.policyProcedure' as TranslationKey)}</option>
+                </select>
+              </div>
             </div>
             <div className={`flex gap-3 mt-4`}>
               <button
-                onClick={() => { setSearchTerm(''); setCategoryFilter(''); setStatusFilter(''); }}
+                onClick={() => { setSearchTerm(''); setCategoryFilter(''); setStatusFilter(''); setKindFilter(''); }}
                 className={`px-4 py-2 text-sm font-bold text-slate-600 hover:text-slate-900 transition-colors flex items-center gap-1 cursor-pointer`}
               >
                 <Icon icon="lucide:x" className="text-lg" />
@@ -286,11 +308,14 @@ export default function RegistryPage() {
               <table className="w-full">
                 <thead className="bg-slate-50 border-b-2 border-slate-200">
                   <tr>
-                    <th className={`text-left p-4 text-xs font-black text-slate-600 uppercase tracking-wider`}>
+                    <th className={`text-left p-4 text-xs font-black text-slate-600 uppercase tracking-wider w-64`}>
                       <SortHeader label={t('correspondence.requirementName')} col="name" sort={sort} onSort={handleSort} onClear={() => setSort(null)} isRTL={isRTL} />
                     </th>
                     <th className={`text-left p-4 text-xs font-black text-slate-600 uppercase tracking-wider`}>
                       <SortHeader label={t('correspondence.category')} col="category" sort={sort} onSort={handleSort} onClear={() => setSort(null)} isRTL={isRTL} />
+                    </th>
+                    <th className={`text-left p-4 text-xs font-black text-slate-600 uppercase tracking-wider`}>
+                      {t('correspondence.itemType' as TranslationKey)}
                     </th>
                     <th className={`text-left p-4 text-xs font-black text-slate-600 uppercase tracking-wider`}>
                       <SortHeader label={t('correspondence.releaseDate')} col="releaseDate" sort={sort} onSort={handleSort} onClear={() => setSort(null)} isRTL={isRTL} />
@@ -310,8 +335,8 @@ export default function RegistryPage() {
                 <tbody>
                   {filteredRequirements.map(req => (
                     <tr key={req.id} className="border-b border-slate-100 hover:bg-slate-50 transition-colors">
-                      <td className="p-4">
-                        <p className="text-sm font-bold text-slate-900">{req.name}</p>
+                      <td className="p-4 w-64 max-w-64">
+                        <p className="text-sm font-bold text-slate-900 line-clamp-2">{req.name}</p>
                       </td>
                       <td className="p-4">
                         <div className={`flex flex-col items-start gap-1 ${isRTL ? 'items-end' : ''}`}>
@@ -320,6 +345,17 @@ export default function RegistryPage() {
                             <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${departmentColors[req.affectedDepartment] ?? departmentColorFallback}`}>{req.affectedDepartment}</span>
                           )}
                         </div>
+                      </td>
+                      <td className="p-4">
+                        {(req.kind ?? 'rule') === 'rule' ? (
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full border bg-emerald-50 text-emerald-700 border-emerald-200 whitespace-nowrap">
+                            {t('correspondence.ruleCircular' as TranslationKey)}
+                          </span>
+                        ) : (
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full border bg-blue-50 text-blue-700 border-blue-200 whitespace-nowrap">
+                            {t('correspondence.policyProcedure' as TranslationKey)}
+                          </span>
+                        )}
                       </td>
                       <td className="p-4 text-sm text-slate-600">{req.releaseDate}</td>
                       <td className="p-4">
@@ -589,6 +625,7 @@ function EditRequirementForm({
   const [checklistItems, setChecklistItems] = useState<ChecklistItem[]>(requirement.checklist ?? [])
   const [formData, setFormData] = useState({
     name: requirement.name,
+    kind: requirement.kind ?? 'rule',
     category: requirement.category,
     affectedDepartment: requirement.affectedDepartment ?? '',
     releaseDate: requirement.releaseDate,
@@ -626,6 +663,7 @@ function EditRequirementForm({
     setIsSubmitting(true)
     requirementStore.update(requirement.id, {
       name: formData.name,
+      kind: formData.kind as 'rule' | 'policy',
       category: formData.category,
       affectedDepartment: formData.affectedDepartment || undefined,
       releaseDate: formData.releaseDate,
@@ -651,6 +689,18 @@ function EditRequirementForm({
             onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
             className={`w-full px-4 py-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500`}
           />
+        </div>
+
+        <div>
+          <label className={`text-xs font-bold text-slate-700 uppercase mb-2 block`}>Type *</label>
+          <select
+            value={formData.kind}
+            onChange={(e) => setFormData(prev => ({ ...prev, kind: e.target.value as 'rule' | 'policy' }))}
+            className={`w-full px-4 py-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500`}
+          >
+            <option value="rule">Rule / Circular</option>
+            <option value="policy">Policy / Procedure</option>
+          </select>
         </div>
 
         <div className="grid grid-cols-2 gap-4">
