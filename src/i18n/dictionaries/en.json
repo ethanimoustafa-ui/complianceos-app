@@ -58,7 +58,10 @@
     "selectCategory": "Select Category",
     "enterCategory": "Enter new category",
     "notes": "Notes",
-    "edited": "edited"
+    "edited": "edited",
+    "yes": "Yes",
+    "no": "No",
+    "progress": "Progress"
   },
   "navigation": {
     "dashboard": "Dashboard",
@@ -1806,7 +1809,11 @@
   "correspondence": {
     "tabs": {
       "correspondence": "Correspondence",
-      "advisory": "Advisory"
+      "advisory": "Advisory",
+      "registry": "Registry",
+      "samaLetters": "SAMA Letters",
+      "observations": "Observations",
+      "regulatoryUpdates": "Regulatory Updates"
     },
     "title": "Correspondence Hub",
     "subtitle": "Regulatory Command Center",
@@ -1910,8 +1917,37 @@
     "openingPrmReport": "Opening PRM Report for review...",
     "noRisksInCategory": "No risks in this category",
     "requirementAdded": "Requirement added successfully!",
+    "requirementUpdated": "Requirement updated successfully!",
+    "requirementDeleted": "Requirement deleted successfully!",
+    "editRequirement": "Edit Requirement",
+    "referenceUrl": "Reference URL",
+    "referenceUrlPlaceholder": "https://...",
+    "affectedDepartment": "Affected Department",
+    "complianceChecklist": "Compliance Checklist",
+    "addChecklistItem": "Add Item",
+    "checklistItemPlaceholder": "e.g., Conduct gap analysis",
+    "noChecklistItems": "No checklist items yet. Add the first one below.",
+    "checklistProgress": "{{done}} of {{total}} tasks completed",
+    "viewReference": "View Reference",
     "fillRequiredFields": "Please fill in all required fields",
-    "load": "Load"
+    "load": "Load",
+    "noRequirements": "No requirements tracked yet",
+    "noCorrespondence": "No correspondence yet",
+    "noMembers": "No team members",
+    "justNow": "Just now",
+    "overdue": "Overdue",
+    "hoursAgo": "{{count}}h ago",
+    "daysAgo": "{{count}}d ago",
+    "dueInDays": "Due in {{count}} days",
+    "noUpcomingSubmissions": "No upcoming submissions",
+    "noUpcomingReviews": "No upcoming reviews",
+    "filterAll": "All",
+    "filterActive": "Active",
+    "filterArchived": "Archived",
+    "sent": "Sent",
+    "received": "Received",
+    "internal": "Internal",
+    "external": "External"
   },
   "advisory": {
     "title": "Advisory Requests",
@@ -1956,6 +1992,8 @@
     "reassign": "Reassign",
     "statusUpdated": "Status updated successfully!",
     "assignmentUpdated": "Assignment updated!",
+    "requestDeleted": "Advisory request deleted",
+    "selectAssignee": "Select assignee",
     "noRequests": "No advisory requests found",
     "noRequestsDescription": "Try adjusting your filters or create a new request",
     "timeframe": "Timeframe",
@@ -2017,7 +2055,19 @@
     "frameworks": "Frameworks",
     "deductions": "Deductions",
     "riskDistribution": "Risk Distribution",
-    "findings": "Audit Findings"
+    "findings": "Audit Findings",
+    "subject": "Subject",
+    "type": "Type",
+    "from": "From",
+    "to": "To",
+    "date": "Date",
+    "archived": "Archived",
+    "name": "Name",
+    "releaseDate": "Release Date",
+    "businessUnit": "Business Unit",
+    "requestedBy": "Requested By",
+    "assignedTo": "Assigned To",
+    "notesCount": "Notes Count"
   },
   "auditDetail": {
     "audits": "Audits",

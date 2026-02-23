@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { persist } from 'zustand/middleware'
 import type { Correspondence, PaginationState, SortState } from '@/types'
 
 interface CorrespondenceFilters {
@@ -18,177 +19,168 @@ interface CorrespondenceState {
   error: string | null
 
   // Actions
-  fetchAll: () => Promise<void>
-  fetchById: (id: string) => Promise<Correspondence | null>
-  create: (data: Omit<Correspondence, 'id' | 'createdAt' | 'updatedAt'>) => Promise<Correspondence>
-  update: (id: string, data: Partial<Correspondence>) => Promise<Correspondence>
-  delete: (id: string) => Promise<void>
+  fetchAll: () => void
+  fetchById: (id: string) => Correspondence | null
+  create: (data: Omit<Correspondence, 'id' | 'createdAt' | 'updatedAt'>) => Correspondence
+  update: (id: string, data: Partial<Correspondence>) => Correspondence
+  delete: (id: string) => void
   setFilters: (filters: CorrespondenceFilters) => void
   clearFilters: () => void
   setSelected: (correspondence: Correspondence | null) => void
   setSort: (sort: SortState) => void
   setPage: (page: number) => void
   setPageSize: (pageSize: number) => void
+  getNextReference: () => string
 }
 
-export const useCorrespondenceStore = create<CorrespondenceState>((set, get) => ({
-  correspondence: [],
-  selectedCorrespondence: null,
-  filters: {},
-  pagination: {
-    page: 1,
-    pageSize: 10,
-    total: 0,
-    totalPages: 0,
+const seedCorrespondence: Correspondence[] = [
+  {
+    id: 'COR-001',
+    subject: 'Sent to SAMA',
+    from: 'Compliance Department',
+    to: ['SAMA'],
+    date: '2024-10-20T10:00:00.000Z',
+    type: 'sama',
+    status: 'sent',
+    body: 'Clarification on Risk Management Hub',
+    attachments: [],
+    archived: false,
+    reference: 'CM-9942',
+    createdAt: '2024-10-20T10:00:00.000Z',
+    updatedAt: '2024-10-20T10:00:00.000Z',
   },
-  sort: {
-    field: 'date',
-    direction: 'desc',
+  {
+    id: 'COR-002',
+    subject: 'Draft - Quarterly Filing',
+    from: 'Compliance Department',
+    to: ['SAMA'],
+    date: '2024-10-19T08:00:00.000Z',
+    type: 'sama',
+    status: 'draft',
+    body: 'Q3 Compliance Report Summary',
+    attachments: [],
+    archived: false,
+    reference: 'CM-9943',
+    assignee: 'Felix H.',
+    createdAt: '2024-10-19T08:00:00.000Z',
+    updatedAt: '2024-10-19T08:00:00.000Z',
   },
-  isLoading: false,
-  error: null,
+]
 
-  fetchAll: async () => {
-    set({ isLoading: true, error: null })
-    try {
-      // TODO: Replace with actual API call
-      await new Promise((resolve) => setTimeout(resolve, 500))
-
-      // Mock data for now - will be replaced with API response
-      const mockCorrespondence: Correspondence[] = []
-
-      set({
-        correspondence: mockCorrespondence,
-        pagination: {
-          ...get().pagination,
-          total: mockCorrespondence.length,
-          totalPages: Math.ceil(mockCorrespondence.length / get().pagination.pageSize),
-        },
-        isLoading: false,
-      })
-    } catch (error) {
-      set({
-        error: error instanceof Error ? error.message : 'Failed to fetch correspondence',
-        isLoading: false,
-      })
-    }
-  },
-
-  fetchById: async (id: string) => {
-    set({ isLoading: true, error: null })
-    try {
-      // TODO: Replace with actual API call
-      await new Promise((resolve) => setTimeout(resolve, 300))
-
-      const item = get().correspondence.find((c) => c.id === id) || null
-      set({ selectedCorrespondence: item, isLoading: false })
-      return item
-    } catch (error) {
-      set({
-        error: error instanceof Error ? error.message : 'Failed to fetch correspondence',
-        isLoading: false,
-      })
-      return null
-    }
-  },
-
-  create: async (data) => {
-    set({ isLoading: true, error: null })
-    try {
-      // TODO: Replace with actual API call
-      await new Promise((resolve) => setTimeout(resolve, 500))
-
-      const newCorrespondence: Correspondence = {
-        ...data,
-        id: crypto.randomUUID(),
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      }
-
-      set((state) => ({
-        correspondence: [newCorrespondence, ...state.correspondence],
-        isLoading: false,
-      }))
-
-      return newCorrespondence
-    } catch (error) {
-      set({
-        error: error instanceof Error ? error.message : 'Failed to create correspondence',
-        isLoading: false,
-      })
-      throw error
-    }
-  },
-
-  update: async (id: string, data: Partial<Correspondence>) => {
-    set({ isLoading: true, error: null })
-    try {
-      // TODO: Replace with actual API call
-      await new Promise((resolve) => setTimeout(resolve, 500))
-
-      let updatedCorrespondence: Correspondence | null = null
-
-      set((state) => ({
-        correspondence: state.correspondence.map((c) => {
-          if (c.id === id) {
-            updatedCorrespondence = { ...c, ...data, updatedAt: new Date().toISOString() }
-            return updatedCorrespondence
-          }
-          return c
-        }),
-        selectedCorrespondence:
-          state.selectedCorrespondence?.id === id
-            ? { ...state.selectedCorrespondence, ...data, updatedAt: new Date().toISOString() }
-            : state.selectedCorrespondence,
-        isLoading: false,
-      }))
-
-      if (!updatedCorrespondence) {
-        throw new Error('Correspondence not found')
-      }
-
-      return updatedCorrespondence
-    } catch (error) {
-      set({
-        error: error instanceof Error ? error.message : 'Failed to update correspondence',
-        isLoading: false,
-      })
-      throw error
-    }
-  },
-
-  delete: async (id: string) => {
-    set({ isLoading: true, error: null })
-    try {
-      // TODO: Replace with actual API call
-      await new Promise((resolve) => setTimeout(resolve, 500))
-
-      set((state) => ({
-        correspondence: state.correspondence.filter((c) => c.id !== id),
-        selectedCorrespondence:
-          state.selectedCorrespondence?.id === id ? null : state.selectedCorrespondence,
-        isLoading: false,
-      }))
-    } catch (error) {
-      set({
-        error: error instanceof Error ? error.message : 'Failed to delete correspondence',
-        isLoading: false,
-      })
-      throw error
-    }
-  },
-
-  setFilters: (filters) => set({ filters }),
-  clearFilters: () => set({ filters: {} }),
-  setSelected: (correspondence) => set({ selectedCorrespondence: correspondence }),
-  setSort: (sort) => set({ sort }),
-  setPage: (page) => set((state) => ({ pagination: { ...state.pagination, page } })),
-  setPageSize: (pageSize) =>
-    set((state) => ({
+export const useCorrespondenceStore = create<CorrespondenceState>()(
+  persist(
+    (set, get) => ({
+      correspondence: seedCorrespondence,
+      selectedCorrespondence: null,
+      filters: {},
       pagination: {
-        ...state.pagination,
-        pageSize,
-        totalPages: Math.ceil(state.pagination.total / pageSize),
+        page: 1,
+        pageSize: 10,
+        total: 0,
+        totalPages: 0,
       },
-    })),
-}))
+      sort: {
+        field: 'date',
+        direction: 'desc',
+      },
+      isLoading: false,
+      error: null,
+
+      fetchAll: () => {
+        const existing = get().correspondence
+        set({
+          pagination: {
+            ...get().pagination,
+            total: existing.length,
+            totalPages: Math.ceil(existing.length / get().pagination.pageSize),
+          },
+        })
+      },
+
+      fetchById: (id: string) => {
+        const item = get().correspondence.find((c) => c.id === id) || null
+        set({ selectedCorrespondence: item })
+        return item
+      },
+
+      create: (data) => {
+        const now = new Date().toISOString()
+        const ref = get().getNextReference()
+        const newCorrespondence: Correspondence = {
+          ...data,
+          id: ref,
+          reference: data.reference || ref,
+          createdAt: now,
+          updatedAt: now,
+        }
+
+        set((state) => ({
+          correspondence: [newCorrespondence, ...state.correspondence],
+        }))
+
+        return newCorrespondence
+      },
+
+      update: (id: string, data: Partial<Correspondence>) => {
+        let updated: Correspondence | null = null
+
+        set((state) => ({
+          correspondence: state.correspondence.map((c) => {
+            if (c.id === id) {
+              updated = { ...c, ...data, updatedAt: new Date().toISOString() }
+              return updated
+            }
+            return c
+          }),
+          selectedCorrespondence:
+            state.selectedCorrespondence?.id === id
+              ? { ...state.selectedCorrespondence, ...data, updatedAt: new Date().toISOString() }
+              : state.selectedCorrespondence,
+        }))
+
+        if (!updated) {
+          throw new Error('Correspondence not found')
+        }
+
+        return updated
+      },
+
+      delete: (id: string) => {
+        set((state) => ({
+          correspondence: state.correspondence.filter((c) => c.id !== id),
+          selectedCorrespondence:
+            state.selectedCorrespondence?.id === id ? null : state.selectedCorrespondence,
+        }))
+      },
+
+      getNextReference: () => {
+        const existing = get().correspondence
+          .map(c => c.id.match(/^COR-(\d+)$/))
+          .filter(Boolean)
+          .map(m => parseInt(m![1], 10))
+        const next = existing.length > 0 ? Math.max(...existing) + 1 : 1
+        return `COR-${String(next).padStart(3, '0')}`
+      },
+
+      setFilters: (filters) => set({ filters }),
+      clearFilters: () => set({ filters: {} }),
+      setSelected: (correspondence) => set({ selectedCorrespondence: correspondence }),
+      setSort: (sort) => set({ sort }),
+      setPage: (page) => set((state) => ({ pagination: { ...state.pagination, page } })),
+      setPageSize: (pageSize) =>
+        set((state) => ({
+          pagination: {
+            ...state.pagination,
+            pageSize,
+            totalPages: Math.ceil(state.pagination.total / pageSize),
+          },
+        })),
+    }),
+    {
+      name: 'correspondence-storage',
+      partialize: (state) => ({
+        correspondence: state.correspondence,
+      }),
+    }
+  )
+)

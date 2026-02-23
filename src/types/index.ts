@@ -17,6 +17,7 @@ export interface TeamMember extends User {
   status: 'active' | 'inactive' | 'pending'
   joinedAt: string
   invitedBy?: string
+  nationality?: string
 }
 
 // Audit types
@@ -351,8 +352,73 @@ export interface Correspondence {
   body: string
   attachments: Attachment[]
   threadId?: string
+  archived?: boolean
+  reference?: string
+  assignee?: string
   createdAt: string
   updatedAt: string
+}
+
+// Advisory types
+export type AdvisoryStatus = 'pending' | 'in_progress' | 'completed'
+export type AdvisoryPriority = 'low' | 'medium' | 'high'
+export type BusinessUnit = 'corporate_banking' | 'compliance' | 'it' | 'risk_management' | 'finance' | 'operations' | 'hr'
+
+export interface AdvisoryNote {
+  id: string
+  author: string
+  content: string
+  timestamp: string
+}
+
+export interface AdvisoryRequest {
+  id: string
+  ref: string
+  subject: string
+  description: string
+  businessUnit: BusinessUnit
+  status: AdvisoryStatus
+  priority: AdvisoryPriority
+  requestedBy: string
+  requestedDate: string
+  assignedTo?: string
+  notes: AdvisoryNote[]
+  createdAt: string
+  updatedAt: string
+}
+
+export interface AdvisoryFilters {
+  status?: AdvisoryStatus[]
+  priority?: AdvisoryPriority[]
+  businessUnit?: BusinessUnit[]
+  search?: string
+  dateRange?: { from: string; to: string }
+}
+
+// Requirement types
+export type RequirementStatus = 'implementing' | 'drafting' | 'completed' | 'pending'
+
+export interface Requirement {
+  id: string
+  name: string
+  category: string
+  affectedDepartment?: string
+  releaseDate: string
+  status: RequirementStatus
+  dueDate: string
+  description?: string
+  progress: number
+  referenceUrl?: string
+  checklist?: ChecklistItem[]
+  createdAt: string
+  updatedAt: string
+}
+
+export interface RequirementFilters {
+  status?: RequirementStatus[]
+  category?: string[]
+  search?: string
+  dateRange?: { from: string; to: string }
 }
 
 // Training Module

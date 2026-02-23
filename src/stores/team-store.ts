@@ -3,11 +3,11 @@ import type { TeamMember, PaginationState, SortState } from '@/types'
 
 // Sample team members for dropdown and display
 const sampleMembers: TeamMember[] = [
-  { id: '1', name: 'Sarah Connor', email: 'sarah@company.com', role: 'manager', department: 'Compliance', avatar: 'Sarah', workload: 65, status: 'active', joinedAt: '2023-01-15' },
-  { id: '2', name: 'Ahmed Khan', email: 'ahmed@company.com', role: 'officer', department: 'Risk Management', avatar: 'Ahmed', workload: 45, status: 'active', joinedAt: '2023-03-20' },
-  { id: '3', name: 'Lisa Martinez', email: 'lisa@company.com', role: 'officer', department: 'Legal', avatar: 'Lisa', workload: 80, status: 'active', joinedAt: '2022-11-01' },
-  { id: '4', name: 'Michael Scott', email: 'michael@company.com', role: 'admin', department: 'IT & Cybersecurity', avatar: 'Michael', workload: 55, status: 'active', joinedAt: '2022-06-10' },
-  { id: '5', name: 'Dr. Hassan Ali', email: 'hassan@company.com', role: 'manager', department: 'Compliance', avatar: 'Hassan', workload: 70, status: 'active', joinedAt: '2021-09-05' },
+  { id: '1', name: 'Sarah Connor', email: 'sarah@company.com', role: 'manager', department: 'Compliance', avatar: 'Sarah', workload: 65, status: 'active', joinedAt: '2023-01-15', nationality: 'Saudi' },
+  { id: '2', name: 'Ahmed Khan', email: 'ahmed@company.com', role: 'officer', department: 'Risk Management', avatar: 'Ahmed', workload: 45, status: 'active', joinedAt: '2023-03-20', nationality: 'Saudi' },
+  { id: '3', name: 'Lisa Martinez', email: 'lisa@company.com', role: 'officer', department: 'Legal', avatar: 'Lisa', workload: 80, status: 'active', joinedAt: '2022-11-01', nationality: 'American' },
+  { id: '4', name: 'Michael Scott', email: 'michael@company.com', role: 'admin', department: 'IT & Cybersecurity', avatar: 'Michael', workload: 55, status: 'active', joinedAt: '2022-06-10', nationality: 'British' },
+  { id: '5', name: 'Dr. Hassan Ali', email: 'hassan@company.com', role: 'manager', department: 'Compliance', avatar: 'Hassan', workload: 70, status: 'active', joinedAt: '2021-09-05', nationality: 'Saudi' },
 ]
 
 interface TeamFilters {

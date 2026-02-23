@@ -681,6 +681,181 @@ export function exportRisksLocalized(
 }
 
 /**
+ * Export correspondence to CSV with localization support
+ */
+export function exportCorrespondenceLocalized(
+  items: Array<{
+    reference?: string
+    subject: string
+    type: string
+    status: string
+    from: string
+    to: string[]
+    date: string
+    archived?: boolean
+  }>,
+  filename = 'correspondence',
+  t?: TranslationFunction,
+  isRTL = false
+): void {
+  const getText = (key: string, fallback: string) => t ? t(key) : fallback
+
+  const statusLabels: Record<string, string> = {
+    draft: t ? t('common.draft') : 'Draft',
+    sent: t ? t('correspondence.sent') : 'Sent',
+    received: t ? t('correspondence.received') : 'Received',
+  }
+
+  const typeLabels: Record<string, string> = {
+    internal: t ? t('correspondence.internal') : 'Internal',
+    external: t ? t('correspondence.external') : 'External',
+    sama: 'SAMA',
+  }
+
+  const headers = [
+    getText('export.reference', 'Reference'),
+    getText('export.subject', 'Subject'),
+    getText('export.type', 'Type'),
+    getText('export.status', 'Status'),
+    getText('export.from', 'From'),
+    getText('export.to', 'To'),
+    getText('export.date', 'Date'),
+    getText('export.archived', 'Archived'),
+  ]
+
+  const exportData = items.map((item) => ({
+    [headers[0]]: item.reference || '',
+    [headers[1]]: item.subject,
+    [headers[2]]: typeLabels[item.type] || item.type,
+    [headers[3]]: statusLabels[item.status] || item.status,
+    [headers[4]]: item.from,
+    [headers[5]]: item.to.join('; '),
+    [headers[6]]: formatExportDate(item.date, isRTL, ''),
+    [headers[7]]: item.archived ? (t ? t('common.yes') : 'Yes') : (t ? t('common.no') : 'No'),
+  }))
+
+  exportToCSV(exportData, { filename, headers })
+}
+
+/**
+ * Export advisory requests to CSV with localization support
+ */
+export function exportAdvisoryLocalized(
+  requests: Array<{
+    ref: string
+    subject: string
+    businessUnit: string
+    status: string
+    priority: string
+    requestedBy: string
+    requestedDate: string
+    assignedTo?: string
+    notes: Array<unknown>
+  }>,
+  filename = 'advisory-requests',
+  t?: TranslationFunction,
+  isRTL = false
+): void {
+  const getText = (key: string, fallback: string) => t ? t(key) : fallback
+
+  const statusLabels: Record<string, string> = {
+    pending: t ? t('common.pending') : 'Pending',
+    in_progress: t ? t('advisory.inProgress') : 'In Progress',
+    completed: t ? t('common.completed') : 'Completed',
+  }
+
+  const priorityLabels: Record<string, string> = {
+    low: t ? t('advisory.low') : 'Low',
+    medium: t ? t('advisory.medium') : 'Medium',
+    high: t ? t('advisory.high') : 'High',
+  }
+
+  const unitLabels: Record<string, string> = {
+    corporate_banking: t ? t('advisory.corporateBanking') : 'Corporate Banking',
+    compliance: t ? t('advisory.compliance') : 'Compliance',
+    it: t ? t('advisory.it') : 'IT',
+    risk_management: t ? t('advisory.riskManagement') : 'Risk Management',
+    finance: t ? t('advisory.finance') : 'Finance',
+    operations: t ? t('advisory.operations') : 'Operations',
+    hr: t ? t('advisory.hr') : 'HR',
+  }
+
+  const headers = [
+    getText('export.reference', 'Ref'),
+    getText('export.subject', 'Subject'),
+    getText('export.businessUnit', 'Business Unit'),
+    getText('export.status', 'Status'),
+    getText('export.priority', 'Priority'),
+    getText('export.requestedBy', 'Requested By'),
+    getText('export.date', 'Date'),
+    getText('export.assignedTo', 'Assigned To'),
+    getText('export.notesCount', 'Notes Count'),
+  ]
+
+  const naText = getText('export.unassigned', 'Unassigned')
+
+  const exportData = requests.map((req) => ({
+    [headers[0]]: req.ref,
+    [headers[1]]: req.subject,
+    [headers[2]]: unitLabels[req.businessUnit] || req.businessUnit,
+    [headers[3]]: statusLabels[req.status] || req.status,
+    [headers[4]]: priorityLabels[req.priority] || req.priority,
+    [headers[5]]: req.requestedBy,
+    [headers[6]]: formatExportDate(req.requestedDate, isRTL, ''),
+    [headers[7]]: req.assignedTo || naText,
+    [headers[8]]: req.notes.length,
+  }))
+
+  exportToCSV(exportData, { filename, headers })
+}
+
+/**
+ * Export requirements to CSV with localization support
+ */
+export function exportRequirementsLocalized(
+  requirements: Array<{
+    name: string
+    category: string
+    releaseDate: string
+    status: string
+    dueDate: string
+    progress: number
+  }>,
+  filename = 'requirements',
+  t?: TranslationFunction,
+  isRTL = false
+): void {
+  const getText = (key: string, fallback: string) => t ? t(key) : fallback
+
+  const statusLabels: Record<string, string> = {
+    pending: t ? t('common.pending') : 'Pending',
+    drafting: t ? t('correspondence.drafting') : 'Drafting',
+    implementing: t ? t('correspondence.implementing') : 'Implementing',
+    completed: t ? t('common.completed') : 'Completed',
+  }
+
+  const headers = [
+    getText('export.name', 'Name'),
+    getText('export.category', 'Category'),
+    getText('export.releaseDate', 'Release Date'),
+    getText('export.status', 'Status'),
+    getText('export.dueDate', 'Due Date'),
+    getText('export.progress', 'Progress'),
+  ]
+
+  const exportData = requirements.map((req) => ({
+    [headers[0]]: req.name,
+    [headers[1]]: req.category,
+    [headers[2]]: formatExportDate(req.releaseDate, isRTL, ''),
+    [headers[3]]: statusLabels[req.status] || req.status,
+    [headers[4]]: formatExportDate(req.dueDate, isRTL, ''),
+    [headers[5]]: `${req.progress}%`,
+  }))
+
+  exportToCSV(exportData, { filename, headers })
+}
+
+/**
  * Generate a simple HTML-based printable report (can be saved as PDF via browser print)
  */
 export function generatePrintableReport(

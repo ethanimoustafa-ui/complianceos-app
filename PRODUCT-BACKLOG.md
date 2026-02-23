@@ -87,6 +87,9 @@
 | COR-020 | IA-specific: Actuarial submission templates | 🗺️ | P3 | A | REC | Technical documents, not standard letters |
 | COR-021 | IA-specific: Solvency filing templates | 🗺️ | P3 | A | REC | Structured financial data |
 | COR-022 | IA-specific: Insurance product approval workflow | 🗺️ | P3 | A | REC | Pricing, terms, coverage data |
+| COR-023 | Correspondence store with persistence, archive field, reference number, assignee | ✅ | P1 | A | FEEDBACK | Done — Zustand + persist, `archived`, `reference`, `assignee` fields, seed data, `getNextReference()` |
+| COR-024 | Correspondence hub feed page with live multi-module metric cards | ✅ | P1 | A | FEEDBACK | Done — SAMA submissions, audit observations, saudization rate, training completion; integrates 9 stores |
+| COR-025 | Letter list view with archive/unarchive workflow and CSV export | ✅ | P1 | A | FEEDBACK | Done — Active/archived/all filter, reply composer, letter detail modal, localized CSV export |
 
 ---
 
@@ -109,6 +112,13 @@
 | RUL-013 | Activity feed per circular | 📋 | P2 | A | BRD | |
 | RUL-014 | Convert non-compliance items to observations | 📋 | P2 | A | BRD | Link to Observation Tracker |
 | RUL-015 | Multi-authority circular support (SAMA, CMA, IA circulars) | 💡 | P2 | A | REC | Filter by authority |
+| RUL-016 | Requirement registry store (Zustand + persist, CRUD, 15 seed items, pagination) | ✅ | P1 | A | FEEDBACK | Done — `requirement-store.ts`, auto-incrementing REQ-### IDs, status/category filters |
+| RUL-017 | Registry page: sortable/filterable table (name, category, date, status, due date, progress) | ✅ | P1 | A | FEEDBACK | Done — Asc/desc sort with clear button on all 6 columns, search + category + status filters |
+| RUL-018 | Compliance checklist per requirement with auto-computed progress | ✅ | P1 | A | FEEDBACK | Done — `ChecklistItem[]` on Requirement, toggle in view modal = instant store update, progress bar auto-derived |
+| RUL-019 | Reference URL per requirement (external link to source document) | ✅ | P1 | A | FEEDBACK | Done — `referenceUrl` field, protocol guard on href, "View Reference" link in view modal |
+| RUL-020 | Affected department field with color-coded department chips | ✅ | P1 | A | FEEDBACK | Done — 7 predefined departments (Compliance, IT, Finance, Operations, Risk Management, HR, Legal), each with distinct color |
+| RUL-021 | Color-coded category badges (Cybersecurity=blue, AML/CTF=rose, Risk=amber, etc.) | ✅ | P1 | A | FEEDBACK | Done — 6 category colors + fallback, department chip stacked below in table |
+| RUL-022 | CSV export for requirements | ✅ | P1 | A | FEEDBACK | Done — `exportRequirementsLocalized()`, UTF-8 BOM, localized headers, i18n values |
 
 ---
 
@@ -390,7 +400,7 @@
 | GOV-004 | Sharia product review workflow | 📋 | P2 | C | BRD | |
 | GOV-005 | Sharia transaction sampling and fatwa verification | 🗺️ | P3 | C | BRD | |
 | GOV-006 | Annual Sharia compliance certification | 🗺️ | P3 | C | BRD | |
-| GOV-007 | Advisory log (internal advisories per department) | 📋 | P2 | C | BRD | Marketing materials, product approvals |
+| GOV-007 | Advisory log (internal advisories per department) | ✅ | P2 | C | BRD | Done — `advisory-store.ts` (Zustand + persist, CRUD, note threads, reassignment), full advisory page with multi-filter, pagination, status/priority/business-unit filters, localized CSV export |
 | GOV-008 | Internal weekly/monthly task tracker | 📋 | P2 | C | BRD | From Compliance_Processes.xlsx |
 | GOV-009 | Link Internal Audit to both Archetype A observations and Archetype B assessments | 💡 | P1 | C | REC | Bridges correspondence and framework models |
 | GOV-010 | Link Sharia to SAMA annual Sharia report + product approvals | 💡 | P2 | C | REC | |
@@ -434,12 +444,12 @@
 
 | Status | Count | % |
 |---|---|---|
-| ✅ Done | 65 | 33% |
-| 🔧 In Progress (UI built, logic pending) | 26 | 13% |
-| 📋 To Do (defined, not started) | 68 | 34% |
-| 💡 New Recommendation | 24 | 12% |
+| ✅ Done | 76 | 36% |
+| 🔧 In Progress (UI built, logic pending) | 26 | 12% |
+| 📋 To Do (defined, not started) | 67 | 32% |
+| 💡 New Recommendation | 24 | 11% |
 | 🗺️ Roadmap (future phase) | 18 | 9% |
-| **Total** | **201** | **100%** |
+| **Total** | **211** | **100%** |
 
 ### By Priority
 

@@ -58,7 +58,10 @@
     "selectCategory": "اختر الفئة",
     "enterCategory": "أدخل فئة جديدة",
     "notes": "ملاحظات",
-    "edited": "معدل"
+    "edited": "معدل",
+    "yes": "نعم",
+    "no": "لا",
+    "progress": "التقدم"
   },
   "navigation": {
     "dashboard": "لوحة التحكم",
@@ -1802,7 +1805,11 @@
   "correspondence": {
     "tabs": {
       "correspondence": "المراسلات",
-      "advisory": "الاستشارات"
+      "advisory": "الاستشارات",
+      "registry": "السجل",
+      "samaLetters": "خطابات ساما",
+      "observations": "الملاحظات",
+      "regulatoryUpdates": "التحديثات التنظيمية"
     },
     "title": "مركز المراسلات",
     "subtitle": "مركز القيادة التنظيمية",
@@ -1906,8 +1913,37 @@
     "openingPrmReport": "جاري فتح تقرير PRM للمراجعة...",
     "noRisksInCategory": "لا توجد مخاطر في هذه الفئة",
     "requirementAdded": "تمت إضافة المتطلب بنجاح!",
+    "requirementUpdated": "تم تحديث المتطلب بنجاح!",
+    "requirementDeleted": "تم حذف المتطلب بنجاح!",
+    "editRequirement": "تعديل المتطلب",
+    "referenceUrl": "رابط المرجع",
+    "referenceUrlPlaceholder": "https://...",
+    "affectedDepartment": "الإدارة المعنية",
+    "complianceChecklist": "قائمة الامتثال",
+    "addChecklistItem": "إضافة بند",
+    "checklistItemPlaceholder": "مثال: إجراء تحليل الفجوات",
+    "noChecklistItems": "لا توجد بنود بعد. أضف البند الأول أدناه.",
+    "checklistProgress": "{{done}} من {{total}} مهمة مكتملة",
+    "viewReference": "عرض المرجع",
     "fillRequiredFields": "الرجاء ملء جميع الحقول المطلوبة",
-    "load": "الحمل"
+    "load": "الحمل",
+    "noRequirements": "لا توجد متطلبات متابعة حتى الآن",
+    "noCorrespondence": "لا توجد مراسلات حتى الآن",
+    "noMembers": "لا يوجد أعضاء فريق",
+    "justNow": "الآن",
+    "overdue": "متأخر",
+    "hoursAgo": "قبل {{count}} ساعة",
+    "daysAgo": "قبل {{count}} يوم",
+    "dueInDays": "متبقي {{count}} يوم",
+    "noUpcomingSubmissions": "لا توجد تقديمات قادمة",
+    "noUpcomingReviews": "لا توجد مراجعات قادمة",
+    "filterAll": "الكل",
+    "filterActive": "النشطة",
+    "filterArchived": "المؤرشفة",
+    "sent": "مرسل",
+    "received": "مستلم",
+    "internal": "داخلي",
+    "external": "خارجي"
   },
   "advisory": {
     "title": "طلبات الاستشارة",
@@ -1952,6 +1988,8 @@
     "reassign": "إعادة التعيين",
     "statusUpdated": "تم تحديث الحالة بنجاح!",
     "assignmentUpdated": "تم تحديث التعيين!",
+    "requestDeleted": "تم حذف طلب الاستشارة",
+    "selectAssignee": "اختر المسؤول",
     "noRequests": "لم يتم العثور على طلبات استشارة",
     "noRequestsDescription": "حاول تعديل الفلاتر أو إنشاء طلب جديد",
     "timeframe": "الفترة الزمنية",
@@ -2013,7 +2051,19 @@
     "frameworks": "الأطر",
     "deductions": "الخصومات",
     "riskDistribution": "توزيع المخاطر",
-    "findings": "نتائج التدقيق"
+    "findings": "نتائج التدقيق",
+    "subject": "الموضوع",
+    "type": "النوع",
+    "from": "من",
+    "to": "إلى",
+    "date": "التاريخ",
+    "archived": "مؤرشف",
+    "name": "الاسم",
+    "releaseDate": "تاريخ الإصدار",
+    "businessUnit": "وحدة الأعمال",
+    "requestedBy": "مقدم الطلب",
+    "assignedTo": "مسند إلى",
+    "notesCount": "عدد الملاحظات"
   },
   "auditDetail": {
     "audits": "التدقيقات",
