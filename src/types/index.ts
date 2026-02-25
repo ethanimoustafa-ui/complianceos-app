@@ -305,17 +305,104 @@ export interface TimelineEntry {
   metadata?: Record<string, unknown>
 }
 
+// SAMA Letter Templates
+export type TemplateStatus = 'Active' | 'Draft'
+
+export interface LetterTemplate {
+  id: string
+  name: string
+  type: SAMALetterType
+  icon: string
+  color: string
+  description: string
+  status: TemplateStatus
+  createdDate: string
+  lastModified: string
+  usageCount: number
+  // Default letter content (carried into new letters)
+  defaultSubjectEn?: string
+  defaultSubjectAr?: string
+  defaultBodyEn?: string
+  defaultBodyAr?: string
+  defaultSignerName?: string
+  defaultSignerTitle?: string
+  defaultSignerNameAr?: string
+  defaultSignerTitleAr?: string
+  defaultSignatureImageUrl?: string  // base64 data URL
+  defaultSamaDepartment?: SAMADepartment
+  defaultRecipientName?: string
+  defaultRecipientOrg?: string
+  defaultRecipientCity?: string
+  defaultRecipientNameAr?: string
+  defaultRecipientOrgAr?: string
+  defaultRecipientCityAr?: string
+}
+
 // SAMA Letters
+export type SAMALetterStatus =
+  | 'draft'
+  | 'pending-approval'
+  | 'approved'
+  | 'sent'
+  | 'response-received'
+  | 'overdue'
+
+export type SAMALetterType = 'non-objection' | 'inquiry' | 'submission' | 'notification'
+export type SAMADepartment = 'banking-supervision' | 'payment-systems' | 'compliance-aml'
+export type SAMASubCategory =
+  | 'key-function' | 'product-launch' | 'equity-participation'
+  | 'circular-clarification' | 'regulatory-interpretation'
+  | 'quarterly-aml' | 'annual-compliance'
+  | 'incident-notification' | 'system-outage'
+
+export interface SAMALetterApprovalStep {
+  step: 1 | 2 | 3
+  role: 'Compliance Officer' | 'Department Head' | 'CEO'
+  status: 'pending' | 'approved' | 'rejected'
+  assignedTo?: string
+  approvedAt?: string
+  rejectedAt?: string
+  notes?: string
+}
+
+export interface SAMALetterTimelineEvent {
+  id: string
+  title: string
+  date: string
+  user?: string
+  status: 'completed' | 'active' | 'pending'
+}
+
 export interface SAMALetter {
   id: string
-  type: 'non-objection' | 'inquiry' | 'submission' | 'notification'
   reference: string
-  recipient: string
+  type: SAMALetterType
+  subCategory?: SAMASubCategory
+  samaDepartment?: SAMADepartment
   subject: string
+  subjectAr?: string
   body: string
-  status: 'draft' | 'sent' | 'received' | 'closed'
+  bodyAr?: string
+  status: SAMALetterStatus
+  priority: 'standard' | 'urgent'
+  createdBy: string
+  assignedTo?: string
+  approvalChain: SAMALetterApprovalStep[]
+  timeline: SAMALetterTimelineEvent[]
   sentDate?: string
   responseDeadline?: string
+  responseReceivedDate?: string
+  recipientName?: string
+  recipientOrg?: string
+  recipientCity?: string
+  recipientNameAr?: string
+  recipientOrgAr?: string
+  recipientCityAr?: string
+  signerName?: string
+  signerTitle?: string
+  signerNameAr?: string
+  signerTitleAr?: string
+  signatureImageUrl?: string   // base64, stamped from template at letter creation
   attachments: Attachment[]
   relatedObservations: string[]
   createdAt: string

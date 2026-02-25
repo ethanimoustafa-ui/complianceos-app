@@ -2,7 +2,7 @@
 
 **Version:** 1.0
 **Date:** February 2026
-**Last Updated:** February 23, 2026
+**Last Updated:** February 25, 2026
 
 ---
 
@@ -65,18 +65,18 @@
 
 | ID | Feature | Status | Priority | Arch | Source | Notes |
 |---|---|---|---|---|---|---|
-| COR-001 | SAMA letter creation (type: Non-Objection, Inquiry, Submission, Notification) | 🔧 | P0 | A | BRD | UI built, business logic not wired |
-| COR-002 | Sub-category selection (Key Function Appointment, Product Launch, etc.) | 🔧 | P0 | A | BRD | UI built |
-| COR-003 | Target SAMA department selection | 🔧 | P0 | A | BRD | UI built |
-| COR-004 | Template databank with usage tracking, duplication, custom creation | 🔧 | P1 | A | BRD | UI built, template data placeholder |
-| COR-005 | Approval routing (Draft → Send for Approval → Approved → Sent → Response Received) | 📋 | P0 | A | BRD | Workflow not enforced in logic |
-| COR-006 | Writer → Reviewer (Dept Head) → CEO approval chain | 📋 | P0 | A | BRD | Three-step approval with timestamp + revision notes |
-| COR-007 | Attachment management per letter | 🔧 | P1 | A | BRD | UI built |
-| COR-008 | Activity timeline per letter | 🔧 | P1 | A | BRD | UI built |
-| COR-009 | Reference number auto-generation | 📋 | P0 | A | BRD | Manual currently |
-| COR-010 | Response deadline tracking with overdue alerts | 📋 | P1 | A | BRD | |
+| COR-001 | SAMA letter creation (type: Non-Objection, Inquiry, Submission, Notification) | ✅ | P0 | A | BRD | Done — store wired with Zustand + persist, seed data, sync CRUD actions; edit letter functionality removed (create-only flow) |
+| COR-002 | Sub-category selection (Key Function Appointment, Product Launch, etc.) | ✅ | P0 | A | BRD | Done — `SAMASubCategory` type, persisted in letter model |
+| COR-003 | Target SAMA department selection | ✅ | P0 | A | BRD | Done — `SAMADepartment` type, SAMA dept email map, recipient defaults per dept |
+| COR-004 | Template databank with usage tracking, duplication, custom creation | ✅ | P1 | A | BRD | Done — `sama-template-store.ts` (Zustand + persist, 8 seed templates, CRUD + `incrementUsage`); `LetterTemplate` type extended with default subject/body/signer/recipient/signature fields; template edit form with Basic / Default Content / Signer & Signature / Recipient tabs |
+| COR-005 | Approval routing (Draft → Send for Approval → Approved → Sent → Response Received) | ✅ | P0 | A | BRD | Done — `submitForApproval`, `approveStep`, `rejectStep`, `send`, `markResponseReceived` store actions fully wired; status values kebab-case; feed page fixed (`'closed'` → `'response-received'`) |
+| COR-006 | Writer → Reviewer (Dept Head) → CEO approval chain | ✅ | P0 | A | BRD | Done — Three-step `SAMALetterApprovalStep[]` approval chain; `ApprovalStepActions` component; approve/reject with notes; all-steps-approved auto-transitions letter to `approved` status |
+| COR-007 | Attachment management per letter | ✅ | P1 | A | BRD | Done — Attachment upload, display, zip download alongside PDF export using `fflate` |
+| COR-008 | Activity timeline per letter | ✅ | P1 | A | BRD | Done — `SAMALetterTimelineEvent[]`; `translateTimelineTitle` helper with EXACT map, FIELD_UPDATED map, and prefix patterns for approval events; 16 new i18n keys (EN + AR); timeline simplified from IIFE-with-progress-bar to flat map |
+| COR-009 | Reference number auto-generation | ✅ | P0 | A | BRD | Done — `getNextReference(type)` store action; prefixes NOB/INQ/SUB/NOT; year-scoped, zero-padded sequential numbering |
+| COR-010 | Response deadline tracking with overdue alerts | ✅ | P1 | A | BRD | Done — Deadline auto-set on send per letter type (Non-Objection=30d, Inquiry=21d, Submission=45d, Notification=10d); `responseDeadline` stored as ISO string |
 | COR-011 | Thread management (original → response → follow-up linked) | 📋 | P1 | A | BRD | |
-| COR-012 | Email automation (Outlook popup with PDF letter + attachments) | 📋 | P2 | A | BRD | |
+| COR-012 | Email automation (Outlook popup with PDF letter + attachments) | ✅ | P2 | A | BRD | Done — "Send To SAMA" generates PDF via html2canvas + jsPDF (client-side), triggers zip of attachments via fflate, then opens mailto: with SAMA dept email + localized subject; `pendingSend` state navigates to detail view first then auto-fires flow via useEffect |
 | COR-013 | Multi-authority generalization (extend workflow to CMA, IA) | 📋 | P2 | A | BRD | Same workflow, authority-specific letter types/templates |
 | COR-014 | Template management per authority (separate template libraries) | 📋 | P2 | A | BRD | |
 | COR-015 | CMA-specific: Prospectus review cycle (multi-round submission/feedback) | 🗺️ | P3 | A | REC | Unique workflow — not standard letter |
@@ -92,6 +92,9 @@
 | COR-025 | Letter list view with archive/unarchive workflow and CSV export | ✅ | P1 | A | FEEDBACK | Done — Active/archived/all filter, reply composer, letter detail modal, localized CSV export |
 | COR-026 | Deep-link navigation: feed → registry / SAMA letters / observations with auto-open detail view | ✅ | P1 | A | FEEDBACK | Done — All three destination pages read `?id=` from `useSearchParams` on mount and auto-open the matching detail view (registry view modal, SAMA letters detail view, observations detail modal). Feed "Review" buttons and Regulatory Tracker rows push `?id=` param |
 | COR-027 | Deep-link navigation: feed risk heatmap → risk register with auto-open drawer | ✅ | P1 | A | FEEDBACK | Done — Heatmap cell detail view risk cards converted to full-row `<button>` elements; clicking any risk navigates to `/reports/risks?id={risk.id}`. Risk register reads `?id=` via `useSearchParams` + `useRef` on mount and auto-opens the matching risk drawer. Closes heatmap panel and cell detail before navigating |
+| COR-028 | SAMA letter page RTL cleanup — remove redundant conditional class interpolations | ✅ | P1 | A | FEEDBACK | Done — ~76 instances of `${isRTL ? 'flex-row-reverse' : ''}` and `${isRTL ? 'text-right' : ''}` removed from sama-letters page; layout driven by Tailwind RTL utilities instead; `dir` attribute on letter content wrapper overrides inherited RTL cascade for letter direction |
+| COR-029 | Action dropdown smart upward flip in letter table | ✅ | P1 | A | FEEDBACK | Done — `menuPosition` state extended with `buttonTop`; portal computes `flipUp` when trigger is near bottom of viewport; dropdown repositions above trigger automatically |
+| COR-030 | "Send To SAMA" from table auto-triggers after navigating to detail view | ✅ | P1 | A | FEEDBACK | Done — `pendingSend` ref/state pattern: table action navigates to detail view and sets flag; `useEffect` on detail view mount detects flag and auto-triggers full send flow |
 
 ---
 
@@ -448,12 +451,12 @@
 
 | Status | Count | % |
 |---|---|---|
-| ✅ Done | 79 | 36% |
-| 🔧 In Progress (UI built, logic pending) | 26 | 12% |
-| 📋 To Do (defined, not started) | 67 | 31% |
-| 💡 New Recommendation | 24 | 11% |
+| ✅ Done | 93 | 40% |
+| 🔧 In Progress (UI built, logic pending) | 22 | 9% |
+| 📋 To Do (defined, not started) | 59 | 25% |
+| 💡 New Recommendation | 24 | 10% |
 | 🗺️ Roadmap (future phase) | 18 | 8% |
-| **Total** | **214** | **100%** |
+| **Total** | **217** | **100%** |
 
 ### By Priority
 
@@ -480,7 +483,7 @@ These 30 items must be completed before launch (2 now done):
 1. **Stores:** ~~Risk Store (RSK-001)~~ ✅, Policy Store (POL-002), Training Store (TRN-004), Framework Store (FRM-018)
 2. **Engine Integration:** Risk Posture (RSK-009), Policy Currency (POL-009), Training Completion (TRN-013)
 3. **Live Data:** ~~Replace hardcoded risk data (RPT-012)~~ ✅
-4. **Correspondence:** Letter approval chain (COR-005, COR-006), reference numbering (COR-009)
+4. **Correspondence:** ~~Letter approval chain (COR-005, COR-006)~~ ✅, ~~Reference numbering (COR-009)~~ ✅
 5. **Rules & Circulars:** Registration logic (RUL-001), applicability (RUL-002), CAP creation (RUL-003), Business Owner assignment (RUL-004)
 6. **Onboarding:** Org profile (ONB-001), entity type (ONB-002), authority selection (ONB-003), framework selection (ONB-006), pre-selection logic (ONB-004, ONB-007), Constant C (ONB-008), entity map data (ONB-012)
 

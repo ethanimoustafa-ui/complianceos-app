@@ -202,7 +202,7 @@ export default function CorrespondenceFeedPage() {
 
     // SAMA Letters (responseDeadline)
     samaLetterStore.letters
-      .filter(l => l.responseDeadline && new Date(l.responseDeadline) > now && l.status !== 'closed')
+      .filter(l => l.responseDeadline && new Date(l.responseDeadline) > now && l.status !== 'response-received')
       .forEach(l => items.push({
         id: l.id, name: l.subject, subtitle: l.type,
         dueDate: l.responseDeadline!, source: 'sama-letter'
