@@ -9,9 +9,8 @@ import { Modal } from '@/components/ui/modal'
 import { cn } from '@/lib/utils'
 import { useTranslation } from '@/i18n'
 import type { TranslationKey } from '@/i18n'
-import { AddRequirementModal } from '@/components/correspondence/add-requirement-modal'
 import { useCorrespondenceStore } from '@/stores/correspondence-store'
-import { useRequirementStore } from '@/stores/requirement-store'
+import { useCircularStore } from '@/stores/circular-store'
 import { useSAMALetterStore } from '@/stores/sama-letter-store'
 import { useRiskStore } from '@/stores/risk-store'
 import { useTeamStore } from '@/stores/team-store'
@@ -20,7 +19,7 @@ import { usePolicyStore } from '@/stores/policy-store'
 import { useTrainingStore } from '@/stores/training-store'
 import { useAuthStore } from '@/stores/auth-store'
 import { exportCorrespondenceLocalized } from '@/lib/export'
-import type { Correspondence, Requirement as RequirementType } from '@/types'
+import type { Correspondence, Circular } from '@/types'
 
 // Risk type for heatmap display (mapped from risk-store)
 interface HeatmapRisk {
@@ -62,7 +61,7 @@ export default function CorrespondenceFeedPage() {
 
   // Stores
   const correspondenceStore = useCorrespondenceStore()
-  const requirementStore = useRequirementStore()
+  const circularStore = useCircularStore()
   const riskStore = useRiskStore()
   const teamStore = useTeamStore()
   const observationStore = useObservationStore()
@@ -75,7 +74,6 @@ export default function CorrespondenceFeedPage() {
   const [isNewCorrespondenceOpen, setIsNewCorrespondenceOpen] = useState(false)
   const [isRiskMatrixOpen, setIsRiskMatrixOpen] = useState(false)
   const [isLetterDetailOpen, setIsLetterDetailOpen] = useState(false)
-  const [isAddRequirementOpen, setIsAddRequirementOpen] = useState(false)
   const [selectedLetter, setSelectedLetter] = useState<Correspondence | null>(null)
   const [selectedCellRisks, setSelectedCellRisks] = useState<HeatmapRisk[] | null>(null)
   const [toastMessage, setToastMessage] = useState<string | null>(null)
@@ -157,47 +155,46 @@ export default function CorrespondenceFeedPage() {
     const policies = policyStore.policies
     if (policies.length === 0) return { currentPct: 0, overdueCount: 0 }
     const now = new Date()
-    const active = policies.filter(p => p.status === 'active').length
-    const overdue = policies.filter(p => p.status === 'active' && new Date(p.nextReviewDate) < now).length
+    const active = policies.filter(p => p.status === 'approved').length
+    const overdue = policies.filter(p => p.status === 'approved' && new Date(p.nextReviewDate) < now).length
     return {
       currentPct: Math.round((active / policies.length) * 100),
       overdueCount: overdue,
     }
   }, [policyStore.policies])
 
-  const requirementStats = useMemo(() => {
-    const reqs = requirementStore.requirements
-    if (reqs.length === 0) return { currentPct: 0, overdueCount: 0 }
+  const circularStats = useMemo(() => {
+    const circs = circularStore.circulars
+    if (circs.length === 0) return { currentPct: 0, overdueCount: 0 }
     const now = new Date()
-    const completed = reqs.filter(r => r.status === 'completed').length
-    const overdue = reqs.filter(r => r.status !== 'completed' && new Date(r.dueDate) < now).length
+    const overdue = circs.filter(c => c.status === 'overdue' || (c.dueDate && new Date(c.dueDate) < now && c.status !== 'completed')).length
     return {
-      currentPct: Math.round((completed / reqs.length) * 100),
+      currentPct: Math.round(((circs.length - overdue) / circs.length) * 100),
       overdueCount: overdue,
     }
-  }, [requirementStore.requirements])
+  }, [circularStore.circulars])
 
-  const nextRequirementsDue = useMemo(() => {
+  const nextCircularsDue = useMemo(() => {
     const now = new Date()
-    const upcoming = requirementStore.requirements
-      .filter(r => r.status !== 'completed' && new Date(r.dueDate) > now)
+    const upcoming = circularStore.circulars
+      .filter(c => c.status !== 'completed' && c.dueDate && new Date(c.dueDate) > now)
       .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime())
     if (upcoming.length === 0) return []
     const nearestDay = new Date(upcoming[0].dueDate).setHours(0, 0, 0, 0)
-    return upcoming.filter(r => new Date(r.dueDate).setHours(0, 0, 0, 0) === nearestDay)
-  }, [requirementStore.requirements])
+    return upcoming.filter(c => new Date(c.dueDate).setHours(0, 0, 0, 0) === nearestDay)
+  }, [circularStore.circulars])
 
   // Upcoming items from all sources
   const upcomingItems = useMemo((): UpcomingItem[] => {
     const now = new Date()
     const items: UpcomingItem[] = []
 
-    // Requirements / Registry
-    requirementStore.requirements
-      .filter(r => r.status !== 'completed' && new Date(r.dueDate) > now)
-      .forEach(r => items.push({
-        id: r.id, name: r.name, subtitle: r.category,
-        dueDate: r.dueDate, source: 'registry'
+    // Circulars (dueDate)
+    circularStore.circulars
+      .filter(c => c.status !== 'completed' && c.dueDate && new Date(c.dueDate) > now)
+      .forEach(c => items.push({
+        id: c.id, name: c.title, subtitle: c.authority,
+        dueDate: c.dueDate, source: 'registry'
       }))
 
     // SAMA Letters (responseDeadline)
@@ -217,20 +214,23 @@ export default function CorrespondenceFeedPage() {
       }))
 
     return items.sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime()).slice(0, 3)
-  }, [requirementStore.requirements, samaLetterStore.letters, observationStore.observations])
+  }, [circularStore.circulars, samaLetterStore.letters, observationStore.observations])
 
   // Next policy review
   const nextPolicyReview = useMemo(() => {
     const now = new Date()
     return policyStore.policies
-      .filter(p => p.status === 'active' && new Date(p.nextReviewDate) > now)
+      .filter(p => p.status === 'approved' && new Date(p.nextReviewDate) > now)
       .sort((a, b) => new Date(a.nextReviewDate).getTime() - new Date(b.nextReviewDate).getTime())[0] || null
   }, [policyStore.policies])
 
-  // Top 3 requirements for summary view
-  const topRequirements = useMemo(() => {
-    return requirementStore.requirements.slice(0, 3)
-  }, [requirementStore.requirements])
+  // Top 3 circulars for regulatory tracker view
+  const topCirculars = useMemo(() => {
+    const order: Record<string, number> = { 'in-progress': 0, overdue: 1, pending: 2, completed: 3 }
+    return [...circularStore.circulars]
+      .sort((a, b) => (order[a.status] ?? 2) - (order[b.status] ?? 2))
+      .slice(0, 3)
+  }, [circularStore.circulars])
 
   const handleViewLetter = (letter: Correspondence) => {
     setSelectedLetter(letter)
@@ -407,34 +407,24 @@ export default function CorrespondenceFeedPage() {
                       {t('correspondence.trackerSubtitle')}
                     </p>
                   </div>
-                  <div className={`flex gap-3 ${isRTL ? 'flex-row-reverse' : ''}`}>
-                    <button
-                      onClick={() => setIsAddRequirementOpen(true)}
-                      className={`text-xs font-bold text-blue-600 hover:text-blue-700 cursor-pointer flex items-center gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}
-                    >
-                      <Icon icon="lucide:plus-circle" className="text-lg" />
-                      {t('correspondence.addRequirement')}
-                    </button>
-                    <Link
-                      href="/correspondence/registry"
-                      className="text-xs font-bold text-emerald-600 hover:text-emerald-700 cursor-pointer"
-                    >
-                      {t('correspondence.viewFullRegistry')} {isRTL ? '\u2190' : '\u2192'}
-                    </Link>
-                  </div>
+                  <Link
+                    href="/correspondence/registry"
+                    className="text-xs font-bold text-emerald-600 hover:text-emerald-700 cursor-pointer"
+                  >
+                    {t('correspondence.viewFullRegistry')} {isRTL ? '\u2190' : '\u2192'}
+                  </Link>
                 </div>
 
                 <div className="space-y-4">
-                  {topRequirements.map((req) => (
-                    <RequirementRow
-                      key={req.id}
-                      requirement={req}
-                      t={t}
+                  {topCirculars.map((circ) => (
+                    <CircularRow
+                      key={circ.id}
+                      circular={circ}
                       isRTL={isRTL}
-                      onClick={() => router.push(`/correspondence/registry?id=${req.id}`)}
+                      onClick={() => router.push(`/correspondence/regulatory-updates/rules`)}
                     />
                   ))}
-                  {topRequirements.length === 0 && (
+                  {topCirculars.length === 0 && (
                     <p className="text-sm text-slate-400 text-center py-4">{t('correspondence.noRequirements')}</p>
                   )}
                 </div>
@@ -555,27 +545,27 @@ export default function CorrespondenceFeedPage() {
                       <span className="text-[10px] font-black text-slate-400 uppercase">
                         {t('correspondence.current')}
                       </span>
-                      <p className="text-xl font-bold text-slate-900">{requirementStats.currentPct}%</p>
+                      <p className="text-xl font-bold text-slate-900">{circularStats.currentPct}%</p>
                     </div>
                     <div className={`bg-slate-50 p-3 rounded-xl border border-slate-100 ${isRTL ? 'text-right' : ''}`}>
                       <span className="text-[10px] font-black text-rose-500 uppercase">
                         {t('correspondence.overdue' as TranslationKey)}
                       </span>
-                      <p className="text-xl font-bold text-rose-600">{requirementStats.overdueCount}</p>
+                      <p className="text-xl font-bold text-rose-600">{circularStats.overdueCount}</p>
                     </div>
                   </div>
                   <div className={`mt-4 text-[10px] font-bold text-slate-500`}>
-                    {nextRequirementsDue.length > 0 ? (
+                    {nextCircularsDue.length > 0 ? (
                       <>
                         <div className={`flex items-center justify-between mb-1.5 ${isRTL ? 'flex-row-reverse' : ''}`}>
                           <span>{t('correspondence.nextDeadline' as TranslationKey)}</span>
                           <span className="text-blue-600">
-                            {new Date(nextRequirementsDue[0].dueDate).toLocaleDateString(isRTL ? 'ar-SA' : 'en-US', { month: 'short', day: 'numeric' })}
+                            {new Date(nextCircularsDue[0].dueDate).toLocaleDateString(isRTL ? 'ar-SA' : 'en-US', { month: 'short', day: 'numeric' })}
                           </span>
                         </div>
                         <ul className={`space-y-0.5 ${isRTL ? 'text-right' : ''}`}>
-                          {nextRequirementsDue.map(r => (
-                            <li key={r.id} className="text-slate-600 truncate">· {r.name}</li>
+                          {nextCircularsDue.map(c => (
+                            <li key={c.id} className="text-slate-600 truncate">· {c.title}</li>
                           ))}
                         </ul>
                       </>
@@ -1051,12 +1041,6 @@ export default function CorrespondenceFeedPage() {
         )}
       </Modal>
 
-      {/* Add Requirement Modal */}
-      <AddRequirementModal
-        isOpen={isAddRequirementOpen}
-        onClose={() => setIsAddRequirementOpen(false)}
-        onSuccess={() => showToast(t('correspondence.requirementAdded'))}
-      />
     </div>
   )
 }
@@ -1134,23 +1118,20 @@ function MetricCard({
   )
 }
 
-function RequirementRow({ requirement, t, isRTL, onClick }: { requirement: RequirementType; t: (key: TranslationKey, params?: Record<string, string | number>) => string; isRTL: boolean; onClick?: () => void }) {
-  const statusConfig = {
-    implementing: { bg: 'bg-amber-100', text: 'text-amber-700', label: t('correspondence.implementing') },
-    drafting: { bg: 'bg-blue-100', text: 'text-blue-700', label: t('correspondence.drafting') },
-    completed: { bg: 'bg-emerald-100', text: 'text-emerald-700', label: t('correspondence.verified') },
-    pending: { bg: 'bg-slate-100', text: 'text-slate-700', label: t('common.pending') },
+function CircularRow({ circular, isRTL, onClick }: { circular: Circular; isRTL: boolean; onClick?: () => void }) {
+  const statusConfig: Record<string, { bg: string; text: string; label: string }> = {
+    'in-progress': { bg: 'bg-amber-100', text: 'text-amber-700', label: 'In Progress' },
+    overdue:       { bg: 'bg-rose-100', text: 'text-rose-700', label: 'Overdue' },
+    pending:       { bg: 'bg-slate-100', text: 'text-slate-700', label: 'Pending' },
+    completed:     { bg: 'bg-emerald-100', text: 'text-emerald-700', label: 'Completed' },
   }
-
-  const config = statusConfig[requirement.status]
-  const isCompleted = requirement.status === 'completed'
-
-  // Compute due text from dueDate
+  const config = statusConfig[circular.status] ?? statusConfig.pending
+  const isCompleted = circular.status === 'completed'
   const now = new Date()
-  const due = new Date(requirement.dueDate)
+  const due = new Date(circular.dueDate)
   const diffDays = Math.ceil((due.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
-  const dueText = isCompleted ? t('common.completed') : diffDays <= 0 ? t('correspondence.overdue') : t('correspondence.dueInDays', { count: String(diffDays) })
-  const isDueSoon = diffDays <= 7 && diffDays > 0
+  const dueText = isCompleted ? 'Completed' : diffDays <= 0 ? 'Overdue' : `Due in ${diffDays}d`
+  const isDueSoon = !isCompleted && diffDays <= 7
 
   return (
     <div
@@ -1160,26 +1141,24 @@ function RequirementRow({ requirement, t, isRTL, onClick }: { requirement: Requi
       <div className={`flex items-center gap-4 ${isRTL ? 'flex-row-reverse' : ''}`}>
         <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center border border-slate-200 shadow-sm">
           <Icon
-            icon={isCompleted ? 'lucide:check-circle' : 'lucide:landmark'}
+            icon={isCompleted ? 'lucide:check-circle' : 'lucide:scale'}
             className={isCompleted ? 'text-emerald-500' : 'text-slate-400'}
           />
         </div>
         <div className={isRTL ? 'text-right' : ''}>
-          <p className="text-sm font-bold text-slate-900">{requirement.name}</p>
-          <p className="text-[10px] text-slate-500">{requirement.description || requirement.category}</p>
+          <p className="text-sm font-bold text-slate-900">{circular.title}</p>
+          <p className="text-[10px] text-slate-500">{circular.authority} · {circular.reference}</p>
         </div>
       </div>
       <div className={`flex items-center gap-6 ${isRTL ? 'flex-row-reverse' : ''}`}>
         <div className={isRTL ? 'text-left' : 'text-right'}>
-          <span
-            className={`text-[10px] font-black uppercase ${isDueSoon ? 'text-rose-500' : isCompleted ? 'text-emerald-600' : 'text-slate-400'}`}
-          >
+          <span className={`text-[10px] font-black uppercase ${isDueSoon ? 'text-rose-500' : isCompleted ? 'text-emerald-600' : 'text-slate-400'}`}>
             {dueText}
           </span>
           <div className="h-1 w-24 bg-slate-200 rounded-full mt-1 overflow-hidden">
             <div
               className={`h-full ${isCompleted ? 'bg-emerald-500' : isDueSoon ? 'bg-rose-500' : 'bg-emerald-500'}`}
-              style={{ width: `${requirement.progress}%` }}
+              style={{ width: `${circular.progress}%` }}
             />
           </div>
         </div>

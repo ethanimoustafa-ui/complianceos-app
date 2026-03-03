@@ -184,7 +184,7 @@ function calcPolicyCurrency(policies: { status: string; nextReviewDate: string }
   }
 
   const now = new Date()
-  const activePolicies = policies.filter((p) => p.status === 'active')
+  const activePolicies = policies.filter((p) => p.status === 'approved' || p.status === 'active')
   if (activePolicies.length === 0) {
     return { score: 0, weight, confidence, dataPoints }
   }

@@ -276,6 +276,7 @@ export interface Attachment {
   size: number
   uploadedAt: string
   uploadedBy: string
+  dataUrl?: string
 }
 
 // Reminder type
@@ -497,6 +498,7 @@ export interface Requirement {
   description?: string
   progress: number
   referenceUrl?: string
+  linkedCircularId?: string
   checklist?: ChecklistItem[]
   createdAt: string
   updatedAt: string
@@ -537,18 +539,30 @@ export interface Training {
 }
 
 // Policy
+export type PolicyStatus = 'draft' | 'under-review' | 'approved' | 'expired'
+export type PolicyCategory = 'compliance' | 'it' | 'operations' | 'risk' | 'hr' | 'finance'
+export type PolicyApprovalTier = 'board' | 'management-sharia' | 'agm'
+
+export interface PolicyVersionEntry { version: string; date: string; author: string; changes: string }
+export interface PolicyWorkflowStep { step: string; date: string; user: string; status: 'completed' | 'current' | 'pending' }
+export interface PolicyOwner { name: string; avatar: string; department: string }
+
 export interface Policy {
-  id: string
+  id: string                      // auto: POL-001
   name: string
+  description: string
+  status: PolicyStatus
+  category: PolicyCategory
   version: string
-  status: 'draft' | 'active' | 'archived'
+  approvalTier: PolicyApprovalTier
+  owner: PolicyOwner
   lastReviewDate: string
   nextReviewDate: string
-  owner: string
-  department: string
-  content: string
-  category: string
-  attachments: Attachment[]
+  reviewCycleDays: number
+  approvedDate?: string
+  versionHistory: PolicyVersionEntry[]
+  workflowTimeline: PolicyWorkflowStep[]
+  attachmentUrl?: string
   createdAt: string
   updatedAt: string
 }
@@ -567,6 +581,141 @@ export interface RegulatoryUpdate {
   actionRequired?: string
   createdAt: string
   updatedAt: string
+}
+
+// Circular / Rules types
+export type CircularAuthority = 'SAMA' | 'CMA' | 'IA' | 'ZATCA' | 'MISA' | 'SAFIU'
+export type CircularPriority = 'critical' | 'high' | 'medium' | 'low'
+export type CircularStatus = 'pending' | 'in-progress' | 'completed' | 'overdue'
+export type CircularApplicability = 'applicable' | 'not-applicable' | 'pending'
+export type CAPStatus = 'not-started' | 'drafting' | 'submitted' | 'approved' | 'in-progress' | 'completed'
+export type ArticleRiskLevel = 'critical' | 'high' | 'medium' | 'low'
+export type ArticleComplianceStatus = 'compliant' | 'in-progress' | 'non-compliant' | 'not-started'
+
+export interface CircularArticle {
+  id: string
+  articleNumber: string
+  title: string
+  description?: string
+  riskLevel: ArticleRiskLevel
+  responsibleDepartment: string
+  complianceStatus: ArticleComplianceStatus
+  assignedTo?: string
+  notes?: string
+  checklist: ChecklistItem[]
+  attachments: Attachment[]
+  versions?: ArticleVersionEntry[]
+  timeline?: ArticleTimelineEvent[]
+}
+
+export interface CircularWorkflowStep {
+  id: string
+  phase: 0 | 1 | 2
+  label: string
+  labelAr: string
+  status: 'pending' | 'current' | 'completed'
+  date?: string
+  user?: string
+  notes?: string
+  actionLabel: string
+  actionLabelAr: string
+  requiresNotes: boolean
+  actionType: 'approve' | 'notify-bo' | 'notify-authority' | 'advance' | 'submit' | 'acknowledge' | 'start' | 'complete' | 'review'
+}
+
+export interface CircularTimelineEvent {
+  id: string
+  title: string
+  titleAr?: string
+  date: string
+  user?: string
+  status: 'completed' | 'active' | 'pending'
+}
+
+export interface CircularVersionEntry {
+  version: number
+  date: string
+  author: string
+  changes: string
+  fieldChanges?: Record<string, { from: string; to: string }>
+  approved: boolean
+}
+
+export interface ArticleVersionEntry {
+  version: number
+  date: string
+  author: string
+  summary: string
+  fieldChanges: Record<string, { from: string; to: string }>
+  approved: boolean
+}
+
+export interface ArticleTimelineEvent {
+  id: string
+  title: string
+  titleAr?: string
+  date: string
+  user?: string
+  status: 'completed' | 'active' | 'pending'
+}
+
+export interface CircularPendingEdit {
+  data: Partial<Circular>
+  requestedBy: string
+  requestedAt: string
+  status: 'pending' | 'approved' | 'rejected'
+  fieldChanges?: Record<string, { from: string; to: string }>
+  approvals: Array<{
+    id: string
+    role: string
+    roleAr: string
+    status: 'pending' | 'approved' | 'rejected'
+    date?: string
+    user?: string
+    notes?: string
+  }>
+}
+
+export interface Circular {
+  id: string                      // internal uuid
+  reference: string               // auto: SAMA-2026-001
+  authority: CircularAuthority
+  title: string
+  priority: CircularPriority
+  status: CircularStatus
+  applicability: CircularApplicability
+  departments: string[]
+  businessOwnerDepartment?: string
+  progress: number
+  issuanceDate: string
+  dueDate: string
+  capStatus: CAPStatus
+  capDueDate?: string
+  articles: CircularArticle[]
+  description?: string
+  pdfUrl?: string
+  workflowSteps?: CircularWorkflowStep[]
+  timeline?: CircularTimelineEvent[]
+  versions?: CircularVersionEntry[]
+  capAttachments?: Attachment[]
+  capResponseDeadline?: string
+  remediationAttachments?: Attachment[]
+  capDeadline?: string
+  remediationDeadline?: string
+  referenceUrl?: string
+  pendingEdit?: CircularPendingEdit
+  createdAt: string
+  updatedAt: string
+}
+
+export interface CircularFilters {
+  authority?: CircularAuthority[]
+  status?: CircularStatus[]
+  priority?: CircularPriority[]
+  applicability?: CircularApplicability[]
+  department?: string
+  search?: string
+  dateRange?: { from: string; to: string }
 }
 
 // Report types
@@ -688,8 +837,10 @@ export interface RiskFilters {
 
 // Policy filters
 export interface PolicyFilters {
-  status?: Policy['status'][]
-  department?: string
+  status?: PolicyStatus[]
+  category?: PolicyCategory[]
+  approvalTier?: PolicyApprovalTier[]
+  search?: string
   dateRange?: { from: string; to: string }
 }
 

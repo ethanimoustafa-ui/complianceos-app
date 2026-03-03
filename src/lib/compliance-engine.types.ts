@@ -111,7 +111,7 @@ export interface RiskSlice {
 
 export interface PolicySlice {
   id: string
-  status: 'draft' | 'active' | 'archived'
+  status: string   // 'approved' | 'under-review' | 'draft' | 'expired' (legacy: 'active' | 'archived')
   nextReviewDate: string
   createdAt: string
 }

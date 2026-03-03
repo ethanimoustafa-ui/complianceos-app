@@ -2,7 +2,7 @@
 
 **Version:** 1.0
 **Date:** February 2026
-**Last Updated:** February 25, 2026
+**Last Updated:** March 3, 2026
 
 ---
 
@@ -12,6 +12,8 @@
 - **Priority:** `P0` (Critical — blocks launch) | `P1` (High — needed for launch) | `P2` (Medium — post-launch) | `P3` (Low — future phase)
 - **Source:** `BRD` (from Business Requirements Doc) | `REC` (from architecture/strategy sessions) | `FEEDBACK` (from compliance team)
 - **Arch:** `A` (Correspondence) | `B` (Framework) | `C` (Internal Governance) | `S` (Shared/Platform)
+
+> **Sprint 3 in progress:** Circular UX & Integration Overhaul — Epic 3 (Rules & Circulars) and Epic 4 (Policies & Procedures) are the current focus.
 
 ---
 
@@ -36,32 +38,7 @@
 
 ---
 
-## Epic 2: Observation Tracker
-
-| ID | Feature | Status | Priority | Arch | Source | Notes |
-|---|---|---|---|---|---|---|
-| OBS-001 | Multi-source tracking (SAMA Inspection, Internal Audit, Sharia Audit) | ✅ | P0 | S | BRD | Done |
-| OBS-002 | Severity classification (Critical, High, Medium, Low) with weighted scoring | ✅ | P0 | S | BRD | Done |
-| OBS-003 | Status lifecycle (Open → In Progress → Resolved → Closed) | ✅ | P0 | S | BRD | Done |
-| OBS-004 | Remediation plan workflow (submit → review → approve/reject) | ✅ | P0 | S | BRD | Done |
-| OBS-005 | Evidence collection (document upload with remediation plan association) | ✅ | P0 | S | BRD | Done |
-| OBS-006 | Checklist management (per-observation remediation checklists) | ✅ | P0 | S | BRD | Done |
-| OBS-007 | Dual deadlines (Plan Submission Due + Remediation Deadline) | ✅ | P0 | S | BRD | Done |
-| OBS-008 | Closure workflow (Request → Leader/Manager review → Approve/Reject) | ✅ | P0 | S | BRD | Done |
-| OBS-009 | Leadership model with transfer capability | ✅ | P0 | S | BRD | Done |
-| OBS-010 | Role-based access (Officers view/create, Managers manage, Leaders manage their own) | ✅ | P0 | S | BRD | Done |
-| OBS-011 | Activity timeline (full audit trail) | ✅ | P0 | S | BRD | Done |
-| OBS-012 | Department assignment | ✅ | P0 | S | BRD | Done |
-| OBS-013 | CSV export | ✅ | P0 | S | BRD | Done |
-| OBS-014 | Sub-classification system (subTitle field with filtering) | ✅ | P0 | S | BRD | Done |
-| OBS-015 | Visit-type column (online vs. on-site inspection) | 📋 | P1 | S | FEEDBACK | Field not yet in data model |
-| OBS-016 | Evidence follow-up per department (request-and-track workflow) | 📋 | P1 | S | FEEDBACK | Currently upload-only, no request tracking |
-| OBS-017 | Framework principle tagging on observations | 📋 | P1 | B | BRD | `frameworkTags[]` metadata field. See Epic 11 |
-| OBS-018 | Expand source types to include CMA, IA observations | 💡 | P2 | A | REC | When onboarding adds CMA/IA authorities |
-
----
-
-## Epic 3: Correspondence Hub (Letters)
+## Epic 2: Correspondence Hub (Letters)
 
 | ID | Feature | Status | Priority | Arch | Source | Notes |
 |---|---|---|---|---|---|---|
@@ -98,7 +75,7 @@
 
 ---
 
-## Epic 4: Rules & Circulars
+## Epic 3: Rules & Circulars
 
 | ID | Feature | Status | Priority | Arch | Source | Notes |
 |---|---|---|---|---|---|---|
@@ -115,9 +92,10 @@
 | RUL-011 | Internal notes/comments per circular | 📋 | P1 | A | BRD | |
 | RUL-012 | Documentation repository per circular | 📋 | P1 | A | BRD | |
 | RUL-013 | Activity feed per circular | 📋 | P2 | A | BRD | |
-| RUL-014 | Convert non-compliance items to observations | 📋 | P2 | A | BRD | Link to Observation Tracker |
+| RUL-014 | Convert non-compliance items to observations | 📋 | P2 | A | BRD | Link to Observation Tracker (Epic 6) |
 | RUL-015 | Multi-authority circular support (SAMA, CMA, IA circulars) | 💡 | P2 | A | REC | Filter by authority |
-| RUL-016 | Requirement registry store (Zustand + persist, CRUD, 15 seed items, pagination) | ✅ | P1 | A | FEEDBACK | Done — `requirement-store.ts`, auto-incrementing REQ-### IDs, status/category filters |
+| RUL-016 | Circular store (Zustand + persist, CRUD, 5 seed circulars, authority-aware ref gen) | ✅ | P1 | A | FEEDBACK | Done — `circular-store.ts`; `getNextReference(authority)` produces `SAMA-2026-001` format; full CRUD + advanceStep, setApplicability, setBusinessOwner, addArticle, updateArticle, removeArticle, requestEdit, approveEdit, rejectEdit actions; seed circulars span all statuses and CAP phases |
+| RUL-016b | Requirement registry store (Zustand + persist, CRUD, 15 seed items, pagination) | ✅ | P1 | A | FEEDBACK | Done — migrated: `requirement-store.ts` removed; `Requirement.linkedCircularId` field added to `types/index.ts` linking requirements to circulars; feed page switched from requirement-store to circular-store |
 | RUL-017 | Registry page: sortable/filterable table (name, category, date, status, due date, progress) | ✅ | P1 | A | FEEDBACK | Done — Asc/desc sort with clear button on all 6 columns, search + category + status filters |
 | RUL-018 | Compliance checklist per requirement with auto-computed progress | ✅ | P1 | A | FEEDBACK | Done — `ChecklistItem[]` on Requirement, toggle in view modal = instant store update, progress bar auto-derived |
 | RUL-019 | Reference URL per requirement (external link to source document) | ✅ | P1 | A | FEEDBACK | Done — `referenceUrl` field, protocol guard on href, "View Reference" link in view modal |
@@ -129,24 +107,68 @@
 
 ---
 
-## Epic 5: Policies & Procedures
+## Epic 4: Policies & Procedures
 
 | ID | Feature | Status | Priority | Arch | Source | Notes |
 |---|---|---|---|---|---|---|
-| POL-001 | Policy registry (name, version, status, category, owner, dates) | 🔧 | P1 | S | BRD | UI built, no store |
-| POL-002 | Policy store (Zustand with persistence) | 📋 | P0 | S | BRD | Required for compliance engine |
-| POL-003 | Automated review notifications (90 days before next review) | 📋 | P1 | S | BRD | |
-| POL-004 | Tiered approval workflows (Board / Management+Sharia / AGM) | 📋 | P1 | S | BRD | Three distinct chains |
-| POL-005 | Version history with changelog | 🔧 | P1 | S | BRD | UI built |
+| POL-001 | Policy registry (name, version, status, category, owner, dates) | ✅ | P1 | S | BRD | Done — rewritten to consume `policy-store`; sortable/filterable table with search, category, status, approvalTier filters; RegDocCard list view; detail drawer with version history + workflow timeline |
+| POL-002 | Policy store (Zustand with persistence) | ✅ | P0 | S | BRD | Done — full rewrite: sync CRUD actions, 5 seed policies (POL-001..005), `getNextId()`, `submitForReview`, `approve`, `initiateReview`, `reviewAlerts()` (90-day window + expired), persist v1 migration |
+| POL-003 | Automated review notifications (90 days before next review) | ✅ | P1 | S | BRD | Done — `reviewAlerts()` store action returns policies with `nextReviewDate ≤ 90 days` or `status === 'expired'`; policies page shows alert banner with count |
+| POL-004 | Tiered approval workflows (Board / Management+Sharia / AGM) | ✅ | P1 | S | BRD | Done — `PolicyApprovalTier` type; `approvalTier` field on Policy; tier badge in RegDocCard and detail drawer; `submitForReview` / `approve` / `initiateReview` store actions |
+| POL-005 | Version history with changelog | ✅ | P1 | S | BRD | Done — `PolicyVersionEntry[]` on Policy model; rendered in detail drawer with version, date, author, changes columns |
 | POL-006 | Audit trail (creation, edits, approvals, rejections, publication) | 📋 | P1 | S | BRD | |
 | POL-007 | Document management (PDF, DOC uploads per policy) | 📋 | P1 | S | BRD | |
-| POL-008 | Status dashboard (total, by status, upcoming/overdue reviews) | 🔧 | P1 | S | BRD | UI built, needs live data |
-| POL-009 | Compliance engine integration (Policy Currency = 15% weight) | 📋 | P0 | S | BRD | Currently returns 0 |
-| POL-010 | Framework principle tagging on policies | 📋 | P1 | B | BRD | `frameworkTags[]` field. See Epic 11 |
+| POL-008 | Status dashboard (total, by status, upcoming/overdue reviews) | ✅ | P1 | S | BRD | Done — stat cards driven by live `policy-store` data; counts for approved/under-review/draft/expired and overdue review alerts |
+| POL-009 | Compliance engine integration (Policy Currency = 15% weight) | ✅ | P0 | S | BRD | Done — engine filter widened from `status === 'active'` to `status === 'approved' || 'active'`; `PolicySlice.status` widened to `string` in compliance-engine.types.ts; policy-store seeds provide real data |
+| POL-010 | Framework principle tagging on policies | 📋 | P1 | B | BRD | `frameworkTags[]` field. See Epic 12 |
+| POL-011 | Shared RegDocCard component (circular + policy variants) | ✅ | P1 | A | FEEDBACK | Done — `src/components/reg-doc/RegDocCard.tsx`; circular variant: authority badge, priority, status, business owner, progress bar, days left, phase chip; policy variant: category icon, status badge, tier badge, owner avatar, next review urgency; phase display shows "Current Phase" chip (Phase 0 amber / Phase 1 blue / Phase 2 violet) replacing raw capStatus text |
+| POL-012 | Shared RegDocFilterBar component | ✅ | P1 | A | FEEDBACK | Done — `src/components/reg-doc/RegDocFilterBar.tsx`; reusable filter bar for both circulars and policies pages |
 
 ---
 
-## Epic 6: Audit Management
+## Epic 5: Circular AI & Backend Features
+
+> Deferred from Sprint 2 (Circular Detail Overhaul). All items require ML/LLM backend or auth infrastructure not yet available in the frontend-only build.
+
+| ID | Feature | Status | Priority | Arch | Source | Notes |
+|---|---|---|---|---|---|---|
+| CIRC-AI-001 | PDF auto-parse to fill title + authority on upload | 📋 | P2 | A | FEEDBACK | Requires ML/backend OCR service |
+| CIRC-AI-002 | AI-powered CAP applicability analysis | 📋 | P2 | A | FEEDBACK | Requires LLM backend; analyzes circular text vs entity profile |
+| CIRC-AI-003 | AI article extraction from circular PDF | 📋 | P2 | A | FEEDBACK | Requires LLM backend; auto-populates article breakdown |
+| CIRC-AI-004 | Auto-suggest business owner dept based on circular content | 📋 | P3 | A | FEEDBACK | Requires ML classification model |
+| CIRC-AI-005 | "Pending AI Review" initial state + officer approval flow | 📋 | P2 | A | FEEDBACK | Depends on AI backend; CO reviews AI applicability suggestion |
+| CIRC-BE-001 | Formal CR approval flow (Compliance Officer → Compliance Manager) with real notifications | 📋 | P1 | A | FEEDBACK | Requires backend + auth roles; replaces simulate-only advance step |
+| CIRC-BE-002 | Real email sending for BO notification and authority correspondence | 📋 | P1 | A | FEEDBACK | Requires backend email service (SES / SendGrid) |
+| CIRC-BE-003 | Authority correspondence: auto-download CAP/Remediation PDF and send to authority | 📋 | P2 | A | FEEDBACK | Requires backend + PDF generation service |
+
+---
+
+## Epic 6: Observation Tracker
+
+| ID | Feature | Status | Priority | Arch | Source | Notes |
+|---|---|---|---|---|---|---|
+| OBS-001 | Multi-source tracking (SAMA Inspection, Internal Audit, Sharia Audit) | ✅ | P0 | S | BRD | Done |
+| OBS-002 | Severity classification (Critical, High, Medium, Low) with weighted scoring | ✅ | P0 | S | BRD | Done |
+| OBS-003 | Status lifecycle (Open → In Progress → Resolved → Closed) | ✅ | P0 | S | BRD | Done |
+| OBS-004 | Remediation plan workflow (submit → review → approve/reject) | ✅ | P0 | S | BRD | Done |
+| OBS-005 | Evidence collection (document upload with remediation plan association) | ✅ | P0 | S | BRD | Done |
+| OBS-006 | Checklist management (per-observation remediation checklists) | ✅ | P0 | S | BRD | Done |
+| OBS-007 | Dual deadlines (Plan Submission Due + Remediation Deadline) | ✅ | P0 | S | BRD | Done |
+| OBS-008 | Closure workflow (Request → Leader/Manager review → Approve/Reject) | ✅ | P0 | S | BRD | Done |
+| OBS-009 | Leadership model with transfer capability | ✅ | P0 | S | BRD | Done |
+| OBS-010 | Role-based access (Officers view/create, Managers manage, Leaders manage their own) | ✅ | P0 | S | BRD | Done |
+| OBS-011 | Activity timeline (full audit trail) | ✅ | P0 | S | BRD | Done |
+| OBS-012 | Department assignment | ✅ | P0 | S | BRD | Done |
+| OBS-013 | CSV export | ✅ | P0 | S | BRD | Done |
+| OBS-014 | Sub-classification system (subTitle field with filtering) | ✅ | P0 | S | BRD | Done |
+| OBS-015 | Visit-type column (online vs. on-site inspection) | 📋 | P1 | S | FEEDBACK | Field not yet in data model |
+| OBS-016 | Evidence follow-up per department (request-and-track workflow) | 📋 | P1 | S | FEEDBACK | Currently upload-only, no request tracking |
+| OBS-017 | Framework principle tagging on observations | 📋 | P1 | B | BRD | `frameworkTags[]` metadata field. See Epic 12 |
+| OBS-018 | Expand source types to include CMA, IA observations | 💡 | P2 | A | REC | When onboarding adds CMA/IA authorities |
+
+---
+
+## Epic 7: Audit Management
 
 | ID | Feature | Status | Priority | Arch | Source | Notes |
 |---|---|---|---|---|---|---|
@@ -163,12 +185,12 @@
 | AUD-011 | Compliance engine integration (Audit Completion = 25% weight) | ✅ | P0 | S | BRD | Done |
 | AUD-012 | Automated archiving for completed internal audits | 📋 | P1 | C | FEEDBACK | Configurable retention period, archive view |
 | AUD-013 | Recurring scheduling (auto-create next instance on completion) | 📋 | P1 | S | FEEDBACK | E.g., complete Q1 → auto-create Q2 |
-| AUD-014 | Framework principle tagging on audits | 📋 | P1 | B | BRD | `frameworkTags[]` field. See Epic 11 |
+| AUD-014 | Framework principle tagging on audits | 📋 | P1 | B | BRD | `frameworkTags[]` field. See Epic 12 |
 | AUD-015 | Expand audit types to include CMA Inspection, IA Inspection | 💡 | P2 | A | REC | When onboarding adds CMA/IA |
 
 ---
 
-## Epic 7: Reports & Analytics
+## Epic 8: Reports & Analytics
 
 | ID | Feature | Status | Priority | Arch | Source | Notes |
 |---|---|---|---|---|---|---|
@@ -185,13 +207,13 @@
 | RPT-011 | Detailed logs tab (activity logs, CSV export) | ✅ | P0 | S | BRD | Done |
 | RPT-012 | Replace hardcoded risk data in Risks tab with Risk Store | ✅ | P0 | S | BRD | Done — `risks` useMemo maps store data to page format, all UI driven by `useRiskStore` |
 | RPT-013 | Replace hardcoded executive view details with live data | 📋 | P1 | S | BRD | |
-| RPT-014 | Framework-aligned reporting (per-framework coverage %) | 📋 | P1 | B | BRD | See Epic 11. Show coverage per control |
+| RPT-014 | Framework-aligned reporting (per-framework coverage %) | 📋 | P1 | B | BRD | See Epic 12. Show coverage per control |
 | RPT-015 | Control-level drill-down (all tagged entities per control) | 📋 | P2 | B | BRD | |
 | RPT-016 | Gap analysis report (controls with no associated records) | 📋 | P2 | B | BRD | |
 
 ---
 
-## Epic 8: Calendar
+## Epic 9: Calendar
 
 | ID | Feature | Status | Priority | Arch | Source | Notes |
 |---|---|---|---|---|---|---|
@@ -209,7 +231,7 @@
 
 ---
 
-## Epic 9: Risk Register
+## Epic 10: Risk Register
 
 | ID | Feature | Status | Priority | Arch | Source | Notes |
 |---|---|---|---|---|---|---|
@@ -223,7 +245,7 @@
 | RSK-008 | Audit trail (status, score, mitigation, review, checklist changes) | ✅ | P1 | S | BRD | Done — History timeline in drawer with colored dots, 11 action types including 4 checklist actions (added/toggled/edited/removed), all changes append entries automatically |
 | RSK-009 | Compliance engine integration (Risk Posture = 20% weight) | 📋 | P0 | S | BRD | Currently returns 0 — engine receives empty arrays for risk data |
 | RSK-010 | Dashboard widget integration | 📋 | P1 | S | BRD | |
-| RSK-011 | Framework principle tagging on risks | 📋 | P1 | B | BRD | `frameworkTags[]` field. See Epic 11 |
+| RSK-011 | Framework principle tagging on risks | 📋 | P1 | B | BRD | `frameworkTags[]` field. See Epic 12 |
 | RSK-012 | Risk list search (name, description, category, owner) | ✅ | P1 | S | BRD | Done — Search input in risk list card header, case-insensitive across 4 fields |
 | RSK-013 | Risk list sorting (name, category, score, status, owner) | ✅ | P1 | S | BRD | Done — Clickable column headers with asc/desc chevron indicators, clear button |
 | RSK-014 | Edit risk (populate modal from existing risk, update via store) | ✅ | P1 | S | BRD | Done — Edit button in drawer pre-fills all 8 form fields, saves via `update` action, appends history entry |
@@ -237,7 +259,7 @@
 
 ---
 
-## Epic 10: Team & Training
+## Epic 11: Team & Training
 
 | ID | Feature | Status | Priority | Arch | Source | Notes |
 |---|---|---|---|---|---|---|
@@ -258,7 +280,7 @@
 
 ---
 
-## Epic 11: Framework Metadata Layer
+## Epic 12: Framework Metadata Layer
 
 > Core Archetype B infrastructure. Adds tagging capability across all existing modules without new workflows.
 
@@ -289,7 +311,7 @@
 
 ---
 
-## Epic 12: Framework Versioning & Migration
+## Epic 13: Framework Versioning & Migration
 
 > Handles framework updates (e.g., NCA ECC v1→v2). Infrequent but critical.
 
@@ -308,7 +330,7 @@
 
 ---
 
-## Epic 13: Settings & Configuration
+## Epic 14: Settings & Configuration
 
 | ID | Feature | Status | Priority | Arch | Source | Notes |
 |---|---|---|---|---|---|---|
@@ -325,7 +347,7 @@
 
 ---
 
-## Epic 14: RBAC & Permissions
+## Epic 15: RBAC & Permissions
 
 | ID | Feature | Status | Priority | Arch | Source | Notes |
 |---|---|---|---|---|---|---|
@@ -337,7 +359,7 @@
 
 ---
 
-## Epic 15: Internationalization
+## Epic 16: Internationalization
 
 | ID | Feature | Status | Priority | Arch | Source | Notes |
 |---|---|---|---|---|---|---|
@@ -349,10 +371,11 @@
 | I18N-006 | No hardcoded English in components | ✅ | P0 | S | BRD | Done |
 | I18N-007 | Arabic translations for new onboarding screens | 💡 | P2 | S | REC | New authority/framework names in AR |
 | I18N-008 | Arabic translations for framework control libraries | 💡 | P2 | B | REC | NCA ECC, PDPL etc. article names in AR |
+| I18N-009 | Circular & Policy i18n keys (EN + AR) | ✅ | P1 | A | FEEDBACK | Done — authority labels, CAP status labels, applicability, autoReference, reviewAlert, phase labels (`phaseCAP`, `phaseCorrectiveActionPlan`, `phaseRemediation`, `currentPhase`), policy status/tier keys, `viewFullDetail`, and 80+ circular workflow keys added to both `en.json` and `ar.json` |
 
 ---
 
-## Epic 16: ZATCA Compliance Tracker
+## Epic 17: ZATCA Compliance Tracker
 
 > Specialized module — Pattern 2 (Portal-Based). No letter correspondence.
 
@@ -366,7 +389,7 @@
 
 ---
 
-## Epic 17: SAFIU AML Case Management
+## Epic 18: SAFIU AML Case Management
 
 > Specialized module — Pattern 3 (One-Way Reporting). Highly restricted access.
 
@@ -384,7 +407,7 @@
 
 ---
 
-## Epic 18: MISA License Management
+## Epic 19: MISA License Management
 
 > Lightweight module — Pattern 4 (Periodic License Management).
 
@@ -397,7 +420,7 @@
 
 ---
 
-## Epic 19: Internal Governance (Constant C)
+## Epic 20: Internal Governance (Constant C)
 
 | ID | Feature | Status | Priority | Arch | Source | Notes |
 |---|---|---|---|---|---|---|
@@ -414,7 +437,7 @@
 
 ---
 
-## Epic 20: LaTeX PDF Generation System
+## Epic 21: LaTeX PDF Generation System
 
 > Universal export system — every page offers CSV or styled PDF via server-side LaTeX compilation. Design doc: `latex-pdf-generation-design.md`.
 
@@ -447,16 +470,18 @@
 
 ## Summary Dashboard
 
+> **Sprint 3 in progress** — Circular UX & Integration Overhaul targeting Epic 3 (Rules & Circulars) and Epic 4 (Policies & Procedures).
+
 ### By Status
 
 | Status | Count | % |
 |---|---|---|
-| ✅ Done | 93 | 40% |
-| 🔧 In Progress (UI built, logic pending) | 22 | 9% |
-| 📋 To Do (defined, not started) | 59 | 25% |
+| ✅ Done | 104 | 43% |
+| 🔧 In Progress (UI built, logic pending) | 17 | 7% |
+| 📋 To Do (defined, not started) | 57 | 24% |
 | 💡 New Recommendation | 24 | 10% |
 | 🗺️ Roadmap (future phase) | 18 | 8% |
-| **Total** | **217** | **100%** |
+| **Total** | **222** | **100%** |
 
 ### By Priority
 
@@ -480,8 +505,8 @@
 
 These 30 items must be completed before launch (2 now done):
 
-1. **Stores:** ~~Risk Store (RSK-001)~~ ✅, Policy Store (POL-002), Training Store (TRN-004), Framework Store (FRM-018)
-2. **Engine Integration:** Risk Posture (RSK-009), Policy Currency (POL-009), Training Completion (TRN-013)
+1. **Stores:** ~~Risk Store (RSK-001)~~ ✅, ~~Policy Store (POL-002)~~ ✅, Training Store (TRN-004), Framework Store (FRM-018)
+2. **Engine Integration:** Risk Posture (RSK-009), ~~Policy Currency (POL-009)~~ ✅, Training Completion (TRN-013)
 3. **Live Data:** ~~Replace hardcoded risk data (RPT-012)~~ ✅
 4. **Correspondence:** ~~Letter approval chain (COR-005, COR-006)~~ ✅, ~~Reference numbering (COR-009)~~ ✅
 5. **Rules & Circulars:** Registration logic (RUL-001), applicability (RUL-002), CAP creation (RUL-003), Business Owner assignment (RUL-004)
