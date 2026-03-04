@@ -297,44 +297,44 @@ export default function CorrespondenceFeedPage() {
   }
 
   return (
-    <div className={`flex flex-col h-full overflow-hidden ${isRTL ? 'rtl' : ''}`}>
+    <div className={`flex flex-col h-full overflow-hidden`}>
       <header className="h-20 bg-white border-b border-slate-200 px-8 flex items-center justify-between shrink-0">
-        <div className={`flex items-center gap-4 ${isRTL ? 'flex-row-reverse' : ''}`}>
-          <div className={isRTL ? 'text-right' : ''}>
+        <div className={`flex items-center gap-4`}>
+          <div>
             <h1 className="text-xl font-bold font-display text-slate-900">{t('correspondence.title' as TranslationKey)}</h1>
             <p className="text-xs text-slate-500 font-medium tracking-wide uppercase">{t('correspondence.subtitle' as TranslationKey)}</p>
           </div>
           <div className="hidden lg:block h-8 w-px bg-slate-200" />
           <div className="hidden lg:flex gap-2">
-            <Link href="/correspondence/sama-letters" className={`px-3 py-1.5 text-xs font-bold text-slate-600 bg-slate-50 hover:bg-slate-100 rounded-lg border border-slate-200 flex items-center gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
+            <Link href="/correspondence/sama-letters" className={`px-3 py-1.5 text-xs font-bold text-slate-600 bg-slate-50 hover:bg-slate-100 rounded-lg border border-slate-200 flex items-center gap-2`}>
               <Icon icon="lucide:mail" className="text-emerald-500" />
               {t('observations.samaLetters' as TranslationKey)}
             </Link>
-            <Link href="/correspondence/regulatory-updates" className={`px-3 py-1.5 text-xs font-bold text-slate-600 bg-slate-50 hover:bg-slate-100 rounded-lg border border-slate-200 flex items-center gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
+            <Link href="/correspondence/regulatory-updates" className={`px-3 py-1.5 text-xs font-bold text-slate-600 bg-slate-50 hover:bg-slate-100 rounded-lg border border-slate-200 flex items-center gap-2`}>
               <Icon icon="lucide:refresh-cw" className="text-blue-500" />
               {t('observations.regulatoryUpdates' as TranslationKey)}
             </Link>
-            <Link href="/correspondence/observations" className={`px-3 py-1.5 text-xs font-bold text-slate-600 bg-slate-50 hover:bg-slate-100 rounded-lg border border-slate-200 flex items-center gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
+            <Link href="/correspondence/observations" className={`px-3 py-1.5 text-xs font-bold text-slate-600 bg-slate-50 hover:bg-slate-100 rounded-lg border border-slate-200 flex items-center gap-2`}>
               <Icon icon="lucide:crosshair" className="text-rose-500" />
               {t('regulatoryUpdates.observationsTracker' as TranslationKey)}
             </Link>
           </div>
           <div className="hidden lg:block h-8 w-px bg-slate-200" />
-          <div className={`flex bg-slate-100 p-1 rounded-lg ${isRTL ? 'flex-row-reverse' : ''}`}>
-            <Link href="/correspondence/feed" className={cn('px-4 py-1.5 text-sm font-bold rounded-md transition-all flex items-center gap-2', pathname.startsWith('/correspondence/feed') ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700', isRTL ? 'flex-row-reverse' : '')}>
+          <div className={`flex bg-slate-100 p-1 rounded-lg`}>
+            <Link href="/correspondence/feed" className={cn('px-4 py-1.5 text-sm font-bold rounded-md transition-all flex items-center gap-2', pathname.startsWith('/correspondence/feed') ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700')}>
               <Icon icon="lucide:mail" className="text-base" />
               {t('correspondence.tabs.correspondence' as TranslationKey)}
             </Link>
-            <Link href="/correspondence/advisory" className={cn('px-4 py-1.5 text-sm font-bold rounded-md transition-all flex items-center gap-2', pathname.startsWith('/correspondence/advisory') ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700', isRTL ? 'flex-row-reverse' : '')}>
+            <Link href="/correspondence/advisory" className={cn('px-4 py-1.5 text-sm font-bold rounded-md transition-all flex items-center gap-2', pathname.startsWith('/correspondence/advisory') ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700')}>
               <Icon icon="lucide:message-circle-question" className="text-base" />
               {t('correspondence.tabs.advisory' as TranslationKey)}
             </Link>
           </div>
         </div>
-        <div className={`flex items-center gap-4 ${isRTL ? 'flex-row-reverse' : ''}`}>
+        <div className={`flex items-center gap-4`}>
           <button
             onClick={() => setIsNewCorrespondenceOpen(true)}
-            className={`bg-emerald-600 text-white px-5 py-2.5 rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-emerald-700 transition-colors shadow-lg shadow-emerald-100 cursor-pointer ${isRTL ? 'flex-row-reverse' : ''}`}
+            className={`bg-emerald-600 text-white px-5 py-2.5 rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-emerald-700 transition-colors shadow-lg shadow-emerald-100 cursor-pointer`}
           >
             <Icon icon="lucide:plus" />
             {t('correspondence.logCommunication' as TranslationKey)}
@@ -398,8 +398,8 @@ export default function CorrespondenceFeedPage() {
             <div className="col-span-12 lg:col-span-8 space-y-8">
               {/* Regulatory Tracker */}
               <section className="glass-card rounded-3xl p-6">
-                <div className={`flex justify-between items-center mb-6 ${isRTL ? 'flex-row-reverse' : ''}`}>
-                  <div className={isRTL ? 'text-right' : ''}>
+                <div className={`flex justify-between items-center mb-6`}>
+                  <div>
                     <h2 className="text-lg font-bold font-display text-slate-900">
                       {t('correspondence.regulatoryTracker')}
                     </h2>
@@ -434,12 +434,12 @@ export default function CorrespondenceFeedPage() {
               <div className="grid grid-cols-2 gap-8">
                 {/* Letter Correspondence */}
                 <section className="glass-card rounded-3xl p-6">
-                  <div className={`flex justify-between items-center mb-4 ${isRTL ? 'flex-row-reverse' : ''}`}>
-                    <h3 className={`text-sm font-bold text-slate-900 flex items-center gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                  <div className={`flex justify-between items-center mb-4`}>
+                    <h3 className={`text-sm font-bold text-slate-900 flex items-center gap-2`}>
                       <Icon icon="lucide:mail" className="text-slate-400" />
                       {t('correspondence.correspondenceFeed')}
                     </h3>
-                    <div className={`flex items-center gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                    <div className={`flex items-center gap-2`}>
                       <select
                         value={correspondenceFilter}
                         onChange={(e) => setCorrespondenceFilter(e.target.value as 'active' | 'archived' | 'all')}
@@ -502,25 +502,25 @@ export default function CorrespondenceFeedPage() {
                 {/* Policy Status + Rules & Circulars */}
                 <section className="glass-card rounded-3xl p-6">
                   {/* Policy Review */}
-                  <h3 className={`text-sm font-bold text-slate-900 mb-4 flex items-center gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                  <h3 className={`text-sm font-bold text-slate-900 mb-4 flex items-center gap-2`}>
                     <Icon icon="lucide:scroll-text" className="text-slate-400" />
                     {t('correspondence.policyReview')}
                   </h3>
                   <div className="grid grid-cols-2 gap-4">
-                    <div className={`bg-slate-50 p-3 rounded-xl border border-slate-100 ${isRTL ? 'text-right' : ''}`}>
+                    <div className={`bg-slate-50 p-3 rounded-xl border border-slate-100`}>
                       <span className="text-[10px] font-black text-slate-400 uppercase">
                         {t('correspondence.current')}
                       </span>
                       <p className="text-xl font-bold text-slate-900">{policyStats.currentPct}%</p>
                     </div>
-                    <div className={`bg-slate-50 p-3 rounded-xl border border-slate-100 ${isRTL ? 'text-right' : ''}`}>
+                    <div className={`bg-slate-50 p-3 rounded-xl border border-slate-100`}>
                       <span className="text-[10px] font-black text-rose-500 uppercase">
                         {t('correspondence.overdue' as TranslationKey)}
                       </span>
                       <p className="text-xl font-bold text-rose-600">{policyStats.overdueCount}</p>
                     </div>
                   </div>
-                  <div className={`mt-4 flex items-center justify-between text-[10px] font-bold text-slate-500 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                  <div className={`mt-4 flex items-center justify-between text-[10px] font-bold text-slate-500`}>
                     {nextPolicyReview ? (
                       <>
                         <span>{t('correspondence.nextReview')}: {nextPolicyReview.name}</span>
@@ -536,18 +536,18 @@ export default function CorrespondenceFeedPage() {
                   <div className="my-5 border-t border-slate-100" />
 
                   {/* Rules & Circulars Review */}
-                  <h3 className={`text-sm font-bold text-slate-900 mb-4 flex items-center gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                  <h3 className={`text-sm font-bold text-slate-900 mb-4 flex items-center gap-2`}>
                     <Icon icon="lucide:landmark" className="text-slate-400" />
                     {t('correspondence.rulesAndCirculars' as TranslationKey)}
                   </h3>
                   <div className="grid grid-cols-2 gap-4">
-                    <div className={`bg-slate-50 p-3 rounded-xl border border-slate-100 ${isRTL ? 'text-right' : ''}`}>
+                    <div className={`bg-slate-50 p-3 rounded-xl border border-slate-100`}>
                       <span className="text-[10px] font-black text-slate-400 uppercase">
                         {t('correspondence.current')}
                       </span>
                       <p className="text-xl font-bold text-slate-900">{circularStats.currentPct}%</p>
                     </div>
-                    <div className={`bg-slate-50 p-3 rounded-xl border border-slate-100 ${isRTL ? 'text-right' : ''}`}>
+                    <div className={`bg-slate-50 p-3 rounded-xl border border-slate-100`}>
                       <span className="text-[10px] font-black text-rose-500 uppercase">
                         {t('correspondence.overdue' as TranslationKey)}
                       </span>
@@ -557,13 +557,13 @@ export default function CorrespondenceFeedPage() {
                   <div className={`mt-4 text-[10px] font-bold text-slate-500`}>
                     {nextCircularsDue.length > 0 ? (
                       <>
-                        <div className={`flex items-center justify-between mb-1.5 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                        <div className={`flex items-center justify-between mb-1.5`}>
                           <span>{t('correspondence.nextDeadline' as TranslationKey)}</span>
                           <span className="text-blue-600">
                             {new Date(nextCircularsDue[0].dueDate).toLocaleDateString(isRTL ? 'ar-SA' : 'en-US', { month: 'short', day: 'numeric' })}
                           </span>
                         </div>
-                        <ul className={`space-y-0.5 ${isRTL ? 'text-right' : ''}`}>
+                        <ul className={`space-y-0.5`}>
                           {nextCircularsDue.map(c => (
                             <li key={c.id} className="text-slate-600 truncate">· {c.title}</li>
                           ))}
@@ -581,12 +581,12 @@ export default function CorrespondenceFeedPage() {
             <div className="col-span-12 lg:col-span-4 space-y-8">
               {/* Risk Register Summary */}
               <section className="rounded-3xl p-6 bg-slate-900 text-white">
-                <div className={`flex justify-between items-center mb-6 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                <div className={`flex justify-between items-center mb-6`}>
                   <h2 className="text-lg font-bold font-display">{t('correspondence.riskHeatmap')}</h2>
                   <Icon icon="lucide:trending-up" className="text-emerald-400 text-xl" />
                 </div>
                 <div className="space-y-4">
-                  <div className={`flex items-center justify-between ${isRTL ? 'flex-row-reverse' : ''}`}>
+                  <div className={`flex items-center justify-between`}>
                     <span className="text-xs text-slate-400 uppercase tracking-widest font-black">{t('observations.severity')}</span>
                     <span className="text-xs text-slate-400 uppercase tracking-widest font-black">{t('common.items')}</span>
                   </div>
@@ -594,19 +594,19 @@ export default function CorrespondenceFeedPage() {
                     const totalRisks = risks.length || 1
                     return (
                       <div className="space-y-3">
-                        <div className={`flex items-center gap-3 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                        <div className={`flex items-center gap-3`}>
                           <div className="w-full h-2 bg-slate-800 rounded-full overflow-hidden">
                             <div className="h-full bg-rose-500" style={{ width: `${(riskCounts.critical / totalRisks) * 100}%` }} />
                           </div>
                           <span className="text-[10px] font-bold w-16 shrink-0">{t('riskRegister.critical')} ({riskCounts.critical})</span>
                         </div>
-                        <div className={`flex items-center gap-3 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                        <div className={`flex items-center gap-3`}>
                           <div className="w-full h-2 bg-slate-800 rounded-full overflow-hidden">
                             <div className="h-full bg-orange-500" style={{ width: `${(riskCounts.high / totalRisks) * 100}%` }} />
                           </div>
                           <span className="text-[10px] font-bold w-16 shrink-0">{t('riskRegister.high')} ({riskCounts.high})</span>
                         </div>
-                        <div className={`flex items-center gap-3 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                        <div className={`flex items-center gap-3`}>
                           <div className="w-full h-2 bg-slate-800 rounded-full overflow-hidden">
                             <div className="h-full bg-amber-500" style={{ width: `${(riskCounts.medium / totalRisks) * 100}%` }} />
                           </div>
@@ -626,16 +626,16 @@ export default function CorrespondenceFeedPage() {
 
               {/* Team Workload */}
               <section className="glass-card rounded-3xl p-6">
-                <div className={`flex justify-between items-center mb-6 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                <div className={`flex justify-between items-center mb-6`}>
                   <h2 className="text-sm font-bold text-slate-900 uppercase tracking-widest">
                     {t('correspondence.teamCapacity')}
                   </h2>
                   <Link
                     href="/team"
-                    className={`text-xs font-bold text-slate-500 hover:text-slate-700 flex items-center gap-1 ${isRTL ? 'flex-row-reverse' : ''}`}
+                    className={`text-xs font-bold text-slate-500 hover:text-slate-700 flex items-center gap-1`}
                   >
                     {t('correspondence.viewAll' as TranslationKey)}
-                    <Icon icon={isRTL ? 'lucide:arrow-left' : 'lucide:arrow-right'} className="text-sm" />
+                    <Icon icon={'lucide:arrow-right'} className="text-sm" />
                   </Link>
                 </div>
                 <div className="space-y-5">
@@ -650,7 +650,7 @@ export default function CorrespondenceFeedPage() {
 
               {/* Upcoming Submission */}
               <section className="glass-card rounded-3xl p-6 border-emerald-100 bg-emerald-50/20">
-                <h2 className={`text-[10px] font-black text-emerald-600 uppercase tracking-widest mb-4 ${isRTL ? 'text-right' : ''}`}>
+                <h2 className={`text-[10px] font-black text-emerald-600 uppercase tracking-widest mb-4`}>
                   {t('correspondence.upcomingSubmission')}
                 </h2>
                 {upcomingItems.length > 0 ? (
@@ -662,8 +662,8 @@ export default function CorrespondenceFeedPage() {
                         'observation': 'bg-rose-100 text-rose-700',
                       }
                       return (
-                        <div key={item.id} className={`bg-white p-4 rounded-2xl border border-emerald-100 shadow-sm ${isRTL ? 'text-right' : ''}`}>
-                          <div className={`flex items-start justify-between gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                        <div key={item.id} className={`bg-white p-4 rounded-2xl border border-emerald-100 shadow-sm`}>
+                          <div className={`flex items-start justify-between gap-2`}>
                             <div className="flex-1 min-w-0">
                               <p className="text-sm font-bold text-slate-900 truncate">{item.name}</p>
                               <p className="text-xs text-slate-500 mt-0.5">{item.subtitle}</p>
@@ -672,7 +672,7 @@ export default function CorrespondenceFeedPage() {
                               {item.source === 'registry' ? 'Registry' : item.source === 'sama-letter' ? 'SAMA' : 'Obs'}
                             </span>
                           </div>
-                          <div className={`flex items-center justify-between mt-3 pt-3 border-t border-slate-100 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                          <div className={`flex items-center justify-between mt-3 pt-3 border-t border-slate-100`}>
                             <span className="text-xs font-bold text-rose-500">
                               {new Date(item.dueDate).toLocaleDateString(isRTL ? 'ar-SA' : 'en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                             </span>
@@ -688,7 +688,7 @@ export default function CorrespondenceFeedPage() {
                     })}
                   </div>
                 ) : (
-                  <div className={`bg-white p-4 rounded-2xl border border-slate-100 shadow-sm ${isRTL ? 'text-right' : ''}`}>
+                  <div className={`bg-white p-4 rounded-2xl border border-slate-100 shadow-sm`}>
                     <p className="text-sm text-slate-400 text-center py-2">{t('correspondence.noUpcomingSubmissions')}</p>
                   </div>
                 )}
@@ -711,13 +711,13 @@ export default function CorrespondenceFeedPage() {
       >
         <div className="space-y-4">
           <div>
-            <label className={`text-xs font-bold text-slate-700 uppercase mb-2 block ${isRTL ? 'text-right' : ''}`}>
+            <label className={`text-xs font-bold text-slate-700 uppercase mb-2 block`}>
               {t('correspondence.typeLabel' as TranslationKey)}
             </label>
             <select
               value={newCorrespondenceType}
               onChange={(e) => setNewCorrespondenceType(e.target.value as Correspondence['type'])}
-              className={`w-full px-4 py-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 ${isRTL ? 'text-right' : ''}`}
+              className={`w-full px-4 py-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500`}
             >
               <option value="sama">{t('correspondence.typeSama' as TranslationKey)}</option>
               <option value="cma">{t('correspondence.typeCma' as TranslationKey)}</option>
@@ -729,33 +729,33 @@ export default function CorrespondenceFeedPage() {
             </select>
           </div>
           <div>
-            <label className={`text-xs font-bold text-slate-700 uppercase mb-2 block ${isRTL ? 'text-right' : ''}`}>{t('correspondence.to')}</label>
+            <label className={`text-xs font-bold text-slate-700 uppercase mb-2 block`}>{t('correspondence.to')}</label>
             <input
               type="text"
               value={newCorrespondenceTo}
               onChange={(e) => setNewCorrespondenceTo(e.target.value)}
               placeholder={t('common.enterRecipient')}
-              className={`w-full px-4 py-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 ${isRTL ? 'text-right' : ''}`}
+              className={`w-full px-4 py-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500`}
             />
           </div>
           <div>
-            <label className={`text-xs font-bold text-slate-700 uppercase mb-2 block ${isRTL ? 'text-right' : ''}`}>{t('common.subject')}</label>
+            <label className={`text-xs font-bold text-slate-700 uppercase mb-2 block`}>{t('common.subject')}</label>
             <input
               type="text"
               value={newCorrespondenceSubject}
               onChange={(e) => setNewCorrespondenceSubject(e.target.value)}
               placeholder={t('common.enterSubject')}
-              className={`w-full px-4 py-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 ${isRTL ? 'text-right' : ''}`}
+              className={`w-full px-4 py-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500`}
             />
           </div>
           <div>
-            <label className={`text-xs font-bold text-slate-700 uppercase mb-2 block ${isRTL ? 'text-right' : ''}`}>
+            <label className={`text-xs font-bold text-slate-700 uppercase mb-2 block`}>
               {t('correspondence.assignedTo')}
             </label>
             <select
               value={newCorrespondenceAssignee}
               onChange={(e) => setNewCorrespondenceAssignee(e.target.value)}
-              className={`w-full px-4 py-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 ${isRTL ? 'text-right' : ''}`}
+              className={`w-full px-4 py-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500`}
             >
               <option value="">{t('common.unassigned' as TranslationKey)}</option>
               {teamStore.members.map((m) => (
@@ -764,16 +764,16 @@ export default function CorrespondenceFeedPage() {
             </select>
           </div>
           <div>
-            <label className={`text-xs font-bold text-slate-700 uppercase mb-2 block ${isRTL ? 'text-right' : ''}`}>{t('correspondence.message')}</label>
+            <label className={`text-xs font-bold text-slate-700 uppercase mb-2 block`}>{t('correspondence.message')}</label>
             <textarea
               rows={8}
               value={newCorrespondenceBody}
               onChange={(e) => setNewCorrespondenceBody(e.target.value)}
               placeholder={t('common.typeMessage')}
-              className={`w-full px-4 py-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 ${isRTL ? 'text-right' : ''}`}
+              className={`w-full px-4 py-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500`}
             />
           </div>
-          <div className={`flex gap-3 mt-6 ${isRTL ? 'flex-row-reverse' : ''}`}>
+          <div className={`flex gap-3 mt-6`}>
             <button
               onClick={() => {
                 if (!newCorrespondenceSubject || !newCorrespondenceTo) {
@@ -800,7 +800,7 @@ export default function CorrespondenceFeedPage() {
                 setIsNewCorrespondenceOpen(false)
                 showToast(t('correspondence.correspondenceSent'))
               }}
-              className={`flex-1 bg-emerald-600 text-white py-3 rounded-lg font-bold hover:bg-emerald-700 transition-colors flex items-center justify-center gap-2 cursor-pointer ${isRTL ? 'flex-row-reverse' : ''}`}
+              className={`flex-1 bg-emerald-600 text-white py-3 rounded-lg font-bold hover:bg-emerald-700 transition-colors flex items-center justify-center gap-2 cursor-pointer`}
             >
               <Icon icon="lucide:send" className="text-lg" />
               {t('correspondence.send')}
@@ -988,8 +988,8 @@ export default function CorrespondenceFeedPage() {
             </div>
 
             {/* Info Box */}
-            <div className={`mt-6 bg-blue-50 p-4 rounded-lg border border-blue-200 ${isRTL ? 'text-right' : ''}`}>
-              <div className={`flex items-start gap-3 ${isRTL ? 'flex-row-reverse' : ''}`}>
+            <div className={`mt-6 bg-blue-50 p-4 rounded-lg border border-blue-200`}>
+              <div className={`flex items-start gap-3`}>
                 <Icon icon="lucide:info" className="text-blue-600 text-xl shrink-0 mt-0.5" />
                 <div>
                   <p className="text-sm font-bold text-blue-900">{t('correspondence.interactiveMatrix')}</p>
@@ -1011,25 +1011,25 @@ export default function CorrespondenceFeedPage() {
       >
         {selectedLetter && (
           <div className="space-y-4">
-            <div className={`bg-slate-50 p-4 rounded-lg ${isRTL ? 'text-right' : ''}`}>
+            <div className={`bg-slate-50 p-4 rounded-lg`}>
               <p className="text-xs font-bold text-slate-500 uppercase mb-1">{t('common.status')}</p>
               <p className="text-sm font-bold text-slate-900">{selectedLetter.status === 'sent' ? t('correspondence.sentToSama') : t('common.draft')}</p>
             </div>
-            <div className={`bg-slate-50 p-4 rounded-lg ${isRTL ? 'text-right' : ''}`}>
+            <div className={`bg-slate-50 p-4 rounded-lg`}>
               <p className="text-xs font-bold text-slate-500 uppercase mb-1">{t('common.date')}</p>
               <p className="text-sm font-bold text-slate-900">{new Date(selectedLetter.date).toLocaleDateString(isRTL ? 'ar-SA' : 'en-US')}</p>
             </div>
-            <div className={`bg-slate-50 p-4 rounded-lg ${isRTL ? 'text-right' : ''}`}>
+            <div className={`bg-slate-50 p-4 rounded-lg`}>
               <p className="text-xs font-bold text-slate-500 uppercase mb-1">{t('correspondence.content')}</p>
               <p className="text-sm text-slate-700">{selectedLetter.body}</p>
             </div>
             {selectedLetter.assignee && (
-              <div className={`bg-emerald-50 p-4 rounded-lg ${isRTL ? 'text-right' : ''}`}>
+              <div className={`bg-emerald-50 p-4 rounded-lg`}>
                 <p className="text-xs font-bold text-emerald-600 uppercase mb-1">{t('correspondence.assignedTo')}</p>
                 <p className="text-sm font-bold text-slate-900">{selectedLetter.assignee}</p>
               </div>
             )}
-            <div className={`flex gap-3 pt-4 ${isRTL ? 'flex-row-reverse' : ''}`}>
+            <div className={`flex gap-3 pt-4`}>
               <button
                 onClick={() => handleArchive(selectedLetter.id)}
                 className="flex-1 bg-slate-100 text-slate-700 py-3 rounded-lg font-bold hover:bg-slate-200 transition-colors cursor-pointer"
@@ -1084,8 +1084,8 @@ function MetricCard({
   }
 
   return (
-    <div className={`glass-card stat-card-hover p-6 rounded-2xl ${isRTL ? 'text-right' : ''}`}>
-      <div className={`flex justify-between items-start mb-4 ${isRTL ? 'flex-row-reverse' : ''}`}>
+    <div className={`glass-card stat-card-hover p-6 rounded-2xl`}>
+      <div className={`flex justify-between items-start mb-4`}>
         <div className={`p-2 ${iconColors[iconColor]} rounded-lg`}>
           <Icon icon={icon} className="text-2xl" />
         </div>
@@ -1094,7 +1094,7 @@ function MetricCard({
         </span>
       </div>
       <h3 className="text-slate-500 text-xs font-bold uppercase tracking-wider mb-1">{title}</h3>
-      <div className={`flex items-baseline gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
+      <div className={`flex items-baseline gap-2`}>
         <span className="text-2xl font-bold text-slate-900">{value}</span>
         <span className="text-xs text-slate-400">{subtitle}</span>
       </div>
@@ -1104,7 +1104,7 @@ function MetricCard({
         </div>
       )}
       {progressSegments && (
-        <div className={`mt-4 flex gap-1 ${isRTL ? 'flex-row-reverse' : ''}`}>
+        <div className={`mt-4 flex gap-1`}>
           {progressSegments.map((segment, i) => (
             <div
               key={i}
@@ -1136,22 +1136,22 @@ function CircularRow({ circular, isRTL, onClick }: { circular: Circular; isRTL: 
   return (
     <div
       onClick={onClick}
-      className={`flex items-center justify-between p-4 rounded-xl border ${isCompleted ? 'bg-emerald-50/50 border-emerald-100' : 'bg-slate-50 border-slate-100'} ${isRTL ? 'flex-row-reverse' : ''} ${onClick ? 'cursor-pointer hover:bg-slate-100/80' : ''}`}
+      className={`flex items-center justify-between p-4 rounded-xl border ${isCompleted ? 'bg-emerald-50/50 border-emerald-100' : 'bg-slate-50 border-slate-100'} ${onClick ? 'cursor-pointer hover:bg-slate-100/80' : ''}`}
     >
-      <div className={`flex items-center gap-4 ${isRTL ? 'flex-row-reverse' : ''}`}>
+      <div className={`flex items-center gap-4`}>
         <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center border border-slate-200 shadow-sm">
           <Icon
             icon={isCompleted ? 'lucide:check-circle' : 'lucide:scale'}
             className={isCompleted ? 'text-emerald-500' : 'text-slate-400'}
           />
         </div>
-        <div className={isRTL ? 'text-right' : ''}>
+        <div>
           <p className="text-sm font-bold text-slate-900">{circular.title}</p>
           <p className="text-[10px] text-slate-500">{circular.authority} · {circular.reference}</p>
         </div>
       </div>
-      <div className={`flex items-center gap-6 ${isRTL ? 'flex-row-reverse' : ''}`}>
-        <div className={isRTL ? 'text-left' : 'text-right'}>
+      <div className={`flex items-center gap-6`}>
+        <div className={'text-right'}>
           <span className={`text-[10px] font-black uppercase ${isDueSoon ? 'text-rose-500' : isCompleted ? 'text-emerald-600' : 'text-slate-400'}`}>
             {dueText}
           </span>
@@ -1200,7 +1200,7 @@ function CommunicationLogItem({
   })()
 
   return (
-    <div className={`flex gap-3 ${isRTL ? 'flex-row-reverse' : ''}`}>
+    <div className={`flex gap-3`}>
       <div
         className={`w-8 h-8 rounded-full ${isSent ? 'bg-blue-100' : 'bg-slate-100'} flex items-center justify-center shrink-0`}
       >
@@ -1209,7 +1209,7 @@ function CommunicationLogItem({
           className={`${isSent ? 'text-blue-600' : 'text-slate-600'} text-sm`}
         />
       </div>
-      <div className={`flex-1 ${isRTL ? 'text-right' : ''}`}>
+      <div className={`flex-1`}>
         <p className="text-xs font-bold text-slate-900">{letter.subject}</p>
         <p className="text-[10px] text-slate-500">{letter.body}</p>
         <p className="text-[9px] text-slate-400 mt-1">
@@ -1220,7 +1220,7 @@ function CommunicationLogItem({
             {t('correspondence.assignedTo')}: {letter.assignee}
           </p>
         )}
-        <div className={`flex gap-2 mt-2 ${isRTL ? 'flex-row-reverse justify-end' : ''}`}>
+        <div className={`flex gap-2 mt-2`}>
           <button
             onClick={onView}
             className="text-[9px] font-bold text-emerald-600 hover:text-emerald-700 cursor-pointer"

@@ -43,21 +43,21 @@ export function RegDocFilterBar({
   t,
   isRTL,
 }: RegDocFilterBarProps) {
-  const selectClass = `px-4 py-2 bg-white border border-slate-200 rounded-lg text-sm text-slate-600 focus:ring-2 focus:ring-emerald-500/20 focus:outline-none ${isRTL ? 'text-right' : ''}`
+  const selectClass = `px-4 py-2 bg-white border border-slate-200 rounded-lg text-sm text-slate-600 focus:ring-2 focus:ring-emerald-500/20 focus:outline-none`
 
   return (
-    <div className={`flex items-center justify-between mb-6 ${isRTL ? 'flex-row-reverse' : ''}`}>
-      <div className={`flex gap-4 flex-wrap ${isRTL ? 'flex-row-reverse' : ''}`}>
+    <div className={`flex items-center justify-between mb-6`}>
+      <div className={`flex gap-4 flex-wrap`}>
         {/* Search */}
         <div className="relative">
           <Icon
             icon="lucide:search"
-            className={`absolute ${isRTL ? 'right-3' : 'left-3'} top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none`}
+            className={`absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none`}
           />
           <input
             type="text"
             placeholder={variant === 'circular' ? t('regulatoryUpdates.searchCirculars') : t('policies.searchPolicies')}
-            className={`${isRTL ? 'pr-10 pl-4 text-right' : 'pl-10 pr-4'} py-2 bg-white border border-slate-200 rounded-lg text-sm w-72 focus:ring-2 focus:ring-emerald-500/20 focus:outline-none`}
+            className={`pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-lg text-sm w-72 focus:ring-2 focus:ring-emerald-500/20 focus:outline-none`}
             value={searchQuery}
             onChange={(e) => onSearchChange(e.target.value)}
           />
@@ -121,14 +121,16 @@ export function RegDocFilterBar({
               <option value="under-review">{t('policies.statusUnderReview')}</option>
               <option value="approved">{t('policies.statusApproved')}</option>
               <option value="expired">{t('policies.statusExpired')}</option>
+              <option value="overdue">{t('policies.statusOverdue')}</option>
+              <option value="requires-review">{t('policies.statusRequiresReview')}</option>
             </select>
           </>
         )}
       </div>
 
       {/* Right side: result count + slot */}
-      <div className={`flex items-center gap-3 shrink-0 ${isRTL ? 'flex-row-reverse' : ''}`}>
-        <span className={`text-xs font-bold text-slate-500 ${isRTL ? 'text-right' : ''}`}>
+      <div className={`flex items-center gap-3 shrink-0`}>
+        <span className={`text-xs font-bold text-slate-500`}>
           {resultCount} {resultLabel}
         </span>
         {rightSlot}

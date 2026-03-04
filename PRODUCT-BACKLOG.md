@@ -121,8 +121,12 @@
 | POL-008 | Status dashboard (total, by status, upcoming/overdue reviews) | ✅ | P1 | S | BRD | Done — stat cards driven by live `policy-store` data; counts for approved/under-review/draft/expired and overdue review alerts |
 | POL-009 | Compliance engine integration (Policy Currency = 15% weight) | ✅ | P0 | S | BRD | Done — engine filter widened from `status === 'active'` to `status === 'approved' || 'active'`; `PolicySlice.status` widened to `string` in compliance-engine.types.ts; policy-store seeds provide real data |
 | POL-010 | Framework principle tagging on policies | 📋 | P1 | B | BRD | `frameworkTags[]` field. See Epic 12 |
-| POL-011 | Shared RegDocCard component (circular + policy variants) | ✅ | P1 | A | FEEDBACK | Done — `src/components/reg-doc/RegDocCard.tsx`; circular variant: authority badge, priority, status, business owner, progress bar, days left, phase chip; policy variant: category icon, status badge, tier badge, owner avatar, next review urgency; phase display shows "Current Phase" chip (Phase 0 amber / Phase 1 blue / Phase 2 violet) replacing raw capStatus text |
-| POL-012 | Shared RegDocFilterBar component | ✅ | P1 | A | FEEDBACK | Done — `src/components/reg-doc/RegDocFilterBar.tsx`; reusable filter bar for both circulars and policies pages |
+| POL-011 | Shared RegDocCard component (circular + policy variants) | ✅ | P1 | A | FEEDBACK | Done — moved to `src/components/correspondence/regulatory-updates/RegDocCard.tsx`; circular variant: authority badge, priority, status, business owner, progress bar, days left, phase chip; policy variant: category icon, status badge, tier badge, owner avatar, next review urgency; `overdue`/`requires-review` status handling added (Sprint 5) |
+| POL-012 | Shared RegDocFilterBar component | ✅ | P1 | A | FEEDBACK | Done — moved to `src/components/correspondence/regulatory-updates/RegDocFilterBar.tsx`; reusable filter bar for both circulars and policies pages |
+| POL-013 | In-app system notification when manager review is requested on a policy step | ✅ | P1 | S | FEEDBACK | Done (Sprint 5) — `PolicyDetailsContent` wires `notify-manager-prompt` confirmation → `notification-store.addNotification()`; notification title/body localized, links back to policies page |
+| POL-014 | Email notification to policy owner when status becomes `requires-review` | 📋 | P2 | S | BRD | Requires server-side scheduler (cron/job queue) + email service (SendGrid, Resend). The `checkAndUpdateStatuses()` action in `policy-store.ts` sets client-side status; a server equivalent would send email at the 90-day threshold |
+| POL-015 | Evidence filter across all review cycles | ✅ | P1 | S | FEEDBACK | Done (Sprint 5) — `Policy` type gains `reviewCycleHistory[]`; `initiateReview()` pushes the outgoing cycle to history before creating the new one; evidence `useMemo` in PolicyDetailsContent merges current + history cycles so all past uploads remain filterable |
+| POL-016 | Status auto-derive on workflow-step drag (reorder + drag-to-bin) | ✅ | P1 | S | FEEDBACK | Done (Sprint 5) — `deriveStatusFromTimeline()` helper evaluates the updated timeline after every drag operation (reorder and bin-drop) and writes the correct `PolicyStatus` back to the store; drag-reorder and drag-to-bin both also clear `stepState` from non-completed steps to prevent stale approval-flow button states |
 
 ---
 
@@ -515,3 +519,4 @@ These 30 items must be completed before launch (2 now done):
 ---
 
 *This backlog is a living document. Update status as features are implemented. Add new items as requirements emerge. Review priorities quarterly.*
+

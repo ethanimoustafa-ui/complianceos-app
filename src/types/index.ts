@@ -539,13 +539,53 @@ export interface Training {
 }
 
 // Policy
-export type PolicyStatus = 'draft' | 'under-review' | 'approved' | 'expired'
+export type PolicyStatus = 'draft' | 'under-review' | 'approved' | 'expired' | 'overdue' | 'requires-review'
 export type PolicyCategory = 'compliance' | 'it' | 'operations' | 'risk' | 'hr' | 'finance'
-export type PolicyApprovalTier = 'board' | 'management-sharia' | 'agm'
+export type PolicyApprovalTier = 'board' | 'management' | 'sharia' | 'agm'
 
 export interface PolicyVersionEntry { version: string; date: string; author: string; changes: string }
-export interface PolicyWorkflowStep { step: string; date: string; user: string; status: 'completed' | 'current' | 'pending' }
+export interface PolicyWorkflowStep {
+  step: string
+  date: string
+  user: string
+  status: 'completed' | 'current' | 'pending'
+  description?: string
+  actionType?: string
+  note?: string
+  stepState?: 'pending-approval' | 'awaiting-response' | 'awaiting-manager'
+}
 export interface PolicyOwner { name: string; avatar: string; department: string }
+
+export interface PolicyAttachment {
+  id: string
+  name: string
+  dataUrl: string       // base64 data URL for download
+  size: number          // bytes
+  uploadedAt: string    // ISO
+  uploadedBy: string
+}
+
+export interface PolicyEvidence {
+  id: string
+  name: string
+  dataUrl: string
+  uploadedAt: string
+  uploadedBy: string
+  reviewCycleId: string
+  reviewCycleLabel: string
+  notes?: string
+}
+
+export interface PolicyActivityEntry {
+  id: string
+  timestamp: string   // ISO string, used for ordering
+  date: string        // YYYY-MM-DD, for display
+  type: 'created' | 'edited' | 'step_advanced' | 'step_reverted' | 'document_uploaded' | 'document_removed' | 'step_added' | 'workflow_approved' | 'step_denied'
+  textEn: string
+  textAr: string
+  user?: string
+  note?: string       // optional transition note
+}
 
 export interface Policy {
   id: string                      // auto: POL-001
@@ -562,7 +602,15 @@ export interface Policy {
   approvedDate?: string
   versionHistory: PolicyVersionEntry[]
   workflowTimeline: PolicyWorkflowStep[]
-  attachmentUrl?: string
+  activityLog?: PolicyActivityEntry[]
+  attachments?: PolicyAttachment[]        // replaces attachmentUrl (kept for seed compat)
+  attachmentUrl?: string                  // legacy (seed data only)
+  evidence?: PolicyEvidence[]
+  overdueCount?: number
+  lastOverdueDate?: string
+  currentReviewCycleId?: string
+  currentReviewCycleLabel?: string
+  reviewCycleHistory?: Array<{ id: string; label: string; initiatedAt: string }>
   createdAt: string
   updatedAt: string
 }

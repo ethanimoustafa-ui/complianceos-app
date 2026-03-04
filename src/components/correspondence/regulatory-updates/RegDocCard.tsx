@@ -11,6 +11,7 @@ interface RegDocCardProps {
   circular?: Circular
   policy?: Policy
   onClick: () => void
+  isNew?: boolean
   t: (key: TranslationKey, params?: Record<string, string>) => string
   isRTL: boolean
 }
@@ -64,10 +65,12 @@ function normalizeUrl(url: string): string {
 // ── Policy helpers ────────────────────────────────────────────────────────────
 
 const POLICY_STATUS_COLORS: Record<PolicyStatus, { bg: string; text: string }> = {
-  draft:          { bg: 'bg-slate-100',   text: 'text-slate-600'   },
-  'under-review': { bg: 'bg-amber-100',   text: 'text-amber-700'   },
-  approved:       { bg: 'bg-emerald-100', text: 'text-emerald-700' },
-  expired:        { bg: 'bg-rose-100',    text: 'text-rose-700'    },
+  draft:              { bg: 'bg-slate-100',   text: 'text-slate-600'   },
+  'under-review':     { bg: 'bg-amber-100',   text: 'text-amber-700'   },
+  approved:           { bg: 'bg-emerald-100', text: 'text-emerald-700' },
+  expired:            { bg: 'bg-rose-100',    text: 'text-rose-700'    },
+  overdue:            { bg: 'bg-rose-100',    text: 'text-rose-700'    },
+  'requires-review':  { bg: 'bg-orange-100',  text: 'text-orange-700'  },
 }
 
 const CATEGORY_ICONS: Record<PolicyCategory, string> = {
@@ -80,9 +83,10 @@ const CATEGORY_ICONS: Record<PolicyCategory, string> = {
 }
 
 const TIER_COLORS: Record<PolicyApprovalTier, { bg: string; text: string }> = {
-  board:               { bg: 'bg-violet-100', text: 'text-violet-700' },
-  'management-sharia': { bg: 'bg-blue-100',   text: 'text-blue-700'   },
-  agm:                 { bg: 'bg-amber-100',  text: 'text-amber-700'  },
+  board:      { bg: 'bg-violet-100',  text: 'text-violet-700'  },
+  management: { bg: 'bg-blue-100',    text: 'text-blue-700'    },
+  sharia:     { bg: 'bg-emerald-100', text: 'text-emerald-700' },
+  agm:        { bg: 'bg-amber-100',   text: 'text-amber-700'   },
 }
 
 function getReviewUrgency(nextReviewDate: string, status: PolicyStatus): 'expired' | 'warning' | 'normal' {
@@ -96,13 +100,13 @@ function getReviewUrgency(nextReviewDate: string, status: PolicyStatus): 'expire
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-export function RegDocCard({ variant, circular, policy, onClick, t, isRTL }: RegDocCardProps) {
+export function RegDocCard({ variant, circular, policy, onClick, isNew, t, isRTL }: RegDocCardProps) {
   return (
     <div
       onClick={onClick}
       className={cn(
         'bg-white/80 backdrop-blur border border-slate-100 p-6 rounded-2xl flex items-center justify-between cursor-pointer group hover:border-emerald-500 hover:bg-white transition-all',
-        isRTL ? 'flex-row-reverse' : ''
+        isNew && 'ring-2 ring-emerald-400 ring-offset-1 shadow-emerald-100'
       )}
     >
       {variant === 'circular' && circular && (
@@ -112,8 +116,8 @@ export function RegDocCard({ variant, circular, policy, onClick, t, isRTL }: Reg
         <PolicyCardContent policy={policy} t={t} isRTL={isRTL} />
       )}
       <Icon
-        icon="lucide:chevron-right"
-        className={cn('text-slate-300 group-hover:text-emerald-500 transition-colors text-xl shrink-0 ms-4', isRTL && 'flip-x')}
+        icon={"lucide:chevron-right"}
+        className={cn('text-slate-300 group-hover:text-emerald-500 transition-colors text-xl shrink-0 ms-4', isRTL ? 'rotate-180' : '')}
       />
     </div>
   )
@@ -131,15 +135,15 @@ function CircularCardContent({ circular, t, isRTL }: { circular: Circular; t: Re
   const currentPhase = currentStep?.phase ?? 0
 
   return (
-    <div className={cn('flex items-center gap-6 flex-1', isRTL ? 'flex-row-reverse' : '')}>
+    <div className={cn('flex items-center gap-6 flex-1', )}>
       {/* Authority badge */}
       <div className={cn('flex flex-col items-center justify-center px-4 py-3 rounded-xl border shrink-0', authorityStyle.bg, authorityStyle.border)}>
         <span className={cn('text-xs font-black', authorityStyle.text)}>{circular.authority}</span>
       </div>
 
       {/* Main info */}
-      <div className={cn('flex-1 space-y-1.5 min-w-0', isRTL ? 'text-right' : '')}>
-        <div className={cn('flex items-center gap-2', isRTL ? 'flex-row-reverse' : '')}>
+      <div className={cn('flex-1 space-y-1.5 min-w-0')}>
+        <div className={cn('flex items-center gap-2', )}>
           <h4 className="text-sm font-bold text-slate-900 truncate">{circular.title}</h4>
           <span className={cn('px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0', statusStyle.bg, statusStyle.text)}>
             {circular.status.replace('-', ' ').toUpperCase()}
@@ -157,7 +161,7 @@ function CircularCardContent({ circular, t, isRTL }: { circular: Circular; t: Re
             </a>
           )}
         </div>
-        <div className={cn('flex items-center gap-2', isRTL ? 'flex-row-reverse' : '')}>
+        <div className={cn('flex items-center gap-2', )}>
           <span className="text-xs font-mono font-bold text-slate-500">{circular.reference}</span>
           <span className="w-1 h-1 bg-slate-300 rounded-full"></span>
           <span className={cn('px-2 py-0.5 rounded-full text-[10px] font-bold', priorityStyle.bg, priorityStyle.text)}>
@@ -176,7 +180,7 @@ function CircularCardContent({ circular, t, isRTL }: { circular: Circular; t: Re
         </div>
         {/* Deadlines row */}
         {(circular.capDeadline || circular.remediationDeadline) && (
-          <div className={cn('flex items-center gap-2 flex-wrap', isRTL ? 'flex-row-reverse' : '')}>
+          <div className={cn('flex items-center gap-2 flex-wrap', )}>
             {circular.capDeadline && (
               <span className="bg-amber-50 text-amber-700 border border-amber-100 text-[10px] font-medium px-2 py-0.5 rounded-full">
                 {t('regulatoryUpdates.capDeadline')}: {circular.capDeadline} ({differenceInCalendarDays(new Date(circular.capDeadline), new Date())}d)
@@ -192,9 +196,9 @@ function CircularCardContent({ circular, t, isRTL }: { circular: Circular; t: Re
       </div>
 
       {/* Progress + days + CAP */}
-      <div className={cn('flex items-center gap-8 shrink-0', isRTL ? 'flex-row-reverse' : '')}>
+      <div className={cn('flex items-center gap-8 shrink-0', )}>
         <div className="w-36 space-y-1.5">
-          <div className={cn('flex justify-between text-[10px] font-bold', isRTL ? 'flex-row-reverse' : '')}>
+          <div className={cn('flex justify-between text-[10px] font-bold', )}>
             <span className="text-slate-500 uppercase">{t('regulatoryUpdates.implementationProgress')}</span>
             <span className="text-emerald-600">{circular.progress}%</span>
           </div>
@@ -202,7 +206,7 @@ function CircularCardContent({ circular, t, isRTL }: { circular: Circular; t: Re
             <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${circular.progress}%` }} />
           </div>
         </div>
-        <div className={cn('shrink-0', isRTL ? 'text-left' : 'text-right')}>
+        <div className={cn('shrink-0 text-right')}>
           {isCompleted ? (
             <span className="text-xs font-bold text-emerald-600">{t('regulatoryUpdates.completed')}</span>
           ) : isOverdue ? (
@@ -214,7 +218,7 @@ function CircularCardContent({ circular, t, isRTL }: { circular: Circular; t: Re
           )}
           <p className="text-[10px] text-slate-400 mt-0.5">{t('regulatoryUpdates.due')}: {circular.dueDate}</p>
         </div>
-        <div className={cn('shrink-0 text-center', isRTL ? 'text-left' : 'text-right')}>
+        <div className={cn('shrink-0 text-center text-right')}>
           <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">
             {t('regulatoryUpdates.currentPhase')}
           </p>
@@ -237,34 +241,37 @@ function CircularCardContent({ circular, t, isRTL }: { circular: Circular; t: Re
 function PolicyCardContent({ policy, t, isRTL }: { policy: Policy; t: RegDocCardProps['t']; isRTL: boolean }) {
   const statusStyle = POLICY_STATUS_COLORS[policy.status]
   const categoryIcon = CATEGORY_ICONS[policy.category]
-  const tierStyle = TIER_COLORS[policy.approvalTier]
+  const tierStyle = TIER_COLORS[policy.approvalTier] ?? TIER_COLORS.management
   const urgency = getReviewUrgency(policy.nextReviewDate, policy.status)
 
   const tierLabels: Record<string, string> = {
-    board: t('policies.approvalTierBoard'),
-    'management-sharia': t('policies.approvalTierManagementSharia'),
-    agm: t('policies.approvalTierAGM'),
+    board:      t('policies.approvalTierBoard'),
+    management: t('policies.approvalTierManagement'),
+    sharia:     t('policies.approvalTierSharia'),
+    agm:        t('policies.approvalTierAGM'),
   }
 
   return (
-    <div className={cn('flex items-center gap-6 flex-1', isRTL ? 'flex-row-reverse' : '')}>
+    <div className={cn('flex items-center gap-6 flex-1', )}>
       {/* Category icon */}
       <div className="w-12 h-12 bg-slate-100 rounded-xl flex items-center justify-center shrink-0">
         <Icon icon={categoryIcon} className="text-xl text-slate-600" />
       </div>
 
       {/* Main info */}
-      <div className={cn('flex-1 space-y-1.5 min-w-0', isRTL ? 'text-right' : '')}>
-        <div className={cn('flex items-center gap-2', isRTL ? 'flex-row-reverse' : '')}>
+      <div className={cn('flex-1 space-y-1.5 min-w-0')}>
+        <div className={cn('flex items-center gap-2', )}>
           <h4 className="text-sm font-bold text-slate-900 truncate">{policy.name}</h4>
           <span className={cn('px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0', statusStyle.bg, statusStyle.text)}>
-            {policy.status === 'under-review' ? t('policies.statusUnderReview') :
-             policy.status === 'approved'     ? t('policies.statusApproved') :
-             policy.status === 'expired'      ? t('policies.statusExpired') :
+            {policy.status === 'under-review'    ? t('policies.statusUnderReview') :
+             policy.status === 'approved'       ? t('policies.statusApproved') :
+             policy.status === 'expired'        ? t('policies.statusExpired') :
+             policy.status === 'overdue'        ? t('policies.statusOverdue') :
+             policy.status === 'requires-review' ? t('policies.statusRequiresReview') :
              t('policies.statusDraft')}
           </span>
         </div>
-        <div className={cn('flex items-center gap-2', isRTL ? 'flex-row-reverse' : '')}>
+        <div className={cn('flex items-center gap-2', )}>
           <span className="text-xs font-mono font-bold text-slate-400">{policy.id}</span>
           <span className="w-1 h-1 bg-slate-300 rounded-full"></span>
           <span className={cn('px-2 py-0.5 rounded-full text-[10px] font-bold', tierStyle.bg, tierStyle.text)}>
@@ -276,19 +283,19 @@ function PolicyCardContent({ policy, t, isRTL }: { policy: Policy; t: RegDocCard
       </div>
 
       {/* Owner + next review */}
-      <div className={cn('flex items-center gap-8 shrink-0', isRTL ? 'flex-row-reverse' : '')}>
-        <div className={cn('flex items-center gap-3', isRTL ? 'flex-row-reverse' : '')}>
+      <div className={cn('flex items-center gap-8 shrink-0', )}>
+        <div className={cn('flex items-center gap-3', )}>
           <img
             src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${policy.owner.avatar}`}
             className="w-8 h-8 rounded-full border border-slate-200"
             alt={policy.owner.name}
           />
-          <div className={isRTL ? 'text-right' : ''}>
+          <div>
             <p className="text-xs font-bold text-slate-700">{policy.owner.name}</p>
             <p className="text-[10px] text-slate-400">{policy.owner.department}</p>
           </div>
         </div>
-        <div className={cn('shrink-0', isRTL ? 'text-left' : 'text-right')}>
+        <div className={cn('shrink-0 text-right')}>
           <p className="text-[10px] font-bold text-slate-400 uppercase mb-0.5">{t('policies.nextReview')}</p>
           <p className={cn(
             'text-xs font-bold',

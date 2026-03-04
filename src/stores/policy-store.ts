@@ -1,6 +1,26 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import type { Policy, PolicyFilters, PolicyStatus } from '@/types'
+import type { Policy, PolicyFilters, PolicyStatus, PolicyWorkflowStep } from '@/types'
+
+function restatusTimeline(timeline: PolicyWorkflowStep[]): PolicyWorkflowStep[] {
+  let firstNonCompleted = false
+  return timeline.map(s => {
+    if (s.status === 'completed') return s
+    if (!firstNonCompleted) { firstNonCompleted = true; return { ...s, status: 'current' as const } }
+    return { ...s, status: 'pending' as const }
+  })
+}
+
+function advanceTimeline(timeline: PolicyWorkflowStep[]): PolicyWorkflowStep[] {
+  const today = new Date().toISOString().split('T')[0]
+  const currentIdx = timeline.findIndex((s) => s.status === 'current')
+  if (currentIdx === -1) return timeline
+  return timeline.map((step, idx) => {
+    if (idx === currentIdx) return { ...step, status: 'completed' as const, date: today }
+    if (idx === currentIdx + 1 && step.status === 'pending') return { ...step, status: 'current' as const }
+    return step
+  })
+}
 
 interface PolicyState {
   policies: Policy[]
@@ -23,6 +43,9 @@ interface PolicyState {
 
   // Review alerts: policies with nextReviewDate ≤ 90 days from now OR status 'expired'
   reviewAlerts: () => Policy[]
+
+  // Status check: called on mount to update overdue/requires-review
+  checkAndUpdateStatuses: () => void
 }
 
 const seedPolicies: Policy[] = [
@@ -33,7 +56,7 @@ const seedPolicies: Policy[] = [
     status: 'approved',
     category: 'compliance',
     version: 'v2.3',
-    approvalTier: 'management-sharia',
+    approvalTier: 'management',
     owner: { name: 'Sarah Connor', avatar: 'Sarah', department: 'Compliance' },
     lastReviewDate: '2025-08-15',
     nextReviewDate: '2026-08-15',  // ~170 days from Mar 2026
@@ -135,7 +158,7 @@ const seedPolicies: Policy[] = [
     status: 'expired',
     category: 'risk',
     version: 'v2.1',
-    approvalTier: 'management-sharia',
+    approvalTier: 'sharia',
     owner: { name: 'David Wallace', avatar: 'David', department: 'Risk Management' },
     lastReviewDate: '2024-06-15',
     nextReviewDate: '2025-06-15',  // expired
@@ -211,16 +234,52 @@ export const usePolicyStore = create<PolicyState>()(
       clearFilters: () => set({ filters: {} }),
 
       submitForReview: (id) => {
-        get().update(id, { status: 'under-review' as PolicyStatus })
+        const policy = get().policies.find((p) => p.id === id)
+        if (!policy) return
+        get().update(id, {
+          status: 'under-review' as PolicyStatus,
+          workflowTimeline: advanceTimeline(policy.workflowTimeline),
+        })
       },
 
       approve: (id) => {
-        const now = new Date().toISOString().split('T')[0]
-        get().update(id, { status: 'approved' as PolicyStatus, approvedDate: now })
+        const policy = get().policies.find((p) => p.id === id)
+        if (!policy) return
+        const today = new Date().toISOString().split('T')[0]
+        const updatedTimeline = policy.workflowTimeline.map((step) =>
+          step.status !== 'completed'
+            ? { ...step, status: 'completed' as const, date: step.date || today }
+            : step
+        )
+        get().update(id, { status: 'approved' as PolicyStatus, approvedDate: today, workflowTimeline: updatedTimeline })
       },
 
       initiateReview: (id) => {
-        get().update(id, { status: 'draft' as PolicyStatus })
+        const policy = get().policies.find((p) => p.id === id)
+        if (!policy) return
+        const today = new Date().toISOString().split('T')[0]
+        const cycleId = Date.now().toString()
+        const cycleLabel = `Review ${new Date().toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}`
+        // Push old cycle to history before replacing it
+        const oldEntry = policy.currentReviewCycleId
+          ? [{ id: policy.currentReviewCycleId, label: policy.currentReviewCycleLabel ?? 'Review', initiatedAt: today }]
+          : []
+        const resetTimeline = policy.workflowTimeline.map((step) =>
+          step.status === 'current' ? { ...step, status: 'completed' as const, date: today } : step
+        )
+        const newStep: PolicyWorkflowStep = {
+          step: 'Review Initiated',
+          date: today,
+          user: policy.owner.name,
+          status: 'current',
+        }
+        get().update(id, {
+          status: 'draft' as PolicyStatus,
+          workflowTimeline: [...resetTimeline, newStep],
+          currentReviewCycleId: cycleId,
+          currentReviewCycleLabel: cycleLabel,
+          reviewCycleHistory: [...(policy.reviewCycleHistory ?? []), ...oldEntry],
+        })
       },
 
       reviewAlerts: (): Policy[] => {
@@ -235,16 +294,62 @@ export const usePolicyStore = create<PolicyState>()(
           return false
         })
       },
+
+      checkAndUpdateStatuses: () => {
+        const today = new Date().toISOString().split('T')[0]
+        const ninetyDaysFromNow = new Date(Date.now() + 90 * 86400000).toISOString().split('T')[0]
+        set(state => ({
+          policies: state.policies.map(p => {
+            if (p.status === 'draft' || p.status === 'expired') return p
+            let updated = { ...p }
+            if (
+              p.nextReviewDate &&
+              p.nextReviewDate < today &&
+              p.status !== 'overdue' &&
+              p.lastOverdueDate !== p.nextReviewDate
+            ) {
+              updated = {
+                ...updated,
+                status: 'overdue' as PolicyStatus,
+                overdueCount: (p.overdueCount ?? 0) + 1,
+                lastOverdueDate: p.nextReviewDate,
+              }
+            } else if (
+              p.nextReviewDate &&
+              p.nextReviewDate <= ninetyDaysFromNow &&
+              p.status === 'approved'
+            ) {
+              updated = { ...updated, status: 'requires-review' as PolicyStatus }
+            }
+            return updated
+          }),
+        }))
+      },
     }),
     {
       name: 'policy-storage',
-      version: 1,
+      version: 2,
       migrate: (persistedState: unknown, version: number) => {
+        const state = persistedState as { policies?: Policy[] }
         if (version === 0) {
-          // Inject seed data for users with empty localStorage from v0
-          const state = persistedState as { policies?: Policy[] }
           if (!state.policies || state.policies.length === 0) {
             return { ...state, policies: seedPolicies }
+          }
+        }
+        if (version < 2) {
+          // Add actionType to workflow steps missing it, and currentReviewCycleId
+          const cycleId = Date.now().toString()
+          const cycleLabel = `Review ${new Date().toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}`
+          return {
+            ...state,
+            policies: (state.policies ?? seedPolicies).map(p => ({
+              ...p,
+              currentReviewCycleId: p.currentReviewCycleId ?? cycleId,
+              currentReviewCycleLabel: p.currentReviewCycleLabel ?? cycleLabel,
+              workflowTimeline: p.workflowTimeline.map(s =>
+                s.actionType ? s : { ...s, actionType: 'request-approval' }
+              ),
+            })),
           }
         }
         return persistedState as PolicyState
