@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import type { Policy, PolicyFilters, PolicyStatus, PolicyWorkflowStep } from '@/types'
+import type { Policy, PolicyFilters, PolicyStatus, PolicyWorkflowStep, PolicyActivityEntry } from '@/types'
 import { computeNextReview, cadenceToReviewCycleDays } from '@/lib/review-schedule'
 
 function restatusTimeline(timeline: PolicyWorkflowStep[]): PolicyWorkflowStep[] {
@@ -39,7 +39,7 @@ interface PolicyState {
 
   // Status transitions
   submitForReview: (id: string) => void
-  approve: (id: string) => void
+  approve: (id: string, notes?: string, approvedBy?: string) => void
   initiateReview: (id: string) => void
 
   // Review alerts: policies with nextReviewDate ≤ 90 days from now OR status 'expired'
@@ -245,22 +245,43 @@ export const usePolicyStore = create<PolicyState>()(
       submitForReview: (id) => {
         const policy = get().policies.find((p) => p.id === id)
         if (!policy) return
+        const newTimeline = policy.workflowTimeline.map(step =>
+          step.status === 'current' ? { ...step, stepState: 'pending-approval' as const } : step
+        )
         get().update(id, {
           status: 'under-review' as PolicyStatus,
-          workflowTimeline: advanceTimeline(policy.workflowTimeline),
+          workflowTimeline: newTimeline,
         })
       },
 
-      approve: (id) => {
+      approve: (id, notes?, approvedBy?) => {
         const policy = get().policies.find((p) => p.id === id)
         if (!policy) return
         const today = new Date().toISOString().split('T')[0]
-        const updatedTimeline = policy.workflowTimeline.map((step) =>
+        const currentIdx = policy.workflowTimeline.findIndex(s => s.status === 'current')
+        const updatedTimeline = policy.workflowTimeline.map((step, idx) =>
           step.status !== 'completed'
-            ? { ...step, status: 'completed' as const, date: step.date || today }
+            ? {
+                ...step, status: 'completed' as const, date: step.date || today, stepState: undefined,
+                ...(idx === currentIdx && notes ? { note: notes } : {}),
+              }
             : step
         )
-        get().update(id, { status: 'approved' as PolicyStatus, approvedDate: today, workflowTimeline: updatedTimeline })
+        const activityEntry: PolicyActivityEntry = {
+          id: Date.now().toString(),
+          timestamp: new Date().toISOString(),
+          date: today,
+          type: 'workflow_approved',
+          textEn: notes ? `Policy approved — ${notes}` : 'Policy approved',
+          textAr: notes ? `تمت الموافقة على السياسة — ${notes}` : 'تمت الموافقة على السياسة',
+          user: approvedBy ?? 'System',
+        }
+        get().update(id, {
+          status: 'approved' as PolicyStatus,
+          approvedDate: today,
+          workflowTimeline: updatedTimeline,
+          activityLog: [...(policy.activityLog ?? []), activityEntry],
+        })
       },
 
       initiateReview: (id) => {

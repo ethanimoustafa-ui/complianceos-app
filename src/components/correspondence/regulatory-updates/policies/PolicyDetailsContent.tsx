@@ -23,6 +23,7 @@ type NotePromptFor =
 
 type Props = {
   policy: Policy
+  initialTab?: DetailTab
   onClose: () => void
   onSubmitForReview: () => void
   onApprove: () => void
@@ -76,9 +77,9 @@ function formatBytes(bytes: number): string {
 }
 
 export function PolicyDetailsContent({
-  policy, onClose, onSubmitForReview, onApprove, onInitiateReview, onDeleteOpen, onEditOpen, onArchive, onUnarchive, showToast, t, isRTL,
+  policy, initialTab, onClose, onSubmitForReview, onApprove, onInitiateReview, onDeleteOpen, onEditOpen, onArchive, onUnarchive, showToast, t, isRTL,
 }: Props) {
-  const [activeTab, setActiveTab] = useState<DetailTab>('overview')
+  const [activeTab, setActiveTab] = useState<DetailTab>(initialTab ?? 'overview')
   const [expandedVersion, setExpandedVersion] = useState<number | null>(null)
 
   // Attachment file upload
@@ -406,7 +407,15 @@ export function PolicyDetailsContent({
       const currentStep = tl[ci]
       const newTl = tl.map((s, i) => {
         if (i === ci) return { ...s, status: 'completed' as const, date: today, user: actingUser, note, stepState: undefined }
-        if (i === ci + 1 && s.status === 'pending') return { ...s, status: 'current' as const }
+        if (i === ci + 1 && s.status === 'pending') {
+          const autoState =
+            s.actionType === 'request-approval' || s.actionType === 'send-for-review'
+              ? 'pending-approval' as const
+              : s.actionType === 'send-email' ? 'awaiting-response' as const
+              : s.actionType === 'notify-manager' ? 'awaiting-manager' as const
+              : undefined
+          return { ...s, status: 'current' as const, ...(autoState ? { stepState: autoState } : {}) }
+        }
         return s
       })
       const allDone = newTl.every(s => s.status === 'completed')
@@ -434,11 +443,10 @@ export function PolicyDetailsContent({
     if (notePromptFor === 'submit') {
       const ci = tl.findIndex(s => s.status === 'current')
       const currentStep = tl[ci]
-      const newTl = tl.map((s, i) => {
-        if (i === ci) return { ...s, status: 'completed' as const, date: today, user: actingUser, note }
-        if (i === ci + 1 && s.status === 'pending') return { ...s, status: 'current' as const }
-        return s
-      })
+      // Stay on current step, just enter pending-approval state
+      const newTl = tl.map((s, i) =>
+        i === ci ? { ...s, stepState: 'pending-approval' as const } : s
+      )
       const actEntry: PolicyActivityEntry = {
         id: Date.now().toString(), timestamp: new Date().toISOString(), date: today,
         type: 'step_advanced',
@@ -549,8 +557,8 @@ export function PolicyDetailsContent({
       if (lastCompleted === -1) { closePrompt(); return }
       const realIdx = tl.length - 1 - lastCompleted
       const newTl = tl.map((s, i) => {
-        if (i === realIdx) return { ...s, status: 'current' as const, date: '', note }
-        if (s.status === 'current') return { ...s, status: 'pending' as const }
+        if (i === realIdx) return { ...s, status: 'current' as const, date: '', note, stepState: undefined }
+        if (s.status === 'current') return { ...s, status: 'pending' as const, stepState: undefined }
         return s
       })
       const anyCompleted = newTl.some(s => s.status === 'completed')
@@ -815,14 +823,14 @@ export function PolicyDetailsContent({
                             {step.actionType && ACTION_TYPE_META[step.actionType] && (
                               <Icon icon={ACTION_TYPE_META[step.actionType].icon} className={cn('text-xs', ACTION_TYPE_META[step.actionType].color)} />
                             )}
-                            {step.stepState === 'pending-approval' && (
+                            {step.status === 'current' && step.stepState === 'pending-approval' && (
                               <span className="text-[9px] font-bold px-1.5 py-0.5 bg-amber-100 text-amber-700 rounded-full">{t('policies.awaitingApproval')}</span>
                             )}
-                            {step.stepState === 'awaiting-response' && (
-                              <span className="text-[9px] font-bold px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded-full">{t('policies.receivedResponse')}</span>
+                            {step.status === 'current' && step.stepState === 'awaiting-response' && (
+                              <span className="text-[9px] font-bold px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded-full">{t('policies.awaitingResponse')}</span>
                             )}
-                            {step.stepState === 'awaiting-manager' && (
-                              <span className="text-[9px] font-bold px-1.5 py-0.5 bg-violet-100 text-violet-700 rounded-full">{t('policies.managerApprovedProceed')}</span>
+                            {step.status === 'current' && step.stepState === 'awaiting-manager' && (
+                              <span className="text-[9px] font-bold px-1.5 py-0.5 bg-violet-100 text-violet-700 rounded-full">{t('policies.awaitingManagerResponse')}</span>
                             )}
                           </div>
                           {isCompleted && step.date && (

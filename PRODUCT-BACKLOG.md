@@ -2,7 +2,7 @@
 
 **Version:** 1.0
 **Date:** February 2026
-**Last Updated:** March 7, 2026
+**Last Updated:** March 8, 2026
 
 ---
 
@@ -14,6 +14,8 @@
 - **Arch:** `A` (Correspondence) | `B` (Framework) | `C` (Internal Governance) | `S` (Shared/Platform)
 
 > **Sprint 6 complete:** Custom Review Frequency — `ReviewSchedule` type + `ReviewSchedulePicker` UI + `computeNextReview()` utility wired across Policies (POL-018), Risks (RSK-007), and Audits (AUD-004).
+>
+> **Sprint 3.3 complete (Mar 8 2026):** Policy workflow bug fixes (submit-for-review stays on step, chip labels corrected, undo clears stepState), Pending Approvals card scoped to managerial-only items with deep-link + enriched modal, workload drawer shows full cross-store item list with type badges, Saudization grid layout fix, and new Epic 22 (Smart Workload & Burnout Management System) defined.
 
 ---
 
@@ -129,6 +131,12 @@
 | POL-015 | Evidence filter across all review cycles | ✅ | P1 | S | FEEDBACK | Done (Sprint 5) — `Policy` type gains `reviewCycleHistory[]`; `initiateReview()` pushes the outgoing cycle to history before creating the new one; evidence `useMemo` in PolicyDetailsContent merges current + history cycles so all past uploads remain filterable |
 | POL-016 | Status auto-derive on workflow-step drag (reorder + drag-to-bin) | ✅ | P1 | S | FEEDBACK | Done (Sprint 5) — `deriveStatusFromTimeline()` helper evaluates the updated timeline after every drag operation (reorder and bin-drop) and writes the correct `PolicyStatus` back to the store; drag-reorder and drag-to-bin both also clear `stepState` from non-completed steps to prevent stale approval-flow button states |
 | POL-017 | Evidence cycle filter always visible (single-cycle policies) | ✅ | P1 | S | FEEDBACK | Done (Sprint 5) — guard changed from `evidenceCycles.size > 1` to `> 0`; dropdown now renders for first-cycle policies with the current cycle as the sole option; `lucide:filter` icon added for visual affordance; no logic changes to cycle data or display |
+| POL-019 | Submit for Review — stay on step, enter pending-approval state (not advance) | ✅ | P1 | S | FEEDBACK | Done (Sprint 3.3) — `PolicyDetailsContent` submit branch sets `stepState: 'pending-approval'` on the current step without advancing; `policy-store.submitForReview` no longer calls `advanceTimeline()`, mirrors same in-place state change |
+| POL-020 | Workflow chip labels corrected and guarded to current step only | ✅ | P1 | S | FEEDBACK | Done (Sprint 3.3) — `awaiting-response` chip uses `policies.awaitingResponse` key ("Awaiting Response"); `awaiting-manager` chip uses `policies.awaitingManagerResponse` key ("Awaiting Manager Response"); all chips gated on `step.status === 'current'` to prevent stale chips after undo; `awaitingResponse` key added to en.json and ar.json |
+| POL-021 | Next-step auto-derives stepState on Complete (request-approval, send-email, notify-manager) | ✅ | P1 | S | FEEDBACK | Done (Sprint 3.3) — when a step is completed and the next pending step is activated, its `stepState` is auto-set based on `actionType`: `request-approval`/`send-for-review` → `pending-approval`; `send-email` → `awaiting-response`; `notify-manager` → `awaiting-manager` |
+| POL-022 | Undo step clears stepState on both reverted and demoted steps | ✅ | P1 | S | FEEDBACK | Done (Sprint 3.3) — undo branch sets `stepState: undefined` on the step being reverted to `current` AND on any step being pushed back to `pending`; eliminates stuck approval-flow chips after undo |
+| POL-023 | policy-store `approve()` accepts optional notes and approvedBy, logs activity entry | ✅ | P1 | S | FEEDBACK | Done (Sprint 3.3) — `approve(id, notes?, approvedBy?)` signature extended; current step note and `stepState: undefined` written on all completed steps; `workflow_approved` activity entry appended with localized EN/AR text |
+| POL-024 | PolicyDetailsContent accepts `initialTab` prop for deep-link tab targeting | ✅ | P1 | S | FEEDBACK | Done (Sprint 3.3) — `initialTab?: DetailTab` prop added; `useState` initializes from `initialTab ?? 'overview'` allowing external callers (e.g., Pending Approvals modal) to open directly on the workflow tab |
 
 ---
 
@@ -269,20 +277,31 @@
 
 | ID | Feature | Status | Priority | Arch | Source | Notes |
 |---|---|---|---|---|---|---|
-| TRN-001 | Active Directory (team listing, detail view, stats) | ✅ | P0 | S | BRD | Done |
-| TRN-002 | User Logs (activity log, filterable, exportable) | ✅ | P0 | S | BRD | Done |
-| TRN-003 | Invite new member workflow with role assignment | ✅ | P0 | S | BRD | Done |
-| TRN-004 | Training store (Zustand with persistence) | 📋 | P0 | S | BRD | Required for compliance engine |
-| TRN-005 | Overall training dashboard (completion rates, assigned, overdue) | 🔧 | P1 | S | BRD | UI built, needs live data |
-| TRN-006 | Department-level progress tracking | 🔧 | P1 | S | BRD | UI built |
-| TRN-007 | Saudization metrics (Saudi vs Non-Saudi, actual/target/gap) | 🔧 | P1 | S | BRD | UI built |
-| TRN-008 | Employee training records (per-employee view) | 🔧 | P1 | S | BRD | UI built |
-| TRN-009 | Course management (add, set deadlines, assign, remove) | 🔧 | P1 | S | BRD | UI built |
-| TRN-010 | Course categories (Compliance, AML, Cybersecurity, Sharia, Risk) | 🔧 | P1 | S | BRD | UI built |
+| TRN-001 | Active Directory (team listing, detail view, stats) | ✅ | P0 | S | BRD | Done — wired to `team-store`; `SortHeader<T>` column sorting; `DirectoryStatCards`, `MemberDetailDrawer`, `PendingApprovalsCard`, `BurnoutDetectionCard` components; `selectedMemberId: string | null` derived from store to fix stale drawer bug |
+| TRN-002 | User Logs (activity log, filterable, exportable) | ✅ | P0 | S | BRD | Done — `user-log-store.ts` (Zustand + persist, 15 seed logs); zero `isRTL` conditionals; logical CSS throughout; `logSort` state + `sortedLogs` useMemo for timestamp/user asc/desc; localized CSV export via `exportUserLogsLocalized` |
+| TRN-003 | Invite new member workflow with role assignment | ✅ | P0 | S | BRD | Done — multi-invite modal with per-row `permissions: Record<string, boolean>` and `accessDuration`; "Add Another" row; `STANDARD_PERMISSIONS` + `perms()` helper in team-store |
+| TRN-004 | Training store (Zustand with persistence) | ✅ | P0 | S | BRD | Done — `training-store.ts` persist v3 with seed migration (4 employees, 4 courses, dept progress, overview stats, saudization); empty seeds on v2 reset; `TrainingCategory` expanded with 8 new categories (data-privacy, ethics, fraud-prevention, governance, operational-risk, business-continuity, sanctions, internal-audit); `CourseProgress.progress` field added |
+| TRN-005 | Overall training dashboard (completion rates, assigned, overdue) | ✅ | P1 | S | BRD | Done — `TrainingOverviewStats` component driven by live store data; manual entry and upload populate real numbers |
+| TRN-006 | Department-level progress tracking | ✅ | P1 | S | BRD | Done — `DepartmentProgressCard` reads dept progress from training store |
+| TRN-007 | Saudization metrics (Saudi vs Non-Saudi, actual/target/gap) | ✅ | P1 | S | BRD | Done — `SaudizationCard` component; dept name grid layout fixed with `grid-cols-[8rem_2.5rem_1fr_2.5rem]` to guarantee visible truncated department names (Sprint 3.3) |
+| TRN-008 | Employee training records (per-employee view) | ✅ | P1 | S | BRD | Done — `EmployeeTable` + `EmployeeDetailModal` with per-employee course progress |
+| TRN-009 | Course management (add, set deadlines, assign, remove) | ✅ | P1 | S | BRD | Done — `AssignTrainingModal` + `TrainingManageModal` wired to training store |
+| TRN-010 | Course categories (Compliance, AML, Cybersecurity, Sharia, Risk, + 8 new) | ✅ | P1 | S | BRD | Done — 13 categories total; i18n keys added for all 8 new categories in en.json + ar.json |
 | TRN-011 | Bulk assignment of courses | 📋 | P2 | S | BRD | |
-| TRN-012 | Training report export | 📋 | P2 | S | BRD | |
+| TRN-012 | Training report export | ✅ | P2 | S | BRD | Done — `exportTrainingDataLocalized` in `export.ts`; wired to both download buttons in `EmployeeTable` via `onExport` prop |
 | TRN-013 | Compliance engine integration (Training Completion = 15% weight) | 📋 | P0 | S | BRD | Currently returns 0 |
 | TRN-014 | Saudization data integration with MISA requirements | 💡 | P3 | A | BRD | Pattern 4 linkage |
+| TRN-015 | File upload with category checkboxes sends file to AI API for parsing | 📋 | P2 | S | REC | Upload modal already has file + category selection UI (`TrainingUploadModal`) |
+| TRN-016 | AI returns structured data (employees, saudization metrics, training records) | 📋 | P2 | S | REC | Requires: API endpoint, file parsing service |
+| TRN-017 | Confidence scoring on parsed fields (highlight low-confidence values in amber) | 📋 | P3 | S | REC | UX: let user correct before confirming |
+| TRN-018 | Support for .xlsx, .csv, .pdf, .docx input formats | 📋 | P2 | S | REC | PDF/DOCX need OCR or text extraction |
+| TRN-019 | Pending Approvals card — managerial-only, enriched modal, deep-links | ✅ | P1 | S | FEEDBACK | Done (Sprint 3.3) — audits removed (no manager approval loop); policies: only `notify-manager` steps with `awaiting-manager` stepState flagged; SAMA: only Department Head (step 2) pending; stat count and card list use identical filter; urgency = deadline within 30 days or requires-review/urgent status; modal shows mini workflow timeline (policies) or approval chain (SAMA), evidence + attachment downloads; deep-links with `?id=`; fixed i18n keys (`navigation.samaLetters`, `policies.approvalWorkflow`) |
+| TRN-020 | Burnout Detection card — suggest reassignment with workload targets | ✅ | P1 | S | FEEDBACK | Done (Sprint 3.3) — "Suggest Reassignment" expands to show ALL cross-store assignments as individual cards with color-coded type badges; clicking an item reveals 3 lowest-workload reassignment targets; `useBurnoutDetection` hook in `useWorkload.ts` drives escalation tier display |
+| TRN-021 | Member detail drawer — full cross-store workload item list | ✅ | P1 | S | FEEDBACK | Done (Sprint 3.3) — `useWorkload` returns `items: WorkloadItem[]`; drawer renders individual item cards per observation/audit/policy/correspondence with color-coded type badges (observation=rose, audit=amber, policy=blue, correspondence=violet); manual task assignments retain unassign + "Clear All" buttons |
+| TRN-022 | `SortHeader<T>` reusable sort component | ✅ | P1 | S | FEEDBACK | Done — `src/components/ui/sort-header.tsx` with `SortState<T>` generic type; used across directory, logs, and training pages |
+| TRN-023 | Team member export | ✅ | P1 | S | FEEDBACK | Done — `exportTeamMembersLocalized` in `export.ts` |
+
+> **TRN-015–018 Dependencies:** Backend API endpoint for file upload + AI parsing service (e.g., OpenAI structured output, Claude tool use, or custom NLP pipeline). Frontend upload modal (`TrainingUploadModal`) is ready — currently uses hardcoded default values as placeholder.
 
 ---
 
@@ -474,29 +493,55 @@
 
 ---
 
+## Epic 22: Smart Workload & Burnout Management System
+
+> Cross-store capacity tracking that connects every ComplianceOS module (observations, audits, policies, correspondence, manual tasks) to each team member's workload, with escalating sensitivity the longer someone stays overloaded.
+
+| ID | Feature | Status | Priority | Arch | Source | Notes |
+|---|---|---|---|---|---|---|
+| WRK-001 | Cross-store workload aggregation per member (observations, audits, policies, correspondence, manual tasks) | ✅ | P1 | S | FEEDBACK | Done — `useWorkload(memberId, member, memberName)` hook in `src/hooks/useWorkload.ts`; queries observation-store, audit-store, policy-store, correspondence-store; open/active items only (excludes closed obs, completed audits, non-review policies, archived correspondence) |
+| WRK-002 | Workload percentage calculation — base 10% per task, reduced to 5% for tasks >= 75% progress | ✅ | P1 | S | FEEDBACK | Done — `base = total * ratePerAssignment`; discount of 5% per manual assignment that has `progress >= 75`; result clamped 0–100 |
+| WRK-003 | Escalating workload rate based on burnout duration | ✅ | P1 | S | FEEDBACK | Done — `ratePerAssignment` escalates from 10% (default) → 20% (overloaded 3+ days) → 30% (overloaded 7+ days) based on `member.burnoutSince` ISO timestamp; makes burnout detection increasingly sensitive the longer someone is overloaded |
+| WRK-004 | `burnoutSince` timestamp tracking on TeamMember | ✅ | P1 | S | FEEDBACK | Done — `TeamMember.burnoutSince?: string` field in `src/types/index.ts`; `updateBurnoutTimestamps()` store action sets/clears the field when a member crosses the 75% threshold; called by `useBurnoutDetection` hook |
+| WRK-005 | Burnout detection hook with escalation tier classification | ✅ | P1 | S | FEEDBACK | Done — `useBurnoutDetection` in `src/hooks/useWorkload.ts`; tiers: mild (>75%), moderate (>75% for 3+ days), severe (>75% for 7+ days); returns `{ member, workload, tier, daysSince }[]` for all overloaded members |
+| WRK-006 | BurnoutDetectionCard UI — overloaded members with escalation tier badges | ✅ | P1 | S | FEEDBACK | Done — `src/components/team/directory/burnout-detection-card.tsx`; shows all overloaded members with tier badge and days-overloaded count; "Suggest Reassignment" expands to show full cross-store item list with color-coded type badges (observation=rose, audit=amber, policy=blue, correspondence=violet, task=slate); clicking an item reveals 3 lowest-workload reassignment targets |
+| WRK-007 | WorkloadResult `items[]` — individual typed cross-store items | ✅ | P1 | S | FEEDBACK | Done — `WorkloadItem { type, id, title }` interface; `useWorkload` returns `items: WorkloadItem[]`; used by burnout card and member detail drawer to render per-item cards |
+| WRK-008 | Member detail drawer — full item list with type badges and unassign/reassign actions | ✅ | P1 | S | FEEDBACK | Done — `src/components/team/directory/member-detail-drawer.tsx`; renders individual item cards with type badges; manual task assignments have unassign button + "Clear All"; staged permissions pattern (changes only apply on "Update Permissions" click) |
+| WRK-009 | `useTeamWorkloads` bulk hook (all members in one useMemo) | ✅ | P1 | S | FEEDBACK | Done — `useTeamWorkloads(members[])` computes all members' workloads in a single `useMemo`; used by BurnoutDetectionCard and PendingApprovalsCard for ranking by workload |
+| WRK-010 | Unassign / Reassign task store actions | ✅ | P1 | S | FEEDBACK | Done — `unassignTask(memberId, taskTitle)` and `reassignTask(fromId, toId, taskTitle)` actions in `team-store.ts`; drawer wires "Unassign" per item and reassign targets |
+| WRK-011 | Capacity bar in directory table with tooltip breakdown | ✅ | P1 | S | FEEDBACK | Done — `WorkloadBar` component in directory page renders a 128px bar with percentage; color: green (<75%) / amber (>=75%); tooltip shows `obs N, audits N, policies N` breakdown |
+| WRK-012 | Manual task progress field for discount calculation | 📋 | P2 | S | FEEDBACK | `TeamMember.assignments[].progress` exists on type but is not yet surfaced in the UI for editing; currently used only for the 75%-discount calculation |
+| WRK-013 | Real-time workload recalculation on store changes | 📋 | P2 | S | FEEDBACK | `useWorkload` already subscribes to all four stores via Zustand selectors; any store mutation auto-triggers re-render; no polling needed |
+| WRK-014 | Workload widget on compliance feed / dashboard | 📋 | P2 | S | REC | Surface top-3 overloaded members on the correspondence feed page capacity card |
+| WRK-015 | Reassignment audit trail (log when task is reassigned, who approved) | 📋 | P2 | S | REC | Append to `user-log-store` when `reassignTask` is called; requires `actingUser` from auth store |
+| WRK-016 | Configurable capacity threshold (default 75%, admin-adjustable) | 📋 | P3 | S | REC | Move threshold from hardcoded to `compliance-settings-store`; affects burnout detection, workload bar color, and escalation trigger |
+| WRK-017 | Configurable escalation schedule (3-day / 7-day thresholds admin-adjustable) | 📋 | P3 | S | REC | Currently hardcoded in `useWorkload.ts`; expose in Settings → Team Configuration |
+
+---
+
 ## Summary Dashboard
 
-> **Sprint 3 in progress** — Circular UX & Integration Overhaul targeting Epic 3 (Rules & Circulars) and Epic 4 (Policies & Procedures).
+> **Sprint 3.3 complete (Mar 8 2026)** — Policy workflow bug fixes, Pending Approvals managerial scoping, cross-store workload item list, Saudization grid fix, training store fully wired with live data, Epic 22 (Smart Workload & Burnout Management) defined.
 
 ### By Status
 
 | Status | Count | % |
 |---|---|---|
-| ✅ Done | 104 | 43% |
-| 🔧 In Progress (UI built, logic pending) | 17 | 7% |
-| 📋 To Do (defined, not started) | 57 | 24% |
-| 💡 New Recommendation | 24 | 10% |
-| 🗺️ Roadmap (future phase) | 18 | 8% |
-| **Total** | **222** | **100%** |
+| ✅ Done | 127 | 47% |
+| 🔧 In Progress (UI built, logic pending) | 11 | 4% |
+| 📋 To Do (defined, not started) | 65 | 24% |
+| 💡 New Recommendation | 24 | 9% |
+| 🗺️ Roadmap (future phase) | 18 | 7% |
+| **Total** | **245** | **100%** |
 
 ### By Priority
 
 | Priority | Count | Description |
 |---|---|---|
-| P0 — Critical | 30 | Blocks launch. Stores, engine integration, core workflows |
-| P1 — High | 83 | Needed for launch. Onboarding, framework layer, correspondence logic, PDF export |
-| P2 — Medium | 55 | Post-launch. Multi-authority, advanced features, Sharia workflows |
-| P3 — Low | 33 | Future phase. ZATCA, SAFIU, MISA, advanced versioning, Arabic PDF |
+| P0 — Critical | 31 | Blocks launch. Stores, engine integration, core workflows |
+| P1 — High | 97 | Needed for launch. Onboarding, framework layer, correspondence logic, PDF export, workload |
+| P2 — Medium | 64 | Post-launch. Multi-authority, advanced features, Sharia workflows |
+| P3 — Low | 36 | Future phase. ZATCA, SAFIU, MISA, advanced versioning, Arabic PDF |
 
 ### By Archetype
 
@@ -505,13 +550,13 @@
 | A — Correspondence | 49 | Authority communication, letters, circulars, submissions |
 | B — Framework | 35 | Framework metadata, tagging, versioning, assessments |
 | C — Internal Governance | 10 | Internal audit, Sharia compliance |
-| S — Shared/Platform | 100 | Core modules, engine, calendar, settings, RBAC, i18n, PDF export |
+| S — Shared/Platform | 117 | Core modules, engine, calendar, settings, RBAC, i18n, PDF export, workload |
 
 ### Critical Path (P0 items)
 
-These 30 items must be completed before launch (2 now done):
+These 31 items must be completed before launch:
 
-1. **Stores:** ~~Risk Store (RSK-001)~~ ✅, ~~Policy Store (POL-002)~~ ✅, Training Store (TRN-004), Framework Store (FRM-018)
+1. **Stores:** ~~Risk Store (RSK-001)~~ ✅, ~~Policy Store (POL-002)~~ ✅, ~~Training Store (TRN-004)~~ ✅, Framework Store (FRM-018)
 2. **Engine Integration:** Risk Posture (RSK-009), ~~Policy Currency (POL-009)~~ ✅, Training Completion (TRN-013)
 3. **Live Data:** ~~Replace hardcoded risk data (RPT-012)~~ ✅
 4. **Correspondence:** ~~Letter approval chain (COR-005, COR-006)~~ ✅, ~~Reference numbering (COR-009)~~ ✅

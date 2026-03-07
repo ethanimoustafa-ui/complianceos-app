@@ -1,0 +1,412 @@
+'use client'
+
+import { useState, useMemo } from 'react'
+import { Icon } from '@iconify/react'
+import { Card } from '@/components/ui/card'
+import { Modal } from '@/components/ui/modal'
+import { Button } from '@/components/ui/button'
+import { useTranslation } from '@/i18n'
+import type { TranslationKey } from '@/i18n'
+import type { PolicyWorkflowStep, PolicyEvidence, PolicyAttachment, SAMALetterApprovalStep } from '@/types'
+import { RoleGuard } from '@/components/auth/role-guard'
+import { usePolicyStore } from '@/stores/policy-store'
+import { useSAMALetterStore } from '@/stores/sama-letter-store'
+import { useAuthStore } from '@/stores/auth-store'
+import Link from 'next/link'
+
+interface ApprovalItem {
+  id: string
+  type: 'policy' | 'sama-letter'
+  title: string
+  reference?: string
+  urgent: boolean
+  contextSummary: string
+  workflowStepInfo?: string
+  linkHref: string
+  workflowTimeline?: PolicyWorkflowStep[]
+  evidence?: PolicyEvidence[]
+  attachments?: PolicyAttachment[]
+  approvalChain?: SAMALetterApprovalStep[]
+}
+
+export function PendingApprovalsCard() {
+  const { t } = useTranslation()
+  const currentUser = useAuthStore((s) => s.user)
+  const policies = usePolicyStore((s) => s.policies)
+  const policyApprove = usePolicyStore((s) => s.approve)
+  const policyUpdate = usePolicyStore((s) => s.update)
+  const letters = useSAMALetterStore((s) => s.letters)
+  const approveLetterStep = useSAMALetterStore((s) => s.approveStep)
+  const rejectLetterStep = useSAMALetterStore((s) => s.rejectStep)
+
+  const [page, setPage] = useState(0)
+  const [selectedItem, setSelectedItem] = useState<ApprovalItem | null>(null)
+  const [notes, setNotes] = useState('')
+  const perPage = 5
+
+  const items = useMemo<ApprovalItem[]>(() => {
+    const now = Date.now()
+    const thirtyDaysMs = 30 * 24 * 60 * 60 * 1000
+    const result: ApprovalItem[] = []
+    // Only notify-manager steps count as managerial approval
+    for (const p of policies) {
+      if (p.status === 'under-review' || p.status === 'requires-review') {
+        const currentStep = p.workflowTimeline?.find(
+          s => s.status === 'current' && s.actionType === 'notify-manager' && s.stepState === 'awaiting-manager'
+        )
+        if (!currentStep) continue
+        const deadlineClose = p.nextReviewDate
+          ? (new Date(p.nextReviewDate).getTime() - now) < thirtyDaysMs
+          : false
+        result.push({
+          id: p.id,
+          type: 'policy',
+          title: p.name,
+          reference: p.id,
+          urgent: deadlineClose || p.status === 'requires-review',
+          contextSummary: 'Policy awaiting manager approval',
+          workflowStepInfo: `Current step: ${currentStep.step}`,
+          linkHref: `/correspondence/regulatory-updates/policies?policyId=${p.id}&tab=workflow`,
+          workflowTimeline: p.workflowTimeline,
+          evidence: p.evidence,
+          attachments: p.attachments,
+        })
+      }
+    }
+    // Only Department Head (step 2) counts as managerial approval
+    for (const l of letters) {
+      if (l.status === 'pending-approval') {
+        const deptHeadStep = l.approvalChain?.find(s => s.role === 'Department Head' && s.status === 'pending')
+        if (!deptHeadStep) continue
+        const deadlineClose = l.responseDeadline
+          ? (new Date(l.responseDeadline).getTime() - now) < thirtyDaysMs
+          : false
+        result.push({
+          id: l.id,
+          type: 'sama-letter',
+          title: l.subject || l.reference,
+          reference: l.reference,
+          urgent: l.priority === 'urgent' || deadlineClose,
+          contextSummary: `SAMA letter awaiting Department Head approval`,
+          workflowStepInfo: deptHeadStep.assignedTo ? `Pending: ${deptHeadStep.assignedTo}` : 'Pending: Department Head',
+          linkHref: `/correspondence/sama-letters?id=${l.id}`,
+          approvalChain: l.approvalChain,
+        })
+      }
+    }
+    return result
+  }, [policies, letters])
+
+  const totalPages = Math.ceil(items.length / perPage)
+  const pageItems = items.slice(page * perPage, (page + 1) * perPage)
+
+  const typeIcons: Record<string, { icon: string; color: string }> = {
+    policy: { icon: 'lucide:file-text', color: 'text-blue-600 bg-blue-50' },
+    'sama-letter': { icon: 'lucide:mail', color: 'text-purple-600 bg-purple-50' },
+  }
+
+  const typeLabels: Record<string, string> = {
+    policy: t('correspondence.policyReview' as TranslationKey),
+    'sama-letter': t('navigation.samaLetters' as TranslationKey),
+  }
+
+  const handleApprove = (item: ApprovalItem) => {
+    const name = currentUser?.name || 'Manager'
+    if (item.type === 'policy') {
+      policyApprove(item.id, notes || undefined, name)
+    } else if (item.type === 'sama-letter') {
+      const letter = letters.find(l => l.id === item.id)
+      if (letter) {
+        const pendingStep = letter.approvalChain?.find(s => s.status === 'pending')
+        if (pendingStep) {
+          approveLetterStep(item.id, pendingStep.step, name, notes || undefined)
+        }
+      }
+    }
+    setNotes('')
+    setSelectedItem(null)
+  }
+
+  const handleReject = (item: ApprovalItem) => {
+    const name = currentUser?.name || 'Manager'
+    if (item.type === 'policy') {
+      const policy = policies.find(p => p.id === item.id)
+      const today = new Date().toISOString().split('T')[0]
+      const resetTimeline = policy?.workflowTimeline.map(step =>
+        step.status === 'current'
+          ? { ...step, stepState: undefined, note: notes || undefined }
+          : step
+      )
+      const rejectActivity = {
+        id: Date.now().toString(),
+        timestamp: new Date().toISOString(),
+        date: today,
+        type: 'step_denied' as const,
+        textEn: notes ? `Policy rejected by ${name} — ${notes}` : `Policy rejected by ${name}`,
+        textAr: notes ? `تم رفض السياسة بواسطة ${name} — ${notes}` : `تم رفض السياسة بواسطة ${name}`,
+        user: name,
+      }
+      policyUpdate(item.id, {
+        ...(resetTimeline ? { workflowTimeline: resetTimeline } : {}),
+        activityLog: [...(policy?.activityLog ?? []), rejectActivity],
+      } as never)
+    } else if (item.type === 'sama-letter') {
+      const letter = letters.find(l => l.id === item.id)
+      if (letter) {
+        const pendingStep = letter.approvalChain?.find(s => s.status === 'pending')
+        if (pendingStep) {
+          rejectLetterStep(item.id, pendingStep.step, name, notes || 'Rejected via directory')
+        }
+      }
+    }
+    setNotes('')
+    setSelectedItem(null)
+  }
+
+  return (
+    <Card className="p-6">
+      <h3 className="text-sm font-bold text-slate-900 mb-4 flex items-center gap-2">
+        <Icon icon="lucide:clock" className="text-slate-400" />
+        {t('team.pendingApprovals' as TranslationKey)}
+        {items.length > 0 && (
+          <span className="text-[10px] font-bold bg-rose-100 text-rose-700 px-2 py-0.5 rounded-full">
+            {items.length}
+          </span>
+        )}
+      </h3>
+
+      {items.length === 0 ? (
+        <div className="text-center py-8">
+          <Icon icon="lucide:check-circle" className="text-3xl text-emerald-400 mx-auto mb-2" />
+          <p className="text-sm text-slate-500 font-medium">{t('team.noApprovalsPending' as TranslationKey)}</p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {pageItems.map((item) => {
+            const icon = typeIcons[item.type]
+            return (
+              <div
+                key={`${item.type}-${item.id}`}
+                onClick={() => setSelectedItem(item)}
+                className={`p-3 rounded-xl border cursor-pointer transition-colors hover:shadow-sm ${item.urgent ? 'border-rose-200 bg-rose-50/30 hover:bg-rose-50/60' : 'border-slate-100 bg-slate-50 hover:bg-slate-100'}`}
+              >
+                <div className="flex items-start gap-3">
+                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${icon.color}`}>
+                    <Icon icon={icon.icon} className="w-4 h-4" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-bold text-slate-900 truncate">{item.title}</p>
+                    <p className="text-[10px] text-slate-500 mt-0.5">
+                      {typeLabels[item.type]} {item.reference && `· ${item.reference}`}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )
+          })}
+
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between pt-2">
+              <button onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0} className="text-[10px] font-bold text-slate-500 disabled:opacity-30 cursor-pointer">
+                {t('team.previous' as TranslationKey)}
+              </button>
+              <span className="text-[10px] text-slate-400">{page + 1}/{totalPages}</span>
+              <button onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))} disabled={page >= totalPages - 1} className="text-[10px] font-bold text-slate-500 disabled:opacity-30 cursor-pointer">
+                {t('team.next' as TranslationKey)}
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Detail Modal */}
+      <Modal
+        isOpen={!!selectedItem}
+        onClose={() => { setSelectedItem(null); setNotes('') }}
+        title={t('team.pendingApprovalsDetail' as TranslationKey)}
+        size="md"
+      >
+        {selectedItem && (() => {
+          const icon = typeIcons[selectedItem.type]
+          return (
+            <div className="space-y-5">
+              {/* Type Badge + Title */}
+              <div className="flex items-start gap-3">
+                <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${icon.color}`}>
+                  <Icon icon={icon.icon} className="w-5 h-5" />
+                </div>
+                <div>
+                  <span className={`inline-block text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full mb-1 ${icon.color}`}>
+                    {typeLabels[selectedItem.type]}
+                  </span>
+                  <h4 className="text-base font-bold text-slate-900">{selectedItem.title}</h4>
+                  {selectedItem.reference && (
+                    <p className="text-xs text-slate-500 font-mono mt-0.5">{selectedItem.reference}</p>
+                  )}
+                </div>
+              </div>
+
+              {/* Urgency Indicator */}
+              <div className={`p-3 rounded-xl border ${selectedItem.urgent ? 'border-rose-200 bg-rose-50' : 'border-slate-200 bg-slate-50'}`}>
+                <div className="flex items-center gap-2">
+                  <Icon
+                    icon={selectedItem.urgent ? 'lucide:alert-triangle' : 'lucide:info'}
+                    className={`w-4 h-4 ${selectedItem.urgent ? 'text-rose-500' : 'text-slate-400'}`}
+                  />
+                  <span className={`text-xs font-bold ${selectedItem.urgent ? 'text-rose-700' : 'text-slate-600'}`}>
+                    {selectedItem.urgent ? t('team.urgent' as TranslationKey) : t('team.status')}
+                  </span>
+                </div>
+              </div>
+
+              {/* Context Summary */}
+              <div>
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">{t('team.details')}</p>
+                <p className="text-sm text-slate-700">{selectedItem.contextSummary}</p>
+                {selectedItem.workflowStepInfo && (
+                  <p className="text-xs text-slate-500 mt-1">{selectedItem.workflowStepInfo}</p>
+                )}
+              </div>
+
+              {/* Mini Workflow Timeline */}
+              {selectedItem.workflowTimeline && selectedItem.workflowTimeline.length > 0 && (
+                <div>
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">{t('policies.approvalWorkflow' as TranslationKey)}</p>
+                  <div className="space-y-1.5">
+                    {selectedItem.workflowTimeline.map((step, i) => (
+                      <div key={i} className="flex items-center gap-2">
+                        <div className={`w-2.5 h-2.5 rounded-full shrink-0 ${
+                          step.status === 'completed' ? 'bg-emerald-500'
+                            : step.status === 'current' ? 'bg-amber-500'
+                            : 'bg-slate-200'
+                        }`} />
+                        <span className={`text-xs ${step.status === 'current' ? 'font-bold text-slate-900' : 'text-slate-500'}`}>
+                          {step.step}
+                        </span>
+                        {step.stepState === 'pending-approval' && (
+                          <span className="text-[9px] font-bold px-1.5 py-0.5 bg-amber-100 text-amber-700 rounded-full">
+                            {t('policies.awaitingApproval' as TranslationKey)}
+                          </span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Evidence Downloads */}
+              {selectedItem.evidence && selectedItem.evidence.length > 0 && (
+                <div>
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">{t('policies.evidenceSection' as TranslationKey)}</p>
+                  <div className="space-y-1">
+                    {selectedItem.evidence.map((ev, i) => (
+                      <a
+                        key={i}
+                        href={ev.dataUrl}
+                        download={ev.name}
+                        className="flex items-center gap-2 text-xs text-emerald-600 hover:text-emerald-700 font-medium p-1.5 rounded hover:bg-emerald-50"
+                      >
+                        <Icon icon="lucide:download" className="w-3.5 h-3.5 shrink-0" />
+                        <span className="truncate">{ev.name}</span>
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Attachment Downloads */}
+              {selectedItem.attachments && selectedItem.attachments.length > 0 && (
+                <div>
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">{t('policies.attachments' as TranslationKey)}</p>
+                  <div className="space-y-1">
+                    {selectedItem.attachments.map((att, i) => (
+                      <a
+                        key={i}
+                        href={att.dataUrl}
+                        download={att.name}
+                        className="flex items-center gap-2 text-xs text-blue-600 hover:text-blue-700 font-medium p-1.5 rounded hover:bg-blue-50"
+                      >
+                        <Icon icon="lucide:paperclip" className="w-3.5 h-3.5 shrink-0" />
+                        <span className="truncate">{att.name}</span>
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* SAMA Approval Chain */}
+              {selectedItem.approvalChain && selectedItem.approvalChain.length > 0 && (
+                <div>
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">{t('policies.approvalWorkflow' as TranslationKey)}</p>
+                  <div className="space-y-1.5">
+                    {selectedItem.approvalChain.map((step, i) => (
+                      <div key={i} className="flex items-center gap-2">
+                        <div className={`w-2.5 h-2.5 rounded-full shrink-0 ${
+                          step.status === 'approved' ? 'bg-emerald-500'
+                            : step.status === 'pending' ? 'bg-amber-500'
+                            : 'bg-rose-500'
+                        }`} />
+                        <span className={`text-xs ${step.status === 'pending' ? 'font-bold text-slate-900' : 'text-slate-500'}`}>
+                          Step {step.step}: {step.role}
+                        </span>
+                        {step.status === 'pending' && (
+                          <span className="text-[9px] font-bold px-1.5 py-0.5 bg-amber-100 text-amber-700 rounded-full">
+                            {t('policies.awaitingApproval' as TranslationKey)}
+                          </span>
+                        )}
+                        {step.status === 'approved' && step.approvedAt && (
+                          <span className="text-[9px] text-slate-400">{step.approvedAt}</span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Notes */}
+              <div>
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">{t('team.approvalNotes' as TranslationKey)}</p>
+                <textarea
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  placeholder={t('team.approvalNotesPlaceholder' as TranslationKey)}
+                  className="w-full border border-slate-200 rounded-lg p-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-none"
+                  rows={2}
+                />
+              </div>
+
+              {/* Actions */}
+              <div className="flex items-center gap-3 pt-2 border-t border-slate-100">
+                <RoleGuard requiredRole="manager" hidden>
+                  <Button
+                    size="sm"
+                    onClick={() => handleApprove(selectedItem)}
+                  >
+                    <Icon icon="lucide:check" className="w-4 h-4" />
+                    {t('team.approveAction' as TranslationKey)}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleReject(selectedItem)}
+                    className="text-rose-600 border-rose-200 hover:bg-rose-50"
+                  >
+                    <Icon icon="lucide:x" className="w-4 h-4" />
+                    {t('team.rejectAction' as TranslationKey)}
+                  </Button>
+                </RoleGuard>
+                <Link
+                  href={selectedItem.linkHref}
+                  className="ms-auto text-xs font-bold text-emerald-600 hover:text-emerald-700 flex items-center gap-1"
+                >
+                  {t('team.viewDetails' as TranslationKey)}
+                  <Icon icon="lucide:external-link" className="w-3 h-3" />
+                </Link>
+              </div>
+            </div>
+          )
+        })()}
+      </Modal>
+    </Card>
+  )
+}

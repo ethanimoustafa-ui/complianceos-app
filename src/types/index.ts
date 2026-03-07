@@ -18,6 +18,9 @@ export interface TeamMember extends User {
   joinedAt: string
   invitedBy?: string
   nationality?: string
+  assignments?: { title: string; dueDate: string; progress?: number }[]
+  accessControls?: { label: string; enabled: boolean }[]
+  burnoutSince?: string
 }
 
 // Audit types
@@ -902,6 +905,77 @@ export interface PolicyFilters {
   approvalTier?: PolicyApprovalTier[]
   search?: string
   dateRange?: { from: string; to: string }
+}
+
+// Training page types
+export type TrainingStatus = 'completed' | 'in_progress' | 'not_started' | 'overdue'
+export type TrainingCategory = 'compliance' | 'aml' | 'cybersecurity' | 'sharia' | 'risk' | 'data-privacy' | 'ethics' | 'fraud-prevention' | 'governance' | 'operational-risk' | 'business-continuity' | 'sanctions' | 'internal-audit'
+export type FileUploadCategory = 'saudization' | 'training-list' | 'employee-details'
+
+export interface CourseProgress {
+  id: string
+  name: string
+  category: TrainingCategory
+  status: TrainingStatus
+  progress: number
+  completedDate?: string
+  dueDate: string
+  score?: number
+}
+
+export interface TrainingEmployee {
+  id: string
+  name: string
+  email: string
+  department: string
+  isSaudi: boolean
+  courses: CourseProgress[]
+  overallProgress: number
+}
+
+export interface DepartmentTraining {
+  name: string
+  employees: number
+  completed: number
+  inProgress: number
+  overdue: number
+  progress: number
+}
+
+export interface TrainingCourse {
+  id: string
+  name: string
+  category: TrainingCategory
+  dueDate: string
+  description?: string
+  assignedCount: number
+  completedCount: number
+  overdueCount: number
+  inProgressCount: number
+}
+
+export interface SaudizationDepartment {
+  name: string
+  total: number
+  saudi: number
+  percentage: number
+}
+
+export interface SaudizationMetrics {
+  target: number
+  actual: number
+  totalEmployees: number
+  saudiEmployees: number
+  byDepartment: SaudizationDepartment[]
+  lastDataSource?: 'manual' | 'file-upload'
+  lastUpdated?: string
+}
+
+export interface TrainingOverviewStats {
+  overallCompletion: number | null
+  coursesAssigned: number | null
+  overdueCourses: number | null
+  inProgressCourses: number | null
 }
 
 // Training filters

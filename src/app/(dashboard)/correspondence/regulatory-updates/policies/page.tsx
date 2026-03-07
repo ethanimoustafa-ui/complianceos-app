@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { useAuthStore } from '@/stores/auth-store'
 import Link from 'next/link'
 import { Icon } from '@iconify/react'
@@ -124,6 +125,24 @@ export default function RegulatoryUpdatesPoliciesPage() {
     setSelected, reviewAlerts, checkAndUpdateStatuses,
   } = usePolicyStore()
   const { user: currentUser } = useAuthStore()
+
+  const searchParams = useSearchParams()
+  const [deepLinkTab, setDeepLinkTab] = useState<'overview' | 'workflow' | 'activity' | undefined>(undefined)
+
+  // Bug A: Deep-link from URL params (?policyId=...&tab=workflow)
+  useEffect(() => {
+    const policyId = searchParams.get('policyId')
+    const tab = searchParams.get('tab')
+    if (policyId) {
+      const match = policies.find(p => p.id === policyId)
+      if (match) {
+        setSelected(match)
+        if (tab === 'workflow' || tab === 'activity' || tab === 'overview') {
+          setDeepLinkTab(tab)
+        }
+      }
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const [policySearchQuery, setPolicySearchQuery] = useState('')
   const [policyCategoryFilter, setPolicyCategoryFilter] = useState<PolicyCategory | 'all'>('all')
@@ -512,7 +531,8 @@ export default function RegulatoryUpdatesPoliciesPage() {
         {selectedPolicy && (
           <PolicyDetailsContent
             policy={selectedPolicy}
-            onClose={() => setSelected(null)}
+            initialTab={deepLinkTab}
+            onClose={() => { setSelected(null); setDeepLinkTab(undefined) }}
             onSubmitForReview={() => showToast(t('policies.submitForReviewToast'))}
             onApprove={() => showToast(t('policies.approveToast'))}
             onInitiateReview={() => showToast(t('policies.initiateReviewToast'))}

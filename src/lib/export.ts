@@ -963,6 +963,144 @@ export function generatePrintableReport(
 }
 
 /**
+ * Export team members to CSV with localization support
+ */
+export function exportTeamMembersLocalized(
+  members: Array<{
+    name: string
+    email: string
+    role: string
+    department: string
+    status: string
+    joinedAt: string
+    workload: number
+    nationality?: string
+  }>,
+  filename = 'team-members',
+  t?: TranslationFunction,
+  isRTL = false
+): void {
+  const getText = (key: string, fallback: string) => t ? t(key) : fallback
+
+  const headers = [
+    getText('export.memberName', 'Name'),
+    getText('export.memberEmail', 'Email'),
+    getText('export.memberRole', 'Role'),
+    getText('export.memberDepartment', 'Department'),
+    getText('export.memberStatus', 'Status'),
+    getText('export.joinedDate', 'Joined Date'),
+    getText('export.memberWorkload', 'Workload'),
+    getText('export.memberNationality', 'Nationality'),
+  ]
+
+  const exportData = members.map((m) => ({
+    [headers[0]]: m.name,
+    [headers[1]]: m.email,
+    [headers[2]]: m.role,
+    [headers[3]]: m.department,
+    [headers[4]]: m.status,
+    [headers[5]]: formatExportDate(m.joinedAt, isRTL, ''),
+    [headers[6]]: `${m.workload}%`,
+    [headers[7]]: m.nationality || '',
+  }))
+
+  exportToCSV(exportData, { filename, headers })
+}
+
+/**
+ * Export user logs to CSV with localization support
+ */
+export function exportUserLogsLocalized(
+  logs: Array<{
+    id: number
+    timestamp: string
+    user: string
+    action: string
+    detailsKey: string
+    ipAddress: string
+    device: string
+    location: string
+    status: string
+  }>,
+  filename = 'user-logs',
+  t?: TranslationFunction,
+  _isRTL = false
+): void {
+  const getText = (key: string, fallback: string) => t ? t(key) : fallback
+
+  const headers = [
+    getText('export.timestamp', 'Timestamp'),
+    getText('export.user', 'User'),
+    getText('export.userLogAction', 'Action'),
+    getText('export.description', 'Details'),
+    getText('export.ipAddress', 'IP Address'),
+    getText('export.device', 'Device'),
+    getText('export.location', 'Location'),
+    getText('export.status', 'Status'),
+  ]
+
+  const exportData = logs.map((log) => ({
+    [headers[0]]: log.timestamp,
+    [headers[1]]: log.user,
+    [headers[2]]: log.action,
+    [headers[3]]: t ? t(log.detailsKey) : log.detailsKey,
+    [headers[4]]: log.ipAddress,
+    [headers[5]]: log.device,
+    [headers[6]]: log.location,
+    [headers[7]]: log.status,
+  }))
+
+  exportToCSV(exportData, { filename, headers })
+}
+
+/**
+ * Export training data to CSV with localization support
+ */
+export function exportTrainingDataLocalized(
+  employees: Array<{
+    name: string
+    email: string
+    department: string
+    isSaudi: boolean
+    overallProgress: number
+    courses: Array<{ name: string; category: string; status: string; dueDate: string; score?: number }>
+  }>,
+  courses: Array<{
+    name: string
+    category: string
+    dueDate: string
+    assignedCount: number
+    completedCount: number
+    overdueCount: number
+  }>,
+  filename = 'training-data',
+  t?: TranslationFunction,
+  _isRTL = false
+): void {
+  const getText = (key: string, fallback: string) => t ? t(key) : fallback
+
+  const headers = [
+    getText('export.memberName', 'Name'),
+    getText('export.memberEmail', 'Email'),
+    getText('export.department', 'Department'),
+    getText('export.memberNationality', 'Nationality'),
+    getText('export.progress', 'Progress'),
+    getText('export.status', 'Courses'),
+  ]
+
+  const exportData = employees.map((emp) => ({
+    [headers[0]]: emp.name,
+    [headers[1]]: emp.email,
+    [headers[2]]: emp.department,
+    [headers[3]]: emp.isSaudi ? 'Saudi' : 'Non-Saudi',
+    [headers[4]]: `${emp.overallProgress}%`,
+    [headers[5]]: emp.courses.map(c => `${c.name} (${c.status})`).join('; '),
+  }))
+
+  exportToCSV(exportData, { filename, headers })
+}
+
+/**
  * Export data to PDF via print dialog
  */
 export function exportToPDF<T extends ExportableData>(
