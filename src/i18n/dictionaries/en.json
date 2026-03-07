@@ -2565,5 +2565,17 @@
     "activityDeletedTask": "Deleted task: {{title}}",
     "activityCompletedTask": "Completed task: {{title}}",
     "activityReopenedTask": "Reopened task: {{title}}"
+  },
+  "reviewSchedule": {
+    "cadence": "Review Cadence",
+    "dayOfMonth": "Day of Month",
+    "monthly": "Monthly",
+    "quarterly": "Quarterly",
+    "semiAnnual": "Semi-Annual",
+    "yearly": "Yearly",
+    "adhoc": "Ad Hoc",
+    "adhocDate": "Scheduled Date",
+    "selectDay": "Select a day",
+    "computedNextReview": "Computed next review"
   }
 }

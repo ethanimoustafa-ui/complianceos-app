@@ -2,7 +2,7 @@
 
 **Version:** 1.0
 **Date:** February 2026
-**Last Updated:** March 3, 2026
+**Last Updated:** March 7, 2026
 
 ---
 
@@ -13,7 +13,7 @@
 - **Source:** `BRD` (from Business Requirements Doc) | `REC` (from architecture/strategy sessions) | `FEEDBACK` (from compliance team)
 - **Arch:** `A` (Correspondence) | `B` (Framework) | `C` (Internal Governance) | `S` (Shared/Platform)
 
-> **Sprint 3 in progress:** Circular UX & Integration Overhaul — Epic 3 (Rules & Circulars) and Epic 4 (Policies & Procedures) are the current focus.
+> **Sprint 6 complete:** Custom Review Frequency — `ReviewSchedule` type + `ReviewSchedulePicker` UI + `computeNextReview()` utility wired across Policies (POL-018), Risks (RSK-007), and Audits (AUD-004).
 
 ---
 
@@ -118,6 +118,7 @@
 | POL-005 | Version history with changelog | ✅ | P1 | S | BRD | Done — `PolicyVersionEntry[]` on Policy model; rendered in detail drawer with version, date, author, changes columns |
 | POL-006 | Audit trail (creation, edits, approvals, rejections, publication) | 📋 | P1 | S | BRD | |
 | POL-007 | Document management (PDF, DOC uploads per policy) | 📋 | P1 | S | BRD | |
+| POL-018 | Custom review schedule (cadence + day-of-month anchor) | ✅ | P1 | S | FEEDBACK | Done — `ReviewSchedule` type (`cadence: monthly\|quarterly\|semi-annual\|yearly\|adhoc`, `dayOfMonth: 1–28`, `adhocDate`); `ReviewSchedulePicker` UI component (cadence select + 4×7 day grid + ad-hoc date input, RTL-aware); `computeNextReview()` utility in `src/lib/review-schedule.ts`; policy create/edit modals and `initiateReview()` store action all derive `nextReviewDate` from schedule |
 | POL-008 | Status dashboard (total, by status, upcoming/overdue reviews) | ✅ | P1 | S | BRD | Done — stat cards driven by live `policy-store` data; counts for approved/under-review/draft/expired and overdue review alerts |
 | POL-009 | Compliance engine integration (Policy Currency = 15% weight) | ✅ | P0 | S | BRD | Done — engine filter widened from `status === 'active'` to `status === 'approved' || 'active'`; `PolicySlice.status` widened to `string` in compliance-engine.types.ts; policy-store seeds provide real data |
 | POL-010 | Framework principle tagging on policies | 📋 | P1 | B | BRD | `frameworkTags[]` field. See Epic 12 |
@@ -127,6 +128,7 @@
 | POL-014 | Email notification to policy owner when status becomes `requires-review` | 📋 | P2 | S | BRD | Requires server-side scheduler (cron/job queue) + email service (SendGrid, Resend). The `checkAndUpdateStatuses()` action in `policy-store.ts` sets client-side status; a server equivalent would send email at the 90-day threshold |
 | POL-015 | Evidence filter across all review cycles | ✅ | P1 | S | FEEDBACK | Done (Sprint 5) — `Policy` type gains `reviewCycleHistory[]`; `initiateReview()` pushes the outgoing cycle to history before creating the new one; evidence `useMemo` in PolicyDetailsContent merges current + history cycles so all past uploads remain filterable |
 | POL-016 | Status auto-derive on workflow-step drag (reorder + drag-to-bin) | ✅ | P1 | S | FEEDBACK | Done (Sprint 5) — `deriveStatusFromTimeline()` helper evaluates the updated timeline after every drag operation (reorder and bin-drop) and writes the correct `PolicyStatus` back to the store; drag-reorder and drag-to-bin both also clear `stepState` from non-completed steps to prevent stale approval-flow button states |
+| POL-017 | Evidence cycle filter always visible (single-cycle policies) | ✅ | P1 | S | FEEDBACK | Done (Sprint 5) — guard changed from `evidenceCycles.size > 1` to `> 0`; dropdown now renders for first-cycle policies with the current cycle as the sole option; `lucide:filter` icon added for visual affordance; no logic changes to cycle data or display |
 
 ---
 
@@ -179,7 +181,7 @@
 | AUD-001 | Multi-type support (Internal Audit, SAMA Inspection, Sharia Audit) | ✅ | P0 | S | BRD | Done |
 | AUD-002 | Terminology compliance ("SAMA Inspection" not "audit") | ✅ | P0 | A | BRD | Done |
 | AUD-003 | Lifecycle management (Pending → In Progress → Completed + Overdue) | ✅ | P0 | S | BRD | Done |
-| AUD-004 | Priority, category, frequency classification | ✅ | P0 | S | BRD | Done |
+| AUD-004 | Priority, category, frequency classification | ✅ | P0 | S | BRD | Done; frequency field now supplemented by `ReviewSchedulePicker` in add/edit modals (Sprint 6) — cadence + day-of-month drives `dueDate` via `computeNextReview()`; computed date shown read-only; `reviewSchedule` persisted on `Audit` |
 | AUD-005 | Team management with lead auditor designation | ✅ | P0 | S | BRD | Done |
 | AUD-006 | Document management (working papers) | ✅ | P0 | S | BRD | Done |
 | AUD-007 | Comment system (threaded, with edit/delete permissions) | ✅ | P0 | S | BRD | Done |
@@ -245,7 +247,7 @@
 | RSK-004 | Status lifecycle (Open → Mitigating → Accepted → Closed) | ✅ | P1 | S | BRD | Done — Status dropdown in drawer calls `updateStatus`, maps UI↔store statuses, i18n labels |
 | RSK-005 | Mitigation tracking (plan + checklist-driven progress) | ✅ | P1 | S | BRD | Done — Hybrid: free-text plan for context + action item checklist (add/edit/toggle/remove), progress auto-computed from completed/total items, reuses `ChecklistSection` component with domain-agnostic label overrides |
 | RSK-006 | Risk owner assignment | ✅ | P1 | S | BRD | Done — Owner from team store, selectable in add/edit modal, displayed with avatar/department |
-| RSK-007 | Monitoring frequency with auto-computed review dates | ✅ | P1 | S | BRD | Done — `nextReviewDate = lastReviewDate + monitoringFrequency` (7d/1mo/3mo/6mo/1yr), "Mark as Reviewed" button resets cycle, dates auto-set on risk creation, category card filters by frequency |
+| RSK-007 | Monitoring frequency with auto-computed review dates | ✅ | P1 | S | BRD | Done — `nextReviewDate = lastReviewDate + monitoringFrequency` (7d/1mo/3mo/6mo/1yr), "Mark as Reviewed" button resets cycle, dates auto-set on risk creation, category card filters by frequency; enhanced (Sprint 6) with `ReviewSchedulePicker` in add/edit modal: cadence + day-of-month anchor drives `nextReviewDate` via `computeNextReview()`; `markReviewed()` advances by schedule cadence when set, falls back to legacy `monitoringFrequency` offset |
 | RSK-008 | Audit trail (status, score, mitigation, review, checklist changes) | ✅ | P1 | S | BRD | Done — History timeline in drawer with colored dots, 11 action types including 4 checklist actions (added/toggled/edited/removed), all changes append entries automatically |
 | RSK-009 | Compliance engine integration (Risk Posture = 20% weight) | 📋 | P0 | S | BRD | Currently returns 0 — engine receives empty arrays for risk data |
 | RSK-010 | Dashboard widget integration | 📋 | P1 | S | BRD | |

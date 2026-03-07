@@ -16,7 +16,9 @@ import { RegDocFilterBar } from '@/components/correspondence/regulatory-updates/
 import { StatCard } from '@/components/correspondence/regulatory-updates/rules/StatCard'
 import { PolicyDetailsContent } from '@/components/correspondence/regulatory-updates/policies/PolicyDetailsContent'
 import { DeletePolicyModal } from '@/components/correspondence/regulatory-updates/policies/DeletePolicyModal'
-import type { PolicyStatus, PolicyCategory, PolicyApprovalTier, PolicyVersionEntry, PolicyActivityEntry } from '@/types'
+import type { PolicyStatus, PolicyCategory, PolicyApprovalTier, PolicyVersionEntry, PolicyActivityEntry, ReviewSchedule } from '@/types'
+import { ReviewSchedulePicker } from '@/components/ui/ReviewSchedulePicker'
+import { computeNextReview, cadenceToReviewCycleDays } from '@/lib/review-schedule'
 
 // Toast component
 function Toast({ message, onClose }: { message: string; onClose: () => void }) {
@@ -139,10 +141,9 @@ export default function RegulatoryUpdatesPoliciesPage() {
   const [formCategory, setFormCategory] = useState<PolicyCategory | ''>('')
   const [formTier, setFormTier] = useState<PolicyApprovalTier | ''>('')
   const [formVersion, setFormVersion] = useState('v1.0')
-  const [formNextReview, setFormNextReview] = useState('')
+  const [formReviewSchedule, setFormReviewSchedule] = useState<ReviewSchedule>({ cadence: 'yearly', dayOfMonth: 1 })
   const [formOwnerIdx, setFormOwnerIdx] = useState(0)
   const [formDescription, setFormDescription] = useState('')
-  const [formReviewCycle, setFormReviewCycle] = useState<number>(365)
   const [formDocFile, setFormDocFile] = useState<File | null>(null)
   const formDocFileRef = useRef<HTMLInputElement>(null)
 
@@ -151,10 +152,9 @@ export default function RegulatoryUpdatesPoliciesPage() {
   const [formEditCategory, setFormEditCategory] = useState<PolicyCategory | ''>('')
   const [formEditTier, setFormEditTier] = useState<PolicyApprovalTier | ''>('')
   const [formEditVersion, setFormEditVersion] = useState('')
-  const [formEditNextReview, setFormEditNextReview] = useState('')
+  const [formEditReviewSchedule, setFormEditReviewSchedule] = useState<ReviewSchedule>({ cadence: 'yearly', dayOfMonth: 1 })
   const [formEditOwnerIdx, setFormEditOwnerIdx] = useState(0)
   const [formEditDescription, setFormEditDescription] = useState('')
-  const [formEditReviewCycle, setFormEditReviewCycle] = useState<number>(365)
   const [formEditDocFile, setFormEditDocFile] = useState<File | null>(null)
   const formEditDocFileRef = useRef<HTMLInputElement>(null)
 
@@ -174,11 +174,10 @@ export default function RegulatoryUpdatesPoliciesPage() {
       setFormEditCategory(selectedPolicy.category)
       setFormEditTier(selectedPolicy.approvalTier)
       setFormEditVersion(selectedPolicy.version)
-      setFormEditNextReview(selectedPolicy.nextReviewDate)
+      setFormEditReviewSchedule(selectedPolicy.reviewSchedule ?? { cadence: 'yearly', dayOfMonth: 1 })
       const ownerIdx = OWNERS.findIndex((o) => o.name === selectedPolicy.owner.name)
       setFormEditOwnerIdx(ownerIdx >= 0 ? ownerIdx : 0)
       setFormEditDescription(selectedPolicy.description)
-      setFormEditReviewCycle(selectedPolicy.reviewCycleDays)
       setFormEditDocFile(null)
     }
   }, [isEditModalOpen])
@@ -240,15 +239,14 @@ export default function RegulatoryUpdatesPoliciesPage() {
     setFormCategory('')
     setFormTier('')
     setFormVersion('v1.0')
-    setFormNextReview('')
+    setFormReviewSchedule({ cadence: 'yearly', dayOfMonth: 1 })
     setFormOwnerIdx(0)
     setFormDescription('')
-    setFormReviewCycle(365)
     setFormDocFile(null)
   }
 
   function handleCreate() {
-    if (!formName || !formCategory || !formTier || !formNextReview || !formDescription || !formDocFile) return
+    if (!formName || !formCategory || !formTier || !formDescription || !formDocFile) return
     const owner = OWNERS[formOwnerIdx]
     const today = new Date().toISOString().split('T')[0]
     const tierSteps = TIER_WORKFLOWS[formTier as PolicyApprovalTier] ?? TIER_WORKFLOWS.management
@@ -277,8 +275,9 @@ export default function RegulatoryUpdatesPoliciesPage() {
       approvalTier: formTier as PolicyApprovalTier,
       owner,
       lastReviewDate: '',
-      nextReviewDate: formNextReview,
-      reviewCycleDays: formReviewCycle,
+      nextReviewDate: computeNextReview(formReviewSchedule),
+      reviewCycleDays: cadenceToReviewCycleDays(formReviewSchedule.cadence),
+      reviewSchedule: formReviewSchedule,
       attachmentUrl: formDocFile.name,
       currentReviewCycleId: cycleId,
       currentReviewCycleLabel: cycleLabel,
@@ -296,7 +295,7 @@ export default function RegulatoryUpdatesPoliciesPage() {
   }
 
   function handleEdit() {
-    if (!selectedPolicy || !formEditName || !formEditCategory || !formEditTier || !formEditNextReview || !formEditDescription) return
+    if (!selectedPolicy || !formEditName || !formEditCategory || !formEditTier || !formEditDescription) return
     const owner = OWNERS[formEditOwnerIdx]
     const today = new Date().toISOString().split('T')[0]
     const newVersion = formEditVersion || selectedPolicy.version
@@ -307,7 +306,8 @@ export default function RegulatoryUpdatesPoliciesPage() {
     if (newVersion !== selectedPolicy.version) changes.push(`Version: ${selectedPolicy.version} → ${newVersion}`)
     if (formEditTier !== selectedPolicy.approvalTier) changes.push(`Approval tier: ${selectedPolicy.approvalTier} → ${formEditTier}`)
     if (owner.name !== selectedPolicy.owner.name) changes.push(`Owner: ${selectedPolicy.owner.name} → ${owner.name}`)
-    if (formEditNextReview !== selectedPolicy.nextReviewDate) changes.push(`Next review: ${selectedPolicy.nextReviewDate} → ${formEditNextReview}`)
+    const editNextReview = computeNextReview(formEditReviewSchedule)
+    if (editNextReview !== selectedPolicy.nextReviewDate) changes.push(`Next review: ${selectedPolicy.nextReviewDate} → ${editNextReview}`)
     if (formEditDocFile) changes.push(`Document replaced: "${formEditDocFile.name}"`)
     const changesText = changes.length > 0 ? changes.join('; ') : 'Minor update'
     const versionEntry: PolicyVersionEntry = {
@@ -333,8 +333,9 @@ export default function RegulatoryUpdatesPoliciesPage() {
       version: newVersion,
       approvalTier: formEditTier as PolicyApprovalTier,
       owner,
-      nextReviewDate: formEditNextReview,
-      reviewCycleDays: formEditReviewCycle,
+      nextReviewDate: computeNextReview(formEditReviewSchedule),
+      reviewCycleDays: cadenceToReviewCycleDays(formEditReviewSchedule.cadence),
+      reviewSchedule: formEditReviewSchedule,
       ...(formEditDocFile ? { attachmentUrl: formEditDocFile.name } : {}),
       versionHistory: [...selectedPolicy.versionHistory, versionEntry],
       activityLog: [...(selectedPolicy.activityLog ?? []), activityEntry],
@@ -343,8 +344,8 @@ export default function RegulatoryUpdatesPoliciesPage() {
     setIsEditModalOpen(false)
   }
 
-  const createFormValid = !!(formName && formCategory && formTier && formNextReview && formDescription && formDocFile)
-  const editFormValid = !!(formEditName && formEditCategory && formEditTier && formEditNextReview && formEditDescription)
+  const createFormValid = !!(formName && formCategory && formTier && formDescription && formDocFile)
+  const editFormValid = !!(formEditName && formEditCategory && formEditTier && formEditDescription)
 
   return (
     <div className={`flex flex-col h-full overflow-hidden ${isRTL ? 'rtl' : ''}`}>
@@ -617,34 +618,19 @@ export default function RegulatoryUpdatesPoliciesPage() {
                 </select>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <Input
-                  label={t('policies.version')}
-                  placeholder="v1.0"
-                  value={formEditVersion}
-                  onChange={(e) => setFormEditVersion(e.target.value)}
-                />
-                <Input
-                  label={`${t('policies.nextReview')} *`}
-                  type="date"
-                  value={formEditNextReview}
-                  onChange={(e) => setFormEditNextReview(e.target.value)}
-                />
-              </div>
+              <Input
+                label={t('policies.version')}
+                placeholder="v1.0"
+                value={formEditVersion}
+                onChange={(e) => setFormEditVersion(e.target.value)}
+              />
 
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('policies.reviewCycleDays')}</label>
-                <select
-                  className="flex h-11 w-full rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm"
-                  value={formEditReviewCycle}
-                  onChange={(e) => setFormEditReviewCycle(Number(e.target.value))}
-                >
-                  <option value={90}>{t('policies.reviewCycle90')}</option>
-                  <option value={180}>{t('policies.reviewCycle180')}</option>
-                  <option value={365}>{t('policies.reviewCycle365')}</option>
-                  <option value={730}>{t('policies.reviewCycle730')}</option>
-                </select>
-              </div>
+              <ReviewSchedulePicker
+                value={formEditReviewSchedule}
+                onChange={setFormEditReviewSchedule}
+                t={t}
+                isRTL={isRTL}
+              />
             </div>
 
             {/* Right Column */}
@@ -747,34 +733,19 @@ export default function RegulatoryUpdatesPoliciesPage() {
                 </select>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <Input
-                  label={t('policies.version')}
-                  placeholder="v1.0"
-                  value={formVersion}
-                  onChange={(e) => setFormVersion(e.target.value)}
-                />
-                <Input
-                  label={`${t('policies.nextReview')} *`}
-                  type="date"
-                  value={formNextReview}
-                  onChange={(e) => setFormNextReview(e.target.value)}
-                />
-              </div>
+              <Input
+                label={t('policies.version')}
+                placeholder="v1.0"
+                value={formVersion}
+                onChange={(e) => setFormVersion(e.target.value)}
+              />
 
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('policies.reviewCycleDays')}</label>
-                <select
-                  className="flex h-11 w-full rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm"
-                  value={formReviewCycle}
-                  onChange={(e) => setFormReviewCycle(Number(e.target.value))}
-                >
-                  <option value={90}>{t('policies.reviewCycle90')}</option>
-                  <option value={180}>{t('policies.reviewCycle180')}</option>
-                  <option value={365}>{t('policies.reviewCycle365')}</option>
-                  <option value={730}>{t('policies.reviewCycle730')}</option>
-                </select>
-              </div>
+              <ReviewSchedulePicker
+                value={formReviewSchedule}
+                onChange={setFormReviewSchedule}
+                t={t}
+                isRTL={isRTL}
+              />
             </div>
 
             {/* Right Column */}

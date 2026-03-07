@@ -73,6 +73,7 @@ export interface Audit {
   priority?: AuditPriority
   closedOverdue?: boolean  // Flag indicating audit was completed after due date
   completedAt?: string     // Timestamp when audit was marked complete
+  reviewSchedule?: ReviewSchedule
   createdAt: string
   updatedAt: string
 }
@@ -244,6 +245,7 @@ export interface Risk {
   monitoringFrequency: MonitoringFrequency
   lastReviewDate?: string
   nextReviewDate?: string
+  reviewSchedule?: ReviewSchedule
   history: RiskHistoryEntry[]
   createdAt: string
   updatedAt: string
@@ -538,6 +540,15 @@ export interface Training {
   updatedAt: string
 }
 
+// Review Schedule
+export type ReviewCadence = 'monthly' | 'quarterly' | 'semi-annual' | 'yearly' | 'adhoc'
+
+export interface ReviewSchedule {
+  cadence: ReviewCadence
+  dayOfMonth?: number   // 1–28; undefined when cadence === 'adhoc'
+  adhocDate?: string    // ISO date (YYYY-MM-DD); only when cadence === 'adhoc'
+}
+
 // Policy
 export type PolicyStatus = 'draft' | 'under-review' | 'approved' | 'expired' | 'overdue' | 'requires-review'
 export type PolicyCategory = 'compliance' | 'it' | 'operations' | 'risk' | 'hr' | 'finance'
@@ -580,7 +591,7 @@ export interface PolicyActivityEntry {
   id: string
   timestamp: string   // ISO string, used for ordering
   date: string        // YYYY-MM-DD, for display
-  type: 'created' | 'edited' | 'step_advanced' | 'step_reverted' | 'document_uploaded' | 'document_removed' | 'step_added' | 'workflow_approved' | 'step_denied'
+  type: 'created' | 'edited' | 'step_advanced' | 'step_reverted' | 'document_uploaded' | 'document_removed' | 'step_added' | 'workflow_approved' | 'step_denied' | 'evidence_uploaded' | 'evidence_removed'
   textEn: string
   textAr: string
   user?: string
@@ -611,6 +622,7 @@ export interface Policy {
   currentReviewCycleId?: string
   currentReviewCycleLabel?: string
   reviewCycleHistory?: Array<{ id: string; label: string; initiatedAt: string }>
+  reviewSchedule?: ReviewSchedule
   createdAt: string
   updatedAt: string
 }

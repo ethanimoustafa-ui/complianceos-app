@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import type { Audit, AuditFilters, PaginationState, SortState, AuditDocument, AuditTeamMember, AuditComment } from '@/types'
+import { computeNextReview } from '@/lib/review-schedule'
 import { useAuditLogStore } from './audit-log-store'
 import { useAuthStore } from './auth-store'
 
@@ -116,9 +117,13 @@ export const useAuditStore = create<AuditState>()(
           // TODO: Replace with actual API call
           await new Promise((resolve) => setTimeout(resolve, 500))
 
+          const dueDate = data.reviewSchedule
+            ? computeNextReview(data.reviewSchedule)
+            : data.dueDate
           const newAudit: Audit = {
             ...data,
             id: crypto.randomUUID(),
+            dueDate,
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString(),
           }
@@ -159,17 +164,23 @@ export const useAuditStore = create<AuditState>()(
 
           let updatedAudit: Audit | null = null
 
+          const computedDueDate = data.reviewSchedule
+            ? computeNextReview(data.reviewSchedule)
+            : data.dueDate
+          const updatePayload = computedDueDate !== undefined
+            ? { ...data, dueDate: computedDueDate }
+            : data
           set((state) => ({
             audits: state.audits.map((a) => {
               if (a.id === id) {
-                updatedAudit = { ...a, ...data, updatedAt: new Date().toISOString() }
+                updatedAudit = { ...a, ...updatePayload, updatedAt: new Date().toISOString() }
                 return updatedAudit
               }
               return a
             }),
             selectedAudit:
               state.selectedAudit?.id === id
-                ? { ...state.selectedAudit, ...data, updatedAt: new Date().toISOString() }
+                ? { ...state.selectedAudit, ...updatePayload, updatedAt: new Date().toISOString() }
                 : state.selectedAudit,
             isLoading: false,
           }))

@@ -12,7 +12,9 @@ import { useAuditStore } from '@/stores/audit-store'
 import { useTeamStore } from '@/stores/team-store'
 import { useAuthStore } from '@/stores/auth-store'
 import { useTranslation } from '@/i18n'
-import type { Audit, AuditCategory, AuditFrequency, AuditPriority } from '@/types'
+import type { Audit, AuditCategory, AuditFrequency, AuditPriority, ReviewSchedule } from '@/types'
+import { ReviewSchedulePicker } from '@/components/ui/ReviewSchedulePicker'
+import { computeNextReview } from '@/lib/review-schedule'
 
 const auditSchema = z.object({
   title: z.string().min(3, 'Title must be at least 3 characters'),
@@ -37,7 +39,7 @@ interface EditAuditModalProps {
 }
 
 export function EditAuditModal({ isOpen, onClose, audit, onSuccess, calculatedProgress }: EditAuditModalProps) {
-  const { t } = useTranslation()
+  const { t, isRTL } = useTranslation()
   const { update, isLoading } = useAuditStore()
   const { members } = useTeamStore()
   const currentUser = useAuthStore((state) => state.user)
@@ -48,6 +50,7 @@ export function EditAuditModal({ isOpen, onClose, audit, onSuccess, calculatedPr
     { id: 'sharia' as const, label: t('auditDetail.shariaAuditType'), icon: 'lucide:moon', color: 'amber' },
   ]
   const [selectedType, setSelectedType] = useState<'internal' | 'sama' | 'sharia'>('internal')
+  const [schedule, setSchedule] = useState<ReviewSchedule>({ cadence: 'yearly', dayOfMonth: 1 })
 
   const {
     control,
@@ -84,6 +87,7 @@ export function EditAuditModal({ isOpen, onClose, audit, onSuccess, calculatedPr
         priority: audit.priority,
       })
       setSelectedType(audit.type)
+      setSchedule(audit.reviewSchedule ?? { cadence: 'yearly', dayOfMonth: 1 })
     }
   }, [audit, reset])
 
@@ -110,11 +114,12 @@ export function EditAuditModal({ isOpen, onClose, audit, onSuccess, calculatedPr
         title: data.title,
         type: data.type,
         status: data.status,
-        dueDate: data.dueDate,
+        dueDate: computeNextReview(schedule),
         description: data.description,
         category: data.category,
         frequency: data.frequency,
         priority: data.priority,
+        reviewSchedule: schedule,
         assignee: selectedAssignee
           ? {
               id: selectedAssignee.id,
@@ -219,25 +224,11 @@ export function EditAuditModal({ isOpen, onClose, audit, onSuccess, calculatedPr
 
               <div>
                 <label className="text-xs font-black uppercase text-slate-500 tracking-widest mb-2 block">
-                  {t('auditDetail.dueDateLabel')}
+                  {t('reviewSchedule.computedNextReview')}
                 </label>
-                <Controller
-                  name="dueDate"
-                  control={control}
-                  render={({ field }) => (
-                    <input
-                      {...field}
-                      type="date"
-                      className={cn(
-                        'w-full px-4 py-3 bg-slate-50 border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500',
-                        errors.dueDate ? 'border-rose-300' : 'border-slate-200'
-                      )}
-                    />
-                  )}
-                />
-                {errors.dueDate && (
-                  <p className="text-rose-500 text-xs mt-1">{errors.dueDate.message}</p>
-                )}
+                <div className="px-4 py-3 bg-slate-100 border border-slate-200 rounded-xl text-sm text-slate-700 font-medium">
+                  {computeNextReview(schedule)}
+                </div>
               </div>
 
               <div>
@@ -287,29 +278,8 @@ export function EditAuditModal({ isOpen, onClose, audit, onSuccess, calculatedPr
                 />
               </div>
 
-              <div>
-                <label className="text-xs font-black uppercase text-slate-500 tracking-widest mb-2 block">
-                  {t('auditDetail.frequencyLabel')}
-                </label>
-                <Controller
-                  name="frequency"
-                  control={control}
-                  render={({ field }) => (
-                    <select
-                      {...field}
-                      value={field.value || ''}
-                      onChange={(e) => field.onChange(e.target.value || undefined)}
-                      className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                    >
-                      <option value="">{t('auditDetail.selectFrequency')}</option>
-                      <option value="annual">{t('auditDetail.frequencyAnnual')}</option>
-                      <option value="semi_annual">{t('auditDetail.frequencySemiAnnual')}</option>
-                      <option value="quarterly">{t('auditDetail.frequencyQuarterly')}</option>
-                      <option value="monthly">{t('auditDetail.frequencyMonthly')}</option>
-                      <option value="ad_hoc">{t('auditDetail.frequencyAdHoc')}</option>
-                    </select>
-                  )}
-                />
+              <div className="col-span-2">
+                <ReviewSchedulePicker value={schedule} onChange={setSchedule} t={t} isRTL={isRTL} />
               </div>
 
               <div>

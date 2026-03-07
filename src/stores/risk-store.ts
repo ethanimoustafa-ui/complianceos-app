@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import type { Risk, RiskFilters, PaginationState, SortState, MonitoringFrequency } from '@/types'
+import { computeNextReview } from '@/lib/review-schedule'
 
 function computeNextReviewDate(from: string, frequency: MonitoringFrequency): string {
   const d = new Date(from)
@@ -120,14 +121,24 @@ export const useRiskStore = create<RiskState>()(
             .filter(Boolean)
             .map(m => parseInt(m![1], 10))
           const nextNum = existingIds.length > 0 ? Math.max(...existingIds) + 1 : 1
+          const cadenceToMonitoringFrequency: Record<string, MonitoringFrequency> = {
+            monthly: 'monthly', quarterly: 'quarterly', 'semi-annual': 'semi_annual', yearly: 'annual', adhoc: 'monthly',
+          }
+          const monitoringFrequency = data.reviewSchedule
+            ? cadenceToMonitoringFrequency[data.reviewSchedule.cadence] ?? data.monitoringFrequency
+            : data.monitoringFrequency
+          const nextReviewDate = data.reviewSchedule
+            ? computeNextReview(data.reviewSchedule)
+            : computeNextReviewDate(now, data.monitoringFrequency)
           const newRisk: Risk = {
             ...data,
             id: `RSK-${String(nextNum).padStart(3, '0')}`,
             riskScore: data.likelihood * data.impact,
             mitigationChecklist: data.mitigationChecklist ?? [],
             mitigationProgress: data.mitigationProgress ?? 0,
+            monitoringFrequency,
             lastReviewDate: now,
-            nextReviewDate: computeNextReviewDate(now, data.monitoringFrequency),
+            nextReviewDate,
             history: [{
               id: crypto.randomUUID(),
               timestamp: now,
@@ -339,10 +350,13 @@ export const useRiskStore = create<RiskState>()(
           risks: state.risks.map((r) => {
             if (r.id !== riskId) return r
             const now = new Date().toISOString()
+            const nextReviewDate = r.reviewSchedule
+              ? computeNextReview(r.reviewSchedule, new Date())
+              : computeNextReviewDate(now, r.monitoringFrequency)
             return {
               ...r,
               lastReviewDate: now,
-              nextReviewDate: computeNextReviewDate(now, r.monitoringFrequency),
+              nextReviewDate,
               updatedAt: now,
               history: [...r.history, {
                 id: crypto.randomUUID(), timestamp: now, user: r.owner.name,

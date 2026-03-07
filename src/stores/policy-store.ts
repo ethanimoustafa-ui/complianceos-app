@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import type { Policy, PolicyFilters, PolicyStatus, PolicyWorkflowStep } from '@/types'
+import { computeNextReview, cadenceToReviewCycleDays } from '@/lib/review-schedule'
 
 function restatusTimeline(timeline: PolicyWorkflowStep[]): PolicyWorkflowStep[] {
   let firstNonCompleted = false
@@ -199,9 +200,17 @@ export const usePolicyStore = create<PolicyState>()(
       create: (data) => {
         const now = new Date().toISOString()
         const id = get().getNextId()
+        let nextReviewDate = data.nextReviewDate
+        let reviewCycleDays = data.reviewCycleDays
+        if (data.reviewSchedule) {
+          nextReviewDate = computeNextReview(data.reviewSchedule)
+          reviewCycleDays = cadenceToReviewCycleDays(data.reviewSchedule.cadence)
+        }
         const newPolicy: Policy = {
           ...data,
           id,
+          nextReviewDate,
+          reviewCycleDays,
           createdAt: now,
           updatedAt: now,
         }
@@ -273,12 +282,16 @@ export const usePolicyStore = create<PolicyState>()(
           user: policy.owner.name,
           status: 'current',
         }
+        const nextReviewDate = policy.reviewSchedule
+          ? computeNextReview(policy.reviewSchedule, new Date())
+          : policy.nextReviewDate
         get().update(id, {
           status: 'draft' as PolicyStatus,
           workflowTimeline: [...resetTimeline, newStep],
           currentReviewCycleId: cycleId,
           currentReviewCycleLabel: cycleLabel,
           reviewCycleHistory: [...(policy.reviewCycleHistory ?? []), ...oldEntry],
+          nextReviewDate,
         })
       },
 

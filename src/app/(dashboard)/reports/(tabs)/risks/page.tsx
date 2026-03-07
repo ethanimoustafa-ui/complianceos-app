@@ -13,6 +13,9 @@ import { cn } from '@/lib/utils'
 import { useTranslation } from '@/i18n'
 import { useRiskStore } from '@/stores/risk-store'
 import { useTeamStore } from '@/stores/team-store'
+import { ReviewSchedulePicker } from '@/components/ui/ReviewSchedulePicker'
+import type { ReviewSchedule } from '@/types'
+import { computeNextReview } from '@/lib/review-schedule'
 import { exportRisksLocalized } from '@/lib/export'
 import type { TranslationKey } from '@/i18n'
 import { ChecklistSection } from '@/components/observations/detail/checklist-section'
@@ -48,6 +51,7 @@ interface RiskRegisterItem {
   monitoringFrequency: MonitoringFrequency
   lastReviewDate?: Date
   nextReviewDate?: Date
+  reviewSchedule?: ReviewSchedule
   history: RiskHistoryEntry[]
   createdAt: Date
   updatedAt: Date
@@ -132,6 +136,7 @@ export default function ReportsRisksPage() {
       monitoringFrequency: r.monitoringFrequency,
       lastReviewDate: r.lastReviewDate ? new Date(r.lastReviewDate) : undefined,
       nextReviewDate: r.nextReviewDate ? new Date(r.nextReviewDate) : undefined,
+      reviewSchedule: r.reviewSchedule,
       history: r.history.map((h, idx) => ({
         id: idx + 1, timestamp: new Date(h.timestamp), user: h.user, action: h.action as HistoryAction,
         previousValue: h.previousValue, newValue: h.newValue, notes: h.notes,
@@ -162,10 +167,12 @@ export default function ReportsRisksPage() {
   const [newRiskDescription, setNewRiskDescription] = useState('')
   const [newRiskMitigation, setNewRiskMitigation] = useState('')
   const [newRiskMonitoringFrequency, setNewRiskMonitoringFrequency] = useState<MonitoringFrequency>('monthly')
+  const [newRiskSchedule, setNewRiskSchedule] = useState<ReviewSchedule>({ cadence: 'monthly', dayOfMonth: 1 })
 
   const resetAddRiskForm = () => {
     setNewRiskName(''); setNewRiskCategory(''); setNewRiskOwnerId(''); setNewRiskLikelihood(3); setNewRiskImpact(3)
-    setNewRiskDescription(''); setNewRiskMitigation(''); setNewRiskMonitoringFrequency('monthly'); setEditingRiskId(null)
+    setNewRiskDescription(''); setNewRiskMitigation(''); setNewRiskMonitoringFrequency('monthly');
+    setNewRiskSchedule({ cadence: 'monthly', dayOfMonth: 1 }); setEditingRiskId(null)
   }
 
   const handleCreateRisk = async () => {
@@ -180,6 +187,7 @@ export default function ReportsRisksPage() {
         title: newRiskName, description: newRiskDescription, category: newRiskCategory, likelihood: newRiskLikelihood, impact: newRiskImpact,
         owner: { id: owner.id, name: owner.name, email: owner.email, role: owner.role, department: owner.department, workload: owner.workload },
         mitigationPlan: newRiskMitigation || undefined, monitoringFrequency: newRiskMonitoringFrequency,
+        reviewSchedule: newRiskSchedule,
         history: [...(existingStoreRisk?.history || []), editHistoryEntry],
       })
     } else {
@@ -188,6 +196,7 @@ export default function ReportsRisksPage() {
         status: 'identified',
         owner: { id: owner.id, name: owner.name, email: owner.email, role: owner.role, department: owner.department, workload: owner.workload },
         mitigationPlan: newRiskMitigation || undefined, mitigationProgress: 0, monitoringFrequency: newRiskMonitoringFrequency,
+        reviewSchedule: newRiskSchedule,
       })
     }
     resetAddRiskForm(); setShowAddRiskModal(false)
@@ -702,6 +711,7 @@ export default function ReportsRisksPage() {
                   setEditingRiskId(selectedRisk.id); setNewRiskName(selectedRisk.name); setNewRiskCategory(selectedRisk.category); setNewRiskDescription(selectedRisk.description)
                   setNewRiskLikelihood(selectedRisk.likelihood); setNewRiskImpact(selectedRisk.impact); setNewRiskMitigation(selectedRisk.mitigationPlan || '')
                   setNewRiskMonitoringFrequency(selectedRisk.monitoringFrequency)
+                  setNewRiskSchedule(selectedRisk.reviewSchedule ?? { cadence: 'monthly', dayOfMonth: 1 })
                   const matchingMember = teamMembers.find(m => m.name === selectedRisk.owner.name)
                   setNewRiskOwnerId(matchingMember?.id || ''); setShowAddRiskModal(true); setIsRiskDrawerOpen(false)
                 }}>{t('reports.editRisk' as TranslationKey)}</button>
@@ -726,7 +736,7 @@ export default function ReportsRisksPage() {
           </div>
           <div><label className="text-xs font-bold text-slate-700 uppercase mb-2 block">{t('reports.description' as TranslationKey)} *</label><textarea rows={3} value={newRiskDescription} onChange={(e) => setNewRiskDescription(e.target.value)} placeholder={t('reports.enterRiskDescription' as TranslationKey)} className="w-full px-4 py-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500" /></div>
           <div><label className="text-xs font-bold text-slate-700 uppercase mb-2 block">{t('reports.mitigationPlan' as TranslationKey)}</label><textarea rows={2} value={newRiskMitigation} onChange={(e) => setNewRiskMitigation(e.target.value)} placeholder={t('reports.enterMitigationPlan' as TranslationKey)} className="w-full px-4 py-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500" /></div>
-          <div><label className="text-xs font-bold text-slate-700 uppercase mb-2 block">{t('reports.monitoringFrequency' as TranslationKey)}</label><select value={newRiskMonitoringFrequency} onChange={(e) => setNewRiskMonitoringFrequency(e.target.value as MonitoringFrequency)} className="w-full px-4 py-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"><option value="weekly">{t('reports.weekly' as TranslationKey)}</option><option value="monthly">{t('reports.monthly' as TranslationKey)}</option><option value="quarterly">{t('reports.quarterly' as TranslationKey)}</option><option value="semi_annual">{t('reports.semiAnnual' as TranslationKey)}</option><option value="annual">{t('reports.annual' as TranslationKey)}</option></select></div>
+          <ReviewSchedulePicker value={newRiskSchedule} onChange={setNewRiskSchedule} t={t} isRTL={isRTL} />
           <div className="flex gap-3 mt-6">
             <Button className="flex-1" disabled={!newRiskName || !newRiskCategory || !newRiskOwnerId || !newRiskDescription} onClick={handleCreateRisk}>
               <Icon icon={editingRiskId ? 'lucide:save' : 'lucide:plus'} />

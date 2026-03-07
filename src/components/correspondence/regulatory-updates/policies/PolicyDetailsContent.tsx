@@ -232,14 +232,35 @@ export function PolicyDetailsContent({
         reviewCycleLabel: cycleLabel,
       })
     }
+    const actEntries: PolicyActivityEntry[] = newEvidence.map(ev => ({
+      id: ev.id + '-log',
+      timestamp: new Date().toISOString(),
+      date: today,
+      type: 'evidence_uploaded' as const,
+      textEn: `Evidence "${ev.name}" uploaded for cycle "${ev.reviewCycleLabel}"`,
+      textAr: `تم رفع الدليل "${ev.name}" لدورة "${ev.reviewCycleLabel}"`,
+      user: actingUser,
+    }))
     update(fresh.id, {
       evidence: [...(fresh.evidence ?? []), ...newEvidence],
+      activityLog: [...(fresh.activityLog ?? []), ...actEntries],
     })
   }
 
   function handleEvidenceRemove(evidenceId: string) {
+    const removed = fresh.evidence?.find(e => e.id === evidenceId)
+    const actEntry: PolicyActivityEntry = {
+      id: Date.now().toString(),
+      timestamp: new Date().toISOString(),
+      date: today,
+      type: 'evidence_removed',
+      textEn: `Evidence "${removed?.name}" removed`,
+      textAr: `تم إزالة الدليل "${removed?.name}"`,
+      user: actingUser,
+    }
     update(fresh.id, {
       evidence: (fresh.evidence ?? []).filter(e => e.id !== evidenceId),
+      activityLog: [...(fresh.activityLog ?? []), actEntry],
     })
   }
 
@@ -1045,19 +1066,22 @@ export function PolicyDetailsContent({
                   {t('policies.evidenceSection')}
                 </h3>
                 <div className="flex items-center gap-2">
-                  {evidenceCycles.size > 1 && (
-                    <select
-                      className="text-xs border border-slate-200 rounded-lg px-2 py-1 bg-white"
-                      value={evidenceFilter}
-                      onChange={(e) => setEvidenceFilter(e.target.value)}
-                    >
-                      <option value="current">{fresh.currentReviewCycleLabel ?? 'Current Review'}</option>
-                      {Array.from(evidenceCycles.entries()).map(([id, label]) => (
-                        id !== fresh.currentReviewCycleId ? (
-                          <option key={id} value={id}>{label}</option>
-                        ) : null
-                      ))}
-                    </select>
+                  {evidenceCycles.size > 0 && (
+                    <div className="flex items-center gap-1">
+                      <Icon icon="lucide:filter" className="text-slate-400 text-xs shrink-0" />
+                      <select
+                        className="text-xs border border-slate-200 rounded-lg px-2 py-1 bg-white"
+                        value={evidenceFilter}
+                        onChange={(e) => setEvidenceFilter(e.target.value)}
+                      >
+                        <option value="current">{fresh.currentReviewCycleLabel ?? 'Current Review'}</option>
+                        {Array.from(evidenceCycles.entries()).map(([id, label]) => (
+                          id !== fresh.currentReviewCycleId ? (
+                            <option key={id} value={id}>{label}</option>
+                          ) : null
+                        ))}
+                      </select>
+                    </div>
                   )}
                   <button
                     onClick={() => evidenceFileRef.current?.click()}
@@ -1124,7 +1148,7 @@ export function PolicyDetailsContent({
                     <div className={cn(
                       'absolute left-0 top-1 w-4 h-4 rounded-full border-2',
                       entry.type === 'workflow_approved' ? 'bg-emerald-100 border-emerald-500' :
-                      entry.type === 'document_removed' || entry.type === 'step_reverted' || entry.type === 'step_denied' ? 'bg-rose-100 border-rose-400' :
+                      entry.type === 'document_removed' || entry.type === 'evidence_removed' || entry.type === 'step_reverted' || entry.type === 'step_denied' ? 'bg-rose-100 border-rose-400' :
                       'bg-slate-100 border-slate-400'
                     )} />
                     {/* Fix C — show only current language text */}

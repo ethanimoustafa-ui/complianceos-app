@@ -2565,5 +2565,17 @@
     "activityDeletedTask": "تم حذف مهمة: {{title}}",
     "activityCompletedTask": "تم إكمال مهمة: {{title}}",
     "activityReopenedTask": "تم إعادة فتح مهمة: {{title}}"
+  },
+  "reviewSchedule": {
+    "cadence": "دورية المراجعة",
+    "dayOfMonth": "يوم الشهر",
+    "monthly": "شهري",
+    "quarterly": "ربع سنوي",
+    "semiAnnual": "نصف سنوي",
+    "yearly": "سنوي",
+    "adhoc": "مخصص",
+    "adhocDate": "التاريخ المحدد",
+    "selectDay": "اختر يومًا",
+    "computedNextReview": "المراجعة القادمة المحتسبة"
   }
 }
