@@ -2,7 +2,7 @@
 
 **Version:** 1.0
 **Date:** February 2026
-**Last Updated:** February 23, 2026 (Calendar Page Rewrite Sprint)
+**Last Updated:** March 13, 2026 (Notification Engine, Deep-Linking & Group Messaging Sprint)
 
 ---
 
@@ -13,6 +13,8 @@
 - **Source:** `BRD` (from Business Requirements Doc) | `REC` (from architecture/strategy sessions) | `FEEDBACK` (from compliance team)
 - **Arch:** `A` (Correspondence) | `B` (Framework) | `C` (Internal Governance) | `S` (Shared/Platform)
 
+> **Notification Engine, Deep-Linking & Group Messaging Sprint complete (Mar 13 2026):** Live notification engine (`useNotificationEngine` hook) subscribes to 7 stores (audits, policies, observations, SAMA letters, circulars, training, risks) and generates 17 notification rules with ref-based dedup, max-50 cap, and priority sorting. Notification store refactored: seeds removed, `syncGeneratedNotifications` merge action added with `dedupeKey`-based dedup, persist v3 clean migration. `AppNotification` type extended with `entityId` and `dedupeKey` fields. Hook wired into `sidebar.tsx`. Message system overhauled: `MessageThread` type extended with `participantIds[]`, `isGroup`, `avatarUrl`, `createdBy`, `admins[]`; `message-store.ts` rewritten with `createThread` (multi-recipient), `kickMember`, `promoteAdmin`, `demoteAdmin`, `updateThreadAvatar`, and `deleteThread` actions; `message-panel.tsx` fully rewritten for multi-recipient compose with chips, optional group name, group avatar upload, members view with admin actions. Deep-link `?id=` URL param added to Rules/Circulars page (opens circular detail modal, Suspense-wrapped). Deep-link `?employeeId=` URL param added to Training page (opens employee detail modal, Suspense-wrapped). Sign-out modal now navigates to `/sign-in` via `router.push`. 31 new i18n keys added (EN + AR) — 18 notification title keys + 13 group chat keys. MSG-001 through MSG-010 all complete; NTF-001 through NTF-009 all complete.
+>
 > **Sprint 6 complete:** Custom Review Frequency — `ReviewSchedule` type + `ReviewSchedulePicker` UI + `computeNextReview()` utility wired across Policies (POL-018), Risks (RSK-007), and Audits (AUD-004).
 >
 > **Sprint 3.3 complete (Mar 8 2026):** Policy workflow bug fixes (submit-for-review stays on step, chip labels corrected, undo clears stepState), Pending Approvals card scoped to managerial-only items with deep-link + enriched modal, workload drawer shows full cross-store item list with type badges, Saudization grid layout fix, and new Epic 22 (Smart Workload & Burnout Management System) defined.
@@ -80,6 +82,7 @@
 | COR-028 | SAMA letter page RTL cleanup — remove redundant conditional class interpolations | ✅ | P1 | A | FEEDBACK | Done — ~76 instances of `${isRTL ? 'flex-row-reverse' : ''}` and `${isRTL ? 'text-right' : ''}` removed from sama-letters page; layout driven by Tailwind RTL utilities instead; `dir` attribute on letter content wrapper overrides inherited RTL cascade for letter direction |
 | COR-029 | Action dropdown smart upward flip in letter table | ✅ | P1 | A | FEEDBACK | Done — `menuPosition` state extended with `buttonTop`; portal computes `flipUp` when trigger is near bottom of viewport; dropdown repositions above trigger automatically |
 | COR-030 | "Send To SAMA" from table auto-triggers after navigating to detail view | ✅ | P1 | A | FEEDBACK | Done — `pendingSend` ref/state pattern: table action navigates to detail view and sets flag; `useEffect` on detail view mount detects flag and auto-triggers full send flow |
+| COR-031 | Deep-link `?id=` on Rules/Circulars page opens circular detail modal (Suspense-wrapped) | ✅ | P1 | A | FEEDBACK | Done — `rules/page.tsx` split into `RegulatoryUpdatesRulesPageContent` + outer `Suspense` wrapper; `useSearchParams()` reads `?id=` on mount and calls `setSelected` to auto-open the matching circular's detail modal; used by notification engine routes |
 
 ---
 
@@ -313,6 +316,7 @@
 | TRN-021 | Member detail drawer — full cross-store workload item list | ✅ | P1 | S | FEEDBACK | Done (Sprint 3.3) — `useWorkload` returns `items: WorkloadItem[]`; drawer renders individual item cards per observation/audit/policy/correspondence with color-coded type badges (observation=rose, audit=amber, policy=blue, correspondence=violet); manual task assignments retain unassign + "Clear All" buttons |
 | TRN-022 | `SortHeader<T>` reusable sort component | ✅ | P1 | S | FEEDBACK | Done — `src/components/ui/sort-header.tsx` with `SortState<T>` generic type; used across directory, logs, and training pages |
 | TRN-023 | Team member export | ✅ | P1 | S | FEEDBACK | Done — `exportTeamMembersLocalized` in `export.ts` |
+| TRN-024 | Deep-link `?employeeId=` on Training page opens employee detail modal (Suspense-wrapped) | ✅ | P1 | S | FEEDBACK | Done — `team/training/page.tsx` split into content component + outer `Suspense` wrapper; `useSearchParams()` reads `?employeeId=` on mount and auto-opens the matching employee detail modal; used by notification engine training routes |
 
 > **TRN-015–018 Dependencies:** Backend API endpoint for file upload + AI parsing service (e.g., OpenAI structured output, Claude tool use, or custom NLP pipeline). Frontend upload modal (`TrainingUploadModal`) is ready — currently uses hardcoded default values as placeholder.
 
@@ -397,6 +401,7 @@
 | RBAC-001 | Three-tier role hierarchy (Officer, Manager, Admin) | ✅ | P0 | S | BRD | Done |
 | RBAC-002 | Observation-specific permissions (leader, assignee, comment ownership) | ✅ | P0 | S | BRD | Done |
 | RBAC-003 | Authority-scoped permissions (user assigned to specific authorities) | 💡 | P2 | A | REC | From onboarding — e.g., Sarah → SAMA, ZATCA only |
+| RBAC-006 | Sign-out modal navigates to `/sign-in` after logout | ✅ | P1 | S | FEEDBACK | Done — `src/components/auth/sign-out-modal.tsx` (new standalone component); `handleSignOut` calls `logout()` then `router.push('/sign-in')`; sidebar sign-out button now imports and renders this modal |
 | RBAC-004 | Framework-scoped permissions (user assigned to specific frameworks) | 💡 | P2 | B | REC | E.g., Ahmed → NCA ECC, SAMA CSF only |
 | RBAC-005 | SAFIU restricted-access (separate access layer for AML module) | 🗺️ | P3 | A | BRD | Only authorized AML personnel |
 
@@ -564,8 +569,57 @@
 
 ---
 
+## Epic 24: Live Notification Engine
+
+> Cross-store notification system that watches all 7 data stores and generates actionable in-app notifications with deduplication, priority sorting, and user-preference filtering. Engine runs in the sidebar on every page.
+
+| ID | Feature | Status | Priority | Arch | Source | Notes |
+|---|---|---|---|---|---|---|
+| NTF-001 | `AppNotification` type extended with `entityId` and `dedupeKey` fields | ✅ | P0 | S | FEEDBACK | Done — `src/types/index.ts`; `entityId?: string` and `dedupeKey?: string` added; used by engine to prevent duplicate notifications across renders |
+| NTF-002 | Notification store refactored — seeds removed, persist v3 with clean migration | ✅ | P0 | S | FEEDBACK | Done — `src/stores/notification-store.ts`; all seed data and helpers removed; `syncGeneratedNotifications` merge action added; persist `version: 3` migration resets to empty state; manual notifications (no `dedupeKey`) preserved across syncs |
+| NTF-003 | `syncGeneratedNotifications` merge action with dedupeKey-based dedup | ✅ | P0 | S | FEEDBACK | Done — merges engine output into store: preserves `read` state for existing keys, appends new notifications, removes stale generated ones; manual (no-key) notifications always kept |
+| NTF-004 | `useNotificationEngine` hook — subscribes to 7 stores + user preferences | ✅ | P0 | S | FEEDBACK | Done — `src/hooks/useNotificationEngine.ts`; reads audits, policies, observations, letters, circulars, employees, risks + `notificationPreferences`; filtered by `prefs.modules` and `prefs.events` toggles from user-preferences-store |
+| NTF-005 | Audit notification rules (overdue + due-within-7-days) | ✅ | P1 | S | FEEDBACK | Done — part of `useNotificationEngine`; error severity for overdue, warning for due ≤ 7 days; routes to `/reports/{auditId}` |
+| NTF-006 | Policy notification rules (overdue, requires-review, expired, review-approaching-30d) | ✅ | P1 | S | FEEDBACK | Done — 4 rules per policy; routes deep-link to `?policyId=` with optional `&tab=workflow` |
+| NTF-007 | Observation notification rules (overdue, due-within-7d, remediation-plan-overdue) | ✅ | P1 | S | FEEDBACK | Done — 3 rules per open/in-progress observation; routes to `?id=` deep-link |
+| NTF-008 | SAMA letter notification rules (overdue, response-due-within-7d) | ✅ | P1 | A | FEEDBACK | Done — 2 rules per letter; routes to `/correspondence/sama-letters?id=` |
+| NTF-009 | Circular notification rules (overdue, due-within-7d) | ✅ | P1 | A | FEEDBACK | Done — 2 rules per circular; routes to `/correspondence/regulatory-updates/rules?id=` (deep-link opens circular detail modal) |
+| NTF-010 | Training notification rules (overdue, due-within-7d per employee-course pair) | ✅ | P1 | S | FEEDBACK | Done — iterates `employees[].courses[]`; routes to `/team/training?employeeId=` (deep-link opens employee detail modal) |
+| NTF-011 | Risk notification rules (review-overdue, review-approaching-30d) | ✅ | P1 | S | FEEDBACK | Done — 2 rules per non-resolved risk; routes to `/reports/risks?id=` |
+| NTF-012 | Ref-based dedup to prevent render loops (max 50 notifications, priority sort) | ✅ | P0 | S | FEEDBACK | Done — `prevKeysRef` ref stores previous dedupeKey set; `useEffect` fires `syncGeneratedNotifications` only when key set changes; priority order: error > warning > info > success |
+| NTF-013 | Notification engine wired in `sidebar.tsx` | ✅ | P0 | S | FEEDBACK | Done — `useNotificationEngine()` called unconditionally in sidebar component; engine runs on every page load |
+| NTF-014 | 18 notification title i18n keys (EN + AR) | ✅ | P1 | S | FEEDBACK | Done — keys added to `en.json` + `ar.json` for all notification titles used by the engine (auditOverdue, auditDueSoon, policyOverdue, reviewRequired, policyExpired, reviewApproaching, observationOverdue, observationDueSoon, remediationOverdue, samaOverdue, samaResponseDue, circularOverdue, circularDueSoon, trainingOverdue, trainingDueSoon, riskReviewOverdue, riskReviewApproaching) |
+| NTF-015 | Notification delivery backend (push/email) | 📋 | P2 | S | BRD | Currently in-app only; backend push/email requires server-side scheduler — see SET-009 |
+| NTF-016 | Per-module notification grouping / digest view | 📋 | P3 | S | REC | Group notifications by source type in the notification panel |
+
+---
+
+## Epic 25: Messaging & Group Chat System
+
+> In-app messaging system with group chat support, admin controls, thread management, and multi-recipient compose.
+
+| ID | Feature | Status | Priority | Arch | Source | Notes |
+|---|---|---|---|---|---|---|
+| MSG-001 | `MessageThread` type extended for group chat | ✅ | P0 | S | FEEDBACK | Done — `src/types/index.ts`; added `participantIds: string[]`, `isGroup: boolean`, `avatarUrl?: string`, `createdBy: string`, `admins: string[]`; `subject` made optional (direct messages no longer require a subject) |
+| MSG-002 | `message-store.ts` rewrite — multi-recipient `createThread`, group admin actions | ✅ | P0 | S | FEEDBACK | Done — `src/stores/message-store.ts`; new actions: `createThread(participantNames[], participantIds[], firstMessage, senderId, senderName, avatarUrl?)` auto-derives `isGroup` from recipient count; `kickMember`, `promoteAdmin`, `demoteAdmin`, `updateThreadAvatar`; persist v2 migration resets to seed data |
+| MSG-003 | `deleteThread` action with inline confirm UI | ✅ | P1 | S | FEEDBACK | Done — `message-store.ts` `deleteThread` removes thread + all its messages; `message-panel.tsx` shows hover trash icon per thread with inline confirm before deletion |
+| MSG-004 | Multi-recipient compose with recipient chips | ✅ | P1 | S | FEEDBACK | Done — `message-panel.tsx` compose view; multiple recipients selectable from team member list; each recipient rendered as a dismissible chip; group name field (optional) appears when >1 recipient selected |
+| MSG-005 | Group avatar upload in compose | ✅ | P2 | S | FEEDBACK | Done — file input in compose view for groups; selected image stored as `avatarUrl` on the thread via `updateThreadAvatar` action |
+| MSG-006 | Members view with admin actions (kick, promote/demote) | ✅ | P1 | S | FEEDBACK | Done — message-panel members tab shows participant list; thread creator (admin) sees Kick and Promote/Demote buttons per member; `createdBy` cannot be demoted; non-admin members see read-only participant list |
+| MSG-007 | Group icon indicators in thread list | ✅ | P1 | S | FEEDBACK | Done — group threads display a group icon badge in the thread list to distinguish from direct messages |
+| MSG-008 | 13 new group chat i18n keys (EN + AR) | ✅ | P1 | S | FEEDBACK | Done — keys added to `en.json` + `ar.json` under `messages.*`: group name, add recipients, group chat, members, kick, promote, demote, group avatar, new group, direct message, confirm delete thread, and related labels |
+| MSG-009 | Thread pagination / lazy loading | 📋 | P2 | S | REC | Currently renders all threads; add virtual scroll or pagination for large thread counts |
+| MSG-010 | Read receipts per message | 📋 | P3 | S | REC | Show "read by N" indicator on sent messages |
+| MSG-011 | Message search across threads | 📋 | P2 | S | REC | Global search within message panel |
+| MSG-012 | File attachment support in messages | 📋 | P2 | S | REC | Upload file → attach to message → download link in thread |
+| MSG-013 | Backend message persistence (real-time sync) | 📋 | P1 | S | BRD | Currently Zustand + localStorage only; requires WebSocket or SSE backend for real-time delivery |
+
+---
+
 ## Summary Dashboard
 
+> **Notification Engine, Deep-Linking & Group Messaging Sprint complete (Mar 13 2026)** — Live `useNotificationEngine` hook subscribes to 7 stores and generates 17 notification rules with dedup, priority sorting, and user-preference filtering; wired into sidebar. Notification store refactored (persist v3, `syncGeneratedNotifications` merge action). `AppNotification` extended with `entityId` + `dedupeKey`. Message system overhauled: group chat (`participantIds[]`, `isGroup`, `admins[]`, `createdBy`), `message-store` rewritten with `createThread`, `kickMember`, `promoteAdmin`, `demoteAdmin`, `updateThreadAvatar`, `deleteThread`. Message panel fully rewritten for multi-recipient compose with chips, group avatar upload, and members management view. Deep-links added: Rules page `?id=` opens circular modal; Training page `?employeeId=` opens employee modal (both Suspense-wrapped). Sign-out modal extracted to `src/components/auth/sign-out-modal.tsx`, navigates to `/sign-in`. 31 new i18n keys (EN + AR). NTF-001 through NTF-014, MSG-001 through MSG-008, COR-031, TRN-024, RBAC-006 all complete.
+>
 > **Settings Page Overhaul Sprint complete (Mar 13 2026)** — Settings page decomposed into 7 sub-components; 5 new Zustand stores (framework-config, user-preferences, audit-template, policy-template, department); granular notification preferences; per-framework weight sliders + dept multi-select; policy templates management UI; date format preference wired across the app. SET-001 through SET-006 + SET-011 through SET-015 all complete.
 >
 > **Dashboard Health Engine Sprint complete (Mar 13 2026)** — 7-component framework-weighted health scoring system added. 3 new files (`dashboard-health.types.ts`, `dashboard-health.ts`, `useDashboardHealth.ts`), 7 functions exported from `compliance-engine.ts`, `useDashboardMetrics` extended with `health` field. All three dashboard views have differentiated Compliance Health hero cards with threshold bars, dynamic action buttons, and live deductions. DSH-001 through DSH-015 all complete.
@@ -576,12 +630,12 @@
 
 | Status | Count | % |
 |---|---|---|
-| ✅ Done | 165 | 58% |
+| ✅ Done | 196 | 61% |
 | 🔧 In Progress (UI built, logic pending) | 6 | 2% |
-| 📋 To Do (defined, not started) | 67 | 24% |
-| 💡 New Recommendation | 24 | 8% |
+| 📋 To Do (defined, not started) | 74 | 23% |
+| 💡 New Recommendation | 24 | 7% |
 | 🗺️ Roadmap (future phase) | 18 | 6% |
-| **Total** | **280** | **100%** |
+| **Total** | **318** | **100%** |
 
 ### By Priority
 

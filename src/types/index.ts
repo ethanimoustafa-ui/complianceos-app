@@ -6,10 +6,61 @@ export interface User {
   role: 'officer' | 'manager' | 'admin'
   department: string
   avatar?: string
+  phone?: string
+  avatarSeed?: string
   workload: number
   permissions?: string[]
   lastLogin?: string
   createdAt?: string
+}
+
+// App Notification (used by notification-store sidebar panel)
+export interface AppNotification {
+  id: string
+  title: string
+  message: string
+  type: 'info' | 'warning' | 'success' | 'error'
+  sourceType?: CalendarSourceType
+  route?: string
+  read: boolean
+  entityId?: string
+  dedupeKey?: string
+  createdAt: string
+}
+
+// Message types (used by message-store)
+export interface MessageThread {
+  id: string
+  participants: string[]          // participant names
+  participantIds: string[]        // participant user IDs
+  subject?: string                // optional — auto-generated for groups if not set
+  lastMessage: string
+  lastMessageAt: string
+  unreadCount: number
+  isGroup: boolean                // true if 2+ recipients
+  avatarUrl?: string              // custom group avatar (base64 data URL)
+  createdBy: string               // userId of thread creator
+  admins: string[]                // userIds with admin rights (creator is always admin)
+}
+
+export interface Message {
+  id: string
+  threadId: string
+  senderId: string
+  senderName: string
+  content: string
+  createdAt: string
+  read: boolean
+}
+
+// Help article (used by help-store)
+export interface HelpArticle {
+  id: string
+  title: string
+  summary: string
+  category: string
+  content: string
+  icon: string
 }
 
 // Team Member type (extends User with team-specific fields)

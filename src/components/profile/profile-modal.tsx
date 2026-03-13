@@ -1,0 +1,226 @@
+'use client'
+
+import { useState, useEffect, useRef } from 'react'
+import { Icon } from '@iconify/react'
+import { Modal } from '@/components/ui/modal'
+import { useAuthStore } from '@/stores/auth-store'
+import { useTranslation } from '@/i18n'
+
+const AVATAR_PRESETS = ['Felix', 'Sarah', 'Michael', 'Ahmed', 'Layla', 'Omar', 'Fatima', 'Hassan', 'Nora', 'Khalid', 'Mona', 'Yusuf']
+
+interface ProfileModalProps {
+  isOpen: boolean
+  onClose: () => void
+}
+
+export function ProfileModal({ isOpen, onClose }: ProfileModalProps) {
+  const { t } = useTranslation()
+  const user = useAuthStore(s => s.user)
+  const updateProfile = useAuthStore(s => s.updateProfile)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const [name, setName] = useState('')
+  const [email, setEmail] = useState('')
+  const [phone, setPhone] = useState('')
+  const [avatarSeed, setAvatarSeed] = useState('Felix')
+  const [customAvatar, setCustomAvatar] = useState<string | null>(null)
+  const [showAvatarPicker, setShowAvatarPicker] = useState(false)
+
+  useEffect(() => {
+    if (isOpen && user) {
+      setName(user.name)
+      setEmail(user.email)
+      setPhone(user.phone || '')
+      setAvatarSeed(user.avatarSeed || 'Felix')
+      setCustomAvatar(user.avatar || null)
+      setShowAvatarPicker(false)
+    }
+  }, [isOpen, user])
+
+  const avatarSrc = customAvatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${avatarSeed}`
+
+  const handleSave = () => {
+    updateProfile({
+      name,
+      email,
+      phone: phone || undefined,
+      avatarSeed,
+      avatar: customAvatar || undefined,
+    })
+    onClose()
+  }
+
+  const handleAvatarUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      const reader = new FileReader()
+      reader.onload = (event) => {
+        setCustomAvatar(event.target?.result as string)
+        setShowAvatarPicker(false)
+      }
+      reader.readAsDataURL(file)
+    }
+  }
+
+  const handleSelectPreset = (seed: string) => {
+    setAvatarSeed(seed)
+    setCustomAvatar(null)
+    setShowAvatarPicker(false)
+  }
+
+  if (!user) return null
+
+  return (
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title={t('sidebar.editProfile')}
+      size="lg"
+    >
+      <div className="space-y-6">
+        {/* Avatar Section */}
+        <div className="flex flex-col items-center gap-4 pb-6 border-b border-slate-200">
+          <div
+            className="relative group cursor-pointer"
+            onClick={() => fileInputRef.current?.click()}
+          >
+            <img
+              src={avatarSrc}
+              alt="Profile"
+              className="w-24 h-24 rounded-full border-4 border-slate-200"
+            />
+            <div className="absolute inset-0 bg-slate-900/60 rounded-full opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+              <Icon icon="lucide:camera" className="text-white text-2xl" />
+            </div>
+          </div>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={handleAvatarUpload}
+          />
+          <div className="flex gap-3">
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="text-sm font-bold text-emerald-600 hover:text-emerald-700 flex items-center gap-2 cursor-pointer"
+            >
+              <Icon icon="lucide:upload" className="text-lg" />
+              {t('sidebar.uploadPhoto')}
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowAvatarPicker(!showAvatarPicker)}
+              className="text-sm font-bold text-blue-600 hover:text-blue-700 flex items-center gap-2 cursor-pointer"
+            >
+              <Icon icon="lucide:grid-3x3" className="text-lg" />
+              {t('sidebar.chooseAvatar')}
+            </button>
+          </div>
+
+          {showAvatarPicker && (
+            <div className="w-full mt-4 p-4 bg-slate-50 rounded-xl border border-slate-200">
+              <p className="text-xs font-bold text-slate-700 uppercase mb-3">{t('sidebar.avatarStyle')}</p>
+              <div className="grid grid-cols-6 gap-3">
+                {AVATAR_PRESETS.map((seed) => (
+                  <button
+                    key={seed}
+                    type="button"
+                    onClick={() => handleSelectPreset(seed)}
+                    className="w-12 h-12 rounded-full border-2 border-slate-200 hover:border-emerald-500 transition-all overflow-hidden cursor-pointer"
+                  >
+                    <img
+                      src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${seed}`}
+                      alt={seed}
+                      className="w-full h-full"
+                    />
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Form Fields */}
+        <div>
+          <label className="text-xs font-bold text-slate-700 uppercase mb-2 block">
+            {t('sidebar.fullName')}
+          </label>
+          <input
+            type="text"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            className="w-full px-4 py-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+          />
+        </div>
+
+        <div>
+          <label className="text-xs font-bold text-slate-700 uppercase mb-2 block">
+            {t('sidebar.emailAddress')}
+          </label>
+          <input
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            className="w-full px-4 py-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+          />
+        </div>
+
+        <div>
+          <label className="text-xs font-bold text-slate-700 uppercase mb-2 block">
+            {t('sidebar.phoneNumber')}
+          </label>
+          <input
+            type="tel"
+            value={phone}
+            onChange={(e) => setPhone(e.target.value)}
+            className="w-full px-4 py-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+          />
+        </div>
+
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="text-xs font-bold text-slate-700 uppercase mb-2 block">
+              {t('sidebar.department')}
+            </label>
+            <input
+              type="text"
+              value={user.department}
+              readOnly
+              className="w-full px-4 py-3 border border-slate-200 rounded-lg text-sm bg-slate-50 text-slate-500 cursor-not-allowed"
+            />
+          </div>
+          <div>
+            <label className="text-xs font-bold text-slate-700 uppercase mb-2 block">
+              {t('sidebar.role')}
+            </label>
+            <input
+              type="text"
+              value={user.role}
+              readOnly
+              className="w-full px-4 py-3 border border-slate-200 rounded-lg text-sm bg-slate-50 text-slate-500 cursor-not-allowed capitalize"
+            />
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="flex gap-3 mt-8">
+          <button
+            onClick={handleSave}
+            className="flex-1 bg-emerald-600 text-white py-3 rounded-lg font-bold hover:bg-emerald-700 transition-colors flex items-center justify-center gap-2 cursor-pointer"
+          >
+            <Icon icon="lucide:check" className="text-lg" />
+            {t('sidebar.save')}
+          </button>
+          <button
+            onClick={onClose}
+            className="px-6 bg-slate-100 text-slate-700 py-3 rounded-lg font-bold hover:bg-slate-200 transition-colors cursor-pointer"
+          >
+            {t('common.cancel')}
+          </button>
+        </div>
+      </div>
+    </Modal>
+  )
+}

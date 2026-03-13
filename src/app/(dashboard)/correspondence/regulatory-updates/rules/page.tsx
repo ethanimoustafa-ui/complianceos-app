@@ -1,6 +1,7 @@
 'use client'
 
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, Suspense } from 'react'
+import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { Icon } from '@iconify/react'
 import { Button } from '@/components/ui/button'
@@ -37,9 +38,10 @@ function Toast({ message, onClose }: { message: string; onClose: () => void }) {
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 
-export default function RegulatoryUpdatesRulesPage() {
+function RegulatoryUpdatesRulesPageContent() {
   const { t, isRTL } = useTranslation()
   const { circulars, selectedCircular, setSelected } = useCircularStore()
+  const searchParams = useSearchParams()
 
   const [searchQuery, setSearchQuery] = useState('')
   const [authorityFilter, setAuthorityFilter] = useState<CircularAuthority | 'all'>('all')
@@ -56,6 +58,14 @@ export default function RegulatoryUpdatesRulesPage() {
   const showToast = useCallback((message: string) => setToastMessage(message), [])
 
   useEffect(() => { setCurrentPage(1) }, [searchQuery, authorityFilter, departmentFilter])
+
+  useEffect(() => {
+    const deepLinkId = searchParams.get('id')
+    if (deepLinkId && circulars.length > 0) {
+      const target = circulars.find(c => c.id === deepLinkId)
+      if (target) setSelected(target)
+    }
+  }, [searchParams, circulars, setSelected])
 
   const filteredCirculars = useMemo(() => {
     return circulars.filter((c) => {
@@ -288,5 +298,13 @@ export default function RegulatoryUpdatesRulesPage() {
       {/* Toast */}
       {toastMessage && <Toast message={toastMessage} onClose={() => setToastMessage(null)} />}
     </div>
+  )
+}
+
+export default function RegulatoryUpdatesRulesPage() {
+  return (
+    <Suspense>
+      <RegulatoryUpdatesRulesPageContent />
+    </Suspense>
   )
 }

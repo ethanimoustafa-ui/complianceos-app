@@ -72,8 +72,8 @@ export function SaudizationCard({ metrics, employees, onEmployeeClick }: Saudiza
           {t('training.breakdownByDepartment' as TranslationKey)}
         </h4>
         <div className="space-y-2">
-          {metrics.byDepartment.map((dept) => (
-            <div key={dept.name} className="grid grid-cols-[8rem_2.5rem_1fr_2.5rem] items-center gap-2">
+          {metrics.byDepartment.map((dept, idx) => (
+            <div key={`${dept.name}-${idx}`} className="grid grid-cols-[8rem_2.5rem_1fr_2.5rem] items-center gap-2">
               <span className="text-xs font-medium text-slate-700 truncate">{dept.name || 'Unknown'}</span>
               <span className="text-[10px] text-slate-500">{dept.saudi}/{dept.total}</span>
               <div className="h-2 bg-slate-100 rounded-full overflow-hidden">

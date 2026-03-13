@@ -13,7 +13,7 @@ interface AuthState {
   login: (email: string, password: string) => Promise<void>
   logout: () => void
   refreshToken: () => Promise<void>
-  updateProfile: (data: Partial<User>) => Promise<void>
+  updateProfile: (data: Partial<User>) => void
   setUser: (user: User | null) => void
   setToken: (token: string | null) => void
   setLoading: (loading: boolean) => void
@@ -35,6 +35,8 @@ export const useAuthStore = create<AuthState>()(
         email: 'test@example.com',
         role: 'admin', // <-- Change this to test: 'officer' | 'manager' | 'admin'
         department: 'Compliance',
+        phone: '+966 50 123 4567',
+        avatarSeed: 'Felix',
         workload: 75,
       },
       token: 'mock-token',
@@ -60,6 +62,8 @@ export const useAuthStore = create<AuthState>()(
             email,
             role: 'admin', // <-- Change this to test: 'officer' | 'manager' | 'admin'
             department: 'Compliance',
+            phone: '+966 50 123 4567',
+            avatarSeed: 'Felix',
             workload: 75,
           }
 
@@ -105,25 +109,10 @@ export const useAuthStore = create<AuthState>()(
         }
       },
 
-      updateProfile: async (data: Partial<User>) => {
+      updateProfile: (data: Partial<User>) => {
         const { user } = get()
         if (!user) return
-
-        set({ isLoading: true, error: null })
-        try {
-          // TODO: Replace with actual API call
-          await new Promise((resolve) => setTimeout(resolve, 500))
-          set({
-            user: { ...user, ...data },
-            isLoading: false,
-          })
-        } catch (error) {
-          set({
-            error: error instanceof Error ? error.message : 'Update failed',
-            isLoading: false,
-          })
-          throw error
-        }
+        set({ user: { ...user, ...data } })
       },
 
       setUser: (user) => set({ user, isAuthenticated: !!user }),

@@ -516,7 +516,7 @@ export function PolicyDetailsContent({
         title: 'Manager Review Required',
         message: `${actingUser} requested manager review for step "${tl[ci]?.step}" in policy "${fresh.name}"`,
         type: 'info' as const,
-        actionUrl: '/correspondence/regulatory-updates/policies',
+        route: '/correspondence/regulatory-updates/policies',
       })
       showToast(t('policies.managerNotifiedToast', { name: fresh.owner.name }))
 

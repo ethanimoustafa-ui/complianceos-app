@@ -1,7 +1,7 @@
 'use client'
 
-import React, { useState, useEffect, useCallback } from 'react'
-import { usePathname } from 'next/navigation'
+import React, { useState, useEffect, useCallback, Suspense } from 'react'
+import { usePathname, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { Icon } from '@iconify/react'
 import { Button } from '@/components/ui/button'
@@ -37,9 +37,10 @@ function Toast({ message, onClose }: { message: string; onClose: () => void }) {
   )
 }
 
-export default function TeamTrainingPage() {
+function TeamTrainingPageContent() {
   const { t } = useTranslation()
   const pathname = usePathname()
+  const searchParams = useSearchParams()
 
   // Store data
   const employees = useTrainingStore((s) => s.employees)
@@ -87,6 +88,17 @@ export default function TeamTrainingPage() {
     }
     return false
   })
+
+  useEffect(() => {
+    const empId = searchParams.get('employeeId')
+    if (empId && employees.length > 0) {
+      const target = employees.find(e => e.id === empId)
+      if (target) {
+        setSelectedEmployee(target)
+        setIsEmployeeDetailOpen(true)
+      }
+    }
+  }, [searchParams, employees])
 
   const showToast = useCallback((message: string) => {
     setToastMessage(message)
@@ -416,5 +428,13 @@ export default function TeamTrainingPage() {
       {/* Toast */}
       {toastMessage && <Toast message={toastMessage} onClose={() => setToastMessage(null)} />}
     </div>
+  )
+}
+
+export default function TeamTrainingPage() {
+  return (
+    <Suspense>
+      <TeamTrainingPageContent />
+    </Suspense>
   )
 }
