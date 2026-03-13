@@ -61,7 +61,7 @@ function filterByPeriod<T extends { createdAt?: string }>(items: T[], period: Pe
 
 // ── Confidence ───────────────────────────────────────────────────────
 
-function getConfidence(dataPoints: number): ConfidenceLevel {
+export function getConfidence(dataPoints: number): ConfidenceLevel {
   if (dataPoints <= 2) return 'insufficient'
   if (dataPoints <= 5) return 'low'
   if (dataPoints <= 15) return 'moderate'
@@ -94,7 +94,7 @@ function getLatePenaltyCredit(dueDate: string, completedAt?: string): number {
 
 // ── Component: Audit Completion ──────────────────────────────────────
 
-function calcAuditCompletion(audits: AuditSlice[], weight: number): ComponentScore {
+export function calcAuditCompletion(audits: AuditSlice[], weight: number): ComponentScore {
   const dataPoints = audits.length
   const confidence = getConfidence(dataPoints)
 
@@ -125,7 +125,7 @@ function calcAuditCompletion(audits: AuditSlice[], weight: number): ComponentSco
 
 // ── Component: Observation Closure ───────────────────────────────────
 
-function calcObservationClosure(observations: ObservationSlice[], weight: number): ComponentScore {
+export function calcObservationClosure(observations: ObservationSlice[], weight: number): ComponentScore {
   const dataPoints = observations.length
   const confidence = getConfidence(dataPoints)
 
@@ -150,7 +150,7 @@ function calcObservationClosure(observations: ObservationSlice[], weight: number
 
 // ── Component: Risk Posture ──────────────────────────────────────────
 
-function calcRiskPosture(risks: { likelihood: number; impact: number; status: string }[], weight: number): ComponentScore {
+export function calcRiskPosture(risks: { likelihood: number; impact: number; status: string }[], weight: number): ComponentScore {
   const dataPoints = risks.length
   const confidence = getConfidence(dataPoints)
 
@@ -175,7 +175,7 @@ function calcRiskPosture(risks: { likelihood: number; impact: number; status: st
 
 // ── Component: Policy Currency ───────────────────────────────────────
 
-function calcPolicyCurrency(policies: { status: string; nextReviewDate: string }[], weight: number): ComponentScore {
+export function calcPolicyCurrency(policies: { status: string; nextReviewDate: string }[], weight: number): ComponentScore {
   const dataPoints = policies.length
   const confidence = getConfidence(dataPoints)
 
@@ -196,7 +196,7 @@ function calcPolicyCurrency(policies: { status: string; nextReviewDate: string }
 
 // ── Component: Training Completion ───────────────────────────────────
 
-function calcTrainingCompletion(trainings: { completionRate: number }[], weight: number): ComponentScore {
+export function calcTrainingCompletion(trainings: { completionRate: number }[], weight: number): ComponentScore {
   const dataPoints = trainings.length
   const confidence = getConfidence(dataPoints)
 
@@ -211,7 +211,7 @@ function calcTrainingCompletion(trainings: { completionRate: number }[], weight:
 
 // ── Overall score (exclude insufficient, re-normalize) ───────────────
 
-function calcOverall(components: Record<string, ComponentScore>): { overall: number; confidence: ConfidenceLevel } {
+export function calcOverall(components: Record<string, ComponentScore>): { overall: number; confidence: ConfidenceLevel } {
   const eligible = Object.values(components).filter((c) => c.confidence !== 'insufficient')
 
   if (eligible.length === 0) {

@@ -52,11 +52,11 @@ export function ExecutiveView({ metrics }: ExecutiveViewProps) {
       })
     }
 
-    if (metrics.compliance.overall < targetScore) {
+    if (metrics.health.overall < targetScore) {
       list.push({
         type: 'warning',
         title: t('dashboard.trendAlert'),
-        message: t('dashboard.alertComplianceLow', { score: String(Math.round(metrics.compliance.overall)), target: String(targetScore) }),
+        message: t('dashboard.alertComplianceLow', { score: String(Math.round(metrics.health.overall)), target: String(targetScore) }),
         route: '/reports',
       })
     }
@@ -89,12 +89,35 @@ export function ExecutiveView({ metrics }: ExecutiveViewProps) {
     return Math.round(topWorkers.reduce((s, w) => s + w.computed, 0) / topWorkers.length)
   }, [topWorkers])
 
-  const isAtRisk = metrics.compliance.overall < targetScore
-  const complianceScore = Math.round(metrics.compliance.overall)
+  const isAtRisk = metrics.health.overall < targetScore
+  const complianceScore = Math.round(metrics.health.overall)
 
   // Policy counts
   const policiesOk = metrics.policies.approved
   const policiesOverdue = metrics.policies.overdue + metrics.policies.requiresReview
+
+  // Dynamic primary action — route to worst-scoring component
+  const primaryAction = useMemo(() => {
+    const componentRoutes: Record<string, { label: string; route: string }> = {
+      audits: { label: t('dashboard.reviewAudits'), route: '/reports' },
+      observations: { label: t('dashboard.reviewObservations'), route: '/observations' },
+      letters: { label: t('dashboard.reviewLetters'), route: '/correspondence' },
+      policies: { label: t('dashboard.reviewPolicies'), route: '/correspondence/regulatory-updates/policies' },
+      circulars: { label: t('dashboard.reviewCirculars'), route: '/correspondence/regulatory-updates' },
+      riskPosture: { label: t('dashboard.reviewRisks'), route: '/reports/risks' },
+      training: { label: t('dashboard.reviewTraining'), route: '/team/training' },
+    }
+
+    // Find lowest-scoring component with sufficient data
+    const entries = Object.entries(metrics.health.components)
+      .filter(([, c]) => c.confidence !== 'insufficient')
+      .sort((a, b) => a[1].score - b[1].score)
+
+    if (entries.length > 0 && entries[0][1].score < 80) {
+      return componentRoutes[entries[0][0]] ?? { label: t('dashboard.startReview'), route: '/reports' }
+    }
+    return { label: t('dashboard.startReview'), route: '/reports' }
+  }, [metrics.health.components, t])
 
   // Observation progress helpers
   const obsTotal = metrics.observations.total || 1
@@ -137,7 +160,7 @@ export function ExecutiveView({ metrics }: ExecutiveViewProps) {
               <span className="font-bold text-rose-500">{policiesOverdue} {t('dashboard.policiesOverdue')}</span>.
             </p>
             <div className="flex gap-4 pt-2">
-              <Button variant="dark" onClick={() => router.push('/reports')}>{t('dashboard.startReview')}</Button>
+              <Button variant="dark" onClick={() => router.push(primaryAction.route)}>{primaryAction.label}</Button>
               <Button variant="outline" onClick={() => router.push('/correspondence/regulatory-updates/policies')}>{t('dashboard.policyLibrary')}</Button>
             </div>
           </div>
@@ -226,9 +249,8 @@ export function ExecutiveView({ metrics }: ExecutiveViewProps) {
           </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {metrics.frameworks.pinned.map(fw => {
-              const fwScores = metrics.compliance.frameworks as Record<string, { score: number; confidence: string }>
-              const fwScore = fwScores[fw.id]
-              const score = fwScore ? Math.round(fwScore.score) : null
+              const fwHealth = metrics.health.frameworkScores.find(fs => fs.frameworkId === fw.id)
+              const score = fwHealth ? Math.round(fwHealth.overall) : null
 
               return (
                 <Card key={fw.id} className="p-5">
@@ -244,7 +266,7 @@ export function ExecutiveView({ metrics }: ExecutiveViewProps) {
                     <div className="flex items-end gap-2">
                       <span className="text-2xl font-black text-slate-900">{score}%</span>
                       <Badge variant={score >= 80 ? 'success' : score >= 60 ? 'warning' : 'danger'} size="sm">
-                        {fwScore.confidence}
+                        {fwHealth!.confidence}
                       </Badge>
                     </div>
                   ) : (
@@ -258,13 +280,13 @@ export function ExecutiveView({ metrics }: ExecutiveViewProps) {
       )}
 
       {/* Top Deductions */}
-      {metrics.compliance.deductions.length > 0 && (
+      {metrics.health.deductions.length > 0 && (
         <div>
           <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest mb-4">
             {t('dashboard.topDeductions')}
           </h3>
           <Card className="divide-y divide-slate-100">
-            {metrics.compliance.deductions.slice(0, 5).map((d, i) => (
+            {metrics.health.deductions.slice(0, 5).map((d, i) => (
               <div key={i} className="px-5 py-3 flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <Badge variant={d.severity === 'critical' ? 'danger' : d.severity === 'high' ? 'danger' : d.severity === 'medium' ? 'warning' : 'neutral'} size="sm">
@@ -272,7 +294,7 @@ export function ExecutiveView({ metrics }: ExecutiveViewProps) {
                   </Badge>
                   <span className="text-sm text-slate-700">{d.description}</span>
                 </div>
-                <span className="text-sm font-bold text-rose-600">-{d.points.toFixed(1)}</span>
+                <span className="text-sm font-bold text-rose-600">-{Math.abs(d.points).toFixed(1)}</span>
               </div>
             ))}
           </Card>

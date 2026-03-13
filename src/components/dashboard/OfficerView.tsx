@@ -11,7 +11,9 @@ import { useAuditStore } from '@/stores/audit-store'
 import { usePolicyStore } from '@/stores/policy-store'
 import { useSAMALetterStore } from '@/stores/sama-letter-store'
 import { useNotificationStore } from '@/stores/notification-store'
+import { useComplianceSettingsStore } from '@/stores/compliance-settings-store'
 import { useWorkload } from '@/hooks/useWorkload'
+import { Button } from '@/components/ui/button'
 import { CircularProgressRing } from './CircularProgressRing'
 import type { DashboardMetrics } from '@/hooks/useDashboardMetrics'
 
@@ -22,8 +24,15 @@ interface OfficerViewProps {
 export function OfficerView({ metrics }: OfficerViewProps) {
   const { t } = useTranslation()
   const router = useRouter()
+  const targetScore = useComplianceSettingsStore(s => s.targetScore)
   const userId = metrics.currentUser?.id ?? ''
   const userName = metrics.currentUser?.name ?? ''
+
+  // Health
+  const isAtRisk = metrics.health.overall < targetScore
+  const healthScore = Math.round(metrics.health.overall)
+  const policiesOk = metrics.policies.approved
+  const policiesOverdue = metrics.policies.overdue + metrics.policies.requiresReview
 
   // Personal workload
   const workload = useWorkload(userId, undefined, userName)
@@ -124,8 +133,100 @@ export function OfficerView({ metrics }: OfficerViewProps) {
 
   return (
     <div className="space-y-8">
-      {/* Personal Workload Hero */}
+      {/* Hero Compliance Health — Officer: personal actions + threshold + workload */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        <div className="lg:col-span-8 bg-white border border-slate-200 rounded-[2rem] p-8 health-gradient relative overflow-hidden">
+          <div className="flex flex-col md:flex-row items-start gap-8">
+            {/* Left: status + threshold + personal action counts */}
+            <div className="relative z-10 space-y-4 flex-1 min-w-0">
+              <div className="flex items-center gap-3">
+                <Badge variant={isAtRisk ? 'danger' : 'success'} className="gap-2">
+                  <Icon icon={isAtRisk ? 'lucide:alert-triangle' : 'lucide:check-circle'} className="w-3 h-3" />
+                  {isAtRisk ? t('dashboard.statusAtRisk') : t('dashboard.statusOptimal')}
+                </Badge>
+                <span className="text-xs font-bold text-slate-400">{t('dashboard.thresholdLabel')}: {targetScore}%</span>
+              </div>
+              <h2 className="text-2xl font-bold font-display text-slate-900 leading-tight">
+                {t('dashboard.complianceHealth')}
+              </h2>
+
+              {/* Threshold progress bar */}
+              <div className="space-y-1.5">
+                <div className="h-3 w-full bg-slate-100 rounded-full relative overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all ${healthScore >= targetScore ? 'bg-emerald-500' : healthScore >= targetScore * 0.8 ? 'bg-amber-500' : 'bg-rose-500'}`}
+                    style={{ width: `${Math.min(healthScore, 100)}%` }}
+                  />
+                  <div
+                    className="absolute top-0 h-full w-0.5 bg-slate-900"
+                    style={{ left: `${targetScore}%` }}
+                  />
+                </div>
+                <div className="flex justify-between text-[10px] font-bold text-slate-400">
+                  <span>0%</span>
+                  <span>{healthScore}% / {targetScore}%</span>
+                  <span>100%</span>
+                </div>
+              </div>
+
+              {/* Personal action summary */}
+              <div className="pt-1">
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">{t('dashboard.yourActions')}</p>
+                <div className="grid grid-cols-2 gap-2">
+                  {[
+                    { label: t('dashboard.myOpenObservations'), value: myObservations.length, icon: 'lucide:eye', color: 'text-rose-600' },
+                    { label: t('dashboard.myPendingAudits'), value: myAudits.length, icon: 'lucide:clipboard-check', color: 'text-amber-600' },
+                    { label: t('dashboard.myPoliciesUnderReview'), value: myPolicies.length, icon: 'lucide:file-check', color: 'text-blue-600' },
+                    { label: t('dashboard.myOverdueItems'), value: myOverdue, icon: 'lucide:alert-triangle', color: 'text-rose-600' },
+                  ].map(stat => (
+                    <div key={stat.label} className="flex items-center gap-2">
+                      <Icon icon={stat.icon} className={`text-sm ${stat.color}`} />
+                      <span className="text-xs text-slate-600">{stat.value} {stat.label}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Right: ring */}
+            <div className="relative flex-shrink-0 flex justify-center">
+              <CircularProgressRing value={healthScore} size={152} label={t('dashboard.health')} />
+            </div>
+          </div>
+
+          {/* Dynamic action buttons — direct task actions */}
+          <div className="flex flex-wrap gap-3 mt-6 pt-4 border-t border-slate-200/60">
+            {myObservations.length > 0 && (
+              <Button variant="dark" onClick={() => router.push('/observations')} className="gap-2">
+                <Icon icon="lucide:eye" className="w-4 h-4" />
+                {t('dashboard.closeObservations', { count: String(myObservations.length) })}
+              </Button>
+            )}
+            {myAudits.length > 0 && (
+              <Button variant={myObservations.length > 0 ? 'outline' : 'dark'} onClick={() => router.push('/reports')} className="gap-2">
+                <Icon icon="lucide:clipboard-check" className="w-4 h-4" />
+                {t('dashboard.completeAudits', { count: String(myAudits.length) })}
+              </Button>
+            )}
+            {myPolicies.length > 0 && (
+              <Button variant="outline" onClick={() => router.push('/correspondence/regulatory-updates/policies')} className="gap-2">
+                <Icon icon="lucide:file-check" className="w-4 h-4" />
+                {t('dashboard.reviewMyPolicies', { count: String(myPolicies.length) })}
+              </Button>
+            )}
+            {actionItems.length > 0 && (
+              <Button variant="outline" onClick={() => router.push('/correspondence')} className="gap-2">
+                <Icon icon="lucide:check-circle" className="w-4 h-4" />
+                {t('dashboard.resolveItems', { count: String(actionItems.length) })}
+              </Button>
+            )}
+            {myObservations.length === 0 && myAudits.length === 0 && myPolicies.length === 0 && actionItems.length === 0 && (
+              <p className="text-sm text-emerald-600 font-bold">{t('dashboard.noIssues')}</p>
+            )}
+          </div>
+        </div>
+
+        {/* Right: Personal workload ring + breakdown */}
         <div className="lg:col-span-4 bg-white border border-slate-200 rounded-[2rem] p-8 flex flex-col items-center gap-4">
           <CircularProgressRing value={workload.percentage} size={120} color={workload.percentage >= 90 ? 'blue' : 'emerald'} />
           <div className="text-center">
@@ -150,24 +251,6 @@ export function OfficerView({ metrics }: OfficerViewProps) {
               <p className="text-[9px] text-slate-400 uppercase">Corr</p>
             </div>
           </div>
-        </div>
-
-        {/* Quick Stats */}
-        <div className="lg:col-span-8 grid grid-cols-2 md:grid-cols-4 gap-4">
-          {[
-            { label: t('dashboard.myOpenObservations'), value: myObservations.length, icon: 'lucide:eye', color: 'text-rose-600 bg-rose-50' },
-            { label: t('dashboard.myPendingAudits'), value: myAudits.length, icon: 'lucide:clipboard-check', color: 'text-amber-600 bg-amber-50' },
-            { label: t('dashboard.myPoliciesUnderReview'), value: myPolicies.length, icon: 'lucide:file-check', color: 'text-blue-600 bg-blue-50' },
-            { label: t('dashboard.myOverdueItems'), value: myOverdue, icon: 'lucide:alert-triangle', color: 'text-rose-600 bg-rose-50' },
-          ].map(stat => (
-            <Card key={stat.label} className="p-5">
-              <div className={`w-8 h-8 rounded-lg flex items-center justify-center mb-3 ${stat.color}`}>
-                <Icon icon={stat.icon} className="text-lg" />
-              </div>
-              <p className="text-2xl font-black text-slate-900">{stat.value}</p>
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mt-1">{stat.label}</p>
-            </Card>
-          ))}
         </div>
       </div>
 

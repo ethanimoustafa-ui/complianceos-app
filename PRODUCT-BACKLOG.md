@@ -2,7 +2,7 @@
 
 **Version:** 1.0
 **Date:** February 2026
-**Last Updated:** March 13, 2026
+**Last Updated:** March 13, 2026 (Dashboard Health Engine Sprint)
 
 ---
 
@@ -18,6 +18,8 @@
 > **Sprint 3.3 complete (Mar 8 2026):** Policy workflow bug fixes (submit-for-review stays on step, chip labels corrected, undo clears stepState), Pending Approvals card scoped to managerial-only items with deep-link + enriched modal, workload drawer shows full cross-store item list with type badges, Saudization grid layout fix, and new Epic 22 (Smart Workload & Burnout Management System) defined.
 >
 > **Settings Page Overhaul Sprint complete (Mar 13 2026):** Settings page decomposed from 905-line monolith into 55-line orchestrator + 7 sub-components. New stores: `framework-config-store` (11 regulators, pinning UI, per-framework weights + threshold + dept assignment), `user-preferences-store` (date format, timezone, dashboard view, granular notification preferences), `audit-template-store` (6 seed templates, CRUD + `incrementUsage`, frequency schedules), `policy-template-store` (6 seeds, persist v2, `frequency` + `frequencySchedule`), `department-store` (10 canonical seeds, CRUD, `isDefault` guard). New utilities: `src/lib/date-format.ts` + `src/hooks/useFormattedDate.ts` wire date format preference across all pages. Downstream consumers (rules modals, RegDocFilterBar, observations, audits, policies) migrated to `useDepartmentStore()`. SET-001 through SET-006 all complete.
+>
+> **Dashboard Health Engine Sprint complete (Mar 13 2026):** Pure 7-component framework-weighted scoring engine for the dashboard. New files: `src/lib/dashboard-health.types.ts` (types: `DashboardHealthComponentKey`, `LetterSlice`, `CircularSlice`, `DashboardHealthInput`, `FrameworkHealthScore`, `DashboardHealthResult`), `src/lib/dashboard-health.ts` (`calcLetterHealth`, `calcCircularHealth`, `calculateDashboardHealth` orchestrator — reuses 5 existing exports from `compliance-engine.ts`), `src/hooks/useDashboardHealth.ts` (wires 7 stores → engine → `useMemo`, returns `DashboardHealthResult`). `useDashboardMetrics` extended with `health: DashboardHealthResult` field. All three dashboard views (Executive, Managerial, Officer) now feature a differentiated Compliance Health hero card: Executive has dynamic primary-action button targeting worst-scoring component; Managerial has threshold progress bar + top deductions inline + up to 3 dynamic action buttons; Officer has personal action counts (open obs, pending audits, policies under review, overdue items) + threshold bar + task-specific CTA buttons. Per-framework health scores shown on pinned framework cards. Top deductions list on Executive view. 7-component breakdown grid on Managerial view. New i18n keys added to `en.json` + `ar.json` for health component labels, deduction descriptions, and all dynamic action labels. DSH-001 through DSH-010 all complete (see Epic 23).
 
 ---
 
@@ -222,7 +224,7 @@
 | RPT-010 | Audits tab (CRUD, filtering, sorting, CSV export) | ✅ | P0 | S | BRD | Done |
 | RPT-011 | Detailed logs tab (activity logs, CSV export) | ✅ | P0 | S | BRD | Done |
 | RPT-012 | Replace hardcoded risk data in Risks tab with Risk Store | ✅ | P0 | S | BRD | Done — `risks` useMemo maps store data to page format, all UI driven by `useRiskStore` |
-| RPT-013 | Replace hardcoded executive view details with live data | 📋 | P1 | S | BRD | |
+| RPT-013 | Replace hardcoded executive view details with live data | ✅ | P1 | S | BRD | Done — Executive view compliance health hero card now driven by `metrics.health` (DashboardHealthResult from 7-component engine); dynamic primary-action button targets worst-scoring component; pinned framework cards show live per-framework health scores; top deductions list renders engine-computed penalties (Dashboard Health Engine Sprint) |
 | RPT-014 | Framework-aligned reporting (per-framework coverage %) | 📋 | P1 | B | BRD | See Epic 12. Show coverage per control |
 | RPT-015 | Control-level drill-down (all tagged entities per control) | 📋 | P2 | B | BRD | |
 | RPT-016 | Gap analysis report (controls with no associated records) | 📋 | P2 | B | BRD | |
@@ -526,20 +528,49 @@
 
 ---
 
+## Epic 23: Dashboard Health Engine
+
+> Cross-module 7-component framework-weighted scoring system that powers all three dashboard views (Executive, Managerial, Officer) with a differentiated Compliance Health hero card. Reuses and extends the existing compliance engine's calculation functions, adding letter and circular health components and a full deduction pipeline.
+
+| ID | Feature | Status | Priority | Arch | Source | Notes |
+|---|---|---|---|---|---|---|
+| DSH-001 | Dashboard health types (`DashboardHealthComponentKey`, `LetterSlice`, `CircularSlice`, `DashboardHealthInput`, `FrameworkHealthScore`, `DashboardHealthResult`) | ✅ | P0 | S | FEEDBACK | Done — `src/lib/dashboard-health.types.ts`; 7-component key union (`audits`, `observations`, `letters`, `policies`, `circulars`, `riskPosture`, `training`) matching `FrameworkWeights`; slim input slices for letters + circulars; per-framework breakdown type |
+| DSH-002 | `calcLetterHealth()` — SAMA letter status-credit + approaching-deadline penalty | ✅ | P0 | S | FEEDBACK | Done — `src/lib/dashboard-health.ts`; credit table: response-received=1.0, sent=0.8, approved=0.6, pending-approval=0.3, draft=0.1, overdue=0; 7-day approaching-deadline penalty; uses `getConfidence()` from compliance-engine |
+| DSH-003 | `calcCircularHealth()` — priority-weighted progress score | ✅ | P0 | S | FEEDBACK | Done — `src/lib/dashboard-health.ts`; circular priority weights: critical=4, high=2, medium=1, low=0.5; overdue + pending = 0% credit; priority-weighted average of per-circular progress |
+| DSH-004 | `calculateDashboardHealth()` orchestrator — 7-component + per-framework + deductions | ✅ | P0 | S | FEEDBACK | Done — `src/lib/dashboard-health.ts`; reuses `calcAuditCompletion`, `calcObservationClosure`, `calcRiskPosture`, `calcPolicyCurrency`, `calcTrainingCompletion`, `calcOverall` from `compliance-engine.ts` (7 new named exports); primary weights from first pinned framework; per-framework breakdown loop; deduction pipeline |
+| DSH-005 | Health deduction pipeline (critical obs, high obs, overdue audits, overdue letters, overdue circulars, insufficient data, low-score components) | ✅ | P0 | S | FEEDBACK | Done — `generateHealthDeductions()` in `dashboard-health.ts`; 7 deduction rule categories with `descriptionKey` + `descriptionParams` for i18n; sorted by absolute points descending; critical obs = -8 each, overdue letters = -6 each, high obs = -3 each, overdue high-priority circulars = -6 each, overdue medium/low circulars = -4 each, insufficient data = -2 each, component < 60% = -3 each |
+| DSH-006 | `useDashboardHealth()` hook — wires 7 stores to engine via `useMemo` | ✅ | P0 | S | FEEDBACK | Done — `src/hooks/useDashboardHealth.ts`; subscribes to audit-store, observation-store, risk-store, policy-store, training-store, sama-letter-store, circular-store, framework-config-store, compliance-settings-store; derives `pinnedFrameworks` and `primaryWeights` with fallback defaults |
+| DSH-007 | `useDashboardMetrics` extended with `health: DashboardHealthResult` field | ✅ | P0 | S | FEEDBACK | Done — `src/hooks/useDashboardMetrics.ts` imports and calls `useDashboardHealth()`; `DashboardMetrics` interface extended; all three dashboard view components consume `metrics.health` |
+| DSH-008 | Executive view: dynamic primary-action button targeting worst-scoring component | ✅ | P1 | S | FEEDBACK | Done — `src/components/dashboard/ExecutiveView.tsx`; `primaryAction` `useMemo` finds lowest-scoring component with sufficient data, maps to component-specific route + label; falls back to `/reports` when all components are healthy; pinned framework cards show `fwHealth.overall` score + confidence badge |
+| DSH-009 | Managerial view: hero card with threshold bar, top deductions inline, 3 dynamic action buttons, 7-component breakdown grid | ✅ | P1 | S | FEEDBACK | Done — `src/components/dashboard/ManagerialView.tsx`; `criticalActions` useMemo filters components < 80% with sufficient data, sorts worst-first, maps to route + score badge; `topDeductions` renders up to 3 engine deductions inline with severity-colored badges; threshold progress bar with marker at `targetScore`%; 7-component `grid-cols-7` breakdown below hero |
+| DSH-010 | Officer view: personal action-oriented hero with threshold bar, personal action counts, task-specific buttons | ✅ | P1 | S | FEEDBACK | Done — `src/components/dashboard/OfficerView.tsx`; personal counters: open observations, pending audits, policies under review, overdue items; 4 conditional CTA buttons: close observations / complete audits / review policies / resolve action items; shows "All clear" message when all personal queues are empty; workload ring card alongside hero |
+| DSH-011 | Dashboard i18n keys: health component labels, deduction descriptions, dynamic action labels (EN + AR) | ✅ | P1 | S | FEEDBACK | Done — `src/i18n/dictionaries/en.json` + `ar.json`; keys added: `healthAudits`, `healthObservations`, `healthLetters`, `healthPolicies`, `healthCirculars`, `healthRiskPosture`, `healthTraining`, `thresholdLabel`, `topIssues`, `yourActions`, `complianceByComponent`, `criticalActions`, `reviewAudits`, `reviewObservations`, `reviewLetters`, `reviewPolicies`, `reviewCirculars`, `reviewRisks`, `reviewTraining`, `closeObservations`, `completeAudits`, `reviewMyPolicies`, `resolveItems`, `myOpenObservations`, `myPendingAudits`, `myPoliciesUnderReview`, `myOverdueItems`; deduction keys: `dashboard.deduction.criticalObsOpen`, `highObsOpen`, `overdueAudits`, `overdueLetters`, `overdueCircularsHigh`, `overdueCirculars`, `insufficientData`, `componentLow` |
+| DSH-012 | Dashboard page cleanup (view-switcher removed, `setDashboardView` selector removed) | ✅ | P1 | S | FEEDBACK | Done — `src/app/(dashboard)/dashboard/page.tsx`; inline `div.inline-flex` view switcher block removed; `setDashboardView` selector removed from `useUserPreferencesStore` call; view preference remains in `user-preferences-store` and is changeable from Settings |
+| DSH-013 | Per-framework health scores on Executive pinned framework cards | ✅ | P1 | S | FEEDBACK | Done — `ExecutiveView.tsx` matches `fw.id` against `metrics.health.frameworkScores`; renders `fwHealth.overall`% + confidence badge; falls back to "N/A" when framework has no health data |
+| DSH-014 | Compliance engine: export 7 calculation functions for reuse by dashboard health engine | ✅ | P0 | S | FEEDBACK | Done — `src/lib/compliance-engine.ts` now exports `getConfidence`, `calcAuditCompletion`, `calcObservationClosure`, `calcRiskPosture`, `calcPolicyCurrency`, `calcTrainingCompletion`, `calcOverall` as named exports; consumed by `dashboard-health.ts` to avoid duplication |
+| DSH-015 | Real-time reactive health score (auto-updates on any store mutation) | ✅ | P0 | S | FEEDBACK | Done — `useDashboardHealth` subscribes to all 7 data stores via Zustand selectors; any store write triggers `useMemo` recomputation on next render; no polling required |
+| DSH-016 | Dashboard health score on reports page (framework-score cards show health vs compliance scores) | 📋 | P2 | S | REC | `metrics.health.frameworkScores` available; wire to Reports executive tab for side-by-side compliance vs health comparison |
+| DSH-017 | Health score trend over time (store daily snapshots, render sparkline) | 📋 | P3 | S | REC | Would require a new snapshot store or backend persistence; engine is stateless today |
+| DSH-018 | Per-component drill-down from dashboard (click a component card → filter the relevant module page) | 📋 | P2 | S | REC | E.g., click Circulars card → navigate to `/correspondence/regulatory-updates` pre-filtered by overdue status |
+
+---
+
 ## Summary Dashboard
 
 > **Settings Page Overhaul Sprint complete (Mar 13 2026)** — Settings page decomposed into 7 sub-components; 5 new Zustand stores (framework-config, user-preferences, audit-template, policy-template, department); granular notification preferences; per-framework weight sliders + dept multi-select; policy templates management UI; date format preference wired across the app. SET-001 through SET-006 + SET-011 through SET-015 all complete.
+>
+> **Dashboard Health Engine Sprint complete (Mar 13 2026)** — 7-component framework-weighted health scoring system added. 3 new files (`dashboard-health.types.ts`, `dashboard-health.ts`, `useDashboardHealth.ts`), 7 functions exported from `compliance-engine.ts`, `useDashboardMetrics` extended with `health` field. All three dashboard views have differentiated Compliance Health hero cards with threshold bars, dynamic action buttons, and live deductions. DSH-001 through DSH-015 all complete.
 
 ### By Status
 
 | Status | Count | % |
 |---|---|---|
-| ✅ Done | 141 | 50% |
+| ✅ Done | 157 | 52% |
 | 🔧 In Progress (UI built, logic pending) | 6 | 2% |
-| 📋 To Do (defined, not started) | 65 | 23% |
-| 💡 New Recommendation | 24 | 9% |
+| 📋 To Do (defined, not started) | 68 | 22% |
+| 💡 New Recommendation | 24 | 8% |
 | 🗺️ Roadmap (future phase) | 18 | 6% |
-| **Total** | **254** | **100%** |
+| **Total** | **273** | **100%** |
 
 ### By Priority
 
@@ -561,14 +592,15 @@
 
 ### Critical Path (P0 items)
 
-These 31 items must be completed before launch:
+These items must be completed before launch:
 
 1. **Stores:** ~~Risk Store (RSK-001)~~ ✅, ~~Policy Store (POL-002)~~ ✅, ~~Training Store (TRN-004)~~ ✅, Framework Store (FRM-018)
 2. **Engine Integration:** Risk Posture (RSK-009), ~~Policy Currency (POL-009)~~ ✅, Training Completion (TRN-013)
-3. **Live Data:** ~~Replace hardcoded risk data (RPT-012)~~ ✅
-4. **Correspondence:** ~~Letter approval chain (COR-005, COR-006)~~ ✅, ~~Reference numbering (COR-009)~~ ✅
-5. **Rules & Circulars:** Registration logic (RUL-001), applicability (RUL-002), CAP creation (RUL-003), Business Owner assignment (RUL-004)
-6. **Onboarding:** Org profile (ONB-001), entity type (ONB-002), authority selection (ONB-003), framework selection (ONB-006), pre-selection logic (ONB-004, ONB-007), Constant C (ONB-008), entity map data (ONB-012)
+3. **Live Data:** ~~Replace hardcoded risk data (RPT-012)~~ ✅, ~~Replace hardcoded executive view details (RPT-013)~~ ✅
+4. **Dashboard Health Engine:** ~~7-component scoring engine (DSH-001–DSH-015)~~ ✅
+5. **Correspondence:** ~~Letter approval chain (COR-005, COR-006)~~ ✅, ~~Reference numbering (COR-009)~~ ✅
+6. **Rules & Circulars:** Registration logic (RUL-001), applicability (RUL-002), CAP creation (RUL-003), Business Owner assignment (RUL-004)
+7. **Onboarding:** Org profile (ONB-001), entity type (ONB-002), authority selection (ONB-003), framework selection (ONB-006), pre-selection logic (ONB-004, ONB-007), Constant C (ONB-008), entity map data (ONB-012)
 
 ---
 

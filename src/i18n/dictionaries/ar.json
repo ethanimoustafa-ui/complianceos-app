@@ -209,7 +209,43 @@
     "noDueItems": "لا توجد مواعيد نهائية قادمة",
     "noTasks": "لا توجد مهام مسندة",
     "capacity": "السعة",
-    "assignments": "المهام"
+    "assignments": "المهام",
+
+    "reviewAudits": "مراجعة التدقيقات",
+    "reviewObservations": "مراجعة الملاحظات",
+    "reviewLetters": "مراجعة الخطابات",
+    "reviewPolicies": "مراجعة السياسات",
+    "reviewCirculars": "مراجعة التعاميم",
+    "reviewRisks": "مراجعة المخاطر",
+    "reviewTraining": "مراجعة التدريب",
+    "thresholdLabel": "حد الامتثال المستهدف",
+    "topIssues": "أهم المشكلات",
+    "criticalActions": "الإجراءات الحرجة",
+    "yourActions": "إجراءاتك",
+    "resolveItems": "حل {{count}} عنصر(عناصر)",
+    "closeObservations": "إغلاق {{count}} ملاحظة(ملاحظات)",
+    "completeAudits": "إكمال {{count}} تدقيق(تدقيقات)",
+    "reviewMyPolicies": "مراجعة {{count}} سياسة(سياسات)",
+    "noIssues": "جميع الأنظمة سليمة",
+
+    "healthAudits": "التدقيق",
+    "healthObservations": "الملاحظات",
+    "healthLetters": "الخطابات",
+    "healthPolicies": "السياسات",
+    "healthCirculars": "التعاميم",
+    "healthRiskPosture": "المخاطر",
+    "healthTraining": "التدريب",
+
+    "deduction": {
+      "criticalObsOpen": "{{count}} ملاحظة حرجة مفتوحة من {{source}}",
+      "highObsOpen": "{{count}} ملاحظة عالية الخطورة مفتوحة من {{source}}",
+      "overdueAudits": "{{count}} تدقيق(ات) امتثال متأخرة",
+      "overdueLetters": "{{count}} خطاب(ات) ساما متأخرة",
+      "overdueCircularsHigh": "{{count}} تعميم(ات) عالية الأولوية متأخرة",
+      "overdueCirculars": "{{count}} تعميم(ات) متأخرة",
+      "insufficientData": "{{component}} لا تتوفر بيانات كافية",
+      "componentLow": "درجة {{component}} منخفضة بشكل حرج ({{score}}%)"
+    }
   },
   "calendar": {
     "title": "تقويم الامتثال",

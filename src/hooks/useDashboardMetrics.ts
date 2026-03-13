@@ -14,11 +14,14 @@ import { useAdvisoryStore } from '@/stores/advisory-store'
 import { useFrameworkConfigStore } from '@/stores/framework-config-store'
 import { useAuthStore } from '@/stores/auth-store'
 import { useComplianceScore } from '@/hooks/useComplianceScore'
+import { useDashboardHealth } from '@/hooks/useDashboardHealth'
 import type { FrameworkConfig } from '@/types'
 import type { ComplianceScoreResult } from '@/lib/compliance-engine.types'
+import type { DashboardHealthResult } from '@/lib/dashboard-health.types'
 
 export interface DashboardMetrics {
   compliance: ComplianceScoreResult
+  health: DashboardHealthResult
   audits: {
     total: number
     byStatus: Record<string, number>
@@ -107,6 +110,7 @@ function severityBreakdown(items: Array<{ severity: string }>) {
 
 export function useDashboardMetrics(): DashboardMetrics {
   const compliance = useComplianceScore('12months')
+  const health = useDashboardHealth()
 
   const audits = useAuditStore(s => s.audits)
   const observations = useObservationStore(s => s.observations)
@@ -282,6 +286,7 @@ export function useDashboardMetrics(): DashboardMetrics {
 
   return {
     compliance,
+    health,
     audits: auditMetrics,
     observations: observationMetrics,
     risks: riskMetrics,

@@ -10,7 +10,9 @@ import { useComplianceSettingsStore } from '@/stores/compliance-settings-store'
 import { useSAMALetterStore } from '@/stores/sama-letter-store'
 import { usePolicyStore } from '@/stores/policy-store'
 import { useAuditStore } from '@/stores/audit-store'
+import { Button } from '@/components/ui/button'
 import { AlertCard } from './AlertCard'
+import { CircularProgressRing } from './CircularProgressRing'
 import { TrainingProgressBar } from './TrainingProgressBar'
 import { TeamMemberWorkload } from './TeamMemberWorkload'
 import { ObservationCard } from './ObservationCard'
@@ -63,8 +65,8 @@ export function ManagerialView({ metrics }: ManagerialViewProps) {
     if (metrics.samaLetters.overdueCount > 0) {
       list.push({ type: 'critical', title: t('dashboard.criticalActionRequired'), message: t('dashboard.alertSamaOverdue', { count: String(metrics.samaLetters.overdueCount) }), route: '/correspondence' })
     }
-    if (metrics.compliance.overall < targetScore) {
-      list.push({ type: 'warning', title: t('dashboard.trendAlert'), message: t('dashboard.alertComplianceLow', { score: String(Math.round(metrics.compliance.overall)), target: String(targetScore) }), route: '/reports' })
+    if (metrics.health.overall < targetScore) {
+      list.push({ type: 'warning', title: t('dashboard.trendAlert'), message: t('dashboard.alertComplianceLow', { score: String(Math.round(metrics.health.overall)), target: String(targetScore) }), route: '/reports' })
     }
     return list.slice(0, 2)
   }, [metrics, targetScore, t])
@@ -81,11 +83,39 @@ export function ManagerialView({ metrics }: ManagerialViewProps) {
       .sort((a, b) => b.computed - a.computed)
   }, [metrics.team.members, workloads])
 
-  // Compliance components
-  const components = metrics.compliance.components
+  // Health components (7-component)
+  const components = metrics.health.components
+  const isAtRisk = metrics.health.overall < targetScore
+  const healthScore = Math.round(metrics.health.overall)
 
   // Observations by source
   const obsTotal = metrics.observations.total || 1
+
+  // Dynamic actions — sorted worst-first, up to 3 buttons
+  const criticalActions = useMemo(() => {
+    const componentRoutes: Record<string, { label: string; route: string; icon: string }> = {
+      audits: { label: t('dashboard.reviewAudits'), route: '/reports', icon: 'lucide:clipboard-check' },
+      observations: { label: t('dashboard.reviewObservations'), route: '/observations', icon: 'lucide:eye' },
+      letters: { label: t('dashboard.reviewLetters'), route: '/correspondence', icon: 'lucide:file-text' },
+      policies: { label: t('dashboard.reviewPolicies'), route: '/correspondence/regulatory-updates/policies', icon: 'lucide:file-check' },
+      circulars: { label: t('dashboard.reviewCirculars'), route: '/correspondence/regulatory-updates', icon: 'lucide:scale' },
+      riskPosture: { label: t('dashboard.reviewRisks'), route: '/reports/risks', icon: 'lucide:shield-alert' },
+      training: { label: t('dashboard.reviewTraining'), route: '/team/training', icon: 'lucide:graduation-cap' },
+    }
+
+    return Object.entries(metrics.health.components)
+      .filter(([, c]) => c.confidence !== 'insufficient' && c.score < 80)
+      .sort((a, b) => a[1].score - b[1].score)
+      .slice(0, 3)
+      .map(([key, comp]) => ({
+        ...componentRoutes[key],
+        score: Math.round(comp.score),
+        key,
+      }))
+  }, [metrics.health.components, t])
+
+  // Top deductions for inline display
+  const topDeductions = metrics.health.deductions.slice(0, 3)
 
   return (
     <div className="space-y-8">
@@ -105,21 +135,135 @@ export function ManagerialView({ metrics }: ManagerialViewProps) {
         </div>
       )}
 
-      {/* Compliance by Component */}
+      {/* Hero Compliance Health — Managerial: threshold bar + top issues + action buttons */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        <div className="lg:col-span-8 bg-white border border-slate-200 rounded-[2rem] p-8 health-gradient relative overflow-hidden">
+          <div className="flex flex-col md:flex-row items-start gap-8">
+            {/* Left: status + threshold + issues */}
+            <div className="relative z-10 space-y-4 flex-1 min-w-0">
+              <div className="flex items-center gap-3">
+                <Badge variant={isAtRisk ? 'danger' : 'success'} className="gap-2">
+                  <Icon icon={isAtRisk ? 'lucide:alert-triangle' : 'lucide:check-circle'} className="w-3 h-3" />
+                  {isAtRisk ? t('dashboard.statusAtRisk') : t('dashboard.statusOptimal')}
+                </Badge>
+                <span className="text-xs font-bold text-slate-400">{t('dashboard.thresholdLabel')}: {targetScore}%</span>
+              </div>
+              <h2 className="text-2xl font-bold font-display text-slate-900 leading-tight">
+                {t('dashboard.complianceHealth')}
+              </h2>
+
+              {/* Threshold progress bar */}
+              <div className="space-y-1.5">
+                <div className="h-3 w-full bg-slate-100 rounded-full relative overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all ${healthScore >= targetScore ? 'bg-emerald-500' : healthScore >= targetScore * 0.8 ? 'bg-amber-500' : 'bg-rose-500'}`}
+                    style={{ width: `${Math.min(healthScore, 100)}%` }}
+                  />
+                  {/* Threshold marker */}
+                  <div
+                    className="absolute top-0 h-full w-0.5 bg-slate-900"
+                    style={{ left: `${targetScore}%` }}
+                  />
+                </div>
+                <div className="flex justify-between text-[10px] font-bold text-slate-400">
+                  <span>0%</span>
+                  <span>{healthScore}% / {targetScore}%</span>
+                  <span>100%</span>
+                </div>
+              </div>
+
+              {/* Top issues inline */}
+              {topDeductions.length > 0 && (
+                <div className="space-y-1.5 pt-1">
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{t('dashboard.topIssues')}</p>
+                  {topDeductions.map((d, i) => (
+                    <div key={i} className="flex items-center gap-2 text-xs">
+                      <Badge variant={d.severity === 'critical' || d.severity === 'high' ? 'danger' : d.severity === 'medium' ? 'warning' : 'neutral'} size="sm">
+                        {Math.abs(d.points)}pt
+                      </Badge>
+                      <span className="text-slate-600 truncate">{d.description}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Right: ring */}
+            <div className="relative flex-shrink-0 flex justify-center">
+              <CircularProgressRing value={healthScore} size={152} label={t('dashboard.health')} />
+            </div>
+          </div>
+
+          {/* Dynamic action buttons */}
+          <div className="flex flex-wrap gap-3 mt-6 pt-4 border-t border-slate-200/60">
+            {criticalActions.length > 0 ? (
+              criticalActions.map(action => (
+                <Button key={action.key} variant={action.score < 60 ? 'dark' : 'outline'} onClick={() => router.push(action.route)} className="gap-2">
+                  <Icon icon={action.icon} className="w-4 h-4" />
+                  {action.label}
+                  <Badge variant={action.score >= 60 ? 'warning' : 'danger'} size="sm">{action.score}%</Badge>
+                </Button>
+              ))
+            ) : (
+              <p className="text-sm text-emerald-600 font-bold">{t('dashboard.noIssues')}</p>
+            )}
+          </div>
+        </div>
+
+        {/* Right column: SAMA + key counts */}
+        <div className="lg:col-span-4 space-y-4">
+          <Card className="p-5">
+            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">{t('dashboard.criticalActions')}</p>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-slate-600">{t('dashboard.overdueLabel')}</span>
+                <div className="flex items-center gap-2">
+                  {metrics.samaLetters.overdueCount > 0 && <Badge variant="danger" size="sm">{metrics.samaLetters.overdueCount} SAMA</Badge>}
+                  {metrics.audits.overdueCount > 0 && <Badge variant="danger" size="sm">{metrics.audits.overdueCount} Audit</Badge>}
+                  {metrics.policies.overdue > 0 && <Badge variant="danger" size="sm">{metrics.policies.overdue} Policy</Badge>}
+                  {metrics.samaLetters.overdueCount === 0 && metrics.audits.overdueCount === 0 && metrics.policies.overdue === 0 && (
+                    <Badge variant="success" size="sm">0</Badge>
+                  )}
+                </div>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-slate-600">{t('dashboard.pendingApprovals')}</span>
+                <span className="text-sm font-bold text-slate-900">{pendingApprovals.length}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-slate-600">{t('dashboard.openRisks')}</span>
+                <span className="text-sm font-bold text-slate-900">{metrics.risks.open}</span>
+              </div>
+            </div>
+          </Card>
+          <Card className="p-5">
+            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">{t('dashboard.samaSubmissions')}</p>
+            <div className="space-y-2 text-sm">
+              <div className="flex justify-between"><span className="text-slate-500">{t('dashboard.upcoming30d')}</span><span className="font-bold text-slate-900">{metrics.samaLetters.upcoming30d}</span></div>
+              <div className="flex justify-between"><span className="text-slate-500">{t('dashboard.completedMonth')}</span><span className="font-bold text-emerald-600">{metrics.samaLetters.completedThisMonth}</span></div>
+              <div className="flex justify-between"><span className="text-slate-500">{t('dashboard.totalSubmissions')}</span><span className="font-bold text-slate-900">{metrics.samaLetters.total}</span></div>
+            </div>
+          </Card>
+        </div>
+      </div>
+
+      {/* Compliance by Component — 7 health components */}
       <div>
         <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest mb-4">
           {t('dashboard.complianceByComponent')}
         </h3>
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
           {Object.entries(components).map(([key, comp]) => {
             const score = Math.round(comp.score)
             const variant = score >= 80 ? 'success' : score >= 60 ? 'warning' : 'danger'
             const labels: Record<string, string> = {
-              auditCompletion: 'Audit',
-              observationClosure: 'Observations',
-              riskPosture: 'Risk',
-              policyCurrency: 'Policy',
-              trainingCompletion: 'Training',
+              audits: t('dashboard.healthAudits'),
+              observations: t('dashboard.healthObservations'),
+              letters: t('dashboard.healthLetters'),
+              policies: t('dashboard.healthPolicies'),
+              circulars: t('dashboard.healthCirculars'),
+              riskPosture: t('dashboard.healthRiskPosture'),
+              training: t('dashboard.healthTraining'),
             }
             return (
               <Card key={key} className="p-4 text-center">

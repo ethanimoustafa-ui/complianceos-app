@@ -209,7 +209,43 @@
     "noDueItems": "No upcoming deadlines",
     "noTasks": "No tasks assigned",
     "capacity": "Capacity",
-    "assignments": "Assignments"
+    "assignments": "Assignments",
+
+    "reviewAudits": "Review Audits",
+    "reviewObservations": "Review Observations",
+    "reviewLetters": "Review Letters",
+    "reviewPolicies": "Review Policies",
+    "reviewCirculars": "Review Circulars",
+    "reviewRisks": "Review Risks",
+    "reviewTraining": "Review Training",
+    "thresholdLabel": "Target Threshold",
+    "topIssues": "Top Issues",
+    "criticalActions": "Critical Actions",
+    "yourActions": "Your Actions",
+    "resolveItems": "Resolve {{count}} Item(s)",
+    "closeObservations": "Close {{count}} Observation(s)",
+    "completeAudits": "Complete {{count}} Audit(s)",
+    "reviewMyPolicies": "Review {{count}} Policy(ies)",
+    "noIssues": "All systems healthy",
+
+    "healthAudits": "Audits",
+    "healthObservations": "Observations",
+    "healthLetters": "Letters",
+    "healthPolicies": "Policies",
+    "healthCirculars": "Circulars",
+    "healthRiskPosture": "Risk",
+    "healthTraining": "Training",
+
+    "deduction": {
+      "criticalObsOpen": "{{count}} critical {{source}} observation open",
+      "highObsOpen": "{{count}} high severity {{source}} observation open",
+      "overdueAudits": "{{count}} overdue compliance audit(s)",
+      "overdueLetters": "{{count}} overdue SAMA letter(s)",
+      "overdueCircularsHigh": "{{count}} overdue high-priority circular(s)",
+      "overdueCirculars": "{{count}} overdue circular(s)",
+      "insufficientData": "{{component}} has insufficient data",
+      "componentLow": "{{component}} score critically low ({{score}}%)"
+    }
   },
   "calendar": {
     "title": "Compliance Calendar",
