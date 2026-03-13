@@ -800,6 +800,7 @@ export interface Circular {
   applicability: CircularApplicability
   departments: string[]
   businessOwnerDepartment?: string
+  assignedTo?: string
   progress: number
   issuanceDate: string
   dueDate: string

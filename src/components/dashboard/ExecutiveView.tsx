@@ -243,7 +243,7 @@ export function ExecutiveView({ metrics }: ExecutiveViewProps) {
             <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest">
               {t('dashboard.pinnedFrameworks')}
             </h3>
-            <button onClick={() => router.push('/settings')} className="text-xs font-bold text-blue-600 hover:text-blue-700">
+            <button onClick={() => router.push('/settings')} className="text-xs font-bold text-blue-600 hover:text-blue-700 cursor-pointer">
               {t('dashboard.configure')}
             </button>
           </div>

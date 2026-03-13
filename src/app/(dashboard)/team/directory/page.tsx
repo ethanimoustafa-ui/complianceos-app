@@ -37,15 +37,21 @@ function Toast({ message, onClose }: { message: string; onClose: () => void }) {
 }
 
 function RoleBadge({ role }: { role: TeamMember['role'] }) {
+  const { t } = useTranslation()
   const colorClasses: Record<TeamMember['role'], string> = {
     admin: 'bg-blue-100 text-blue-700',
     manager: 'bg-slate-900 text-white',
     officer: 'bg-slate-100 text-slate-600',
   }
+  const roleLabels: Record<TeamMember['role'], string> = {
+    officer: t('team.roleOfficer' as TranslationKey),
+    manager: t('team.roleManager' as TranslationKey),
+    admin: t('team.roleAdmin' as TranslationKey),
+  }
 
   return (
     <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${colorClasses[role]}`}>
-      {role}
+      {roleLabels[role]}
     </span>
   )
 }

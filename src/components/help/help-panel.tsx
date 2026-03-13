@@ -6,6 +6,7 @@ import { cn } from '@/lib/utils'
 import { Modal } from '@/components/ui/modal'
 import { useHelpStore } from '@/stores/help-store'
 import { useTranslation } from '@/i18n'
+import { HelpPanelAr } from './help-panel-ar'
 
 const CATEGORIES = [
   'Getting Started',
@@ -22,8 +23,10 @@ interface HelpPanelProps {
 }
 
 export function HelpPanel({ isOpen, onClose }: HelpPanelProps) {
-  const { t } = useTranslation()
+  const { t, isRTL } = useTranslation()
   const { articles, searchArticles, getByCategory, getArticle, trackView } = useHelpStore()
+
+  if (isRTL) return <HelpPanelAr isOpen={isOpen} onClose={onClose} />
   const [search, setSearch] = useState('')
   const [activeCategory, setActiveCategory] = useState<string | null>(null)
   const [activeArticleId, setActiveArticleId] = useState<string | null>(null)

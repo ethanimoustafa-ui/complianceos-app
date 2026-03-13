@@ -21,6 +21,7 @@ import type { PolicyStatus, PolicyCategory, PolicyApprovalTier, PolicyVersionEnt
 import { ReviewSchedulePicker } from '@/components/ui/ReviewSchedulePicker'
 import { computeNextReview, cadenceToReviewCycleDays } from '@/lib/review-schedule'
 import { usePolicyTemplateStore } from '@/stores/policy-template-store'
+import { useTeamStore } from '@/stores/team-store'
 
 // Toast component
 function Toast({ message, onClose }: { message: string; onClose: () => void }) {
@@ -36,14 +37,6 @@ function Toast({ message, onClose }: { message: string; onClose: () => void }) {
     </div>
   )
 }
-
-const OWNERS = [
-  { name: 'Sarah Connor', avatar: 'Sarah', department: 'Compliance' },
-  { name: 'Felix Henderson', avatar: 'Felix', department: 'IT Security' },
-  { name: 'Michael Scott', avatar: 'Michael', department: 'Legal' },
-  { name: 'David Wallace', avatar: 'David', department: 'Risk Management' },
-  { name: 'Ahmed Al-Rashid', avatar: 'Ahmed', department: 'Compliance' },
-]
 
 // Shared upload zone used by both modals
 function UploadZone({
@@ -126,6 +119,14 @@ export default function RegulatoryUpdatesPoliciesPage() {
     setSelected, reviewAlerts, checkAndUpdateStatuses,
   } = usePolicyStore()
   const { user: currentUser } = useAuthStore()
+  const teamMembers = useTeamStore(s => s.members)
+
+  // Derive owners from team store — active members with name, avatar, department
+  const OWNERS = useMemo(() =>
+    teamMembers
+      .filter(m => m.status === 'active')
+      .map(m => ({ name: m.name, avatar: m.name, department: m.department }))
+  , [teamMembers])
 
   const searchParams = useSearchParams()
   const [deepLinkTab, setDeepLinkTab] = useState<'overview' | 'workflow' | 'activity' | undefined>(undefined)

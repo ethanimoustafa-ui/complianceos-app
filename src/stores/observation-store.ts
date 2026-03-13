@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { persist } from 'zustand/middleware'
 import type { Observation, ObservationFilters, PaginationState, SortState, Comment, User, ObservationTimelineEntry, RemediationPlan, ClosureRequest, ClosureReview } from '@/types'
 
 interface ChecklistItem {
@@ -52,8 +53,106 @@ interface ObservationState {
   setPageSize: (pageSize: number) => void
 }
 
-export const useObservationStore = create<ObservationState>((set, get) => ({
-  observations: [],
+const seedObservations: Observation[] = [
+  {
+    id: 'OBS-2026-0001',
+    title: 'Incomplete KYC Documentation',
+    description: 'Several corporate accounts found with incomplete KYC records during routine review.',
+    source: 'sama',
+    severity: 'high',
+    status: 'open',
+    dueDate: '2026-04-15',
+    department: 'Compliance',
+    reference: 'OBS-2026-0001',
+    assignee: { id: '1', name: 'Sarah Connor', avatar: 'Sarah Connor', role: 'officer' },
+    assignees: [
+      { id: '1', name: 'Sarah Connor', avatar: 'Sarah Connor', role: 'officer' },
+      { id: '2', name: 'Ahmed Khan', avatar: 'Ahmed Khan', role: 'manager' },
+    ],
+    leaderId: '1',
+    createdAt: '2026-02-10T08:00:00.000Z',
+    updatedAt: '2026-03-01T10:30:00.000Z',
+  },
+  {
+    id: 'OBS-2026-0002',
+    title: 'Cybersecurity Penetration Test Gaps',
+    description: 'Quarterly penetration test revealed unpatched vulnerabilities in internal banking portal.',
+    source: 'internal',
+    severity: 'critical',
+    status: 'in_progress',
+    dueDate: '2026-03-30',
+    department: 'IT & Cybersecurity',
+    reference: 'OBS-2026-0002',
+    assignee: { id: '4', name: 'Michael Scott', avatar: 'Michael Scott', role: 'officer' },
+    assignees: [
+      { id: '4', name: 'Michael Scott', avatar: 'Michael Scott', role: 'officer' },
+    ],
+    leaderId: '4',
+    createdAt: '2026-01-20T09:00:00.000Z',
+    updatedAt: '2026-02-28T14:00:00.000Z',
+  },
+  {
+    id: 'OBS-2026-0003',
+    title: 'Sharia Board Resolution Tracking',
+    description: 'Sharia compliance audit identified gaps in tracking board resolutions and their implementation status.',
+    source: 'sharia',
+    severity: 'medium',
+    status: 'open',
+    dueDate: '2026-05-01',
+    department: 'Compliance',
+    reference: 'OBS-2026-0003',
+    assignee: { id: '5', name: 'Dr. Hassan Ali', avatar: 'Dr. Hassan Ali', role: 'manager' },
+    assignees: [
+      { id: '5', name: 'Dr. Hassan Ali', avatar: 'Dr. Hassan Ali', role: 'manager' },
+      { id: '1', name: 'Sarah Connor', avatar: 'Sarah Connor', role: 'officer' },
+    ],
+    leaderId: '5',
+    createdAt: '2026-02-05T07:30:00.000Z',
+    updatedAt: '2026-03-05T11:00:00.000Z',
+  },
+  {
+    id: 'OBS-2026-0004',
+    title: 'Risk Assessment Methodology Update',
+    description: 'Current risk assessment methodology does not align with updated SAMA framework requirements.',
+    source: 'sama',
+    severity: 'high',
+    status: 'in_progress',
+    dueDate: '2026-04-01',
+    department: 'Risk Management',
+    reference: 'OBS-2026-0004',
+    assignee: { id: '2', name: 'Ahmed Khan', avatar: 'Ahmed Khan', role: 'manager' },
+    assignees: [
+      { id: '2', name: 'Ahmed Khan', avatar: 'Ahmed Khan', role: 'manager' },
+      { id: '3', name: 'Lisa Martinez', avatar: 'Lisa Martinez', role: 'officer' },
+    ],
+    leaderId: '2',
+    createdAt: '2026-02-15T10:00:00.000Z',
+    updatedAt: '2026-03-10T09:15:00.000Z',
+  },
+  {
+    id: 'OBS-2026-0005',
+    title: 'Legal Contract Review Backlog',
+    description: 'Internal audit found 15+ vendor contracts pending legal compliance review beyond SLA.',
+    source: 'internal',
+    severity: 'medium',
+    status: 'open',
+    dueDate: '2026-04-20',
+    department: 'Legal',
+    reference: 'OBS-2026-0005',
+    assignee: { id: '3', name: 'Lisa Martinez', avatar: 'Lisa Martinez', role: 'officer' },
+    assignees: [
+      { id: '3', name: 'Lisa Martinez', avatar: 'Lisa Martinez', role: 'officer' },
+    ],
+    leaderId: '3',
+    createdAt: '2026-03-01T08:00:00.000Z',
+    updatedAt: '2026-03-12T16:00:00.000Z',
+  },
+]
+
+export const useObservationStore = create<ObservationState>()(
+  persist(
+    (set, get) => ({
+  observations: seedObservations,
   selectedObservation: null,
   filters: {},
   pagination: {
@@ -70,29 +169,14 @@ export const useObservationStore = create<ObservationState>((set, get) => ({
   error: null,
 
   fetchAll: async () => {
-    set({ isLoading: true, error: null })
-    try {
-      // TODO: Replace with actual API call
-      await new Promise((resolve) => setTimeout(resolve, 500))
-
-      // Mock data for now - will be replaced with API response
-      const mockObservations: Observation[] = []
-
-      set({
-        observations: mockObservations,
-        pagination: {
-          ...get().pagination,
-          total: mockObservations.length,
-          totalPages: Math.ceil(mockObservations.length / get().pagination.pageSize),
-        },
-        isLoading: false,
-      })
-    } catch (error) {
-      set({
-        error: error instanceof Error ? error.message : 'Failed to fetch observations',
-        isLoading: false,
-      })
-    }
+    const existing = get().observations
+    set({
+      pagination: {
+        ...get().pagination,
+        total: existing.length,
+        totalPages: Math.ceil(existing.length / get().pagination.pageSize),
+      },
+    })
   },
 
   fetchById: async (id: string) => {
@@ -300,7 +384,9 @@ export const useObservationStore = create<ObservationState>((set, get) => ({
                 ...(data.dueDate !== undefined && { dueDate: data.dueDate }),
                 ...(data.department !== undefined && { department: data.department }),
                 ...(data.reference !== undefined && { reference: data.reference }),
+                ...(data.assignee !== undefined && { assignee: data.assignee }),
                 ...(data.assignees !== undefined && { assignees: data.assignees }),
+                ...(data.leaderId !== undefined && { leaderId: data.leaderId }),
                 ...(data.documents !== undefined && { documents: data.documents }),
                 ...(data.remediationPlan !== undefined && { remediationPlan: data.remediationPlan }),
                 // Preserve checklist, updates, and comments unless explicitly updated
@@ -327,7 +413,9 @@ export const useObservationStore = create<ObservationState>((set, get) => ({
                   ...(data.dueDate !== undefined && { dueDate: data.dueDate }),
                   ...(data.department !== undefined && { department: data.department }),
                   ...(data.reference !== undefined && { reference: data.reference }),
+                  ...(data.assignee !== undefined && { assignee: data.assignee }),
                   ...(data.assignees !== undefined && { assignees: data.assignees }),
+                  ...(data.leaderId !== undefined && { leaderId: data.leaderId }),
                   ...(data.documents !== undefined && { documents: data.documents }),
                   ...(data.remediationPlan !== undefined && { remediationPlan: data.remediationPlan }),
                   // Preserve checklist, updates, and comments unless explicitly updated
@@ -1255,4 +1343,13 @@ export const useObservationStore = create<ObservationState>((set, get) => ({
         totalPages: Math.ceil(state.pagination.total / pageSize),
       },
     })),
-}))
+    }),
+    {
+      name: 'observation-storage',
+      version: 1,
+      partialize: (state) => ({
+        observations: state.observations,
+      }),
+    }
+  )
+)

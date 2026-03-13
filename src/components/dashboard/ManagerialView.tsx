@@ -38,17 +38,17 @@ export function ManagerialView({ metrics }: ManagerialViewProps) {
 
     for (const l of letters) {
       if (l.status === 'pending-approval') {
-        items.push({ id: l.id, type: 'SAMA Letter', title: l.subject, status: l.status, dueDate: l.responseDeadline, route: '/correspondence' })
+        items.push({ id: l.id, type: 'SAMA Letter', title: l.subject, status: l.status, dueDate: l.responseDeadline, route: `/correspondence/sama-letters?id=${l.id}` })
       }
     }
     for (const p of policies) {
       if (p.status === 'under-review') {
-        items.push({ id: p.id, type: 'Policy', title: p.name, status: p.status, dueDate: p.nextReviewDate, route: '/correspondence/regulatory-updates/policies' })
+        items.push({ id: p.id, type: 'Policy', title: p.name, status: p.status, dueDate: p.nextReviewDate, route: `/correspondence/regulatory-updates/policies?policyId=${p.id}&tab=workflow` })
       }
     }
     for (const a of audits) {
       if (a.status === 'pending') {
-        items.push({ id: a.id, type: 'Audit', title: a.title, status: a.status, dueDate: a.dueDate, route: '/reports' })
+        items.push({ id: a.id, type: 'Audit', title: a.title, status: a.status, dueDate: a.dueDate, route: `/reports/${a.id}` })
       }
     }
 
@@ -291,7 +291,7 @@ export function ManagerialView({ metrics }: ManagerialViewProps) {
                 <button
                   key={item.id}
                   onClick={() => router.push(item.route)}
-                  className="w-full px-5 py-3 flex items-center justify-between hover:bg-slate-50 transition-colors text-start"
+                  className="w-full px-5 py-3 flex items-center justify-between hover:bg-slate-50 transition-colors text-start cursor-pointer"
                 >
                   <div className="flex items-center gap-3">
                     <Icon
@@ -308,6 +308,7 @@ export function ManagerialView({ metrics }: ManagerialViewProps) {
                       <span className="text-[10px] text-slate-400">{item.dueDate}</span>
                     )}
                     <Badge variant={getStatusVariant(item.status)} size="sm">{item.status}</Badge>
+                    <Icon icon="lucide:chevron-right" className="text-slate-300 text-sm" />
                   </div>
                 </button>
               ))

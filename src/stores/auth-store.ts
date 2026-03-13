@@ -123,6 +123,21 @@ export const useAuthStore = create<AuthState>()(
     }),
     {
       name: 'auth-storage',
+      version: 2,
+      migrate: () => ({
+        user: {
+          id: 'current-user',
+          name: 'Test User',
+          email: 'test@example.com',
+          role: 'admin',
+          department: 'Compliance',
+          phone: '+966 50 123 4567',
+          avatarSeed: 'Felix',
+          workload: 75,
+        } as User,
+        token: 'mock-token' as string | null,
+        isAuthenticated: true,
+      }),
       partialize: (state) => ({
         user: state.user,
         token: state.token,

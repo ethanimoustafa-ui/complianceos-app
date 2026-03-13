@@ -148,7 +148,7 @@ export const useAdvisoryStore = create<AdvisoryState>()(
         const id = ref.replace('ADV-', 'ADV-').replace(/-/g, '-')
         const newRequest: AdvisoryRequest = {
           ...data,
-          id: `ADV-${String(get().advisoryRequests.length + 1).padStart(3, '0')}`,
+          id: crypto.randomUUID(),
           ref,
           notes: [],
           createdAt: now,
@@ -269,9 +269,25 @@ export const useAdvisoryStore = create<AdvisoryState>()(
     }),
     {
       name: 'advisory-storage',
+      version: 2,
       partialize: (state) => ({
         advisoryRequests: state.advisoryRequests,
       }),
+      migrate: (persisted: unknown, version: number) => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const state = persisted as any
+        if (version < 2 && state.advisoryRequests) {
+          const seenIds = new Set<string>()
+          state.advisoryRequests = state.advisoryRequests.map((a: { id: string }) => {
+            if (seenIds.has(a.id)) {
+              return { ...a, id: crypto.randomUUID() }
+            }
+            seenIds.add(a.id)
+            return a
+          })
+        }
+        return state
+      },
     }
   )
 )

@@ -39,6 +39,8 @@ interface MessageState {
   kickMember: (threadId: string, memberId: string) => void
   promoteAdmin: (threadId: string, memberId: string) => void
   demoteAdmin: (threadId: string, memberId: string) => void
+  addMembersToThread: (threadId: string, newNames: string[], newIds: string[]) => void
+  updateThreadSubject: (threadId: string, subject: string) => void
   updateThreadAvatar: (threadId: string, avatarUrl: string) => void
   getThread: (threadId: string) => MessageThread | undefined
   getMessages: (threadId: string) => Message[]
@@ -157,6 +159,30 @@ export const useMessageStore = create<MessageState>()(
             t.id === threadId && t.createdBy !== memberId
               ? { ...t, admins: t.admins.filter(id => id !== memberId) }
               : t
+          ),
+        }))
+      },
+
+      addMembersToThread: (threadId, newNames, newIds) => {
+        set((state) => ({
+          threads: state.threads.map(t => {
+            if (t.id !== threadId) return t
+            const updatedParticipants = [...t.participants, ...newNames]
+            const updatedIds = [...t.participantIds, ...newIds]
+            return {
+              ...t,
+              participants: updatedParticipants,
+              participantIds: updatedIds,
+              isGroup: updatedIds.length > 1,
+            }
+          }),
+        }))
+      },
+
+      updateThreadSubject: (threadId, subject) => {
+        set((state) => ({
+          threads: state.threads.map(t =>
+            t.id === threadId ? { ...t, subject } : t
           ),
         }))
       },

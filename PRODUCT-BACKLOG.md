@@ -2,7 +2,7 @@
 
 **Version:** 1.0
 **Date:** February 2026
-**Last Updated:** March 13, 2026 (Notification Engine, Deep-Linking & Group Messaging Sprint)
+**Last Updated:** March 13, 2026 (Observation Persistence, Burnout Polish & Arabic Help Sprint)
 
 ---
 
@@ -13,6 +13,8 @@
 - **Source:** `BRD` (from Business Requirements Doc) | `REC` (from architecture/strategy sessions) | `FEEDBACK` (from compliance team)
 - **Arch:** `A` (Correspondence) | `B` (Framework) | `C` (Internal Governance) | `S` (Shared/Platform)
 
+> **Observation Persistence, Burnout Polish & Arabic Help Sprint complete (Mar 13 2026):** Observation store gained `persist` middleware (version 1) with 5 seed observations and a sync `fetchAll` replacing the old async mock. Observation burnout reassignment fixed: the burnout card now updates `assignee`, `assignees[]`, and `leaderId` together; `leaderId` added to the observation `update` action allowlists. Advisory store bumped to version 2 with a `migrate` function that deduplicates IDs in localStorage. Workload cap removed: `percentage` can now exceed 100% to faithfully reflect extreme overload. `CapacityRing` component shows a dark-purple rotating ring when capacity > 100%. Arabic help panel: `help-panel-ar.tsx` is a new standalone component with full Arabic content, Arabic video labels, and RTL layout; `help-panel.tsx` delegates to it when `isRTL` is true. Role badges on the team directory now use i18n translation keys (`team.roleOfficer`, `team.roleManager`, `team.roleAdmin`). Burnout detection card resolves department `nameAr` from the department store when in RTL mode. New file `src/lib/dashboard-pdf.ts` adds jsPDF-based dashboard report export wired to the Header export button. OBS-019 through OBS-021, WRK-002 (uncapped), I18N-010 through I18N-012, and RPT-017 all complete.
+>
 > **Notification Engine, Deep-Linking & Group Messaging Sprint complete (Mar 13 2026):** Live notification engine (`useNotificationEngine` hook) subscribes to 7 stores (audits, policies, observations, SAMA letters, circulars, training, risks) and generates 17 notification rules with ref-based dedup, max-50 cap, and priority sorting. Notification store refactored: seeds removed, `syncGeneratedNotifications` merge action added with `dedupeKey`-based dedup, persist v3 clean migration. `AppNotification` type extended with `entityId` and `dedupeKey` fields. Hook wired into `sidebar.tsx`. Message system overhauled: `MessageThread` type extended with `participantIds[]`, `isGroup`, `avatarUrl`, `createdBy`, `admins[]`; `message-store.ts` rewritten with `createThread` (multi-recipient), `kickMember`, `promoteAdmin`, `demoteAdmin`, `updateThreadAvatar`, and `deleteThread` actions; `message-panel.tsx` fully rewritten for multi-recipient compose with chips, optional group name, group avatar upload, members view with admin actions. Deep-link `?id=` URL param added to Rules/Circulars page (opens circular detail modal, Suspense-wrapped). Deep-link `?employeeId=` URL param added to Training page (opens employee detail modal, Suspense-wrapped). Sign-out modal now navigates to `/sign-in` via `router.push`. 31 new i18n keys added (EN + AR) — 18 notification title keys + 13 group chat keys. MSG-001 through MSG-010 all complete; NTF-001 through NTF-009 all complete.
 >
 > **Sprint 6 complete:** Custom Review Frequency — `ReviewSchedule` type + `ReviewSchedulePicker` UI + `computeNextReview()` utility wired across Policies (POL-018), Risks (RSK-007), and Audits (AUD-004).
@@ -90,16 +92,16 @@
 
 | ID | Feature | Status | Priority | Arch | Source | Notes |
 |---|---|---|---|---|---|---|
-| RUL-001 | Circular registration (title, reference, dates, departments, PDF upload) | 🔧 | P0 | A | BRD | UI built, logic not wired |
-| RUL-002 | Applicability assessment (applicable/not-applicable with rationale) | 📋 | P0 | A | BRD | |
-| RUL-003 | CAP creation (articles breakdown with risk level, department, status, deadlines) | 📋 | P0 | A | BRD | |
-| RUL-004 | Business Owner assignment with notification | 📋 | P0 | A | BRD | Notification to dept owner on assignment |
+| RUL-001 | Circular registration (title, reference, dates, departments, PDF upload) | ✅ | P0 | A | BRD | Done — `RegisterCircularModal` fully wired to circular store `create` action; authority-aware reference gen (`SAMA-2026-001`); multi-PDF upload via `readFileAsDataUrl`; department multi-select from `department-store`; assigned-to from `team-store`; all fields persisted |
+| RUL-002 | Applicability assessment (applicable/not-applicable with rationale) | ✅ | P0 | A | BRD | Done — `CircularApplicability` type (`pending \| applicable \| not-applicable`); set at creation time in `RegisterCircularModal`; displayed as color-coded badge in `CircularDetailsContent`; persisted in circular model; `update` store action allows post-creation changes |
+| RUL-003 | CAP creation (articles breakdown with risk level, department, status, deadlines) | ✅ | P0 | A | BRD | Done — `ArticleDetailModal` (create/edit/view modes) wired through `CircularDetailsContent`; `addArticle` / `updateArticle` / `deleteArticle` store actions; per-article risk level, compliance status, responsible department, assigned-to, checklist, and timeline |
+| RUL-004 | Business Owner assignment with notification | ✅ | P0 | A | BRD | Done — `BusinessOwnerModal` wired in rules page; `setBusinessOwner` (via `update`) store action; department-based BO assignment; in-app notification path available via `notification-store` (real email requires backend — see CIRC-BE-002) |
 | RUL-005 | Evidence collection per CAP item (upload by Business Owners) | 📋 | P1 | A | BRD | |
-| RUL-006 | Article-level completion tracking with percentage aggregation | 📋 | P1 | A | BRD | |
+| RUL-006 | Article-level completion tracking with percentage aggregation | ✅ | P1 | A | BRD | Done — `recalcProgress()` helper in `circular-store.ts` auto-derives circular `progress` from article checklist completion after every `toggleChecklistItem` / `addArticle` / `updateArticle`; progress bar displayed in `CircularDetailsContent` |
 | RUL-007 | Compliance review of evidence (approve or request additional docs) | 📋 | P1 | A | BRD | |
 | RUL-008 | Submission preparation to regulator (formal confirmation) | 📋 | P2 | A | BRD | |
-| RUL-009 | Priority classification (High, Medium, Low) | 🔧 | P1 | A | BRD | UI built |
-| RUL-010 | Department-based filtering | 🔧 | P1 | A | BRD | UI built |
+| RUL-009 | Priority classification (High, Medium, Low) | ✅ | P1 | A | BRD | Done — `CircularPriority` type (`critical \| high \| medium \| low`); set in `RegisterCircularModal` and `EditCircularModal`; priority badge on `RegDocCard`; filter in `RegDocFilterBar` |
+| RUL-010 | Department-based filtering | ✅ | P1 | A | BRD | Done — `RegDocFilterBar` department filter reads from `department-store`; departments set per-circular at creation; wired in rules page |
 | RUL-011 | Internal notes/comments per circular | 📋 | P1 | A | BRD | |
 | RUL-012 | Documentation repository per circular | 📋 | P1 | A | BRD | |
 | RUL-013 | Activity feed per circular | 📋 | P2 | A | BRD | |
@@ -188,6 +190,9 @@
 | OBS-016 | Evidence follow-up per department (request-and-track workflow) | 📋 | P1 | S | FEEDBACK | Currently upload-only, no request tracking |
 | OBS-017 | Framework principle tagging on observations | 📋 | P1 | B | BRD | `frameworkTags[]` metadata field. See Epic 12 |
 | OBS-018 | Expand source types to include CMA, IA observations | 💡 | P2 | A | REC | When onboarding adds CMA/IA authorities |
+| OBS-019 | Observation store — persist middleware + 5 seed observations | ✅ | P0 | S | FEEDBACK | Done — `persist` middleware added to `observation-store.ts` (version 1); 5 realistic seed observations across severity levels (critical/high/medium/low) and statuses; sync `fetchAll` replaces old async mock |
+| OBS-020 | Observation reassignment — update assignee, assignees[], and leaderId together | ✅ | P1 | S | FEEDBACK | Done — Burnout card `reassignItem` for observations now updates `assignee` + `assignees[]` + `leaderId` simultaneously; `leaderId` field added to the observation `update` action's allowed field set for both observations array and `selectedObservation` |
+| OBS-021 | Advisory store ID deduplication migration (version 2) | ✅ | P1 | S | FEEDBACK | Done — `advisory-store.ts` bumped to `version: 2`; `migrate` function deduplicates `advisoryRequests` by `id` in localStorage, preserving the first occurrence of each duplicated entry |
 
 ---
 
@@ -233,6 +238,7 @@
 | RPT-014 | Framework-aligned reporting (per-framework coverage %) | 📋 | P1 | B | BRD | See Epic 12. Show coverage per control |
 | RPT-015 | Control-level drill-down (all tagged entities per control) | 📋 | P2 | B | BRD | |
 | RPT-016 | Gap analysis report (controls with no associated records) | 📋 | P2 | B | BRD | |
+| RPT-017 | Dashboard PDF export (simple jsPDF, LaTeX planned for backend) | ✅ | P1 | F | Sprint 4 | Done — jsPDF utility at `src/lib/dashboard-pdf.ts`, wired to Header export button on dashboard page |
 
 ---
 
@@ -273,7 +279,7 @@
 | RSK-006 | Risk owner assignment | ✅ | P1 | S | BRD | Done — Owner from team store, selectable in add/edit modal, displayed with avatar/department |
 | RSK-007 | Monitoring frequency with auto-computed review dates | ✅ | P1 | S | BRD | Done — `nextReviewDate = lastReviewDate + monitoringFrequency` (7d/1mo/3mo/6mo/1yr), "Mark as Reviewed" button resets cycle, dates auto-set on risk creation, category card filters by frequency; enhanced (Sprint 6) with `ReviewSchedulePicker` in add/edit modal: cadence + day-of-month anchor drives `nextReviewDate` via `computeNextReview()`; `markReviewed()` advances by schedule cadence when set, falls back to legacy `monitoringFrequency` offset |
 | RSK-008 | Audit trail (status, score, mitigation, review, checklist changes) | ✅ | P1 | S | BRD | Done — History timeline in drawer with colored dots, 11 action types including 4 checklist actions (added/toggled/edited/removed), all changes append entries automatically |
-| RSK-009 | Compliance engine integration (Risk Posture = 20% weight) | 📋 | P0 | S | BRD | Currently returns 0 — engine receives empty arrays for risk data |
+| RSK-009 | Compliance engine integration (Risk Posture = 20% weight) | ✅ | P0 | S | BRD | Done — `useComplianceScore` wires `risks` from `useRiskStore` → `calcRiskPosture(risks, weight)`; `RiskSlice { likelihood, impact, status }[]` maps to engine input; seed risks + any user-created risks feed live score |
 | RSK-010 | Dashboard widget integration | 📋 | P1 | S | BRD | |
 | RSK-011 | Framework principle tagging on risks | 📋 | P1 | B | BRD | `frameworkTags[]` field. See Epic 12 |
 | RSK-012 | Risk list search (name, description, category, owner) | ✅ | P1 | S | BRD | Done — Search input in risk list card header, case-insensitive across 4 fields |
@@ -305,7 +311,7 @@
 | TRN-010 | Course categories (Compliance, AML, Cybersecurity, Sharia, Risk, + 8 new) | ✅ | P1 | S | BRD | Done — 13 categories total; i18n keys added for all 8 new categories in en.json + ar.json |
 | TRN-011 | Bulk assignment of courses | 📋 | P2 | S | BRD | |
 | TRN-012 | Training report export | ✅ | P2 | S | BRD | Done — `exportTrainingDataLocalized` in `export.ts`; wired to both download buttons in `EmployeeTable` via `onExport` prop |
-| TRN-013 | Compliance engine integration (Training Completion = 15% weight) | 📋 | P0 | S | BRD | Currently returns 0 |
+| TRN-013 | Compliance engine integration (Training Completion = 15% weight) | ✅ | P0 | S | BRD | Done — `useComplianceScore` wires `trainings` from `useTrainingStore` → `calcTrainingCompletion(trainings, weight)`; `TrainingSlice { completionRate }[]` maps training modules to engine input; training store persist v3 seeds provide real data |
 | TRN-014 | Saudization data integration with MISA requirements | 💡 | P3 | A | BRD | Pattern 4 linkage |
 | TRN-015 | File upload with category checkboxes sends file to AI API for parsing | 📋 | P2 | S | REC | Upload modal already has file + category selection UI (`TrainingUploadModal`) |
 | TRN-016 | AI returns structured data (employees, saudization metrics, training records) | 📋 | P2 | S | REC | Requires: API endpoint, file parsing service |
@@ -420,6 +426,9 @@
 | I18N-007 | Arabic translations for new onboarding screens | 💡 | P2 | S | REC | New authority/framework names in AR |
 | I18N-008 | Arabic translations for framework control libraries | 💡 | P2 | B | REC | NCA ECC, PDPL etc. article names in AR |
 | I18N-009 | Circular & Policy i18n keys (EN + AR) | ✅ | P1 | A | FEEDBACK | Done — authority labels, CAP status labels, applicability, autoReference, reviewAlert, phase labels (`phaseCAP`, `phaseCorrectiveActionPlan`, `phaseRemediation`, `currentPhase`), policy status/tier keys, `viewFullDetail`, and 80+ circular workflow keys added to both `en.json` and `ar.json` |
+| I18N-010 | Arabic help panel — full RTL standalone component | ✅ | P1 | S | FEEDBACK | Done — `src/components/help/help-panel-ar.tsx`; separate component with full Arabic article content, Arabic video labels, RTL-native layout (text-right, flex-row-reverse), Arabic category names; `help-panel.tsx` delegates to it via `if (isRTL) return <HelpPanelAr .../>` |
+| I18N-011 | Role badge i18n on team directory | ✅ | P1 | S | FEEDBACK | Done — `RoleBadge` component in `team/directory/page.tsx` now uses `t('team.roleOfficer')`, `t('team.roleManager')`, `t('team.roleAdmin')` translation keys instead of hardcoded English strings; keys exist in both `en.json` and `ar.json` |
+| I18N-012 | Department Arabic name in burnout detection card | ✅ | P1 | S | FEEDBACK | Done — `burnout-detection-card.tsx` subscribes to `useDepartmentStore`; `resolveDepName(name)` helper returns `dept.nameAr` when `isRTL` is true, falling back to the raw name; all member department labels are localized |
 
 ---
 
@@ -523,7 +532,7 @@
 | ID | Feature | Status | Priority | Arch | Source | Notes |
 |---|---|---|---|---|---|---|
 | WRK-001 | Cross-store workload aggregation per member (observations, audits, policies, correspondence, manual tasks) | ✅ | P1 | S | FEEDBACK | Done — `useWorkload(memberId, member, memberName)` hook in `src/hooks/useWorkload.ts`; queries observation-store, audit-store, policy-store, correspondence-store; open/active items only (excludes closed obs, completed audits, non-review policies, archived correspondence) |
-| WRK-002 | Workload percentage calculation — base 10% per task, reduced to 5% for tasks >= 75% progress | ✅ | P1 | S | FEEDBACK | Done — `base = total * ratePerAssignment`; discount of 5% per manual assignment that has `progress >= 75`; result clamped 0–100 |
+| WRK-002 | Workload percentage calculation — base 10% per task, reduced to 5% for tasks >= 75% progress | ✅ | P1 | S | FEEDBACK | Done — `base = total * ratePerAssignment`; discount of 5% per manual assignment that has `progress >= 75`; result is uncapped (can exceed 100%) to faithfully reflect extreme overload; `CapacityRing` shows dark-purple rotating animation when capacity > 100% |
 | WRK-003 | Escalating workload rate based on burnout duration | ✅ | P1 | S | FEEDBACK | Done — `ratePerAssignment` escalates from 10% (default) → 20% (overloaded 3+ days) → 30% (overloaded 7+ days) based on `member.burnoutSince` ISO timestamp; makes burnout detection increasingly sensitive the longer someone is overloaded |
 | WRK-004 | `burnoutSince` timestamp tracking on TeamMember | ✅ | P1 | S | FEEDBACK | Done — `TeamMember.burnoutSince?: string` field in `src/types/index.ts`; `updateBurnoutTimestamps()` store action sets/clears the field when a member crosses the 75% threshold; called by `useBurnoutDetection` hook |
 | WRK-005 | Burnout detection hook with escalation tier classification | ✅ | P1 | S | FEEDBACK | Done — `useBurnoutDetection` in `src/hooks/useWorkload.ts`; tiers: mild (>75%), moderate (>75% for 3+ days), severe (>75% for 7+ days); returns `{ member, workload, tier, daysSince }[]` for all overloaded members |
@@ -618,6 +627,8 @@
 
 ## Summary Dashboard
 
+> **Observation Persistence, Burnout Polish & Arabic Help Sprint complete (Mar 13 2026)** — Observation store gained `persist` (v1) + 5 seed observations. Observation burnout reassignment fixed (assignee + assignees[] + leaderId updated together; leaderId added to update allowlists). Advisory store v2 migration deduplicates localStorage IDs. Workload percentage uncapped (can exceed 100%); `CapacityRing` shows dark-purple rotating ring above 100%. `help-panel-ar.tsx` new standalone Arabic help panel; `HelpPanel` delegates to it when RTL. Role badges in team directory use i18n keys. Burnout card resolves department `nameAr` from department store in RTL. `src/lib/dashboard-pdf.ts` jsPDF export wired to Header. RUL-001 through RUL-004, RUL-006, RUL-009–010 marked done (Rules & Circulars critical path complete). RSK-009 and TRN-013 marked done (engine integration complete). OBS-019–021, I18N-010–012, RPT-017 added and complete.
+>
 > **Notification Engine, Deep-Linking & Group Messaging Sprint complete (Mar 13 2026)** — Live `useNotificationEngine` hook subscribes to 7 stores and generates 17 notification rules with dedup, priority sorting, and user-preference filtering; wired into sidebar. Notification store refactored (persist v3, `syncGeneratedNotifications` merge action). `AppNotification` extended with `entityId` + `dedupeKey`. Message system overhauled: group chat (`participantIds[]`, `isGroup`, `admins[]`, `createdBy`), `message-store` rewritten with `createThread`, `kickMember`, `promoteAdmin`, `demoteAdmin`, `updateThreadAvatar`, `deleteThread`. Message panel fully rewritten for multi-recipient compose with chips, group avatar upload, and members management view. Deep-links added: Rules page `?id=` opens circular modal; Training page `?employeeId=` opens employee modal (both Suspense-wrapped). Sign-out modal extracted to `src/components/auth/sign-out-modal.tsx`, navigates to `/sign-in`. 31 new i18n keys (EN + AR). NTF-001 through NTF-014, MSG-001 through MSG-008, COR-031, TRN-024, RBAC-006 all complete.
 >
 > **Settings Page Overhaul Sprint complete (Mar 13 2026)** — Settings page decomposed into 7 sub-components; 5 new Zustand stores (framework-config, user-preferences, audit-template, policy-template, department); granular notification preferences; per-framework weight sliders + dept multi-select; policy templates management UI; date format preference wired across the app. SET-001 through SET-006 + SET-011 through SET-015 all complete.
@@ -630,12 +641,12 @@
 
 | Status | Count | % |
 |---|---|---|
-| ✅ Done | 196 | 61% |
-| 🔧 In Progress (UI built, logic pending) | 6 | 2% |
-| 📋 To Do (defined, not started) | 74 | 23% |
+| ✅ Done | 211 | 65% |
+| 🔧 In Progress (UI built, logic pending) | 3 | 1% |
+| 📋 To Do (defined, not started) | 62 | 19% |
 | 💡 New Recommendation | 24 | 7% |
-| 🗺️ Roadmap (future phase) | 18 | 6% |
-| **Total** | **318** | **100%** |
+| 🗺️ Roadmap (future phase) | 24 | 7% |
+| **Total** | **324** | **100%** |
 
 ### By Priority
 
@@ -659,12 +670,12 @@
 
 These items must be completed before launch:
 
-1. **Stores:** ~~Risk Store (RSK-001)~~ ✅, ~~Policy Store (POL-002)~~ ✅, ~~Training Store (TRN-004)~~ ✅, Framework Store (FRM-018)
-2. **Engine Integration:** Risk Posture (RSK-009), ~~Policy Currency (POL-009)~~ ✅, Training Completion (TRN-013)
+1. **Stores:** ~~Risk Store (RSK-001)~~ ✅, ~~Policy Store (POL-002)~~ ✅, ~~Training Store (TRN-004)~~ ✅, ~~Observation Store persist (OBS-019)~~ ✅, Framework Store (FRM-018)
+2. **Engine Integration:** ~~Risk Posture (RSK-009)~~ ✅, ~~Policy Currency (POL-009)~~ ✅, ~~Training Completion (TRN-013)~~ ✅ — **all engine integrations complete**
 3. **Live Data:** ~~Replace hardcoded risk data (RPT-012)~~ ✅, ~~Replace hardcoded executive view details (RPT-013)~~ ✅
 4. **Dashboard Health Engine:** ~~7-component scoring engine (DSH-001–DSH-015)~~ ✅
 5. **Correspondence:** ~~Letter approval chain (COR-005, COR-006)~~ ✅, ~~Reference numbering (COR-009)~~ ✅
-6. **Rules & Circulars:** Registration logic (RUL-001), applicability (RUL-002), CAP creation (RUL-003), Business Owner assignment (RUL-004)
+6. **Rules & Circulars:** ~~Registration logic (RUL-001)~~ ✅, ~~Applicability (RUL-002)~~ ✅, ~~CAP creation (RUL-003)~~ ✅, ~~Business Owner assignment (RUL-004)~~ ✅ — **critical path complete**
 7. **Onboarding:** Org profile (ONB-001), entity type (ONB-002), authority selection (ONB-003), framework selection (ONB-006), pre-selection logic (ONB-004, ONB-007), Constant C (ONB-008), entity map data (ONB-012)
 
 ---

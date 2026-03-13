@@ -8,6 +8,7 @@ import { Modal } from '@/components/ui/modal'
 import { useCircularStore } from '@/stores/circular-store'
 import type { CircularAuthority, CircularPriority, CircularStatus, CircularApplicability, CAPStatus } from '@/types'
 import { useDepartmentStore } from '@/stores/department-store'
+import { useTeamStore } from '@/stores/team-store'
 import { readFileAsDataUrl, normalizeUrl } from './utils'
 
 type Props = {
@@ -20,6 +21,7 @@ type Props = {
 export function RegisterCircularModal({ isOpen, onClose, onCreated, t }: Props) {
   const { create, setPdfUrl } = useCircularStore()
   const { departments: allDepartments } = useDepartmentStore()
+  const { members: teamMembers } = useTeamStore()
 
   const [formTitle, setFormTitle] = useState('')
   const [formAuthority, setFormAuthority] = useState<CircularAuthority | ''>('')
@@ -31,6 +33,7 @@ export function RegisterCircularModal({ isOpen, onClose, onCreated, t }: Props) 
   const [formDepartments, setFormDepartments] = useState<string[]>([])
   const [formDescription, setFormDescription] = useState('')
   const [formBODept, setFormBODept] = useState('')
+  const [formAssignedTo, setFormAssignedTo] = useState('')
   const [formPdfFiles, setFormPdfFiles] = useState<Array<{ name: string; dataUrl: string; size: number }>>([])
   const pdfInputRef = useRef<HTMLInputElement>(null)
 
@@ -50,6 +53,7 @@ export function RegisterCircularModal({ isOpen, onClose, onCreated, t }: Props) 
       applicability: 'pending' as CircularApplicability,
       departments: formDepartments,
       businessOwnerDepartment: formBODept || undefined,
+      assignedTo: formAssignedTo || undefined,
       progress: 0,
       issuanceDate: formIssuanceDate,
       dueDate: formDueDate,
@@ -73,6 +77,7 @@ export function RegisterCircularModal({ isOpen, onClose, onCreated, t }: Props) 
     setFormDepartments([])
     setFormDescription('')
     setFormBODept('')
+    setFormAssignedTo('')
     setFormPdfFiles([])
     onCreated(t('regulatoryUpdates.circularRegistered'))
   }
@@ -147,6 +152,22 @@ export function RegisterCircularModal({ isOpen, onClose, onCreated, t }: Props) 
                   {allDepartments.map((dept) => <option key={dept.id} value={dept.name}>{dept.name}</option>)}
                 </select>
               </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1.5">
+                {t('regulatoryUpdates.assignedCircularFollowUp')}
+              </label>
+              <select
+                className="flex h-11 w-full rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm"
+                value={formAssignedTo}
+                onChange={(e) => setFormAssignedTo(e.target.value)}
+              >
+                <option value="">{t('regulatoryUpdates.selectOfficer')}</option>
+                {teamMembers.filter(m => m.status === 'active').map((m) => (
+                  <option key={m.id} value={m.name}>{m.name} - {m.department}</option>
+                ))}
+              </select>
             </div>
 
             <div className="grid grid-cols-2 gap-4">

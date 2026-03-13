@@ -25,6 +25,7 @@
     "submit": "إرسال",
     "export": "تصدير",
     "exportCsv": "تصدير CSV",
+    "exportPdf": "تصدير PDF",
     "filter": "تصفية",
     "clearFilters": "مسح الفلاتر",
     "noResults": "لم يتم العثور على نتائج",
@@ -55,6 +56,7 @@
     "enterName": "أدخل الاسم",
     "createNew": "إنشاء مراسلة صادرة جديدة",
     "items": "عناصر",
+    "select": "اختر",
     "selectStatus": "اختر الحالة",
     "selectCategory": "اختر الفئة",
     "enterCategory": "أدخل فئة جديدة",
@@ -142,7 +144,10 @@
     "changeGroupAvatar": "تغيير صورة المجموعة",
     "members": "الأعضاء",
     "admin": "مشرف",
-    "creator": "المنشئ"
+    "creator": "المنشئ",
+    "addMemberToGroup": "إضافة عضو",
+    "searchMembers": "البحث في أعضاء الفريق...",
+    "editGroupName": "تعديل اسم المجموعة"
   },
   "dashboard": {
     "title": "الرؤى التنفيذية",
@@ -270,6 +275,8 @@
     "completeAudits": "إكمال {{count}} تدقيق(تدقيقات)",
     "reviewMyPolicies": "مراجعة {{count}} سياسة(سياسات)",
     "noIssues": "جميع الأنظمة سليمة",
+    "pdfTitle": "تقرير لوحة معلومات ComplianceOS",
+    "pdfGeneratedOn": "تم الإنشاء في {{date}}",
 
     "healthAudits": "التدقيق",
     "healthObservations": "الملاحظات",
@@ -975,6 +982,8 @@
     "capDueDate": "تاريخ استحقاق خطة العمل",
     "businessOwner": "المالك التنفيذي",
     "businessOwnerDept": "قسم المالك التنفيذي",
+    "assignedCircularFollowUp": "متابعة التعميم مُسندة إلى",
+    "selectOfficer": "اختر الموظف",
     "assignBusinessOwner": "تعيين المالك التنفيذي",
     "boAssigned": "تم تعيين المالك التنفيذي بنجاح",
     "autoReference": "المرجع التلقائي",

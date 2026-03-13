@@ -5,9 +5,13 @@ import { useObservationStore } from '@/stores/observation-store'
 import { useAuditStore } from '@/stores/audit-store'
 import { usePolicyStore } from '@/stores/policy-store'
 import { useCorrespondenceStore } from '@/stores/correspondence-store'
+import { useAdvisoryStore } from '@/stores/advisory-store'
+import { useSAMALetterStore } from '@/stores/sama-letter-store'
+import { useRiskStore } from '@/stores/risk-store'
+import { useCircularStore } from '@/stores/circular-store'
 
 export interface WorkloadItem {
-  type: 'observation' | 'audit' | 'policy' | 'correspondence'
+  type: 'observation' | 'audit' | 'policy' | 'correspondence' | 'advisory' | 'sama-letter' | 'risk' | 'circular'
   id: string
   title: string
 }
@@ -19,6 +23,10 @@ export interface WorkloadResult {
     audits: number
     policies: number
     correspondence: number
+    advisory: number
+    samaLetters: number
+    risks: number
+    circulars: number
   }
   items: WorkloadItem[]
   percentage: number
@@ -30,11 +38,16 @@ function computeWorkload(
   audits: ReturnType<typeof useAuditStore.getState>['audits'],
   policies: ReturnType<typeof usePolicyStore.getState>['policies'],
   correspondence: ReturnType<typeof useCorrespondenceStore.getState>['correspondence'],
+  advisoryRequests: ReturnType<typeof useAdvisoryStore.getState>['advisoryRequests'],
+  samaLetters: ReturnType<typeof useSAMALetterStore.getState>['letters'],
+  risks: ReturnType<typeof useRiskStore.getState>['risks'],
+  circulars: ReturnType<typeof useCircularStore.getState>['circulars'],
   member?: { burnoutSince?: string; assignments?: { title: string; dueDate: string; progress?: number }[] },
   memberName?: string,
 ): WorkloadResult {
   const matchedObs = observations.filter(o => {
-    const assigneeMatch = o.assignee?.id === memberId || o.assignee?.name === memberId || o.assignee?.name === memberName
+    const assigneeMatch = o.assignee?.id === memberId || o.assignee?.name === memberName
+      || o.assignees?.some(a => a.id === memberId || a.name === memberName)
     const leaderMatch = o.leaderId === memberId
     return (assigneeMatch || leaderMatch) && o.status !== 'closed'
   })
@@ -57,15 +70,40 @@ function computeWorkload(
   })
   const corrCount = matchedCorr.length
 
+  const matchedAdvisory = advisoryRequests.filter(a => {
+    return (a.assignedTo === memberId || a.assignedTo === memberName) && a.status !== 'completed'
+  })
+  const advisoryCount = matchedAdvisory.length
+
+  const matchedSama = samaLetters.filter(l => {
+    return (l.assignedTo === memberId || l.assignedTo === memberName) && !['response-received'].includes(l.status)
+  })
+  const samaCount = matchedSama.length
+
+  const matchedRisks = risks.filter(r => {
+    const ownerMatch = r.owner?.id === memberId || r.owner?.name === memberName
+    return ownerMatch && !['mitigated', 'closed'].includes(r.status)
+  })
+  const riskCount = matchedRisks.length
+
+  const matchedCirculars = circulars.filter(c => {
+    return (c.assignedTo === memberId || c.assignedTo === memberName) && !['completed', 'archived'].includes(c.status)
+  })
+  const circularCount = matchedCirculars.length
+
   const items: WorkloadItem[] = [
     ...matchedObs.map(o => ({ type: 'observation' as const, id: o.id, title: o.title })),
     ...matchedAudits.map(a => ({ type: 'audit' as const, id: a.id, title: a.title })),
     ...matchedPolicies.map(p => ({ type: 'policy' as const, id: p.id, title: p.name })),
     ...matchedCorr.map(c => ({ type: 'correspondence' as const, id: c.id, title: c.subject })),
+    ...matchedAdvisory.map(a => ({ type: 'advisory' as const, id: a.id, title: a.subject })),
+    ...matchedSama.map(l => ({ type: 'sama-letter' as const, id: l.id, title: l.subject })),
+    ...matchedRisks.map(r => ({ type: 'risk' as const, id: r.id, title: r.title })),
+    ...matchedCirculars.map(c => ({ type: 'circular' as const, id: c.id, title: c.title })),
   ]
 
   const manualCount = member?.assignments?.length ?? 0
-  const total = obsCount + auditCount + policyCount + corrCount + manualCount
+  const total = obsCount + auditCount + policyCount + corrCount + advisoryCount + samaCount + riskCount + circularCount + manualCount
 
   // Determine rate per assignment based on burnout duration
   let ratePerAssignment = 10
@@ -81,7 +119,7 @@ function computeWorkload(
   const base = total * ratePerAssignment
   const discountCount = (member?.assignments ?? []).filter(a => (a.progress ?? 0) >= 75).length
   const discount = discountCount * 5
-  const percentage = Math.max(0, Math.min(base - discount, 100))
+  const percentage = Math.max(0, base - discount)
 
   return {
     totalAssignments: total,
@@ -90,6 +128,10 @@ function computeWorkload(
       audits: auditCount,
       policies: policyCount,
       correspondence: corrCount,
+      advisory: advisoryCount,
+      samaLetters: samaCount,
+      risks: riskCount,
+      circulars: circularCount,
     },
     items,
     percentage,
@@ -101,10 +143,14 @@ export function useWorkload(memberId: string, member?: { burnoutSince?: string; 
   const audits = useAuditStore(s => s.audits)
   const policies = usePolicyStore(s => s.policies)
   const correspondence = useCorrespondenceStore(s => s.correspondence)
+  const advisoryRequests = useAdvisoryStore(s => s.advisoryRequests)
+  const samaLetters = useSAMALetterStore(s => s.letters)
+  const risks = useRiskStore(s => s.risks)
+  const circulars = useCircularStore(s => s.circulars)
 
   return useMemo(
-    () => computeWorkload(memberId, observations, audits, policies, correspondence, member, memberName),
-    [memberId, observations, audits, policies, correspondence, member, memberName],
+    () => computeWorkload(memberId, observations, audits, policies, correspondence, advisoryRequests, samaLetters, risks, circulars, member, memberName),
+    [memberId, observations, audits, policies, correspondence, advisoryRequests, samaLetters, risks, circulars, member, memberName],
   )
 }
 
@@ -113,14 +159,18 @@ export function useTeamWorkloads(members: Array<{ id: string; name: string; burn
   const audits = useAuditStore(s => s.audits)
   const policies = usePolicyStore(s => s.policies)
   const correspondence = useCorrespondenceStore(s => s.correspondence)
+  const advisoryRequests = useAdvisoryStore(s => s.advisoryRequests)
+  const samaLetters = useSAMALetterStore(s => s.letters)
+  const risks = useRiskStore(s => s.risks)
+  const circulars = useCircularStore(s => s.circulars)
 
   return useMemo(() => {
     const result: Record<string, WorkloadResult> = {}
     for (const m of members) {
-      result[m.id] = computeWorkload(m.id, observations, audits, policies, correspondence, m, m.name)
+      result[m.id] = computeWorkload(m.id, observations, audits, policies, correspondence, advisoryRequests, samaLetters, risks, circulars, m, m.name)
     }
     return result
-  }, [members, observations, audits, policies, correspondence])
+  }, [members, observations, audits, policies, correspondence, advisoryRequests, samaLetters, risks, circulars])
 }
 
 export interface BurnoutMember {

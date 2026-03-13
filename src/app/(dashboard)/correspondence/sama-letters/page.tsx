@@ -12,6 +12,7 @@ import { useSAMALetterStore } from '@/stores/sama-letter-store'
 import { useAuthStore } from '@/stores/auth-store'
 import type { SAMALetter, SAMALetterType, SAMALetterStatus, SAMALetterApprovalStep, Attachment, LetterTemplate, TemplateStatus } from '@/types'
 import { useSAMATemplateStore } from '@/stores/sama-template-store'
+import { useTeamStore } from '@/stores/team-store'
 
 // Sort types
 type LetterSortCol = 'reference' | 'type' | 'subject' | 'status' | 'updatedAt'
@@ -182,6 +183,7 @@ export default function SAMALettersPage() {
   const templateStore = useSAMATemplateStore()
   const { user } = useAuthStore()
   const currentUser = user?.name || 'Current User'
+  const teamMembers = useTeamStore(s => s.members)
   const selectedLetter = store.selectedLetter
   const letterContentRef = useRef<HTMLDivElement>(null)
 
@@ -1527,15 +1529,19 @@ export default function SAMALettersPage() {
                     <div className={`flex justify-between items-center`}>
                       <span className="text-xs text-slate-500">{t('calendar.assignedTo')}</span>
                       {editingMeta === 'assignedTo' ? (
-                        <input
+                        <select
                           // eslint-disable-next-line jsx-a11y/no-autofocus
                           autoFocus
                           value={editAssignedTo}
-                          onChange={e => setEditAssignedTo(e.target.value)}
+                          onChange={e => { setEditAssignedTo(e.target.value); saveField({ assignedTo: e.target.value }); setEditingMeta(null) }}
                           onBlur={() => { saveField({ assignedTo: editAssignedTo }); setEditingMeta(null) }}
-                          onKeyDown={e => { if (e.key === 'Enter' || e.key === 'Escape') { saveField({ assignedTo: editAssignedTo }); setEditingMeta(null) } }}
-                          className="text-xs font-bold text-emerald-600 bg-transparent border-b border-dashed border-emerald-300 focus:outline-none w-32 text-right"
-                        />
+                          className="text-xs font-bold text-emerald-600 bg-transparent border-b border-dashed border-emerald-300 focus:outline-none cursor-pointer"
+                        >
+                          <option value="">{t('common.select' as any)}</option>
+                          {teamMembers.filter(m => m.status === 'active').map(m => (
+                            <option key={m.id} value={m.name}>{m.name} — {m.department}</option>
+                          ))}
+                        </select>
                       ) : (
                         <span
                           onClick={() => setEditingMeta('assignedTo')}

@@ -47,8 +47,10 @@ export function OfficerView({ metrics }: OfficerViewProps) {
   // My items
   const myObservations = useMemo(() =>
     observations.filter(o => {
-      const match = o.assignee?.id === userId || o.assignee?.name === userId || o.assignee?.name === userName || o.leaderId === userId
-      return match && o.status !== 'closed'
+      const assigneeMatch = o.assignee?.id === userId || o.assignee?.name === userName
+        || o.assignees?.some(a => a.id === userId || a.name === userName)
+      const leaderMatch = o.leaderId === userId
+      return (assigneeMatch || leaderMatch) && o.status !== 'closed'
     }), [observations, userId, userName])
 
   const myAudits = useMemo(() =>
@@ -78,13 +80,13 @@ export function OfficerView({ metrics }: OfficerViewProps) {
     const items: Array<{ id: string; type: string; icon: string; title: string; dueDate: string; status: string; route: string }> = []
 
     for (const o of myObservations) {
-      items.push({ id: o.id, type: 'Observation', icon: 'lucide:eye', title: o.title, dueDate: o.dueDate, status: o.status, route: '/observations' })
+      items.push({ id: o.id, type: 'Observation', icon: 'lucide:eye', title: o.title, dueDate: o.dueDate, status: o.status, route: `/correspondence/observations?id=${o.id}` })
     }
     for (const a of myAudits) {
-      items.push({ id: a.id, type: 'Audit', icon: 'lucide:clipboard-check', title: a.title, dueDate: a.dueDate, status: a.status, route: '/reports' })
+      items.push({ id: a.id, type: 'Audit', icon: 'lucide:clipboard-check', title: a.title, dueDate: a.dueDate, status: a.status, route: `/reports/${a.id}` })
     }
     for (const p of myPolicies) {
-      items.push({ id: p.id, type: 'Policy', icon: 'lucide:file-check', title: p.name, dueDate: p.nextReviewDate, status: p.status, route: '/correspondence/regulatory-updates/policies' })
+      items.push({ id: p.id, type: 'Policy', icon: 'lucide:file-check', title: p.name, dueDate: p.nextReviewDate, status: p.status, route: `/correspondence/regulatory-updates/policies?policyId=${p.id}` })
     }
 
     return items.sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime())
@@ -98,7 +100,7 @@ export function OfficerView({ metrics }: OfficerViewProps) {
       if (l.status !== 'pending-approval') continue
       for (const step of l.approvalChain) {
         if (step.status === 'pending' && (step.assignedTo === userId || step.assignedTo === userName)) {
-          items.push({ id: l.id, title: `${l.subject} — Step ${step.step} (${step.role})`, type: 'SAMA Approval', route: '/correspondence' })
+          items.push({ id: l.id, title: `${l.subject} — Step ${step.step} (${step.role})`, type: 'SAMA Approval', route: `/correspondence/sama-letters?id=${l.id}` })
         }
       }
     }
@@ -107,7 +109,7 @@ export function OfficerView({ metrics }: OfficerViewProps) {
       if (!p.workflowTimeline) continue
       for (const step of p.workflowTimeline) {
         if (step.status === 'current' && (step.user === userId || step.user === userName)) {
-          items.push({ id: p.id, title: `${p.name} — ${step.step}`, type: 'Policy Workflow', route: '/correspondence/regulatory-updates/policies' })
+          items.push({ id: p.id, title: `${p.name} — ${step.step}`, type: 'Policy Workflow', route: `/correspondence/regulatory-updates/policies?policyId=${p.id}&tab=workflow` })
         }
       }
     }
@@ -273,7 +275,7 @@ export function OfficerView({ metrics }: OfficerViewProps) {
                   <button
                     key={`${item.type}-${item.id}`}
                     onClick={() => router.push(item.route)}
-                    className="w-full px-5 py-3 flex items-center justify-between hover:bg-slate-50 transition-colors text-start"
+                    className="w-full px-5 py-3 flex items-center justify-between hover:bg-slate-50 transition-colors text-start cursor-pointer"
                   >
                     <div className="flex items-center gap-3">
                       <Icon icon={item.icon} className="text-slate-400" />
@@ -308,7 +310,7 @@ export function OfficerView({ metrics }: OfficerViewProps) {
                 <div className="space-y-2">
                   {actionItems.map(item => (
                     <Card key={`${item.type}-${item.id}`} className="p-4">
-                      <button onClick={() => router.push(item.route)} className="w-full text-start">
+                      <button onClick={() => router.push(item.route)} className="w-full text-start cursor-pointer">
                         <div className="flex items-center gap-2 mb-1">
                           <Badge variant="warning" size="sm">{t('dashboard.approvalNeeded')}</Badge>
                         </div>

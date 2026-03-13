@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
-import { usePathname } from 'next/navigation'
+import { usePathname, useSearchParams } from 'next/navigation'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Icon } from '@iconify/react'
@@ -23,6 +23,7 @@ import type { Correspondence, Circular } from '@/types'
 import { useFormattedDate } from '@/hooks/useFormattedDate'
 import { formatDateWithPreference } from '@/lib/date-format'
 import { useUserPreferencesStore } from '@/stores/user-preferences-store'
+import { useTeamWorkloads } from '@/hooks/useWorkload'
 
 // Risk type for heatmap display (mapped from risk-store)
 interface HeatmapRisk {
@@ -61,6 +62,7 @@ export default function CorrespondenceFeedPage() {
   const { t, isRTL } = useTranslation()
   const pathname = usePathname()
   const router = useRouter()
+  const searchParams = useSearchParams()
   const { formatDate } = useFormattedDate()
 
   // Stores
@@ -73,6 +75,7 @@ export default function CorrespondenceFeedPage() {
   const policyStore = usePolicyStore()
   const trainingStore = useTrainingStore()
   const authStore = useAuthStore()
+  const teamWorkloads = useTeamWorkloads(teamStore.members)
 
   // Modal states
   const [isNewCorrespondenceOpen, setIsNewCorrespondenceOpen] = useState(false)
@@ -235,6 +238,15 @@ export default function CorrespondenceFeedPage() {
       .sort((a, b) => (order[a.status] ?? 2) - (order[b.status] ?? 2))
       .slice(0, 3)
   }, [circularStore.circulars])
+
+  // Deep-link: auto-open correspondence when ?id= is present
+  useEffect(() => {
+    const id = searchParams.get('id')
+    if (!id) return
+    const letter = correspondenceStore.correspondence.find(l => l.id === id)
+    if (letter) handleViewLetter(letter)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams, correspondenceStore.correspondence])
 
   const handleViewLetter = (letter: Correspondence) => {
     setSelectedLetter(letter)
@@ -644,7 +656,7 @@ export default function CorrespondenceFeedPage() {
                 </div>
                 <div className="space-y-5">
                   {teamStore.members.map((member) => (
-                    <TeamMemberRow key={member.id} member={{ name: member.name, avatar: member.avatar || member.name, load: member.workload, role: member.role }} />
+                    <TeamMemberRow key={member.id} member={{ name: member.name, avatar: member.avatar || member.name, load: teamWorkloads[member.id]?.percentage ?? member.workload, role: member.role }} />
                   ))}
                   {teamStore.members.length === 0 && (
                     <p className="text-sm text-slate-400 text-center py-4">{t('correspondence.noMembers')}</p>

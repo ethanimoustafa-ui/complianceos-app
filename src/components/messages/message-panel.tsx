@@ -24,7 +24,7 @@ interface SelectedRecipient {
 export function MessagePanel({ isOpen, onClose }: MessagePanelProps) {
   const { t } = useTranslation()
   const user = useAuthStore(s => s.user)
-  const { threads, messages, sendMessage, createThread, markThreadAsRead, deleteThread, kickMember, promoteAdmin, demoteAdmin, updateThreadAvatar } = useMessageStore()
+  const { threads, messages, sendMessage, createThread, markThreadAsRead, deleteThread, kickMember, promoteAdmin, demoteAdmin, updateThreadAvatar, addMembersToThread, updateThreadSubject } = useMessageStore()
   const teamMembers = useTeamStore(s => s.members)
 
   const [view, setView] = useState<View>('threads')
@@ -32,6 +32,10 @@ export function MessagePanel({ isOpen, onClose }: MessagePanelProps) {
   const [draft, setDraft] = useState('')
   const [threadToDelete, setThreadToDelete] = useState<string | null>(null)
   const [memberToKick, setMemberToKick] = useState<string | null>(null)
+  const [showAddMember, setShowAddMember] = useState(false)
+  const [addMemberSearch, setAddMemberSearch] = useState('')
+  const [editingGroupName, setEditingGroupName] = useState(false)
+  const [groupNameDraft, setGroupNameDraft] = useState('')
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   // Compose state — multi-recipient
@@ -58,9 +62,34 @@ export function MessagePanel({ isOpen, onClose }: MessagePanelProps) {
     )
   }, [teamMembers, recipientSearch, user?.id, composeRecipients])
 
+  const availableToAdd = useMemo(() => {
+    if (!activeThread) return []
+    const existingIds = new Set([...activeThread.participantIds, user?.id ?? ''])
+    const base = teamMembers.filter(m => m.status === 'active' && !existingIds.has(m.id))
+    if (!addMemberSearch) return base
+    const q = addMemberSearch.toLowerCase()
+    return base.filter(m => m.name.toLowerCase().includes(q) || m.department.toLowerCase().includes(q))
+  }, [teamMembers, activeThread, user?.id, addMemberSearch])
+
+  const handleAddMember = (member: { id: string; name: string }) => {
+    if (!activeThread) return
+    addMembersToThread(activeThread.id, [member.name], [member.id])
+    setAddMemberSearch('')
+    setShowAddMember(false)
+  }
+
+  const handleGroupNameSave = () => {
+    if (!activeThread || !groupNameDraft.trim()) {
+      setEditingGroupName(false)
+      return
+    }
+    updateThreadSubject(activeThread.id, groupNameDraft.trim())
+    setEditingGroupName(false)
+  }
+
   const handleEscape = useCallback((e: KeyboardEvent) => {
     if (e.key === 'Escape') {
-      if (view === 'members') { setView('detail'); setMemberToKick(null) }
+      if (view === 'members') { setView('detail'); setMemberToKick(null); setShowAddMember(false) }
       else if (view === 'detail') { setView('threads'); setActiveThreadId(null) }
       else if (view === 'compose') { resetCompose() }
       else { onClose() }
@@ -435,7 +464,7 @@ export function MessagePanel({ isOpen, onClose }: MessagePanelProps) {
         {/* ── MEMBERS VIEW (Group admin panel) ── */}
         {view === 'members' && activeThread && (
           <div className="flex-1 overflow-y-auto hide-scrollbar">
-            {/* Group avatar section */}
+            {/* Group avatar + editable name section */}
             {activeThread.isGroup && isCurrentUserAdmin && (
               <div className="px-6 py-5 border-b border-slate-100 flex flex-col items-center gap-3">
                 <button onClick={handleAvatarUpload} className="relative group cursor-pointer">
@@ -451,6 +480,81 @@ export function MessagePanel({ isOpen, onClose }: MessagePanelProps) {
                   </div>
                 </button>
                 <p className="text-xs text-slate-500">{t('sidebar.changeGroupAvatar')}</p>
+
+                {/* Editable group name */}
+                {editingGroupName ? (
+                  <input
+                    type="text"
+                    value={groupNameDraft}
+                    onChange={(e) => setGroupNameDraft(e.target.value)}
+                    onBlur={handleGroupNameSave}
+                    onKeyDown={(e) => { if (e.key === 'Enter') handleGroupNameSave() }}
+                    autoFocus
+                    className="text-sm font-bold text-slate-900 text-center border border-slate-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 w-full max-w-[200px]"
+                  />
+                ) : (
+                  <button
+                    onClick={() => { setGroupNameDraft(activeThread.subject || activeThread.participants.join(', ')); setEditingGroupName(true) }}
+                    className="flex items-center gap-1.5 text-sm font-bold text-slate-900 hover:text-emerald-600 transition-colors cursor-pointer"
+                    title={t('sidebar.editGroupName')}
+                  >
+                    {activeThread.subject || activeThread.participants.join(', ')}
+                    <Icon icon="lucide:pencil" className="text-xs text-slate-400" />
+                  </button>
+                )}
+              </div>
+            )}
+
+            {/* Add Member section (admin only, group chats) */}
+            {activeThread.isGroup && isCurrentUserAdmin && (
+              <div className="px-6 py-3 border-b border-slate-100">
+                {showAddMember ? (
+                  <div className="space-y-2">
+                    <input
+                      type="text"
+                      value={addMemberSearch}
+                      onChange={(e) => setAddMemberSearch(e.target.value)}
+                      placeholder={t('sidebar.searchMembers')}
+                      autoFocus
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    />
+                    <div className="max-h-40 overflow-y-auto">
+                      {availableToAdd.length === 0 ? (
+                        <p className="text-xs text-slate-400 py-2 text-center">{t('common.noResults')}</p>
+                      ) : (
+                        availableToAdd.map(member => (
+                          <button
+                            key={member.id}
+                            onClick={() => handleAddMember(member)}
+                            className="w-full text-start px-3 py-2 hover:bg-slate-50 flex items-center gap-3 cursor-pointer transition-colors rounded-lg"
+                          >
+                            <div className="w-7 h-7 rounded-full bg-slate-200 flex items-center justify-center text-slate-600 font-bold text-xs shrink-0">
+                              {member.name.charAt(0)}
+                            </div>
+                            <div>
+                              <p className="text-sm font-medium text-slate-900">{member.name}</p>
+                              <p className="text-[10px] text-slate-400">{member.department}</p>
+                            </div>
+                          </button>
+                        ))
+                      )}
+                    </div>
+                    <button
+                      onClick={() => { setShowAddMember(false); setAddMemberSearch('') }}
+                      className="text-xs text-slate-500 hover:text-slate-700 cursor-pointer"
+                    >
+                      {t('common.cancel')}
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setShowAddMember(true)}
+                    className="flex items-center gap-2 text-sm font-bold text-emerald-600 hover:text-emerald-700 transition-colors cursor-pointer"
+                  >
+                    <Icon icon="lucide:user-plus" className="text-base" />
+                    {t('sidebar.addMemberToGroup')}
+                  </button>
+                )}
               </div>
             )}
 

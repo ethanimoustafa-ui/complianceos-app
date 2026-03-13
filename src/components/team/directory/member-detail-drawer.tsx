@@ -130,14 +130,18 @@ export function MemberDetailDrawer({
                 {workload.items.map((item) => {
                   const badgeColors: Record<string, string> = {
                     observation: 'bg-rose-100 text-rose-700',
-                    audit: 'bg-amber-100 text-amber-700',
+                    audit: 'bg-emerald-100 text-emerald-700',
                     policy: 'bg-blue-100 text-blue-700',
-                    correspondence: 'bg-violet-100 text-violet-700',
+                    'sama-letter': 'bg-amber-100 text-amber-700',
+                    circular: 'bg-violet-100 text-violet-700',
+                    correspondence: 'bg-slate-200 text-slate-700',
+                    advisory: 'bg-indigo-100 text-indigo-700',
+                    risk: 'bg-orange-100 text-orange-700',
                   }
                   return (
                     <div key={`${item.type}-${item.id}`} className="p-3 rounded-xl border border-slate-100 bg-slate-50">
                       <div className="flex items-center gap-2">
-                        <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full uppercase ${badgeColors[item.type]}`}>
+                        <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full uppercase ${badgeColors[item.type] || 'bg-slate-100 text-slate-600'}`}>
                           {item.type}
                         </span>
                         <p className="text-xs font-bold text-slate-700 truncate flex-1">{item.title}</p>

@@ -25,6 +25,7 @@
     "submit": "Submit",
     "export": "Export",
     "exportCsv": "Export CSV",
+    "exportPdf": "Export PDF",
     "filter": "Filter",
     "clearFilters": "Clear filters",
     "noResults": "No results found",
@@ -55,6 +56,7 @@
     "enterName": "Enter name",
     "createNew": "Create a new outgoing correspondence",
     "items": "Items",
+    "select": "Select",
     "selectStatus": "Select Status",
     "selectCategory": "Select Category",
     "enterCategory": "Enter new category",
@@ -142,7 +144,10 @@
     "changeGroupAvatar": "Change Group Image",
     "members": "Members",
     "admin": "Admin",
-    "creator": "Creator"
+    "creator": "Creator",
+    "addMemberToGroup": "Add Member",
+    "searchMembers": "Search team members...",
+    "editGroupName": "Edit Group Name"
   },
   "dashboard": {
     "title": "Executive Insights",
@@ -270,6 +275,8 @@
     "completeAudits": "Complete {{count}} Audit(s)",
     "reviewMyPolicies": "Review {{count}} Policy(ies)",
     "noIssues": "All systems healthy",
+    "pdfTitle": "ComplianceOS Dashboard Report",
+    "pdfGeneratedOn": "Generated on {{date}}",
 
     "healthAudits": "Audits",
     "healthObservations": "Observations",
@@ -975,6 +982,8 @@
     "capDueDate": "CAP Due Date",
     "businessOwner": "Business Owner",
     "businessOwnerDept": "Business Owner Department",
+    "assignedCircularFollowUp": "Assigned Circular Follow-up To",
+    "selectOfficer": "Select Officer",
     "assignBusinessOwner": "Assign Business Owner",
     "boAssigned": "Business Owner assigned successfully",
     "autoReference": "Auto-Generated Reference",

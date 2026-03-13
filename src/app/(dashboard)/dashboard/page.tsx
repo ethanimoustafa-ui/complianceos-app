@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Header } from '@/components/layout/header'
 import { useTranslation } from '@/i18n'
 import { useUserPreferencesStore } from '@/stores/user-preferences-store'
@@ -8,6 +8,7 @@ import { useDashboardMetrics } from '@/hooks/useDashboardMetrics'
 import { ExecutiveView } from '@/components/dashboard/ExecutiveView'
 import { ManagerialView } from '@/components/dashboard/ManagerialView'
 import { OfficerView } from '@/components/dashboard/OfficerView'
+import { generateDashboardPdf } from '@/lib/dashboard-pdf'
 import type { DashboardView } from '@/types'
 
 
@@ -32,11 +33,15 @@ export default function DashboardPage() {
     }
   }, [])
 
+  const handleExport = useCallback(() => {
+    generateDashboardPdf(metrics, dashboardView, t)
+  }, [metrics, dashboardView, t])
+
   const { titleKey, subtitleKey } = viewConfig[dashboardView]
 
   return (
     <div className={showFadeIn ? 'dashboard-fade-in' : ''}>
-      <Header title={t(titleKey as any)} subtitle={t(subtitleKey as any)} />
+      <Header title={t(titleKey as any)} subtitle={t(subtitleKey as any)} onExport={handleExport} exportLabel={t('common.exportPdf' as any)} />
 
       <div className="flex-1 overflow-auto hide-scrollbar p-8">
         {dashboardView === 'executive' && <ExecutiveView metrics={metrics} />}

@@ -9,6 +9,7 @@ import { cn } from '@/lib/utils'
 import { useCircularStore } from '@/stores/circular-store'
 import type { CircularArticle, ArticleRiskLevel, ArticleComplianceStatus } from '@/types'
 import { useDepartmentStore } from '@/stores/department-store'
+import { useTeamStore } from '@/stores/team-store'
 
 type ArticleTab = 'details' | 'versions' | 'activity'
 
@@ -24,6 +25,7 @@ type Props = {
 export function ArticleDetailModal({ circularId, article, mode, onClose, t, isRTL }: Props) {
   const { addArticle, updateArticle, deleteArticle, toggleChecklistItem, addChecklistItem, deleteChecklistItem } = useCircularStore()
   const { departments: allDepartments } = useDepartmentStore()
+  const teamMembers = useTeamStore(s => s.members)
 
   const [currentMode, setCurrentMode] = useState(mode)
   const [activeArticleTab, setActiveArticleTab] = useState<ArticleTab>('details')
@@ -148,6 +150,20 @@ export function ArticleDetailModal({ circularId, article, mode, onClose, t, isRT
                   <p className="text-sm text-slate-700">{artDept || '—'}</p>
                 )}
               </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('calendar.assignedTo')}</label>
+              {isEditable ? (
+                <select className="flex h-11 w-full rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm" value={artAssignedTo} onChange={(e) => setArtAssignedTo(e.target.value)}>
+                  <option value="">{t('common.select' as any)}</option>
+                  {teamMembers.filter(m => m.status === 'active').map(m => (
+                    <option key={m.id} value={m.name}>{m.name} — {m.department}</option>
+                  ))}
+                </select>
+              ) : (
+                <p className="text-sm text-slate-700">{artAssignedTo || '—'}</p>
+              )}
             </div>
 
             <div>

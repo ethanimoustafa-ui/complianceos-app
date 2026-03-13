@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
-import { usePathname } from 'next/navigation'
+import { usePathname, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { Icon } from '@iconify/react'
 import { Modal } from '@/components/ui/modal'
@@ -35,6 +35,7 @@ function Toast({ message, onClose }: { message: string; onClose: () => void }) {
 export default function AdvisoryPage() {
   const { t, isRTL } = useTranslation()
   const pathname = usePathname()
+  const searchParams = useSearchParams()
 
   // Stores
   const advisoryStore = useAdvisoryStore()
@@ -136,6 +137,15 @@ export default function AdvisoryPage() {
   useEffect(() => {
     setAdvisoryPage(1)
   }, [advisorySearchTerm, advisoryStatusFilter, advisoryPriorityFilter, advisoryBusinessUnitFilter, advisoryFrequencyFilter])
+
+  // Deep-link: auto-open advisory when ?id= is present
+  useEffect(() => {
+    const id = searchParams.get('id')
+    if (!id) return
+    const advisory = advisoryStore.advisoryRequests.find(r => r.id === id)
+    if (advisory) handleViewAdvisory(advisory)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams, advisoryStore.advisoryRequests])
 
   // Advisory status config
   const advisoryStatusConfig: Record<AdvisoryStatus, { bg: string; text: string; labelKey: string }> = {

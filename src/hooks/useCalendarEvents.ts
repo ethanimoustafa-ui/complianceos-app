@@ -45,7 +45,7 @@ export function useCalendarEvents() {
         date,
         status: a.status,
         priority: a.status === 'overdue' ? 'critical' : undefined,
-        route: '/reports',
+        route: `/reports/${a.id}`,
         colorKey: 'audit',
       })
     }
@@ -61,7 +61,7 @@ export function useCalendarEvents() {
         date,
         status: o.status,
         priority: 'high',
-        route: '/observations',
+        route: `/correspondence/observations?id=${o.id}`,
         colorKey: 'observation',
       })
     }
@@ -76,7 +76,7 @@ export function useCalendarEvents() {
         title: p.name,
         date,
         status: p.status,
-        route: '/correspondence/regulatory-updates/policies',
+        route: `/correspondence/regulatory-updates/policies?policyId=${p.id}`,
         colorKey: 'policy',
       })
     }
@@ -93,7 +93,7 @@ export function useCalendarEvents() {
         date,
         status: l.status,
         priority: l.status === 'overdue' ? 'critical' : 'high',
-        route: '/correspondence',
+        route: `/correspondence/sama-letters?id=${l.id}`,
         colorKey: 'sama-letter',
       })
     }
@@ -109,7 +109,7 @@ export function useCalendarEvents() {
           subtitle: c.reference,
           date,
           status: c.status,
-          route: '/correspondence/regulatory-updates',
+          route: `/correspondence/regulatory-updates/rules?id=${c.id}`,
           colorKey: 'circular',
         })
       }
@@ -123,7 +123,7 @@ export function useCalendarEvents() {
           subtitle: c.reference,
           date: capDate,
           status: c.capStatus || 'pending',
-          route: '/correspondence/regulatory-updates',
+          route: `/correspondence/regulatory-updates/rules?id=${c.id}`,
           colorKey: 'circular',
         })
       }
@@ -144,7 +144,7 @@ export function useCalendarEvents() {
           date,
           status: course.status,
           priority: course.status === 'overdue' ? 'critical' : 'medium',
-          route: '/team/training',
+          route: `/team/training?employeeId=${emp.id}`,
           colorKey: 'training',
         })
       }
@@ -163,7 +163,7 @@ export function useCalendarEvents() {
         date,
         status: c.status,
         assignee: c.assignee,
-        route: '/correspondence',
+        route: `/correspondence/feed?id=${c.id}`,
         colorKey: 'correspondence',
       })
     }
@@ -181,7 +181,7 @@ export function useCalendarEvents() {
         status: a.status,
         priority: a.priority === 'high' ? 'high' : a.priority === 'medium' ? 'medium' : 'low',
         assignee: a.assignedTo,
-        route: '/correspondence',
+        route: `/correspondence/advisory?id=${a.id}`,
         colorKey: 'advisory',
       })
     }
@@ -196,7 +196,7 @@ export function useCalendarEvents() {
         title: r.title,
         date,
         status: r.status,
-        route: '/reports/risks',
+        route: `/reports/risks?id=${r.id}`,
         colorKey: 'risk',
       })
     }

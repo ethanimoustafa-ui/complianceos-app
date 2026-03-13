@@ -7,6 +7,7 @@ import { Modal } from '@/components/ui/modal'
 import { useCircularStore } from '@/stores/circular-store'
 import type { Circular, CircularAuthority, CircularPriority } from '@/types'
 import { useDepartmentStore } from '@/stores/department-store'
+import { useTeamStore } from '@/stores/team-store'
 import { normalizeUrl } from './utils'
 
 type Props = {
@@ -21,6 +22,7 @@ type Props = {
 export function EditCircularModal({ circular, isOpen, onClose, onSaved, t, isRTL }: Props) {
   const { requestCircularEdit } = useCircularStore()
   const { departments: allDepartments } = useDepartmentStore()
+  const { members: teamMembers } = useTeamStore()
 
   const [formTitle, setFormTitle] = useState(circular.title)
   const [formAuthority, setFormAuthority] = useState<CircularAuthority>(circular.authority)
@@ -32,6 +34,7 @@ export function EditCircularModal({ circular, isOpen, onClose, onSaved, t, isRTL
   const [formDepartments, setFormDepartments] = useState<string[]>(circular.departments)
   const [formDescription, setFormDescription] = useState(circular.description ?? '')
   const [formBODept, setFormBODept] = useState(circular.businessOwnerDepartment ?? '')
+  const [formAssignedTo, setFormAssignedTo] = useState(circular.assignedTo ?? '')
 
   function toggleDept(dept: string) {
     setFormDepartments((prev) =>
@@ -51,6 +54,7 @@ export function EditCircularModal({ circular, isOpen, onClose, onSaved, t, isRTL
       departments: formDepartments,
       description: formDescription,
       businessOwnerDepartment: formBODept || undefined,
+      assignedTo: formAssignedTo || undefined,
     }
     requestCircularEdit(circular.id, editData)
     onSaved()
@@ -109,6 +113,22 @@ export function EditCircularModal({ circular, isOpen, onClose, onSaved, t, isRTL
                   {allDepartments.map((dept) => <option key={dept.id} value={dept.name}>{isRTL ? dept.nameAr : dept.name}</option>)}
                 </select>
               </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1.5">
+                {t('regulatoryUpdates.assignedCircularFollowUp')}
+              </label>
+              <select
+                className="flex h-11 w-full rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm"
+                value={formAssignedTo}
+                onChange={(e) => setFormAssignedTo(e.target.value)}
+              >
+                <option value="">{t('regulatoryUpdates.selectOfficer')}</option>
+                {teamMembers.filter(m => m.status === 'active').map((m) => (
+                  <option key={m.id} value={m.name}>{m.name} - {m.department}</option>
+                ))}
+              </select>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
