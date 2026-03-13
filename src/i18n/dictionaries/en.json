@@ -379,7 +379,22 @@
     "dueToday": "Due today",
     "dueTomorrow": "Due tomorrow",
     "daysOverdue": "{days}d overdue",
-    "dueInDays": "Due in {days}d"
+    "dueInDays": "Due in {days}d",
+    "sourceAudit": "Audit",
+    "sourceObservation": "Observation",
+    "sourcePolicy": "Policy Review",
+    "sourceSamaLetter": "SAMA Letter",
+    "sourceCircular": "Circular",
+    "sourceTraining": "Training",
+    "sourceCorrespondence": "Correspondence",
+    "sourceAdvisory": "Advisory",
+    "sourceRisk": "Risk Review",
+    "sourceUserEvent": "Custom Event",
+    "goToSource": "Go to Source",
+    "eventDetails": "Event Details",
+    "noEventsForDay": "No events for this day",
+    "eventsCount": "{{count}} event(s)",
+    "capDeadline": "CAP Deadline"
   },
   "samaLetters": {
     "title": "SAMA Letters",

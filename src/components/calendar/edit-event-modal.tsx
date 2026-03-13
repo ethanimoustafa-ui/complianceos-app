@@ -65,24 +65,20 @@ export function EditEventModal({ isOpen, onClose, event, onSuccess }: EditEventM
     }
   }, [event, reset])
 
-  const onSubmit = async (data: EventFormData) => {
+  const onSubmit = (data: EventFormData) => {
     if (!event) return
 
-    try {
-      const updatedEvent = await updateEvent(event.id, {
-        title: data.title,
-        type: data.type,
-        date: data.date,
-        startTime: data.startTime,
-        endTime: data.endTime,
-        description: data.description,
-        location: data.location,
-      })
-      onSuccess?.(updatedEvent)
-      handleClose()
-    } catch (error) {
-      console.error('Failed to update event:', error)
-    }
+    const updatedEvent = updateEvent(event.id, {
+      title: data.title,
+      type: data.type,
+      date: data.date,
+      startTime: data.startTime,
+      endTime: data.endTime,
+      description: data.description,
+      location: data.location,
+    })
+    if (updatedEvent) onSuccess?.(updatedEvent)
+    handleClose()
   }
 
   const handleClose = () => {

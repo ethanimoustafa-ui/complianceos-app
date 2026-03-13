@@ -69,26 +69,22 @@ export function AddEventModal({ isOpen, onClose, onSuccess, initialDate }: AddEv
     setValue('type', type)
   }
 
-  const onSubmit = async (data: EventFormData) => {
-    try {
-      const eventData = {
-        title: data.title,
-        type: data.type,
-        date: data.date,
-        startTime: data.startTime,
-        endTime: data.endTime,
-        description: data.description,
-        location: data.location,
-        attendees: data.attendees || [],
-        reminders: [],
-      }
-
-      const newEvent = await createEvent(eventData)
-      onSuccess?.(newEvent)
-      handleClose()
-    } catch (error) {
-      console.error('Failed to create event:', error)
+  const onSubmit = (data: EventFormData) => {
+    const eventData = {
+      title: data.title,
+      type: data.type,
+      date: data.date,
+      startTime: data.startTime,
+      endTime: data.endTime,
+      description: data.description,
+      location: data.location,
+      attendees: data.attendees || [],
+      reminders: [],
     }
+
+    const newEvent = createEvent(eventData)
+    onSuccess?.(newEvent)
+    handleClose()
   }
 
   const handleClose = () => {

@@ -379,7 +379,22 @@
     "dueToday": "مستحق اليوم",
     "dueTomorrow": "مستحق غداً",
     "daysOverdue": "متأخر {days} يوم",
-    "dueInDays": "مستحق خلال {days} يوم"
+    "dueInDays": "مستحق خلال {days} يوم",
+    "sourceAudit": "تدقيق",
+    "sourceObservation": "ملاحظة",
+    "sourcePolicy": "مراجعة سياسة",
+    "sourceSamaLetter": "خطاب ساما",
+    "sourceCircular": "تعميم",
+    "sourceTraining": "تدريب",
+    "sourceCorrespondence": "مراسلات",
+    "sourceAdvisory": "استشارة",
+    "sourceRisk": "مراجعة مخاطر",
+    "sourceUserEvent": "حدث مخصص",
+    "goToSource": "الانتقال للمصدر",
+    "eventDetails": "تفاصيل الحدث",
+    "noEventsForDay": "لا توجد أحداث لهذا اليوم",
+    "eventsCount": "{{count}} حدث/أحداث",
+    "capDeadline": "موعد خطة الإجراءات التصحيحية"
   },
   "samaLetters": {
     "title": "خطابات ساما",

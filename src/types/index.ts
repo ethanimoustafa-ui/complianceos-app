@@ -882,6 +882,25 @@ export interface CalendarFilters {
   dateRange?: { from: string; to: string }
 }
 
+// Unified Calendar types
+export type CalendarSourceType =
+  | 'audit' | 'observation' | 'policy' | 'sama-letter'
+  | 'circular' | 'training' | 'correspondence' | 'advisory'
+  | 'risk' | 'user-event'
+
+export interface UnifiedCalendarItem {
+  id: string
+  sourceType: CalendarSourceType
+  title: string
+  subtitle?: string
+  date: string
+  status: string
+  priority?: 'critical' | 'high' | 'medium' | 'low' | 'standard'
+  assignee?: string
+  route: string
+  colorKey: CalendarSourceType
+}
+
 // Pagination type
 export interface PaginationState {
   page: number

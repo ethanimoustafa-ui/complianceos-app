@@ -2,7 +2,7 @@
 
 **Version:** 1.0
 **Date:** February 2026
-**Last Updated:** March 13, 2026 (Dashboard Health Engine Sprint)
+**Last Updated:** February 23, 2026 (Calendar Page Rewrite Sprint)
 
 ---
 
@@ -20,6 +20,8 @@
 > **Settings Page Overhaul Sprint complete (Mar 13 2026):** Settings page decomposed from 905-line monolith into 55-line orchestrator + 7 sub-components. New stores: `framework-config-store` (11 regulators, pinning UI, per-framework weights + threshold + dept assignment), `user-preferences-store` (date format, timezone, dashboard view, granular notification preferences), `audit-template-store` (6 seed templates, CRUD + `incrementUsage`, frequency schedules), `policy-template-store` (6 seeds, persist v2, `frequency` + `frequencySchedule`), `department-store` (10 canonical seeds, CRUD, `isDefault` guard). New utilities: `src/lib/date-format.ts` + `src/hooks/useFormattedDate.ts` wire date format preference across all pages. Downstream consumers (rules modals, RegDocFilterBar, observations, audits, policies) migrated to `useDepartmentStore()`. SET-001 through SET-006 all complete.
 >
 > **Dashboard Health Engine Sprint complete (Mar 13 2026):** Pure 7-component framework-weighted scoring engine for the dashboard. New files: `src/lib/dashboard-health.types.ts` (types: `DashboardHealthComponentKey`, `LetterSlice`, `CircularSlice`, `DashboardHealthInput`, `FrameworkHealthScore`, `DashboardHealthResult`), `src/lib/dashboard-health.ts` (`calcLetterHealth`, `calcCircularHealth`, `calculateDashboardHealth` orchestrator — reuses 5 existing exports from `compliance-engine.ts`), `src/hooks/useDashboardHealth.ts` (wires 7 stores → engine → `useMemo`, returns `DashboardHealthResult`). `useDashboardMetrics` extended with `health: DashboardHealthResult` field. All three dashboard views (Executive, Managerial, Officer) now feature a differentiated Compliance Health hero card: Executive has dynamic primary-action button targeting worst-scoring component; Managerial has threshold progress bar + top deductions inline + up to 3 dynamic action buttons; Officer has personal action counts (open obs, pending audits, policies under review, overdue items) + threshold bar + task-specific CTA buttons. Per-framework health scores shown on pinned framework cards. Top deductions list on Executive view. 7-component breakdown grid on Managerial view. New i18n keys added to `en.json` + `ar.json` for health component labels, deduction descriptions, and all dynamic action labels. DSH-001 through DSH-010 all complete (see Epic 23).
+>
+> **Calendar Page Rewrite Sprint complete (Feb 23 2026):** 1,762-line monolith rewritten into ~170-line orchestrator + 10 components under `src/components/calendar/`. Calendar store rewritten with `persist` middleware and sync (non-async) actions. New `useCalendarEvents` hook aggregates deadlines from all 9 data stores (audits, observations, policies, SAMA letters, circulars, training, correspondence, advisory, risks) into a unified `UnifiedCalendarItem[]`. New types `CalendarSourceType` and `UnifiedCalendarItem` added to `src/types/index.ts`. 10 source-type filter pills replace old 4-type toggles. "Go to Source" navigation button on each drawer item routes to the source page. Default date set to `new Date()` (no longer hardcoded Oct 2024). Full Report button exports CSV. Submissions tab items open drawer on click. Show Completed toggle restored. 16 new i18n keys (EN + AR) for source type labels. Preserved: Hijri/Gregorian dual calendar, Saudi holidays/weekends, 3 view modes, date picker. CAL-010 complete; CAL-012 through CAL-018 added.
 
 ---
 
@@ -236,7 +238,7 @@
 | ID | Feature | Status | Priority | Arch | Source | Notes |
 |---|---|---|---|---|---|---|
 | CAL-001 | Dual calendar (Gregorian + Hijri) with month/year navigation | ✅ | P0 | S | BRD | Done |
-| CAL-002 | Event types (Deadline, Meeting, Submission, Review) with filtering | ✅ | P0 | S | BRD | Done |
+| CAL-002 | Event types (Deadline, Meeting, Submission, Review) with filtering | ✅ | P0 | S | BRD | Done — source-type filter pills (10 types: audit, observation, policy, sama-letter, circular, training, correspondence, advisory, risk, user-event) replace old 4-type toggles; `CalendarSourceType` union type |
 | CAL-003 | Task creation with priority and assignee | ✅ | P0 | S | BRD | Done |
 | CAL-004 | Entity linkage (to audits, observations, letters) | ✅ | P0 | S | BRD | Done |
 | CAL-005 | Reminder system (email, notification, SMS) | 🔧 | P1 | S | BRD | UI built, delivery not implemented |
@@ -244,8 +246,15 @@
 | CAL-007 | Overdue detection with visual indicators | ✅ | P0 | S | BRD | Done |
 | CAL-008 | Recurring regulatory dates (auto-generate annually/quarterly/monthly) | 📋 | P1 | S | BRD | |
 | CAL-009 | Multi-authority submission calendar with authority color coding | 📋 | P1 | A | BRD | Consolidated view across SAMA, CMA, ZATCA, MISA |
-| CAL-010 | Auto-population from audit due dates, observation deadlines, policy reviews | 📋 | P1 | S | BRD | |
+| CAL-010 | Auto-population from audit due dates, observation deadlines, policy reviews | ✅ | P1 | S | BRD | Done — `useCalendarEvents` hook aggregates deadlines from all 9 stores (audits, observations, policies, SAMA letters, circulars, training, correspondence, advisory, risks) into `UnifiedCalendarItem[]`; items grouped by date via `itemsByDate` map |
 | CAL-011 | Public holiday calendar (Saudi) with working day calculations | 💡 | P1 | S | REC | From onboarding. Affects deadline calculations |
+| CAL-012 | Calendar page componentization (1,762-line monolith → orchestrator + 10 components) | ✅ | P1 | S | FEEDBACK | Done — `src/components/calendar/`: `calendar-types.ts`, `calendar-utils.ts`, `calendar-header.tsx`, `month-view.tsx`, `year-view.tsx`, `submissions-list.tsx`, `event-drawer.tsx`, `date-picker-modal.tsx`, `create-event-modal.tsx`; page reduced to ~170 lines |
+| CAL-013 | Calendar store rewrite with persist middleware and sync actions | ✅ | P0 | S | FEEDBACK | Done — `calendar-store.ts` rewritten: `persist` middleware added, all async Promise-based actions (`fetchEvents`, `fetchById`, `createEvent`, `updateEvent`, `deleteEvent`) converted to sync; `CalendarFiltersState` local interface replaces imported `CalendarFilters` |
+| CAL-014 | `UnifiedCalendarItem` type and `useCalendarEvents` hook | ✅ | P0 | S | FEEDBACK | Done — `UnifiedCalendarItem { id, sourceType, title, subtitle?, date, status, priority?, assignee?, route, colorKey }` type in `src/types/index.ts`; `useCalendarEvents()` hook at `src/hooks/useCalendarEvents.ts` subscribes to all 9 data stores + calendar store via `useMemo` |
+| CAL-015 | "Go to Source" navigation from event drawer | ✅ | P1 | S | FEEDBACK | Done — each `UnifiedCalendarItem` carries a `route` field; event drawer renders a "Go to Source" button with `cursor-pointer` that navigates via Next.js router to the source page |
+| CAL-016 | Full Report CSV export from event drawer | ✅ | P1 | S | FEEDBACK | Done — Full Report button in drawer triggers CSV download of the selected day's items; preserves source type, status, and route columns |
+| CAL-017 | Submissions tab — clickable items open drawer; Show Completed toggle restored | ✅ | P1 | S | FEEDBACK | Done — `SubmissionsList` component: each item row is clickable and sets `selectedDayKey` to open the event drawer; Show Completed filter button restored to toggle completed/past items visibility |
+| CAL-018 | Calendar i18n keys — 16 source-type labels (EN + AR) | ✅ | P1 | S | FEEDBACK | Done — keys added to `en.json` + `ar.json` under `calendar.*`: `sourceAudit`, `sourceObservation`, `sourcePolicy`, `sourceSamaLetter`, `sourceCircular`, `sourceTraining`, `sourceCorrespondence`, `sourceAdvisory`, `sourceRisk`, `sourceUserEvent`, and 6 additional UI label keys; Arabic translations complete |
 
 ---
 
@@ -560,17 +569,19 @@
 > **Settings Page Overhaul Sprint complete (Mar 13 2026)** — Settings page decomposed into 7 sub-components; 5 new Zustand stores (framework-config, user-preferences, audit-template, policy-template, department); granular notification preferences; per-framework weight sliders + dept multi-select; policy templates management UI; date format preference wired across the app. SET-001 through SET-006 + SET-011 through SET-015 all complete.
 >
 > **Dashboard Health Engine Sprint complete (Mar 13 2026)** — 7-component framework-weighted health scoring system added. 3 new files (`dashboard-health.types.ts`, `dashboard-health.ts`, `useDashboardHealth.ts`), 7 functions exported from `compliance-engine.ts`, `useDashboardMetrics` extended with `health` field. All three dashboard views have differentiated Compliance Health hero cards with threshold bars, dynamic action buttons, and live deductions. DSH-001 through DSH-015 all complete.
+>
+> **Calendar Page Rewrite Sprint complete (Feb 23 2026)** — Calendar page componentized from 1,762-line monolith to ~170-line orchestrator + 10 components. Calendar store rewritten with persist + sync actions. `useCalendarEvents` hook aggregates all 9 data stores. 10 source-type filter pills, "Go to Source" navigation, CSV export from drawer, restored Submissions tab interactions. CAL-010, CAL-012 through CAL-018 all complete.
 
 ### By Status
 
 | Status | Count | % |
 |---|---|---|
-| ✅ Done | 157 | 52% |
+| ✅ Done | 165 | 58% |
 | 🔧 In Progress (UI built, logic pending) | 6 | 2% |
-| 📋 To Do (defined, not started) | 68 | 22% |
+| 📋 To Do (defined, not started) | 67 | 24% |
 | 💡 New Recommendation | 24 | 8% |
 | 🗺️ Roadmap (future phase) | 18 | 6% |
-| **Total** | **273** | **100%** |
+| **Total** | **280** | **100%** |
 
 ### By Priority
 
