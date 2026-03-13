@@ -16,6 +16,7 @@ import { DeleteConfirmationDialog } from '@/components/ui/delete-confirmation-di
 import type { Audit as AuditType } from '@/types'
 import { exportAuditsLocalized } from '@/lib/export'
 import type { TranslationKey } from '@/i18n'
+import { useFormattedDate } from '@/hooks/useFormattedDate'
 
 // Audit type definitions
 type AuditSource = 'sama_inspection' | 'internal_audit' | 'sharia_audit'
@@ -96,6 +97,7 @@ const auditPriorityColors: Record<AuditPriority, { dot: string; bg: string; text
 export default function ReportsAuditsPage() {
   const { t, isRTL } = useTranslation()
   const pathname = usePathname()
+  const { formatDate } = useFormattedDate()
 
   // Audit store connection
   const { audits: storeAudits, fetchAll: fetchAudits, delete: deleteAudit } = useAuditStore()
@@ -477,7 +479,7 @@ export default function ReportsAuditsPage() {
                           </td>
                           <td className="px-6 py-4">
                             <p className="text-sm text-slate-600 font-medium">
-                              {audit.dueDate.toLocaleDateString(isRTL ? 'ar-SA' : 'en-US', { month: 'short', day: 'numeric', year: 'numeric', calendar: 'gregory' })}
+                              {formatDate(audit.dueDate)}
                             </p>
                           </td>
                           <td className="px-6 py-4">

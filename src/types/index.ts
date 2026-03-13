@@ -991,3 +991,139 @@ export interface SortState {
   field: string
   direction: 'asc' | 'desc'
 }
+
+// ── Settings Page Types ──────────────────────────────────────────────────────
+
+export type RegulatoryBodyId =
+  | 'sama'
+  | 'nca-ecc'
+  | 'ndmo-pdpl'
+  | 'nca-cscc'
+  | 'citc'
+  | 'nca-ccc'
+  | 'cma'
+  | 'zatca'
+  | 'misa'
+  | 'safiu'
+  | 'sharia-board'
+
+export type ComplianceThreshold = 'strict' | 'standard' | 'relaxed' | 'custom'
+
+export type FrameworkWeights = {
+  audits: number
+  observations: number
+  letters: number
+  policies: number
+  circulars: number
+  riskPosture: number
+  training: number
+}
+
+export interface FrameworkConfig {
+  id: RegulatoryBodyId
+  name: string
+  nameAr: string
+  description: string
+  descriptionAr: string
+  icon: string
+  iconColor: string
+  enabled: boolean
+  departments: string[]
+  threshold: ComplianceThreshold
+  customThresholdValue?: number
+  alertOnNonCompliance: boolean
+  weights: FrameworkWeights
+  customFieldValues?: Record<string, string>
+}
+
+export interface Department {
+  id: string
+  name: string
+  nameAr: string
+  isDefault: boolean
+}
+
+export type DashboardView = 'executive' | 'managerial' | 'officer'
+export type DateFormatPreference = 'DD/MM/YYYY' | 'MM/DD/YYYY' | 'YYYY-MM-DD'
+
+export interface UserPreferences {
+  dashboardView: DashboardView
+  timezone: string
+  dateFormat: DateFormatPreference
+}
+
+export type NotificationModule = 'rules' | 'policies' | 'audits' | 'observations' | 'samaLetters' | 'training'
+export type NotificationEvent = 'dueDates' | 'criticalAlerts' | 'approvalRequests' | 'overdueItems' | 'statusChanges'
+export type NotificationScope = 'own' | 'managed' | 'all'
+
+export interface NotificationPreferences {
+  modules: Record<NotificationModule, boolean>
+  events: Record<NotificationEvent, boolean>
+  scope: NotificationScope
+  emailDigestEnabled: boolean
+  emailDigestAddress: string
+  slackEnabled: boolean
+}
+
+export type AuditTemplateCategory =
+  | 'security-compliance'
+  | 'financial-compliance'
+  | 'regulatory-compliance'
+  | 'operational-compliance'
+  | 'data-privacy'
+  | 'sharia-compliance'
+  | 'internal-controls'
+  | 'custom'
+
+export interface FrequencySchedule {
+  dayOfMonth?: number
+  monthInQuarter?: 1 | 2 | 3
+  monthOfYear?: number
+  adhocDate?: string // ISO date for ad-hoc frequency
+}
+
+export interface AuditTemplate {
+  id: string
+  name: string
+  auditType: 'internal' | 'sama' | 'sharia'
+  category: AuditTemplateCategory
+  priority: AuditPriority
+  frequency: AuditFrequency
+  frequencySchedule?: FrequencySchedule
+  defaultTitle: string
+  defaultDescription: string
+  defaultChecklistItems: string[]
+  defaultTeamRoles: string[]
+  framework?: RegulatoryBodyId
+  status: 'active' | 'draft'
+  createdAt: string
+  updatedAt: string
+  usageCount: number
+}
+
+export interface PolicyTemplate {
+  id: string
+  name: string
+  category: PolicyCategory
+  approvalTier: PolicyApprovalTier
+  frequency?: AuditFrequency
+  frequencySchedule?: FrequencySchedule
+  defaultDescription: string
+  defaultWorkflowSteps: Array<{ step: string; description: string; actionType: string }>
+  versionPattern: string
+  framework?: RegulatoryBodyId
+  status: 'active' | 'draft'
+  createdAt: string
+  updatedAt: string
+  usageCount: number
+}
+
+export interface CriticalAlert {
+  id: string
+  source: 'audit' | 'policy' | 'observation' | 'correspondence' | 'risk' | 'training'
+  entityId: string
+  title: string
+  severity: 'critical' | 'high' | 'medium'
+  reason: string
+  createdAt: string
+}

@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Modal } from '@/components/ui/modal'
 import { useCircularStore } from '@/stores/circular-store'
 import type { Circular } from '@/types'
-import { DEPARTMENTS } from './constants'
+import { useDepartmentStore } from '@/stores/department-store'
 
 type Props = {
   isOpen: boolean
@@ -17,6 +17,7 @@ type Props = {
 
 export function BusinessOwnerModal({ isOpen, onClose, circular, onAssigned, t }: Props) {
   const { assignBusinessOwner, addTimelineEvent } = useCircularStore()
+  const { departments: allDepartments } = useDepartmentStore()
   const [boDept, setBoDept] = useState(circular?.businessOwnerDepartment ?? '')
 
   // Sync dept selection when modal opens or circular changes
@@ -56,7 +57,7 @@ export function BusinessOwnerModal({ isOpen, onClose, circular, onAssigned, t }:
             onChange={(e) => setBoDept(e.target.value)}
           >
             <option value="">{t('regulatoryUpdates.selectDepartment')}</option>
-            {DEPARTMENTS.map((d) => <option key={d} value={d}>{d}</option>)}
+            {allDepartments.map((dept) => <option key={dept.id} value={dept.name}>{dept.name}</option>)}
           </select>
         </div>
         <div className={`flex justify-end gap-3 pt-2`}>

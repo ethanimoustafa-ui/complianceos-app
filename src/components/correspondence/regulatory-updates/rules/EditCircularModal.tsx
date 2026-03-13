@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input'
 import { Modal } from '@/components/ui/modal'
 import { useCircularStore } from '@/stores/circular-store'
 import type { Circular, CircularAuthority, CircularPriority } from '@/types'
-import { DEPARTMENTS } from './constants'
+import { useDepartmentStore } from '@/stores/department-store'
 import { normalizeUrl } from './utils'
 
 type Props = {
@@ -20,6 +20,7 @@ type Props = {
 
 export function EditCircularModal({ circular, isOpen, onClose, onSaved, t, isRTL }: Props) {
   const { requestCircularEdit } = useCircularStore()
+  const { departments: allDepartments } = useDepartmentStore()
 
   const [formTitle, setFormTitle] = useState(circular.title)
   const [formAuthority, setFormAuthority] = useState<CircularAuthority>(circular.authority)
@@ -105,7 +106,7 @@ export function EditCircularModal({ circular, isOpen, onClose, onSaved, t, isRTL
                   onChange={(e) => setFormBODept(e.target.value)}
                 >
                   <option value="">{t('regulatoryUpdates.selectDepartment')}</option>
-                  {DEPARTMENTS.map((d) => <option key={d} value={d}>{d}</option>)}
+                  {allDepartments.map((dept) => <option key={dept.id} value={dept.name}>{isRTL ? dept.nameAr : dept.name}</option>)}
                 </select>
               </div>
             </div>
@@ -152,15 +153,15 @@ export function EditCircularModal({ circular, isOpen, onClose, onSaved, t, isRTL
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('regulatoryUpdates.affectedDepartments')}</label>
               <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-2 max-h-44 overflow-y-auto">
-                {DEPARTMENTS.map((dept) => (
-                  <label key={dept} className={`flex items-center gap-3 cursor-pointer`}>
+                {allDepartments.map((dept) => (
+                  <label key={dept.id} className={`flex items-center gap-3 cursor-pointer`}>
                     <input
                       type="checkbox"
                       className="rounded text-emerald-600 focus:ring-emerald-500"
-                      checked={formDepartments.includes(dept)}
-                      onChange={() => toggleDept(dept)}
+                      checked={formDepartments.includes(dept.name)}
+                      onChange={() => toggleDept(dept.name)}
                     />
-                    <span className="text-sm">{dept}</span>
+                    <span className="text-sm">{isRTL ? dept.nameAr : dept.name}</span>
                   </label>
                 ))}
               </div>

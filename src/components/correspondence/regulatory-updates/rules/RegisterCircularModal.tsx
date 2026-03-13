@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input'
 import { Modal } from '@/components/ui/modal'
 import { useCircularStore } from '@/stores/circular-store'
 import type { CircularAuthority, CircularPriority, CircularStatus, CircularApplicability, CAPStatus } from '@/types'
-import { DEPARTMENTS } from './constants'
+import { useDepartmentStore } from '@/stores/department-store'
 import { readFileAsDataUrl, normalizeUrl } from './utils'
 
 type Props = {
@@ -19,6 +19,7 @@ type Props = {
 
 export function RegisterCircularModal({ isOpen, onClose, onCreated, t }: Props) {
   const { create, setPdfUrl } = useCircularStore()
+  const { departments: allDepartments } = useDepartmentStore()
 
   const [formTitle, setFormTitle] = useState('')
   const [formAuthority, setFormAuthority] = useState<CircularAuthority | ''>('')
@@ -143,7 +144,7 @@ export function RegisterCircularModal({ isOpen, onClose, onCreated, t }: Props) 
                   onChange={(e) => setFormBODept(e.target.value)}
                 >
                   <option value="">{t('regulatoryUpdates.selectDepartment')}</option>
-                  {DEPARTMENTS.map((d) => <option key={d} value={d}>{d}</option>)}
+                  {allDepartments.map((dept) => <option key={dept.id} value={dept.name}>{dept.name}</option>)}
                 </select>
               </div>
             </div>
@@ -199,15 +200,15 @@ export function RegisterCircularModal({ isOpen, onClose, onCreated, t }: Props) 
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('regulatoryUpdates.affectedDepartments')}</label>
               <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-2 max-h-40 overflow-y-auto">
-                {DEPARTMENTS.map((dept) => (
-                  <label key={dept} className={`flex items-center gap-3 cursor-pointer`}>
+                {allDepartments.map((dept) => (
+                  <label key={dept.id} className={`flex items-center gap-3 cursor-pointer`}>
                     <input
                       type="checkbox"
                       className="rounded text-emerald-600 focus:ring-emerald-500"
-                      checked={formDepartments.includes(dept)}
-                      onChange={() => toggleDepartment(dept)}
+                      checked={formDepartments.includes(dept.name)}
+                      onChange={() => toggleDepartment(dept.name)}
                     />
-                    <span className="text-sm">{dept}</span>
+                    <span className="text-sm">{dept.name}</span>
                   </label>
                 ))}
               </div>

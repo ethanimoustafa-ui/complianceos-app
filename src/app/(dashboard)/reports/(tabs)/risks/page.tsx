@@ -18,6 +18,7 @@ import type { ReviewSchedule } from '@/types'
 import { computeNextReview } from '@/lib/review-schedule'
 import { exportRisksLocalized } from '@/lib/export'
 import type { TranslationKey } from '@/i18n'
+import { useFormattedDate } from '@/hooks/useFormattedDate'
 import { ChecklistSection } from '@/components/observations/detail/checklist-section'
 
 // Types
@@ -110,6 +111,7 @@ function getRiskDotColor(score: number): string {
 export default function ReportsRisksPage() {
   const { t, isRTL } = useTranslation()
   const pathname = usePathname()
+  const { formatDate } = useFormattedDate()
 
   // Risk store
   const storeRisks = useRiskStore((s) => s.risks)
@@ -257,7 +259,7 @@ export default function ReportsRisksPage() {
     const catRisks = filteredByMonitoringFrequency.filter(r => r.category === category && r.nextReviewDate)
     if (catRisks.length === 0) return '-'
     const nextReview = catRisks.map(r => r.nextReviewDate!).sort((a, b) => a.getTime() - b.getTime())[0]
-    return nextReview.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+    return formatDate(nextReview)
   }
   const getAvgProgressForCategory = (category: RiskCategory): number => {
     const catRisks = filteredByMonitoringFrequency.filter(r => r.category === category)
@@ -671,11 +673,11 @@ export default function ReportsRisksPage() {
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="p-4 bg-slate-50 rounded-xl"><p className="text-xs font-bold text-slate-400 uppercase mb-1">{t('reports.monitoringFrequency' as TranslationKey)}</p><span className="text-sm font-bold text-slate-700 bg-slate-100 px-2 py-1 rounded">{monitoringFrequencyLabels[selectedRisk.monitoringFrequency]}</span></div>
-                <div className="p-4 bg-slate-50 rounded-xl"><p className="text-xs font-bold text-slate-400 uppercase mb-1">{t('reports.nextReview' as TranslationKey)}</p><p className="text-sm font-bold text-slate-900">{selectedRisk.nextReviewDate?.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) || '-'}</p></div>
+                <div className="p-4 bg-slate-50 rounded-xl"><p className="text-xs font-bold text-slate-400 uppercase mb-1">{t('reports.nextReview' as TranslationKey)}</p><p className="text-sm font-bold text-slate-900">{selectedRisk.nextReviewDate ? formatDate(selectedRisk.nextReviewDate) : '-'}</p></div>
               </div>
               <div className="p-4 bg-slate-50 rounded-xl">
                 <div className={`flex items-center justify-between ${isRTL ? 'flex-row-reverse' : ''}`}>
-                  <div className={isRTL ? 'text-right' : ''}><p className="text-xs font-bold text-slate-400 uppercase mb-1">{t('reports.lastReview' as TranslationKey)}</p><p className="text-sm font-bold text-slate-900">{selectedRisk.lastReviewDate?.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) || '-'}</p></div>
+                  <div className={isRTL ? 'text-right' : ''}><p className="text-xs font-bold text-slate-400 uppercase mb-1">{t('reports.lastReview' as TranslationKey)}</p><p className="text-sm font-bold text-slate-900">{selectedRisk.lastReviewDate ? formatDate(selectedRisk.lastReviewDate) : '-'}</p></div>
                   <button onClick={() => markReviewed(selectedRisk.id)} className="px-4 py-2 bg-indigo-600 text-white text-xs font-bold rounded-xl hover:bg-indigo-700 transition-all cursor-pointer">{t('reports.markAsReviewed' as TranslationKey)}</button>
                 </div>
               </div>
@@ -689,7 +691,7 @@ export default function ReportsRisksPage() {
                         <div className={cn('w-4 h-4 rounded-full shrink-0 z-10 border-2 border-white', historyActionColors[entry.action])} />
                         <div className="flex-1 pb-2">
                           <div className="flex items-center gap-2">
-                            <span className="text-[10px] text-slate-400">{entry.timestamp.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                            <span className="text-[10px] text-slate-400">{formatDate(entry.timestamp)}</span>
                             <span className="text-[10px] text-slate-400">-</span>
                             <span className="text-[10px] font-bold text-slate-600">{entry.user}</span>
                           </div>

@@ -3,6 +3,7 @@
 import { Icon } from '@iconify/react'
 import type { CircularAuthority, PolicyCategory, PolicyStatus } from '@/types'
 import type { TranslationKey } from '@/i18n'
+import { useDepartmentStore } from '@/stores/department-store'
 
 interface RegDocFilterBarProps {
   variant: 'circular' | 'policy'
@@ -43,6 +44,7 @@ export function RegDocFilterBar({
   t,
   isRTL,
 }: RegDocFilterBarProps) {
+  const { departments: allDepartments } = useDepartmentStore()
   const selectClass = `px-4 py-2 bg-white border border-slate-200 rounded-lg text-sm text-slate-600 focus:ring-2 focus:ring-emerald-500/20 focus:outline-none`
 
   return (
@@ -85,12 +87,11 @@ export function RegDocFilterBar({
               onChange={(e) => onDepartmentChange?.(e.target.value)}
             >
               <option value="all">{t('regulatoryUpdates.allDepartments')}</option>
-              <option value="compliance">{t('regulatoryUpdates.compliance')}</option>
-              <option value="it">{t('regulatoryUpdates.itCyber')}</option>
-              <option value="finance">{t('regulatoryUpdates.finance')}</option>
-              <option value="risk">{t('regulatoryUpdates.risk')}</option>
-              <option value="legal">{t('regulatoryUpdates.legal')}</option>
-              <option value="security">{t('regulatoryUpdates.security')}</option>
+              {allDepartments.map((dept) => (
+                <option key={dept.id} value={dept.name}>
+                  {isRTL ? dept.nameAr : dept.name}
+                </option>
+              ))}
             </select>
           </>
         )}

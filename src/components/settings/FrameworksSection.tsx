@@ -1,0 +1,290 @@
+'use client'
+
+import { useState } from 'react'
+import { Icon } from '@iconify/react'
+import { Modal } from '@/components/ui/modal'
+import { useFrameworkConfigStore } from '@/stores/framework-config-store'
+import { useTranslation } from '@/i18n'
+import { RoleGuard } from '@/components/auth/role-guard'
+import { FrameworkConfigModal } from './FrameworkConfigModal'
+import type { RegulatoryBodyId, FrameworkConfig } from '@/types'
+
+const iconColorMap: Record<string, string> = {
+  blue: 'bg-blue-50 text-blue-600',
+  indigo: 'bg-indigo-50 text-indigo-600',
+  amber: 'bg-amber-50 text-amber-600',
+  sky: 'bg-sky-50 text-sky-600',
+  violet: 'bg-violet-50 text-violet-600',
+  rose: 'bg-rose-50 text-rose-600',
+  emerald: 'bg-emerald-50 text-emerald-600',
+  teal: 'bg-teal-50 text-teal-600',
+  orange: 'bg-orange-50 text-orange-600',
+  slate: 'bg-slate-100 text-slate-600',
+}
+
+export function FrameworksSection() {
+  const { t, language } = useTranslation()
+  const { frameworks, toggleEnabled, pinnedIds, pinFramework, unpinFramework, replacePinned } = useFrameworkConfigStore()
+  const [configureId, setConfigureId] = useState<RegulatoryBodyId | null>(null)
+  const [showAllModal, setShowAllModal] = useState(false)
+  const [replaceDropdownFor, setReplaceDropdownFor] = useState<RegulatoryBodyId | null>(null)
+  const [allSearchQuery, setAllSearchQuery] = useState('')
+
+  const pinnedFrameworks = frameworks.filter((f) => pinnedIds.includes(f.id))
+
+  const allFiltered = frameworks.filter((f) => {
+    if (!allSearchQuery) return true
+    const q = allSearchQuery.toLowerCase()
+    return (
+      f.name.toLowerCase().includes(q) ||
+      f.nameAr.includes(q) ||
+      f.description.toLowerCase().includes(q)
+    )
+  })
+
+  function handlePin(id: RegulatoryBodyId) {
+    if (pinnedIds.includes(id)) {
+      unpinFramework(id)
+    } else if (pinnedIds.length < 3) {
+      pinFramework(id)
+    } else {
+      setReplaceDropdownFor(id)
+    }
+  }
+
+  function handleReplace(oldId: RegulatoryBodyId, newId: RegulatoryBodyId) {
+    replacePinned(oldId, newId)
+    setReplaceDropdownFor(null)
+  }
+
+  return (
+    <section>
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h2 className="text-lg font-bold text-slate-900 font-display">{t('settings.complianceFrameworks')}</h2>
+          <p className="text-sm text-slate-500">{t('settings.manageFrameworks')}</p>
+        </div>
+      </div>
+
+      <p className="text-xs font-medium text-slate-400 mb-3">{t('settings.pinnedFrameworks')} ({pinnedIds.length}/3)</p>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {pinnedFrameworks.map((fw) => (
+          <FrameworkCard
+            key={fw.id}
+            framework={fw}
+            language={language}
+            isPinned
+            onToggle={() => toggleEnabled(fw.id)}
+            onConfigure={() => setConfigureId(fw.id)}
+            onPin={() => unpinFramework(fw.id)}
+            t={t}
+          />
+        ))}
+      </div>
+
+      <div className="mt-6 text-center">
+        <button
+          onClick={() => setShowAllModal(true)}
+          className="text-sm font-bold text-emerald-600 hover:text-emerald-700 cursor-pointer"
+        >
+          {t('settings.viewAllFrameworks')} &rarr;
+        </button>
+      </div>
+
+      {/* View All Frameworks Modal */}
+      <Modal
+        isOpen={showAllModal}
+        onClose={() => { setShowAllModal(false); setAllSearchQuery('') }}
+        title={t('settings.viewAllFrameworks')}
+        subtitle={t('settings.manageFrameworks')}
+        size="xl"
+      >
+        <div className="space-y-4">
+          <div className="relative">
+            <Icon icon="lucide:search" className="absolute start-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm" />
+            <input
+              type="text"
+              value={allSearchQuery}
+              onChange={(e) => setAllSearchQuery(e.target.value)}
+              placeholder={t('settings.searchFrameworks')}
+              className="w-full ps-9 pe-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+            />
+          </div>
+          <div className="max-h-[60vh] overflow-y-auto space-y-2">
+            {allFiltered.map((fw) => {
+              const name = language === 'ar' ? fw.nameAr : fw.name
+              const isPinned = pinnedIds.includes(fw.id)
+              return (
+                <div
+                  key={fw.id}
+                  className="flex items-center justify-between p-4 border border-slate-200 rounded-xl hover:border-slate-300 transition-colors"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className={`p-2 ${iconColorMap[fw.iconColor] || 'bg-slate-50 text-slate-600'} rounded-lg`}>
+                      <Icon icon={fw.icon} className="text-lg" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-bold text-slate-900">{name}</p>
+                        {isPinned && <Icon icon="lucide:pin" className="text-emerald-500 text-xs" />}
+                      </div>
+                      <p className="text-xs text-slate-500">
+                        {language === 'ar' ? fw.descriptionAr : fw.description}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3 shrink-0">
+                    {/* Pin button */}
+                    <div className="relative">
+                      <button
+                        onClick={() => handlePin(fw.id)}
+                        className={`text-sm transition-colors cursor-pointer ${
+                          isPinned ? 'text-emerald-500 hover:text-emerald-600' : 'text-slate-300 hover:text-slate-500'
+                        }`}
+                        title={isPinned ? t('settings.unpinFramework') : t('settings.pinFramework')}
+                      >
+                        <Icon icon={isPinned ? 'lucide:pin-off' : 'lucide:pin'} />
+                      </button>
+                      {/* Replace dropdown */}
+                      {replaceDropdownFor === fw.id && (
+                        <div className="absolute top-8 end-0 z-10 bg-white border border-slate-200 rounded-xl shadow-lg p-3 w-56">
+                          <p className="text-xs font-bold text-slate-700 mb-2">{t('settings.replacePin')}</p>
+                          {pinnedIds.map((pid) => {
+                            const pinFw = frameworks.find((f) => f.id === pid)
+                            if (!pinFw) return null
+                            return (
+                              <button
+                                key={pid}
+                                onClick={() => handleReplace(pid, fw.id)}
+                                className="w-full text-start text-xs text-slate-600 hover:bg-slate-50 px-2 py-1.5 rounded-lg cursor-pointer"
+                              >
+                                {language === 'ar' ? pinFw.nameAr : pinFw.name}
+                              </button>
+                            )
+                          })}
+                          <button
+                            onClick={() => setReplaceDropdownFor(null)}
+                            className="w-full text-start text-xs text-slate-400 hover:text-slate-600 px-2 py-1 mt-1 cursor-pointer"
+                          >
+                            {t('common.cancel')}
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                    {/* Enable toggle */}
+                    <button
+                      className={`w-9 h-5 rounded-full relative transition-colors cursor-pointer ${
+                        fw.enabled ? 'bg-emerald-500' : 'bg-slate-200'
+                      }`}
+                      onClick={() => toggleEnabled(fw.id)}
+                    >
+                      <span
+                        className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${
+                          fw.enabled ? 'start-4' : 'start-0.5'
+                        }`}
+                      />
+                    </button>
+                    {/* Configure */}
+                    <RoleGuard adminOnly hidden>
+                      <button
+                        onClick={() => { setShowAllModal(false); setConfigureId(fw.id) }}
+                        className="text-xs font-bold text-slate-400 hover:text-slate-700 cursor-pointer"
+                      >
+                        {t('settings.configure')}
+                      </button>
+                    </RoleGuard>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      </Modal>
+
+      {configureId && (
+        <FrameworkConfigModal
+          frameworkId={configureId}
+          isOpen={!!configureId}
+          onClose={() => setConfigureId(null)}
+        />
+      )}
+    </section>
+  )
+}
+
+function FrameworkCard({
+  framework,
+  language,
+  isPinned,
+  onToggle,
+  onConfigure,
+  onPin,
+  t,
+}: {
+  framework: FrameworkConfig
+  language: string
+  isPinned: boolean
+  onToggle: () => void
+  onConfigure: () => void
+  onPin: () => void
+  t: (key: any) => string
+}) {
+  const name = language === 'ar' ? framework.nameAr : framework.name
+  const description = language === 'ar' ? framework.descriptionAr : framework.description
+
+  return (
+    <div className="relative bg-white border border-slate-200 p-6 rounded-2xl shadow-sm hover:border-emerald-500 hover:-translate-y-0.5 transition-all">
+      {isPinned && (
+        <div className="absolute top-3 end-3">
+          <Icon icon="lucide:pin" className="text-emerald-500 text-sm" />
+        </div>
+      )}
+
+      <div className="flex justify-between items-start mb-4">
+        <div className={`p-3 ${iconColorMap[framework.iconColor] || 'bg-slate-50 text-slate-600'} rounded-xl`}>
+          <Icon icon={framework.icon} className="text-2xl" />
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={onPin}
+            className="text-slate-300 hover:text-emerald-500 transition-colors cursor-pointer"
+            title={t('settings.unpinFramework')}
+          >
+            <Icon icon="lucide:pin-off" className="text-sm" />
+          </button>
+          <button
+            className={`w-9 h-5 rounded-full relative transition-colors cursor-pointer ${
+              framework.enabled ? 'bg-emerald-500' : 'bg-slate-200'
+            }`}
+            onClick={onToggle}
+          >
+            <span
+              className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${
+                framework.enabled ? 'start-4' : 'start-0.5'
+              }`}
+            />
+          </button>
+        </div>
+      </div>
+
+      <h3 className="font-bold text-slate-900">{name}</h3>
+      <p className="text-xs text-slate-500 mt-1 mb-4">{description}</p>
+      <div className="flex items-center justify-between pt-4 border-t border-slate-50">
+        <span className={`text-[10px] font-black ${framework.enabled ? 'text-emerald-600' : 'text-slate-400'}`}>
+          {framework.enabled ? t('common.active') : t('settings.disabled')}
+        </span>
+        <RoleGuard adminOnly hidden>
+          <button
+            onClick={onConfigure}
+            className={`text-xs font-bold cursor-pointer ${
+              framework.enabled ? 'text-slate-400 hover:text-slate-900' : 'text-emerald-600'
+            }`}
+          >
+            {framework.enabled ? t('settings.configure') : t('settings.enableNow')} &rarr;
+          </button>
+        </RoleGuard>
+      </div>
+    </div>
+  )
+}

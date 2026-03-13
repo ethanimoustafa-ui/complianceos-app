@@ -20,6 +20,7 @@ import { DeletePolicyModal } from '@/components/correspondence/regulatory-update
 import type { PolicyStatus, PolicyCategory, PolicyApprovalTier, PolicyVersionEntry, PolicyActivityEntry, ReviewSchedule } from '@/types'
 import { ReviewSchedulePicker } from '@/components/ui/ReviewSchedulePicker'
 import { computeNextReview, cadenceToReviewCycleDays } from '@/lib/review-schedule'
+import { usePolicyTemplateStore } from '@/stores/policy-template-store'
 
 // Toast component
 function Toast({ message, onClose }: { message: string; onClose: () => void }) {
@@ -155,6 +156,21 @@ export default function RegulatoryUpdatesPoliciesPage() {
   const [toastMessage, setToastMessage] = useState<string | null>(null)
   const [newlyCreatedIds, setNewlyCreatedIds] = useState<string[]>([])
 
+  // ── Template picker ─────────────────────────────────────────────────
+  const { templates: policyTemplates, incrementUsage: incrementPolicyTemplateUsage } = usePolicyTemplateStore()
+  const [selectedPolicyTemplateId, setSelectedPolicyTemplateId] = useState('')
+
+  function handlePolicyTemplateSelect(templateId: string) {
+    setSelectedPolicyTemplateId(templateId)
+    if (!templateId) return
+    const tmpl = policyTemplates.find((t) => t.id === templateId)
+    if (!tmpl) return
+    setFormName(tmpl.name)
+    setFormDescription(tmpl.defaultDescription)
+    setFormCategory(tmpl.category)
+    setFormTier(tmpl.approvalTier)
+  }
+
   // ── Create form state ────────────────────────────────────────────────
   const [formName, setFormName] = useState('')
   const [formCategory, setFormCategory] = useState<PolicyCategory | ''>('')
@@ -262,13 +278,17 @@ export default function RegulatoryUpdatesPoliciesPage() {
     setFormOwnerIdx(0)
     setFormDescription('')
     setFormDocFile(null)
+    setSelectedPolicyTemplateId('')
   }
 
   function handleCreate() {
     if (!formName || !formCategory || !formTier || !formDescription || !formDocFile) return
     const owner = OWNERS[formOwnerIdx]
     const today = new Date().toISOString().split('T')[0]
-    const tierSteps = TIER_WORKFLOWS[formTier as PolicyApprovalTier] ?? TIER_WORKFLOWS.management
+    const selectedTmpl = selectedPolicyTemplateId ? policyTemplates.find((t) => t.id === selectedPolicyTemplateId) : null
+    const tierSteps = (selectedTmpl?.defaultWorkflowSteps?.length ? selectedTmpl.defaultWorkflowSteps : null)
+      ?? TIER_WORKFLOWS[formTier as PolicyApprovalTier]
+      ?? TIER_WORKFLOWS.management
     const workflowTimeline = [
       { step: 'Draft Created', date: today, user: owner.name, status: 'completed' as const, actionType: 'move-to-next' },
       { step: tierSteps[0].step, description: tierSteps[0].description, actionType: tierSteps[0].actionType, date: '', user: '', status: 'current' as const },
@@ -307,6 +327,7 @@ export default function RegulatoryUpdatesPoliciesPage() {
       workflowTimeline,
       activityLog,
     })
+    if (selectedPolicyTemplateId) incrementPolicyTemplateUsage(selectedPolicyTemplateId)
     showToast(t('policies.policyCreated'))
     setNewlyCreatedIds(prev => [...prev, newPolicy.id])
     setIsCreatePolicyModalOpen(false)
@@ -710,6 +731,21 @@ export default function RegulatoryUpdatesPoliciesPage() {
       >
         <div className="space-y-6">
           <p className="text-sm text-slate-500 -mt-2">{t('policies.createPolicySubtitle')}</p>
+
+          {/* Template picker */}
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('settings.selectTemplate')}</label>
+            <select
+              value={selectedPolicyTemplateId}
+              onChange={(e) => handlePolicyTemplateSelect(e.target.value)}
+              className="flex h-11 w-full rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+            >
+              <option value="">{t('settings.noTemplate')}</option>
+              {policyTemplates.map((tmpl) => (
+                <option key={tmpl.id} value={tmpl.id}>{tmpl.name}</option>
+              ))}
+            </select>
+          </div>
 
           <div className="grid grid-cols-2 gap-6">
             {/* Left Column */}

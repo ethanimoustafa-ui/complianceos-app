@@ -8,7 +8,7 @@ import { Modal } from '@/components/ui/modal'
 import { cn } from '@/lib/utils'
 import { useCircularStore } from '@/stores/circular-store'
 import type { CircularArticle, ArticleRiskLevel, ArticleComplianceStatus } from '@/types'
-import { DEPARTMENTS } from './constants'
+import { useDepartmentStore } from '@/stores/department-store'
 
 type ArticleTab = 'details' | 'versions' | 'activity'
 
@@ -23,6 +23,7 @@ type Props = {
 
 export function ArticleDetailModal({ circularId, article, mode, onClose, t, isRTL }: Props) {
   const { addArticle, updateArticle, deleteArticle, toggleChecklistItem, addChecklistItem, deleteChecklistItem } = useCircularStore()
+  const { departments: allDepartments } = useDepartmentStore()
 
   const [currentMode, setCurrentMode] = useState(mode)
   const [activeArticleTab, setActiveArticleTab] = useState<ArticleTab>('details')
@@ -141,7 +142,7 @@ export function ArticleDetailModal({ circularId, article, mode, onClose, t, isRT
                 {isEditable ? (
                   <select className="flex h-11 w-full rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm" value={artDept} onChange={(e) => setArtDept(e.target.value)}>
                     <option value="">{t('regulatoryUpdates.selectDepartment')}</option>
-                    {DEPARTMENTS.map((d) => <option key={d} value={d}>{d}</option>)}
+                    {allDepartments.map((dept) => <option key={dept.id} value={dept.name}>{isRTL ? dept.nameAr : dept.name}</option>)}
                   </select>
                 ) : (
                   <p className="text-sm text-slate-700">{artDept || '—'}</p>

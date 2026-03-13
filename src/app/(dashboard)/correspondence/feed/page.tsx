@@ -20,6 +20,9 @@ import { useTrainingStore } from '@/stores/training-store'
 import { useAuthStore } from '@/stores/auth-store'
 import { exportCorrespondenceLocalized } from '@/lib/export'
 import type { Correspondence, Circular } from '@/types'
+import { useFormattedDate } from '@/hooks/useFormattedDate'
+import { formatDateWithPreference } from '@/lib/date-format'
+import { useUserPreferencesStore } from '@/stores/user-preferences-store'
 
 // Risk type for heatmap display (mapped from risk-store)
 interface HeatmapRisk {
@@ -58,6 +61,7 @@ export default function CorrespondenceFeedPage() {
   const { t, isRTL } = useTranslation()
   const pathname = usePathname()
   const router = useRouter()
+  const { formatDate } = useFormattedDate()
 
   // Stores
   const correspondenceStore = useCorrespondenceStore()
@@ -525,7 +529,7 @@ export default function CorrespondenceFeedPage() {
                       <>
                         <span>{t('correspondence.nextReview')}: {nextPolicyReview.name}</span>
                         <span className="text-blue-600">
-                          {new Date(nextPolicyReview.nextReviewDate).toLocaleDateString(isRTL ? 'ar-SA' : 'en-US', { month: 'short', day: 'numeric' })}
+                          {formatDate(nextPolicyReview.nextReviewDate)}
                         </span>
                       </>
                     ) : (
@@ -560,7 +564,7 @@ export default function CorrespondenceFeedPage() {
                         <div className={`flex items-center justify-between mb-1.5`}>
                           <span>{t('correspondence.nextDeadline' as TranslationKey)}</span>
                           <span className="text-blue-600">
-                            {new Date(nextCircularsDue[0].dueDate).toLocaleDateString(isRTL ? 'ar-SA' : 'en-US', { month: 'short', day: 'numeric' })}
+                            {formatDate(nextCircularsDue[0].dueDate)}
                           </span>
                         </div>
                         <ul className={`space-y-0.5`}>
@@ -674,7 +678,7 @@ export default function CorrespondenceFeedPage() {
                           </div>
                           <div className={`flex items-center justify-between mt-3 pt-3 border-t border-slate-100`}>
                             <span className="text-xs font-bold text-rose-500">
-                              {new Date(item.dueDate).toLocaleDateString(isRTL ? 'ar-SA' : 'en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                              {formatDate(item.dueDate)}
                             </span>
                             <button
                               onClick={() => handleReviewItem(item)}
@@ -1017,7 +1021,7 @@ export default function CorrespondenceFeedPage() {
             </div>
             <div className={`bg-slate-50 p-4 rounded-lg`}>
               <p className="text-xs font-bold text-slate-500 uppercase mb-1">{t('common.date')}</p>
-              <p className="text-sm font-bold text-slate-900">{new Date(selectedLetter.date).toLocaleDateString(isRTL ? 'ar-SA' : 'en-US')}</p>
+              <p className="text-sm font-bold text-slate-900">{formatDate(selectedLetter.date)}</p>
             </div>
             <div className={`bg-slate-50 p-4 rounded-lg`}>
               <p className="text-xs font-bold text-slate-500 uppercase mb-1">{t('correspondence.content')}</p>
@@ -1196,7 +1200,8 @@ function CommunicationLogItem({
     if (diffHours < 24) return t('correspondence.hoursAgo', { count: String(diffHours) })
     const diffDays = Math.floor(diffHours / 24)
     if (diffDays < 7) return t('correspondence.daysAgo', { count: String(diffDays) })
-    return d.toLocaleDateString(isRTL ? 'ar-SA' : 'en-US')
+    const dateFormatPref = useUserPreferencesStore.getState().dateFormat
+    return formatDateWithPreference(d, dateFormatPref, isRTL ? 'ar' : undefined)
   })()
 
   return (

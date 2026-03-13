@@ -5,8 +5,9 @@ import { Icon } from '@iconify/react'
 import { useTranslation } from '@/i18n'
 import { ObservationSource, ObservationSeverity, sourceConfig } from './observation-types'
 import type { TeamMember } from '@/types'
+import { useDepartmentStore } from '@/stores/department-store'
 
-// Department keys for translation lookup
+// Department keys for translation lookup (kept for backward compatibility)
 export const departmentKeys: Record<string, string> = {
   'IT & Cybersecurity': 'observations.departments.itCybersecurity',
   'Human Resources': 'observations.departments.humanResources',
@@ -137,7 +138,8 @@ export const DepartmentField = memo(function DepartmentField({
   error?: string
   required?: boolean
 }) {
-  const { t } = useTranslation()
+  const { t, language } = useTranslation()
+  const { departments: allDepartments } = useDepartmentStore()
 
   return (
     <div>
@@ -151,9 +153,9 @@ export const DepartmentField = memo(function DepartmentField({
         className={`w-full px-4 py-3 bg-slate-50 border ${error ? 'border-rose-300' : 'border-slate-200'} rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500`}
       >
         <option value="">{t('observations.form.selectDepartment')}</option>
-        {departments.map((dept) => (
-          <option key={dept} value={dept}>
-            {t(departmentKeys[dept] as 'observations.departments.itCybersecurity')}
+        {allDepartments.map((dept) => (
+          <option key={dept.id} value={dept.name}>
+            {language === 'ar' ? dept.nameAr : dept.name}
           </option>
         ))}
       </select>

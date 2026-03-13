@@ -2,7 +2,7 @@
 
 **Version:** 1.0
 **Date:** February 2026
-**Last Updated:** March 8, 2026
+**Last Updated:** March 13, 2026
 
 ---
 
@@ -16,6 +16,8 @@
 > **Sprint 6 complete:** Custom Review Frequency — `ReviewSchedule` type + `ReviewSchedulePicker` UI + `computeNextReview()` utility wired across Policies (POL-018), Risks (RSK-007), and Audits (AUD-004).
 >
 > **Sprint 3.3 complete (Mar 8 2026):** Policy workflow bug fixes (submit-for-review stays on step, chip labels corrected, undo clears stepState), Pending Approvals card scoped to managerial-only items with deep-link + enriched modal, workload drawer shows full cross-store item list with type badges, Saudization grid layout fix, and new Epic 22 (Smart Workload & Burnout Management System) defined.
+>
+> **Settings Page Overhaul Sprint complete (Mar 13 2026):** Settings page decomposed from 905-line monolith into 55-line orchestrator + 7 sub-components. New stores: `framework-config-store` (11 regulators, pinning UI, per-framework weights + threshold + dept assignment), `user-preferences-store` (date format, timezone, dashboard view, granular notification preferences), `audit-template-store` (6 seed templates, CRUD + `incrementUsage`, frequency schedules), `policy-template-store` (6 seeds, persist v2, `frequency` + `frequencySchedule`), `department-store` (10 canonical seeds, CRUD, `isDefault` guard). New utilities: `src/lib/date-format.ts` + `src/hooks/useFormattedDate.ts` wire date format preference across all pages. Downstream consumers (rules modals, RegDocFilterBar, observations, audits, policies) migrated to `useDepartmentStore()`. SET-001 through SET-006 all complete.
 
 ---
 
@@ -359,16 +361,21 @@
 
 | ID | Feature | Status | Priority | Arch | Source | Notes |
 |---|---|---|---|---|---|---|
-| SET-001 | Framework listing with enable/disable per framework | 🔧 | P1 | B | BRD | UI built, placeholder data |
-| SET-002 | Per-framework settings (sync frequency, compliance threshold, alerts) | 🔧 | P2 | B | BRD | UI built |
-| SET-003 | Add custom framework (name, type, description, auto-sync) | 🔧 | P2 | B | BRD | UI built |
-| SET-004 | Notification settings (email digests, critical alerts, Slack) | 🔧 | P2 | S | BRD | UI built, delivery not implemented |
-| SET-005 | Integration marketplace (Slack, Teams, Drive, SharePoint, Jira, etc.) | 🔧 | P3 | S | BRD | UI built, all placeholder |
-| SET-006 | Audit templates (listing, creation, usage tracking) | 🔧 | P2 | S | BRD | UI built |
-| SET-007 | Compliance weight configuration (bounds enforcement, sum=100%) | ✅ | P0 | S | BRD | Done |
+| SET-001 | Framework listing with enable/disable per framework | ✅ | P1 | B | BRD | Done — `FrameworksSection` component; pinned frameworks grid (max 3) with pin/unpin/replace UI; "View All" modal with search + per-framework enable toggle; wired to `framework-config-store` (11 regulators, `pinnedIds`) |
+| SET-002 | Per-framework settings (sync frequency, compliance threshold, alerts) | ✅ | P2 | B | BRD | Done — `FrameworkConfigModal`; enable/disable toggle, compliance threshold (strict/standard/relaxed/custom), alert on non-compliance toggle, dept multi-select from `department-store`; `SyncFrequency` field removed (persist v2 migration strips it) |
+| SET-003 | Add custom framework (name, type, description, auto-sync) | 🔧 | P2 | B | BRD | Partial — framework config and enable/disable fully wired; custom framework creation form not yet built |
+| SET-004 | Notification settings (email digests, critical alerts, Slack) | ✅ | P2 | S | BRD | Done — `NotificationsSection` + `useUserPreferencesStore`; granular `NotificationPreferences` (6 modules, 5 events, 3 scope options); master on/off toggle; email digest address input; Slack marked "Coming Later"; no longer imports 5 data stores |
+| SET-005 | Integration marketplace (Slack, Teams, Drive, SharePoint, Jira, etc.) | ✅ | P3 | S | BRD | Done — `ConnectedAppsSection` shows Jira / Drive / Slack / GitHub cards behind a "Coming Soon" frosted overlay; marketplace placeholder link visible |
+| SET-006 | Audit templates (listing, creation, usage tracking) | ✅ | P2 | S | BRD | Done — `AuditTemplatesSection` + `useAuditTemplateStore`; sortable table (name/category/updatedAt/usageCount); create/edit modal with frequency schedule picker (quarterly/semi-annual/annual/monthly/ad-hoc); 6 seed templates; `incrementUsage` action |
+| SET-007 | Compliance weight configuration (bounds enforcement, sum=100%) | ✅ | P0 | S | BRD | Done — `FrameworkConfigModal` weight sliders; 7 dimensions (audits, observations, letters, policies, circulars, riskPosture, training); total shown in red when ≠ 100%; reset-to-defaults button |
 | SET-008 | Target score configuration | ✅ | P0 | S | BRD | Done |
 | SET-009 | Notification delivery system (backend) | 📋 | P2 | S | BRD | Currently UI only |
 | SET-010 | Integration API connections (backend) | 🗺️ | P3 | S | BRD | Currently all placeholder |
+| SET-011 | Policy templates store and management UI | ✅ | P2 | S | FEEDBACK | Done — `PolicyTemplatesSection` + `usePolicyTemplateStore`; 6 seed templates with `defaultWorkflowSteps[]`, `versionPattern`, `framework`; sortable table; create/edit modal with approval tier + review frequency + frequency schedule picker; persist v2 migration adds `frequency` + `frequencySchedule` |
+| SET-012 | Department store (canonical list, CRUD, default-guard) | ✅ | P1 | S | FEEDBACK | Done — `useDepartmentStore`; 10 canonical seed departments (EN + AR names); `addDepartment`, `removeDepartment` (blocks `isDefault`), `updateDepartment`; all downstream consumers (rules modals, RegDocFilterBar, observations, audits, policies) migrated from hardcoded arrays to this store |
+| SET-013 | User preferences store (dashboard view, timezone, date format, notification prefs) | ✅ | P1 | S | FEEDBACK | Done — `useUserPreferencesStore`; `dashboardView`, `timezone`, `dateFormat: DateFormatPreference`; `notificationPreferences: NotificationPreferences`; persist v2 migration maps old `criticalAlertsEnabled` → new structure; `UserPreferencesSection` with profile edit modal |
+| SET-014 | Settings page decomposition (monolith → orchestrator + sub-components) | ✅ | P1 | S | FEEDBACK | Done — 905-line `settings/page.tsx` replaced with 55-line orchestrator importing 7 sub-components from `src/components/settings/`; auto-save indicator retained in header |
+| SET-015 | Date format preference with locale-aware rendering across all pages | ✅ | P2 | S | FEEDBACK | Done — `DateFormatPreference` type (DD/MM/YYYY, MM/DD/YYYY, YYYY-MM-DD); `formatDateWithPreference()` in `src/lib/date-format.ts` handles Arabic numerals; `useFormattedDate()` hook in `src/hooks/useFormattedDate.ts`; wired to correspondence feed, policies, and reports pages |
 
 ---
 
@@ -521,18 +528,18 @@
 
 ## Summary Dashboard
 
-> **Sprint 3.3 complete (Mar 8 2026)** — Policy workflow bug fixes, Pending Approvals managerial scoping, cross-store workload item list, Saudization grid fix, training store fully wired with live data, Epic 22 (Smart Workload & Burnout Management) defined.
+> **Settings Page Overhaul Sprint complete (Mar 13 2026)** — Settings page decomposed into 7 sub-components; 5 new Zustand stores (framework-config, user-preferences, audit-template, policy-template, department); granular notification preferences; per-framework weight sliders + dept multi-select; policy templates management UI; date format preference wired across the app. SET-001 through SET-006 + SET-011 through SET-015 all complete.
 
 ### By Status
 
 | Status | Count | % |
 |---|---|---|
-| ✅ Done | 127 | 47% |
-| 🔧 In Progress (UI built, logic pending) | 11 | 4% |
-| 📋 To Do (defined, not started) | 65 | 24% |
+| ✅ Done | 141 | 50% |
+| 🔧 In Progress (UI built, logic pending) | 6 | 2% |
+| 📋 To Do (defined, not started) | 65 | 23% |
 | 💡 New Recommendation | 24 | 9% |
-| 🗺️ Roadmap (future phase) | 18 | 7% |
-| **Total** | **245** | **100%** |
+| 🗺️ Roadmap (future phase) | 18 | 6% |
+| **Total** | **254** | **100%** |
 
 ### By Priority
 

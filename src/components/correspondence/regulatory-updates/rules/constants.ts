@@ -1,1 +1,1 @@
-export const DEPARTMENTS = ['Compliance', 'IT', 'Finance', 'Risk', 'Legal', 'Security', 'Operations', 'HR']
+// Department list is now managed by the centralized department store at @/stores/department-store

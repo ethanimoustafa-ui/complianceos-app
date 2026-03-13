@@ -15,6 +15,7 @@ import { useTranslation } from '@/i18n'
 import type { Audit, AuditCategory, AuditFrequency, AuditPriority, ReviewSchedule } from '@/types'
 import { ReviewSchedulePicker } from '@/components/ui/ReviewSchedulePicker'
 import { computeNextReview } from '@/lib/review-schedule'
+import { useAuditTemplateStore } from '@/stores/audit-template-store'
 
 const auditSchema = z.object({
   title: z.string().min(3, 'Title must be at least 3 characters'),
@@ -43,6 +44,8 @@ export function AddAuditModal({ isOpen, onClose, onSuccess, initialValues }: Add
   const { create, isLoading } = useAuditStore()
   const { members } = useTeamStore()
   const currentUser = useAuthStore((state) => state.user)
+  const { templates: auditTemplates, incrementUsage } = useAuditTemplateStore()
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string>('')
 
   const auditTypes = [
     { id: 'internal' as const, label: t('auditDetail.internalAuditType'), icon: 'lucide:clipboard-check', color: 'blue' },
@@ -94,6 +97,20 @@ export function AddAuditModal({ isOpen, onClose, onSuccess, initialValues }: Add
     }
   }, [initialValues, isOpen, reset])
 
+  const handleTemplateSelect = (templateId: string) => {
+    setSelectedTemplateId(templateId)
+    if (!templateId) return
+    const tmpl = auditTemplates.find((t) => t.id === templateId)
+    if (!tmpl) return
+    setValue('title', tmpl.defaultTitle)
+    setValue('description', tmpl.defaultDescription)
+    setValue('category', tmpl.category.replace(/-/g, '_') as AuditCategory)
+    setValue('priority', tmpl.priority)
+    setValue('frequency', tmpl.frequency)
+    setSelectedType(tmpl.auditType)
+    setValue('type', tmpl.auditType)
+  }
+
   const handleTypeSelect = (type: 'internal' | 'sama' | 'sharia') => {
     setSelectedType(type)
     setValue('type', type)
@@ -142,6 +159,7 @@ export function AddAuditModal({ isOpen, onClose, onSuccess, initialValues }: Add
       }
 
       const newAudit = await create(auditData)
+      if (selectedTemplateId) incrementUsage(selectedTemplateId)
       onSuccess?.(newAudit)
       handleClose()
     } catch (error) {
@@ -152,6 +170,7 @@ export function AddAuditModal({ isOpen, onClose, onSuccess, initialValues }: Add
   const handleClose = () => {
     reset()
     setSelectedType(initialValues?.type || 'internal')
+    setSelectedTemplateId('')
     setSchedule({ cadence: 'yearly', dayOfMonth: 1 })
     onClose()
   }
@@ -173,6 +192,23 @@ export function AddAuditModal({ isOpen, onClose, onSuccess, initialValues }: Add
           </div>
 
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-8">
+            {/* Template Selection */}
+            <div>
+              <label className="text-xs font-black uppercase text-slate-500 tracking-widest mb-2 block">
+                {t('settings.selectTemplate')}
+              </label>
+              <select
+                value={selectedTemplateId}
+                onChange={(e) => handleTemplateSelect(e.target.value)}
+                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              >
+                <option value="">{t('settings.noTemplate')}</option>
+                {auditTemplates.map((tmpl) => (
+                  <option key={tmpl.id} value={tmpl.id}>{tmpl.name}</option>
+                ))}
+              </select>
+            </div>
+
             {/* Audit Type Selection */}
             <div>
               <label className="text-xs font-black uppercase text-slate-500 tracking-widest mb-4 block">
