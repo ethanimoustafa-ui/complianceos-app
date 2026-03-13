@@ -6,6 +6,7 @@ import { Card, CardHeader } from '@/components/ui/card'
 import { useTranslation } from '@/i18n'
 import type { TranslationKey } from '@/i18n'
 import { NoDataEmptyState } from '@/components/ui/empty-state'
+import { useDepartmentStore } from '@/stores/department-store'
 import type { TrainingEmployee, TrainingStatus } from '@/types'
 
 interface EmployeeTableProps {
@@ -16,7 +17,13 @@ interface EmployeeTableProps {
 }
 
 export function EmployeeTable({ employees, onViewEmployee, onHrReminder, onExport }: EmployeeTableProps) {
-  const { t } = useTranslation()
+  const { t, isRTL } = useTranslation()
+  const departments = useDepartmentStore(s => s.departments)
+  const deptLabel = (name: string) => {
+    if (!isRTL) return name
+    const dept = departments.find(d => d.name === name)
+    return dept?.nameAr || name
+  }
   const [deptFilter, setDeptFilter] = useState('')
   const [statusFilter, setStatusFilter] = useState<TrainingStatus | ''>('')
   const [progressFilter, setProgressFilter] = useState<'all' | 'in_training' | 'completed' | 'overdue'>('all')
@@ -227,7 +234,7 @@ export function EmployeeTable({ employees, onViewEmployee, onHrReminder, onExpor
                       </td>
                       <td className="px-6 py-4">
                         <span className="text-xs font-bold text-slate-600 bg-slate-100 px-3 py-1 rounded-full">
-                          {employee.department}
+                          {deptLabel(employee.department)}
                         </span>
                       </td>
                       <td className="px-6 py-4">

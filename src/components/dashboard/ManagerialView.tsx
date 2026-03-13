@@ -162,7 +162,7 @@ export function ManagerialView({ metrics }: ManagerialViewProps) {
                   {/* Threshold marker */}
                   <div
                     className="absolute top-0 h-full w-0.5 bg-slate-900"
-                    style={{ left: `${targetScore}%` }}
+                    style={{ insetInlineStart: `${targetScore}%` }}
                   />
                 </div>
                 <div className="flex justify-between text-[10px] font-bold text-slate-400">

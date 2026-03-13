@@ -8,6 +8,8 @@ import { useTrainingStore } from '@/stores/training-store'
 import { useRiskStore } from '@/stores/risk-store'
 import { useUserPreferencesStore } from '@/stores/user-preferences-store'
 import { useNotificationStore } from '@/stores/notification-store'
+import { useTranslation } from '@/i18n'
+import type { TranslationKey } from '@/i18n'
 import type { AppNotification, CalendarSourceType } from '@/types'
 
 const MAX_NOTIFICATIONS = 50
@@ -47,6 +49,7 @@ function makeNotif(
 const typePriority: Record<string, number> = { error: 0, warning: 1, info: 2, success: 3 }
 
 export function useNotificationEngine() {
+  const { t, isRTL } = useTranslation()
   const audits = useAuditStore(s => s.audits)
   const policies = usePolicyStore(s => s.policies)
   const observations = useObservationStore(s => s.observations)
@@ -68,11 +71,11 @@ export function useNotificationEngine() {
     if (modules.audits) {
       for (const a of audits) {
         if (a.status === 'overdue' && events.overdueItems) {
-          notifs.push(makeNotif('audit', a.id, 'overdue', 'Audit Overdue', `${a.title} is overdue`, 'error', `/reports/${a.id}`))
+          notifs.push(makeNotif('audit', a.id, 'overdue', t('notifications.auditOverdue' as TranslationKey), t('notifications.isOverdue' as TranslationKey, { name: a.title }), 'error', `/reports/${a.id}`))
         } else if (a.status !== 'completed' && events.dueDates) {
           const d = daysUntil(a.dueDate)
           if (d <= 7 && d > 0) {
-            notifs.push(makeNotif('audit', a.id, 'due-7d', 'Audit Due Soon', `${a.title} is due in ${Math.ceil(d)} days`, 'warning', `/reports/${a.id}`))
+            notifs.push(makeNotif('audit', a.id, 'due-7d', t('notifications.auditDueSoon' as TranslationKey), t('notifications.isDueInDays' as TranslationKey, { name: a.title, days: String(Math.ceil(d)) }), 'warning', `/reports/${a.id}`))
           }
         }
       }
@@ -82,18 +85,18 @@ export function useNotificationEngine() {
     if (modules.policies) {
       for (const p of policies) {
         if (p.status === 'overdue' && events.overdueItems) {
-          notifs.push(makeNotif('policy', p.id, 'overdue', 'Policy Overdue', `${p.name} is overdue for review`, 'error', `/correspondence/regulatory-updates/policies?policyId=${p.id}`))
+          notifs.push(makeNotif('policy', p.id, 'overdue', t('notifications.policyOverdue' as TranslationKey), t('notifications.isOverdueForReview' as TranslationKey, { name: p.name }), 'error', `/correspondence/regulatory-updates/policies?policyId=${p.id}`))
         }
         if (p.status === 'requires-review' && events.criticalAlerts) {
-          notifs.push(makeNotif('policy', p.id, 'requires-review', 'Review Required', `${p.name} requires review`, 'warning', `/correspondence/regulatory-updates/policies?policyId=${p.id}&tab=workflow`))
+          notifs.push(makeNotif('policy', p.id, 'requires-review', t('notifications.policyReviewRequired' as TranslationKey), t('notifications.requiresReview' as TranslationKey, { name: p.name }), 'warning', `/correspondence/regulatory-updates/policies?policyId=${p.id}&tab=workflow`))
         }
         if (p.status === 'expired' && events.overdueItems) {
-          notifs.push(makeNotif('policy', p.id, 'expired', 'Policy Expired', `${p.name} has expired`, 'error', `/correspondence/regulatory-updates/policies?policyId=${p.id}`))
+          notifs.push(makeNotif('policy', p.id, 'expired', t('notifications.policyExpired' as TranslationKey), t('notifications.hasExpired' as TranslationKey, { name: p.name }), 'error', `/correspondence/regulatory-updates/policies?policyId=${p.id}`))
         }
         if (p.status === 'approved' && events.dueDates) {
           const d = daysUntil(p.nextReviewDate)
           if (d <= 30 && d > 0) {
-            notifs.push(makeNotif('policy', p.id, 'due-30d', 'Review Approaching', `${p.name} review in ${Math.ceil(d)} days`, 'info', `/correspondence/regulatory-updates/policies?policyId=${p.id}`))
+            notifs.push(makeNotif('policy', p.id, 'due-30d', t('notifications.policyReviewApproaching' as TranslationKey), t('notifications.reviewInDays' as TranslationKey, { name: p.name, days: String(Math.ceil(d)) }), 'info', `/correspondence/regulatory-updates/policies?policyId=${p.id}`))
           }
         }
       }
@@ -106,15 +109,15 @@ export function useNotificationEngine() {
         if (isOpen) {
           const d = daysUntil(o.dueDate)
           if (d < 0 && events.overdueItems) {
-            notifs.push(makeNotif('observation', o.id, 'overdue', 'Observation Overdue', `${o.title} is past due`, 'error', `/correspondence/observations?id=${o.id}`))
+            notifs.push(makeNotif('observation', o.id, 'overdue', t('notifications.observationOverdue' as TranslationKey), t('notifications.isPastDue' as TranslationKey, { name: o.title }), 'error', `/correspondence/observations?id=${o.id}`))
           } else if (d <= 7 && d > 0 && events.dueDates) {
-            notifs.push(makeNotif('observation', o.id, 'due-7d', 'Observation Due Soon', `${o.title} is due in ${Math.ceil(d)} days`, 'warning', `/correspondence/observations?id=${o.id}`))
+            notifs.push(makeNotif('observation', o.id, 'due-7d', t('notifications.observationDueSoon' as TranslationKey), t('notifications.isDueInDays' as TranslationKey, { name: o.title, days: String(Math.ceil(d)) }), 'warning', `/correspondence/observations?id=${o.id}`))
           }
         }
         if (o.remediationSubmissionDueDate && !o.remediationPlan && events.overdueItems) {
           const rd = daysUntil(o.remediationSubmissionDueDate)
           if (rd < 0) {
-            notifs.push(makeNotif('observation', o.id, 'remediation-overdue', 'Remediation Plan Overdue', `${o.title} remediation plan is overdue`, 'error', `/correspondence/observations?id=${o.id}`))
+            notifs.push(makeNotif('observation', o.id, 'remediation-overdue', t('notifications.remediationOverdue' as TranslationKey), t('notifications.remediationPlanOverdue' as TranslationKey, { name: o.title }), 'error', `/correspondence/observations?id=${o.id}`))
           }
         }
       }
@@ -124,12 +127,12 @@ export function useNotificationEngine() {
     if (modules.samaLetters) {
       for (const l of letters) {
         if (l.status === 'overdue' && events.overdueItems) {
-          notifs.push(makeNotif('sama-letter', l.id, 'overdue', 'SAMA Letter Overdue', `${l.reference} — ${l.subject} is overdue`, 'error', `/correspondence/sama-letters?id=${l.id}`))
+          notifs.push(makeNotif('sama-letter', l.id, 'overdue', t('notifications.samaLetterOverdue' as TranslationKey), t('notifications.isOverdueRef' as TranslationKey, { ref: l.reference, name: l.subject }), 'error', `/correspondence/sama-letters?id=${l.id}`))
         }
         if (l.status === 'sent' && l.responseDeadline && events.dueDates) {
           const d = daysUntil(l.responseDeadline)
           if (d <= 7 && d > 0) {
-            notifs.push(makeNotif('sama-letter', l.id, 'due-7d', 'SAMA Response Due Soon', `${l.reference} response due in ${Math.ceil(d)} days`, 'warning', `/correspondence/sama-letters?id=${l.id}`))
+            notifs.push(makeNotif('sama-letter', l.id, 'due-7d', t('notifications.samaResponseDueSoon' as TranslationKey), t('notifications.responseInDays' as TranslationKey, { name: l.reference, days: String(Math.ceil(d)) }), 'warning', `/correspondence/sama-letters?id=${l.id}`))
           }
         }
       }
@@ -139,11 +142,11 @@ export function useNotificationEngine() {
     if (modules.rules) {
       for (const c of circulars) {
         if (c.status === 'overdue' && events.overdueItems) {
-          notifs.push(makeNotif('circular', c.id, 'overdue', 'Circular Overdue', `${c.reference} — ${c.title} is overdue`, 'error', `/correspondence/regulatory-updates/rules?id=${c.id}`))
+          notifs.push(makeNotif('circular', c.id, 'overdue', t('notifications.circularOverdue' as TranslationKey), t('notifications.isOverdueRef' as TranslationKey, { ref: c.reference, name: c.title }), 'error', `/correspondence/regulatory-updates/rules?id=${c.id}`))
         } else if (c.status !== 'completed' && events.dueDates) {
           const d = daysUntil(c.dueDate)
           if (d <= 7 && d > 0) {
-            notifs.push(makeNotif('circular', c.id, 'due-7d', 'Circular Due Soon', `${c.reference} — ${c.title} due in ${Math.ceil(d)} days`, 'warning', `/correspondence/regulatory-updates/rules?id=${c.id}`))
+            notifs.push(makeNotif('circular', c.id, 'due-7d', t('notifications.circularDueSoon' as TranslationKey), t('notifications.refDueInDays' as TranslationKey, { ref: c.reference, name: c.title, days: String(Math.ceil(d)) }), 'warning', `/correspondence/regulatory-updates/rules?id=${c.id}`))
           }
         }
       }
@@ -157,25 +160,27 @@ export function useNotificationEngine() {
           const d = daysUntil(course.dueDate)
           const key = `${emp.id}-${course.id}`
           if ((course.status === 'overdue' || d < 0) && events.overdueItems) {
-            notifs.push(makeNotif('training', key, 'overdue', 'Training Overdue', `${emp.name} — ${course.name} is overdue`, 'error', `/team/training?employeeId=${emp.id}`))
+            const msg = isRTL ? `${emp.name} — ${course.name} متأخر` : `${emp.name} — ${course.name} is overdue`
+            notifs.push(makeNotif('training', key, 'overdue', t('notifications.trainingOverdue' as TranslationKey), msg, 'error', `/team/training?employeeId=${emp.id}`))
           } else if (d <= 7 && d > 0 && events.dueDates) {
-            notifs.push(makeNotif('training', key, 'due-7d', 'Training Due Soon', `${emp.name} — ${course.name} due in ${Math.ceil(d)} days`, 'warning', `/team/training?employeeId=${emp.id}`))
+            const days = Math.ceil(d)
+            const msg = isRTL ? `${emp.name} — ${course.name} مستحق خلال ${days} أيام` : `${emp.name} — ${course.name} due in ${days} days`
+            notifs.push(makeNotif('training', key, 'due-7d', t('notifications.trainingDueSoon' as TranslationKey), msg, 'warning', `/team/training?employeeId=${emp.id}`))
           }
         }
       }
     }
 
     // ── Risks ──
-    // Risks are not in a notification module toggle, but we check audits as closest match
-    // Actually risks don't have their own module toggle — include if audits or observations enabled
+    // Risks don't have their own module toggle — always included
     {
       for (const r of risks) {
         if (r.status === 'resolved') continue
         const d = daysUntil(r.nextReviewDate)
         if (d < 0 && events.overdueItems) {
-          notifs.push(makeNotif('risk', r.id, 'review-overdue', 'Risk Review Overdue', `${r.title} review is overdue`, 'warning', `/reports/risks?id=${r.id}`))
+          notifs.push(makeNotif('risk', r.id, 'review-overdue', t('notifications.riskReviewOverdue' as TranslationKey), t('notifications.reviewIsOverdue' as TranslationKey, { name: r.title }), 'warning', `/reports/risks?id=${r.id}`))
         } else if (d <= 30 && d > 0 && events.dueDates) {
-          notifs.push(makeNotif('risk', r.id, 'due-30d', 'Risk Review Approaching', `${r.title} review in ${Math.ceil(d)} days`, 'info', `/reports/risks?id=${r.id}`))
+          notifs.push(makeNotif('risk', r.id, 'due-30d', t('notifications.riskReviewApproaching' as TranslationKey), t('notifications.reviewInDays' as TranslationKey, { name: r.title, days: String(Math.ceil(d)) }), 'info', `/reports/risks?id=${r.id}`))
         }
       }
     }
@@ -189,7 +194,7 @@ export function useNotificationEngine() {
     })
 
     return notifs.slice(0, MAX_NOTIFICATIONS)
-  }, [audits, policies, observations, letters, circulars, employees, risks, prefs, prefs.modules, prefs.events])
+  }, [audits, policies, observations, letters, circulars, employees, risks, prefs, prefs.modules, prefs.events, t])
 
   // Sync to store only when the set of dedupeKeys changes
   useEffect(() => {

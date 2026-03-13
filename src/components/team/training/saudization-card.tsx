@@ -4,6 +4,7 @@ import { Icon } from '@iconify/react'
 import { Card } from '@/components/ui/card'
 import { useTranslation } from '@/i18n'
 import type { TranslationKey } from '@/i18n'
+import { useDepartmentStore } from '@/stores/department-store'
 import type { SaudizationMetrics, TrainingEmployee } from '@/types'
 
 interface SaudizationCardProps {
@@ -13,7 +14,13 @@ interface SaudizationCardProps {
 }
 
 export function SaudizationCard({ metrics, employees, onEmployeeClick }: SaudizationCardProps) {
-  const { t } = useTranslation()
+  const { t, isRTL } = useTranslation()
+  const departments = useDepartmentStore(s => s.departments)
+  const deptLabel = (name: string) => {
+    if (!isRTL) return name
+    const dept = departments.find(d => d.name === name)
+    return dept?.nameAr || name
+  }
 
   const saudiEmployeesWithProgress = employees
     .filter((emp) => emp.isSaudi)
@@ -74,7 +81,7 @@ export function SaudizationCard({ metrics, employees, onEmployeeClick }: Saudiza
         <div className="space-y-2">
           {metrics.byDepartment.map((dept, idx) => (
             <div key={`${dept.name}-${idx}`} className="grid grid-cols-[8rem_2.5rem_1fr_2.5rem] items-center gap-2">
-              <span className="text-xs font-medium text-slate-700 truncate">{dept.name || 'Unknown'}</span>
+              <span className="text-xs font-medium text-slate-700 truncate">{deptLabel(dept.name) || t('common.unknown' as TranslationKey)}</span>
               <span className="text-[10px] text-slate-500">{dept.saudi}/{dept.total}</span>
               <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
                 <div
@@ -125,7 +132,7 @@ export function SaudizationCard({ metrics, employees, onEmployeeClick }: Saudiza
               <span className="text-base">{'\u{1F1F8}\u{1F1E6}'}</span>
               <div className="flex-1 text-start">
                 <span className="text-xs font-bold text-slate-700">{emp.name}</span>
-                <span className="text-[10px] text-slate-400 mx-2">({emp.department})</span>
+                <span className="text-[10px] text-slate-400 mx-2">({deptLabel(emp.department)})</span>
               </div>
               <span className={`text-[10px] font-bold ${
                 emp.trainingProgress === 100

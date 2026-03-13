@@ -36,7 +36,7 @@ interface NotificationPanelProps {
 }
 
 export function NotificationPanel({ isOpen, onClose }: NotificationPanelProps) {
-  const { t } = useTranslation()
+  const { t, isRTL } = useTranslation()
   const router = useRouter()
   const { notifications, markAsRead, markAllAsRead, clearAll } = useNotificationStore()
 
@@ -136,7 +136,7 @@ export function NotificationPanel({ isOpen, onClose }: NotificationPanelProps) {
                       <p className="text-[10px] text-slate-400 mt-1.5">{formatRelativeTime(notif.createdAt, t)}</p>
                     </div>
                     {notif.route && (
-                      <Icon icon="lucide:chevron-right" className="text-slate-300 shrink-0 mt-1" />
+                      <Icon icon={isRTL ? 'lucide:chevron-left' : 'lucide:chevron-right'} className="text-slate-300 shrink-0 mt-1" />
                     )}
                   </div>
                 </button>

@@ -25,8 +25,6 @@ interface HelpPanelProps {
 export function HelpPanel({ isOpen, onClose }: HelpPanelProps) {
   const { t, isRTL } = useTranslation()
   const { articles, searchArticles, getByCategory, getArticle, trackView } = useHelpStore()
-
-  if (isRTL) return <HelpPanelAr isOpen={isOpen} onClose={onClose} />
   const [search, setSearch] = useState('')
   const [activeCategory, setActiveCategory] = useState<string | null>(null)
   const [activeArticleId, setActiveArticleId] = useState<string | null>(null)
@@ -62,6 +60,7 @@ export function HelpPanel({ isOpen, onClose }: HelpPanelProps) {
     trackView(id)
   }
 
+  if (isRTL) return <HelpPanelAr isOpen={isOpen} onClose={onClose} />
   if (!isOpen) return null
 
   return (

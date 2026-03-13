@@ -162,7 +162,7 @@ export function HelpPanelAr({ isOpen, onClose }: HelpPanelArProps) {
       <div className="fixed inset-0 z-50 flex" dir="rtl">
         <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={onClose} />
 
-        <div className="me-auto relative w-full max-w-md bg-white shadow-2xl flex flex-col h-full animate-slide-in-right">
+        <div className="me-auto relative w-full max-w-md bg-white shadow-2xl flex flex-col h-full animate-slide-in-left">
           {/* Header */}
           <div className="flex items-center justify-between p-6 border-b border-slate-200">
             <h2 className="text-xl font-bold text-slate-900">مركز المساعدة</h2>

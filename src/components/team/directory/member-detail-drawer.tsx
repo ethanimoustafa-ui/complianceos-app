@@ -240,14 +240,24 @@ export function MemberDetailDrawer({
                 {t('team.accessControl')}
               </h3>
               <div className="space-y-2">
-                {stagedPermissions.map((permission, index) => (
+                {stagedPermissions.map((permission, index) => {
+                  const PERMISSION_KEYS: Record<string, string> = {
+                    'Approve Policy Reviews': 'team.permissionApproveReviews',
+                    'Approve SAMA Letters': 'team.permissionApproveSAMA',
+                    'Manage Audit Findings': 'team.permissionManageFindings',
+                    'Export Compliance Data': 'team.permissionExportData',
+                    'View Risk Register': 'team.permissionViewRiskRegister',
+                    'Can Act As Approver': 'team.canActAsApprover',
+                    'Manage Training Programs': 'training.manageTrainingPrograms',
+                  }
+                  return (
                   <label
                     key={index}
                     className={`flex items-center justify-between p-3 border border-slate-100 rounded-xl cursor-pointer ${
                       permission.enabled ? 'bg-emerald-50/30' : ''
                     }`}
                   >
-                    <span className="text-xs font-medium text-slate-700">{permission.label}</span>
+                    <span className="text-xs font-medium text-slate-700">{t((PERMISSION_KEYS[permission.label] || permission.label) as TranslationKey)}</span>
                     <button
                       onClick={() => {
                         setStagedPermissions(prev => prev.map((p, i) => i === index ? { ...p, enabled: !p.enabled } : p))
@@ -262,7 +272,8 @@ export function MemberDetailDrawer({
                       }`} />
                     </button>
                   </label>
-                ))}
+                  )
+                })}
               </div>
             </section>
           </div>
