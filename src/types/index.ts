@@ -480,6 +480,9 @@ export interface CalendarEvent {
   reminders: Reminder[]
   description?: string
   location?: string
+  completed?: boolean
+  completedAt?: string
+  agency?: 'SAMA' | 'ZATCA' | 'CMA' | 'IA' | 'NCA' | 'MISA' | 'SAFIU' | null
   createdAt: string
   updatedAt: string
 }
@@ -675,6 +678,7 @@ export interface Policy {
   lastOverdueDate?: string
   currentReviewCycleId?: string
   currentReviewCycleLabel?: string
+  currentReviewCycleDate?: string
   reviewCycleHistory?: Array<{ id: string; label: string; initiatedAt: string }>
   reviewSchedule?: ReviewSchedule
   createdAt: string
@@ -1156,13 +1160,16 @@ export interface FrequencySchedule {
 export interface AuditTemplate {
   id: string
   name: string
+  nameAr?: string
   auditType: 'internal' | 'sama' | 'sharia'
   category: AuditTemplateCategory
   priority: AuditPriority
   frequency: AuditFrequency
   frequencySchedule?: FrequencySchedule
   defaultTitle: string
+  defaultTitleAr?: string
   defaultDescription: string
+  defaultDescriptionAr?: string
   defaultChecklistItems: string[]
   defaultTeamRoles: string[]
   framework?: RegulatoryBodyId
@@ -1175,11 +1182,13 @@ export interface AuditTemplate {
 export interface PolicyTemplate {
   id: string
   name: string
+  nameAr?: string
   category: PolicyCategory
   approvalTier: PolicyApprovalTier
   frequency?: AuditFrequency
   frequencySchedule?: FrequencySchedule
   defaultDescription: string
+  defaultDescriptionAr?: string
   defaultWorkflowSteps: Array<{ step: string; description: string; actionType: string }>
   versionPattern: string
   framework?: RegulatoryBodyId

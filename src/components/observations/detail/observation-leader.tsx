@@ -27,7 +27,7 @@ export const ObservationLeader = memo(function ObservationLeader({
 
   return (
     <div>
-      <div className={`flex items-center justify-between mb-4 ${isRTL ? 'flex-row-reverse' : ''}`}>
+      <div className={`flex items-center justify-between mb-4`}>
         <h4 className={`text-xs font-black uppercase text-slate-500 tracking-widest`}>
           {t('observations.detail.observationLeader')}
         </h4>

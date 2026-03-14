@@ -30,7 +30,7 @@ const CATEGORY_LABELS: Record<AuditTemplateCategory, string> = {
 }
 
 export function AuditTemplatesSection() {
-  const { t } = useTranslation()
+  const { t, isRTL } = useTranslation()
   const { templates, create, update, delete: deleteTemplate } = useAuditTemplateStore()
   const [sort, setSort] = useState<SortState<SortCol>>(null)
   const [isCreateOpen, setIsCreateOpen] = useState(false)
@@ -100,7 +100,7 @@ export function AuditTemplatesSection() {
                 <td className="px-8 py-4">
                   <div className="flex items-center gap-3">
                     <Icon icon="lucide:file-check" className="text-emerald-500" />
-                    <span className="text-sm font-bold text-slate-700">{tmpl.name}</span>
+                    <span className="text-sm font-bold text-slate-700">{isRTL ? (tmpl.nameAr || tmpl.name) : tmpl.name}</span>
                   </div>
                 </td>
                 <td className="px-8 py-4 text-xs font-medium text-slate-500">
@@ -132,6 +132,7 @@ export function AuditTemplatesSection() {
         onClose={() => setIsCreateOpen(false)}
         onSave={(data) => { create(data); setIsCreateOpen(false) }}
         t={t}
+        isRTL={isRTL}
       />
 
       {/* Edit Modal */}
@@ -143,6 +144,7 @@ export function AuditTemplatesSection() {
           onSave={(data) => { update(editTemplate.id, data); setEditId(null) }}
           onDelete={() => { deleteTemplate(editTemplate.id); setEditId(null) }}
           t={t}
+          isRTL={isRTL}
         />
       )}
     </section>
@@ -156,6 +158,7 @@ function AuditTemplateFormModal({
   onSave,
   onDelete,
   t,
+  isRTL,
 }: {
   isOpen: boolean
   onClose: () => void
@@ -163,8 +166,10 @@ function AuditTemplateFormModal({
   onSave: (data: any) => void
   onDelete?: () => void
   t: (key: any) => string
+  isRTL: boolean
 }) {
   const [name, setName] = useState(template?.name ?? '')
+  const [nameAr, setNameAr] = useState(template?.nameAr ?? '')
   const [auditType, setAuditType] = useState(template?.auditType ?? 'internal')
   const [category, setCategory] = useState<AuditTemplateCategory>(template?.category ?? 'security-compliance')
   const [priority, setPriority] = useState<AuditPriority>(template?.priority ?? 'medium')
@@ -174,12 +179,14 @@ function AuditTemplateFormModal({
   const [monthOfYear, setMonthOfYear] = useState(template?.frequencySchedule?.monthOfYear ?? 1)
   const [adhocDate, setAdhocDate] = useState(template?.frequencySchedule?.adhocDate ?? '')
   const [description, setDescription] = useState(template?.defaultDescription ?? '')
+  const [descriptionAr, setDescriptionAr] = useState(template?.defaultDescriptionAr ?? '')
   const [status, setStatus] = useState<'active' | 'draft'>(template?.status ?? 'active')
 
   // Reset on open
   useState(() => {
     if (template) {
       setName(template.name)
+      setNameAr(template.nameAr ?? '')
       setAuditType(template.auditType)
       setCategory(template.category)
       setPriority(template.priority)
@@ -189,6 +196,7 @@ function AuditTemplateFormModal({
       setMonthOfYear(template.frequencySchedule?.monthOfYear ?? 1)
       setAdhocDate(template.frequencySchedule?.adhocDate ?? '')
       setDescription(template.defaultDescription)
+      setDescriptionAr(template.defaultDescriptionAr ?? '')
       setStatus(template.status)
     }
   })
@@ -206,13 +214,16 @@ function AuditTemplateFormModal({
     if (!name.trim()) return
     onSave({
       name,
+      nameAr: nameAr || undefined,
       auditType,
       category,
       priority,
       frequency,
       frequencySchedule: buildSchedule(),
       defaultTitle: name,
+      defaultTitleAr: nameAr || undefined,
       defaultDescription: description,
+      defaultDescriptionAr: descriptionAr || undefined,
       defaultChecklistItems: template?.defaultChecklistItems ?? [],
       defaultTeamRoles: template?.defaultTeamRoles ?? [],
       framework: template?.framework,
@@ -229,7 +240,8 @@ function AuditTemplateFormModal({
       size="md"
     >
       <div className="space-y-4">
-        <Input label={t('settings.templateNameLabel')} value={name} onChange={(e) => setName(e.target.value)} placeholder={t('settings.templateNamePlaceholder')} />
+        <Input label={t('settings.nameEnglish')} value={name} onChange={(e) => setName(e.target.value)} placeholder={t('settings.templateNamePlaceholder')} />
+        <Input label={t('settings.nameArabic')} value={nameAr} onChange={(e) => setNameAr(e.target.value)} placeholder={t('settings.templateNamePlaceholder')} dir="rtl" />
         <div className="grid grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('settings.templateType')}</label>
@@ -250,20 +262,20 @@ function AuditTemplateFormModal({
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('settings.templatePriority')}</label>
             <select value={priority} onChange={(e) => setPriority(e.target.value as AuditPriority)} className="flex h-11 w-full rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent">
-              <option value="critical">Critical</option>
-              <option value="high">High</option>
-              <option value="medium">Medium</option>
-              <option value="low">Low</option>
+              <option value="critical">{t('settings.priorityCritical')}</option>
+              <option value="high">{t('settings.priorityHigh')}</option>
+              <option value="medium">{t('settings.priorityMedium')}</option>
+              <option value="low">{t('settings.priorityLow')}</option>
             </select>
           </div>
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('settings.templateFrequency')}</label>
             <select value={frequency} onChange={(e) => setFrequency(e.target.value as AuditFrequency)} className="flex h-11 w-full rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent">
-              <option value="quarterly">Quarterly</option>
-              <option value="semi_annual">Semi-Annual</option>
-              <option value="annual">Annual</option>
-              <option value="monthly">Monthly</option>
-              <option value="ad_hoc">Ad-Hoc</option>
+              <option value="quarterly">{t('settings.freqQuarterly')}</option>
+              <option value="semi_annual">{t('settings.freqSemiAnnual')}</option>
+              <option value="annual">{t('settings.freqAnnual')}</option>
+              <option value="monthly">{t('settings.freqMonthly')}</option>
+              <option value="ad_hoc">{t('settings.freqAdHoc')}</option>
             </select>
           </div>
         </div>
@@ -308,7 +320,7 @@ function AuditTemplateFormModal({
                   >
                     {Array.from({ length: frequency === 'semi_annual' ? 6 : 12 }, (_, i) => (
                       <option key={i + 1} value={i + 1}>
-                        {new Date(2026, i, 1).toLocaleString('en', { month: 'long' })}
+                        {new Date(2026, i, 1).toLocaleString(isRTL ? 'ar' : 'en', { month: 'long' })}
                       </option>
                     ))}
                   </select>
@@ -329,12 +341,23 @@ function AuditTemplateFormModal({
           </div>
         )}
         <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('settings.templateDescription')}</label>
+          <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('settings.descriptionEnglish')}</label>
           <textarea
             rows={3}
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             placeholder={t('settings.describePurposeScope')}
+            className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent resize-none"
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('settings.descriptionArabic')}</label>
+          <textarea
+            rows={3}
+            value={descriptionAr}
+            onChange={(e) => setDescriptionAr(e.target.value)}
+            placeholder={t('settings.describePurposeScope')}
+            dir="rtl"
             className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent resize-none"
           />
         </div>

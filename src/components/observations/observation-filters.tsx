@@ -36,7 +36,7 @@ export function ObservationFilters({
   const { t, isRTL } = useTranslation()
 
   return (
-    <div className={`flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 mb-6 ${isRTL ? 'lg:flex-row-reverse' : ''}`}>
+    <div className={`flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 mb-6 `}>
       <div className="w-full lg:w-96 relative">
         <Icon
           icon="lucide:search"
@@ -50,7 +50,7 @@ export function ObservationFilters({
           className={`w-full ${isRTL ? 'pr-4' : 'pl-10 pr-4'} py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all`}
         />
       </div>
-      <div className={`flex flex-wrap gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
+      <div className={`flex flex-wrap gap-2`}>
         <select
           value={sourceFilter}
           onChange={(e) => onSourceChange(e.target.value as ObservationSource | 'all')}
@@ -85,7 +85,7 @@ export function ObservationFilters({
         </select>
         {/* Remediation Deadline Filter */}
         {onDueDateChange ? (
-          <div className={`relative flex items-center gap-1 bg-white border border-slate-200 rounded-lg px-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
+          <div className={`relative flex items-center gap-1 bg-white border border-slate-200 rounded-lg px-2`}>
             <Icon icon="lucide:flag" className="text-rose-400 text-sm" />
             <input
               type="date"
@@ -106,7 +106,7 @@ export function ObservationFilters({
         ) : null}
         {/* Plan Submission Deadline Filter */}
         {onSubmissionDueDateChange ? (
-          <div className={`relative flex items-center gap-1 bg-white border border-slate-200 rounded-lg px-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
+          <div className={`relative flex items-center gap-1 bg-white border border-slate-200 rounded-lg px-2`}>
             <Icon icon="lucide:file-clock" className="text-amber-400 text-sm" />
             <input
               type="date"

@@ -345,7 +345,7 @@ export default function ReportsRisksPage() {
             </Link>
           </div>
         </div>
-        <div className={`flex items-center gap-4 ${isRTL ? 'flex-row-reverse' : ''}`}>
+        <div className={`flex items-center gap-4`}>
           <button
             className="p-2.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-all cursor-pointer"
             title={t('reports.exportReports')}
@@ -676,7 +676,7 @@ export default function ReportsRisksPage() {
                 <div className="p-4 bg-slate-50 rounded-xl"><p className="text-xs font-bold text-slate-400 uppercase mb-1">{t('reports.nextReview' as TranslationKey)}</p><p className="text-sm font-bold text-slate-900">{selectedRisk.nextReviewDate ? formatDate(selectedRisk.nextReviewDate) : '-'}</p></div>
               </div>
               <div className="p-4 bg-slate-50 rounded-xl">
-                <div className={`flex items-center justify-between ${isRTL ? 'flex-row-reverse' : ''}`}>
+                <div className={`flex items-center justify-between`}>
                   <div className={isRTL ? 'text-right' : ''}><p className="text-xs font-bold text-slate-400 uppercase mb-1">{t('reports.lastReview' as TranslationKey)}</p><p className="text-sm font-bold text-slate-900">{selectedRisk.lastReviewDate ? formatDate(selectedRisk.lastReviewDate) : '-'}</p></div>
                   <button onClick={() => markReviewed(selectedRisk.id)} className="px-4 py-2 bg-indigo-600 text-white text-xs font-bold rounded-xl hover:bg-indigo-700 transition-all cursor-pointer">{t('reports.markAsReviewed' as TranslationKey)}</button>
                 </div>

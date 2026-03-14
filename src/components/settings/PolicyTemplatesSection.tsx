@@ -16,17 +16,34 @@ type SortCol = 'name' | 'category' | 'updatedAt' | 'usageCount'
 const POLICY_CATEGORIES: PolicyCategory[] = ['compliance', 'it', 'operations', 'risk', 'hr', 'finance']
 const APPROVAL_TIERS: PolicyApprovalTier[] = ['board', 'management', 'sharia', 'agm']
 
-const FREQ_LABELS: Record<AuditFrequency, string> = {
-  monthly: 'Monthly',
-  quarterly: 'Quarterly',
-  semi_annual: 'Semi-Annual',
-  annual: 'Annual',
-  ad_hoc: 'Ad-Hoc',
-}
-
 export function PolicyTemplatesSection() {
-  const { t } = useTranslation()
+  const { t, isRTL } = useTranslation()
   const { templates, create, update, delete: deleteTemplate } = usePolicyTemplateStore()
+
+  const CATEGORY_LABELS: Record<PolicyCategory, string> = {
+    compliance: t('policies.categoryCompliance'),
+    it: t('policies.categoryIt'),
+    operations: t('policies.categoryOperations'),
+    risk: t('policies.categoryRisk'),
+    hr: t('policies.categoryHr'),
+    finance: t('policies.categoryFinance'),
+  }
+
+  const TIER_LABELS: Record<PolicyApprovalTier, string> = {
+    board: t('policies.tierBoard'),
+    management: t('policies.tierManagement'),
+    sharia: t('policies.tierSharia'),
+    agm: t('policies.tierAgm'),
+  }
+
+  const FREQ_LABELS: Record<AuditFrequency, string> = {
+    monthly: t('settings.freqMonthly'),
+    quarterly: t('settings.freqQuarterly'),
+    semi_annual: t('settings.freqSemiAnnual'),
+    annual: t('settings.freqAnnual'),
+    ad_hoc: t('settings.freqAdHoc'),
+  }
+
   const [sort, setSort] = useState<SortState<SortCol>>(null)
   const [isCreateOpen, setIsCreateOpen] = useState(false)
   const [editId, setEditId] = useState<string | null>(null)
@@ -101,11 +118,11 @@ export function PolicyTemplatesSection() {
                 <td className="px-8 py-4">
                   <div className="flex items-center gap-3">
                     <Icon icon="lucide:file-text" className="text-blue-500" />
-                    <span className="text-sm font-bold text-slate-700">{tmpl.name}</span>
+                    <span className="text-sm font-bold text-slate-700">{isRTL ? (tmpl.nameAr || tmpl.name) : tmpl.name}</span>
                   </div>
                 </td>
-                <td className="px-8 py-4 text-xs font-medium text-slate-500 capitalize">{tmpl.category}</td>
-                <td className="px-8 py-4 text-xs font-medium text-slate-500 capitalize">{tmpl.approvalTier}</td>
+                <td className="px-8 py-4 text-xs font-medium text-slate-500 capitalize">{CATEGORY_LABELS[tmpl.category] ?? tmpl.category}</td>
+                <td className="px-8 py-4 text-xs font-medium text-slate-500 capitalize">{TIER_LABELS[tmpl.approvalTier] ?? tmpl.approvalTier}</td>
                 <td className="px-8 py-4 text-xs font-medium text-slate-500">{tmpl.frequency ? FREQ_LABELS[tmpl.frequency] : '—'}</td>
                 <td className="px-8 py-4 text-xs text-slate-500">{tmpl.updatedAt}</td>
                 <td className="px-8 py-4">
@@ -133,6 +150,7 @@ export function PolicyTemplatesSection() {
         onClose={() => setIsCreateOpen(false)}
         onSave={(data) => { create(data); setIsCreateOpen(false) }}
         t={t}
+        isRTL={isRTL}
       />
 
       {/* Edit Modal */}
@@ -144,6 +162,7 @@ export function PolicyTemplatesSection() {
           onSave={(data) => { update(editTemplate.id, data); setEditId(null) }}
           onDelete={() => { deleteTemplate(editTemplate.id); setEditId(null) }}
           t={t}
+          isRTL={isRTL}
         />
       )}
     </section>
@@ -157,6 +176,7 @@ function PolicyTemplateFormModal({
   onSave,
   onDelete,
   t,
+  isRTL,
 }: {
   isOpen: boolean
   onClose: () => void
@@ -164,8 +184,10 @@ function PolicyTemplateFormModal({
   onSave: (data: any) => void
   onDelete?: () => void
   t: (key: any) => string
+  isRTL: boolean
 }) {
   const [name, setName] = useState(template?.name ?? '')
+  const [nameAr, setNameAr] = useState(template?.nameAr ?? '')
   const [category, setCategory] = useState<PolicyCategory>(template?.category ?? 'compliance')
   const [approvalTier, setApprovalTier] = useState<PolicyApprovalTier>(template?.approvalTier ?? 'management')
   const [frequency, setFrequency] = useState<AuditFrequency>(template?.frequency ?? 'annual')
@@ -174,6 +196,7 @@ function PolicyTemplateFormModal({
   const [monthOfYear, setMonthOfYear] = useState(template?.frequencySchedule?.monthOfYear ?? 1)
   const [adhocDate, setAdhocDate] = useState(template?.frequencySchedule?.adhocDate ?? '')
   const [description, setDescription] = useState(template?.defaultDescription ?? '')
+  const [descriptionAr, setDescriptionAr] = useState(template?.defaultDescriptionAr ?? '')
   const [status, setStatus] = useState<'active' | 'draft'>(template?.status ?? 'active')
 
   function buildSchedule(): FrequencySchedule | undefined {
@@ -189,11 +212,13 @@ function PolicyTemplateFormModal({
     if (!name.trim()) return
     onSave({
       name,
+      nameAr: nameAr || undefined,
       category,
       approvalTier,
       frequency,
       frequencySchedule: buildSchedule(),
       defaultDescription: description,
+      defaultDescriptionAr: descriptionAr || undefined,
       defaultWorkflowSteps: template?.defaultWorkflowSteps ?? [],
       versionPattern: template?.versionPattern ?? 'v{major}.{minor}',
       framework: template?.framework,
@@ -210,13 +235,21 @@ function PolicyTemplateFormModal({
       size="md"
     >
       <div className="space-y-4">
-        <Input label={t('settings.templateNameLabel')} value={name} onChange={(e) => setName(e.target.value)} placeholder={t('settings.templateNamePlaceholder')} />
+        <Input label={t('settings.nameEnglish')} value={name} onChange={(e) => setName(e.target.value)} placeholder={t('settings.templateNamePlaceholder')} />
+        <Input label={t('settings.nameArabic')} value={nameAr} onChange={(e) => setNameAr(e.target.value)} placeholder={t('settings.templateNamePlaceholder')} dir="rtl" />
         <div className="grid grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('settings.categoryCol')}</label>
             <select value={category} onChange={(e) => setCategory(e.target.value as PolicyCategory)} className="flex h-11 w-full rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent">
               {POLICY_CATEGORIES.map((c) => (
-                <option key={c} value={c} className="capitalize">{c}</option>
+                <option key={c} value={c}>{
+                  c === 'compliance' ? t('policies.categoryCompliance') :
+                  c === 'it' ? t('policies.categoryIt') :
+                  c === 'operations' ? t('policies.categoryOperations') :
+                  c === 'risk' ? t('policies.categoryRisk') :
+                  c === 'hr' ? t('policies.categoryHr') :
+                  t('policies.categoryFinance')
+                }</option>
               ))}
             </select>
           </div>
@@ -224,7 +257,12 @@ function PolicyTemplateFormModal({
             <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('settings.approvalTier')}</label>
             <select value={approvalTier} onChange={(e) => setApprovalTier(e.target.value as PolicyApprovalTier)} className="flex h-11 w-full rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent">
               {APPROVAL_TIERS.map((tier) => (
-                <option key={tier} value={tier} className="capitalize">{tier}</option>
+                <option key={tier} value={tier}>{
+                  tier === 'board' ? t('policies.tierBoard') :
+                  tier === 'management' ? t('policies.tierManagement') :
+                  tier === 'sharia' ? t('policies.tierSharia') :
+                  t('policies.tierAgm')
+                }</option>
               ))}
             </select>
           </div>
@@ -237,11 +275,11 @@ function PolicyTemplateFormModal({
             onChange={(e) => setFrequency(e.target.value as AuditFrequency)}
             className="flex h-11 w-full rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
           >
-            <option value="monthly">Monthly</option>
-            <option value="quarterly">Quarterly</option>
-            <option value="semi_annual">Semi-Annual</option>
-            <option value="annual">Annual</option>
-            <option value="ad_hoc">Ad-Hoc</option>
+            <option value="monthly">{t('settings.freqMonthly')}</option>
+            <option value="quarterly">{t('settings.freqQuarterly')}</option>
+            <option value="semi_annual">{t('settings.freqSemiAnnual')}</option>
+            <option value="annual">{t('settings.freqAnnual')}</option>
+            <option value="ad_hoc">{t('settings.freqAdHoc')}</option>
           </select>
         </div>
         {/* Frequency Schedule Picker */}
@@ -285,7 +323,7 @@ function PolicyTemplateFormModal({
                   >
                     {Array.from({ length: frequency === 'semi_annual' ? 6 : 12 }, (_, i) => (
                       <option key={i + 1} value={i + 1}>
-                        {new Date(2026, i, 1).toLocaleString('en', { month: 'long' })}
+                        {new Date(2026, i, 1).toLocaleString(isRTL ? 'ar' : 'en', { month: 'long' })}
                       </option>
                     ))}
                   </select>
@@ -306,12 +344,23 @@ function PolicyTemplateFormModal({
           </div>
         )}
         <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('settings.templateDescription')}</label>
+          <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('settings.descriptionEnglish')}</label>
           <textarea
             rows={3}
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             placeholder={t('settings.describePurposeScope')}
+            className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent resize-none"
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('settings.descriptionArabic')}</label>
+          <textarea
+            rows={3}
+            value={descriptionAr}
+            onChange={(e) => setDescriptionAr(e.target.value)}
+            placeholder={t('settings.describePurposeScope')}
+            dir="rtl"
             className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent resize-none"
           />
         </div>

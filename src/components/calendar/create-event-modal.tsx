@@ -23,7 +23,13 @@ export function CreateEventModal({ isOpen, onClose, onSuccess }: CreateEventModa
     description: '',
     startTime: '',
     endTime: '',
+    agency: '' as '' | 'SAMA' | 'ZATCA' | 'CMA' | 'IA' | 'NCA' | 'MISA' | 'SAFIU',
   })
+
+  const handleClose = () => {
+    setForm({ title: '', date: '', type: 'meeting', description: '', startTime: '', endTime: '', agency: '' })
+    onClose()
+  }
 
   const handleSubmit = () => {
     if (!form.title || !form.date) return
@@ -35,12 +41,13 @@ export function CreateEventModal({ isOpen, onClose, onSuccess }: CreateEventModa
       description: form.description,
       startTime: form.startTime || undefined,
       endTime: form.endTime || undefined,
+      agency: form.agency || null,
       attendees: [],
       reminders: [],
     })
 
     onSuccess?.(form.date)
-    setForm({ title: '', date: '', type: 'meeting', description: '', startTime: '', endTime: '' })
+    setForm({ title: '', date: '', type: 'meeting', description: '', startTime: '', endTime: '', agency: '' })
     onClose()
   }
 
@@ -49,16 +56,16 @@ export function CreateEventModal({ isOpen, onClose, onSuccess }: CreateEventModa
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
       <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl overflow-hidden animate-fade-in">
-        <div className={`p-6 border-b border-slate-100 flex items-center justify-between ${isRTL ? 'flex-row-reverse' : ''}`}>
+        <div className={`p-6 border-b border-slate-100 flex items-center justify-between`}>
           <h3 className="text-lg font-bold text-slate-900">{t('calendar.newComplianceTask')}</h3>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-900 cursor-pointer">
+          <button onClick={handleClose} className="text-slate-400 hover:text-slate-900 cursor-pointer">
             <Icon icon="lucide:x" className="text-xl" />
           </button>
         </div>
         <div className="p-6 space-y-4">
           <div>
             <label className={`block text-xs font-bold text-slate-500 uppercase mb-1.5 ${isRTL ? 'text-right' : ''}`}>
-              {t('calendar.taskTitle')}
+              {t('calendar.taskTitle')}<span className="text-rose-500 ms-1">*</span>
             </label>
             <input
               type="text"
@@ -71,7 +78,7 @@ export function CreateEventModal({ isOpen, onClose, onSuccess }: CreateEventModa
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className={`block text-xs font-bold text-slate-500 uppercase mb-1.5 ${isRTL ? 'text-right' : ''}`}>
-                {t('calendar.date')}
+                {t('calendar.date')}<span className="text-rose-500 ms-1">*</span>
               </label>
               <input
                 type="date"
@@ -82,24 +89,43 @@ export function CreateEventModal({ isOpen, onClose, onSuccess }: CreateEventModa
             </div>
             <div>
               <label className={`block text-xs font-bold text-slate-500 uppercase mb-1.5 ${isRTL ? 'text-right' : ''}`}>
-                Type
+                {t('common.type')}
               </label>
               <select
                 value={form.type}
                 onChange={(e) => setForm(prev => ({ ...prev, type: e.target.value as typeof form.type }))}
                 className={`w-full px-4 py-2.5 rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 ${isRTL ? 'text-right' : ''}`}
               >
-                <option value="meeting">Meeting</option>
-                <option value="deadline">Deadline</option>
-                <option value="submission">Submission</option>
-                <option value="review">Review</option>
+                <option value="meeting">{t('calendar.typeMeeting')}</option>
+                <option value="deadline">{t('calendar.typeDeadline')}</option>
+                <option value="submission">{t('calendar.typeSubmission')}</option>
+                <option value="review">{t('calendar.typeReview')}</option>
               </select>
             </div>
+          </div>
+          <div>
+            <label className={`block text-xs font-bold text-slate-500 uppercase mb-1.5 ${isRTL ? 'text-right' : ''}`}>
+              {t('calendar.frameworkAgency')}
+            </label>
+            <select
+              value={form.agency}
+              onChange={(e) => setForm(prev => ({ ...prev, agency: e.target.value as typeof form.agency }))}
+              className={`w-full px-4 py-2.5 rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 ${isRTL ? 'text-right' : ''}`}
+            >
+              <option value="">—</option>
+              <option value="SAMA">SAMA</option>
+              <option value="ZATCA">ZATCA</option>
+              <option value="CMA">CMA</option>
+              <option value="IA">IA</option>
+              <option value="NCA">NCA</option>
+              <option value="MISA">MISA</option>
+              <option value="SAFIU">SAFIU</option>
+            </select>
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className={`block text-xs font-bold text-slate-500 uppercase mb-1.5 ${isRTL ? 'text-right' : ''}`}>
-                Start Time
+                {t('calendar.startTime')}
               </label>
               <input
                 type="time"
@@ -110,7 +136,7 @@ export function CreateEventModal({ isOpen, onClose, onSuccess }: CreateEventModa
             </div>
             <div>
               <label className={`block text-xs font-bold text-slate-500 uppercase mb-1.5 ${isRTL ? 'text-right' : ''}`}>
-                End Time
+                {t('calendar.endTime')}
               </label>
               <input
                 type="time"
@@ -122,20 +148,20 @@ export function CreateEventModal({ isOpen, onClose, onSuccess }: CreateEventModa
           </div>
           <div>
             <label className={`block text-xs font-bold text-slate-500 uppercase mb-1.5 ${isRTL ? 'text-right' : ''}`}>
-              Description
+              {t('common.description')}
             </label>
             <textarea
               value={form.description}
               onChange={(e) => setForm(prev => ({ ...prev, description: e.target.value }))}
               rows={2}
-              placeholder="Add notes..."
+              placeholder={t('calendar.addNotesPlaceholder')}
               className={`w-full px-4 py-2.5 rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 resize-none ${isRTL ? 'text-right' : ''}`}
             />
           </div>
         </div>
-        <div className={`p-6 bg-slate-50 flex gap-3 ${isRTL ? 'flex-row-reverse' : ''}`}>
+        <div className={`p-6 bg-slate-50 flex gap-3`}>
           <button
-            onClick={onClose}
+            onClick={handleClose}
             className="flex-1 py-2.5 text-sm font-bold text-slate-600 hover:bg-slate-200 rounded-lg transition-colors cursor-pointer"
           >
             {t('common.cancel')}

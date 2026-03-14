@@ -413,7 +413,7 @@ export const EditObservationModal = memo(function EditObservationModal({
         </div>
 
         {/* Footer */}
-        <div className={`p-8 bg-slate-50 border-t border-slate-200 flex justify-end gap-3 ${isRTL ? 'flex-row-reverse' : ''}`}>
+        <div className={`p-8 bg-slate-50 border-t border-slate-200 flex justify-end gap-3`}>
           <Button variant="ghost" onClick={handleClose} disabled={isLoading}>
             {t('common.cancel')}
           </Button>

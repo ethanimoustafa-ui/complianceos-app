@@ -1520,7 +1520,7 @@ export default function AuditDetailPage() {
             </div>
           ))}
           <button
-            className={`w-full mt-6 py-3 border-2 border-dashed border-slate-200 rounded-xl text-slate-400 hover:border-emerald-200 hover:text-emerald-500 hover:bg-emerald-50/50 transition-all text-sm font-bold flex items-center justify-center gap-2 cursor-pointer ${isRTL ? 'flex-row-reverse' : ''}`}
+            className={`w-full mt-6 py-3 border-2 border-dashed border-slate-200 rounded-xl text-slate-400 hover:border-emerald-200 hover:text-emerald-500 hover:bg-emerald-50/50 transition-all text-sm font-bold flex items-center justify-center gap-2 cursor-pointer`}
             onClick={() => { setShowManageTeamModal(false); setShowAddMemberModal(true) }}
           >
             <Icon icon="lucide:user-plus" />

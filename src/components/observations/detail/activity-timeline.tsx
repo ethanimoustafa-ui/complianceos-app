@@ -46,7 +46,7 @@ export const ActivityTimeline = memo(function ActivityTimeline({
                   index === 0 ? 'bg-emerald-500' : 'bg-slate-300'
                 }`}
               />
-              <div className={`flex items-center gap-2 ${isRTL ? 'flex-row-reverse justify-end' : ''}`}>
+              <div className={`flex items-center gap-2`}>
                 {event.userAvatar ? (
                   <div className="relative group">
                     <img

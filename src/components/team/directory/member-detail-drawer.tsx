@@ -14,7 +14,11 @@ import type { TeamMember } from '@/types'
 
 function CapacityRing({ capacity }: { capacity: number }) {
   const circumference = 2 * Math.PI * 40
-  const offset = circumference - (capacity / 100) * circumference
+  const isOverflow = capacity > 100
+  const basePercent = isOverflow ? 100 : capacity
+  const overflowPercent = isOverflow ? capacity - 100 : 0
+  const baseOffset = circumference - (basePercent / 100) * circumference
+  const overflowOffset = circumference - (Math.min(overflowPercent, 100) / 100) * circumference
   const ringColor = capacity >= 90 ? 'text-rose-500' : capacity >= 75 ? 'text-amber-500' : 'text-emerald-500'
 
   return (
@@ -24,8 +28,15 @@ function CapacityRing({ capacity }: { capacity: number }) {
         <circle
           className={`${ringColor} stroke-current transition-all duration-700`}
           strokeWidth="12" strokeLinecap="round" fill="transparent" r="40" cx="50" cy="50"
-          strokeDasharray={circumference} strokeDashoffset={offset}
+          strokeDasharray={circumference} strokeDashoffset={baseOffset}
         />
+        {isOverflow && (
+          <circle
+            className="text-purple-500 stroke-current transition-all duration-700"
+            strokeWidth="6" strokeLinecap="round" fill="transparent" r="40" cx="50" cy="50"
+            strokeDasharray={circumference} strokeDashoffset={overflowOffset}
+          />
+        )}
       </svg>
       <div className="absolute inset-0 flex items-center justify-center">
         <span className="text-sm font-bold text-slate-900">{capacity}%</span>
@@ -138,11 +149,21 @@ export function MemberDetailDrawer({
                     advisory: 'bg-indigo-100 text-indigo-700',
                     risk: 'bg-orange-100 text-orange-700',
                   }
+                  const typeLabels: Record<string, string> = {
+                    observation: t('team.typeObservation' as TranslationKey),
+                    audit: t('team.typeAudit' as TranslationKey),
+                    policy: t('team.typePolicy' as TranslationKey),
+                    correspondence: t('team.typeCorrespondence' as TranslationKey),
+                    advisory: t('team.typeAdvisory' as TranslationKey),
+                    'sama-letter': t('team.typeSamaLetter' as TranslationKey),
+                    risk: t('team.typeRisk' as TranslationKey),
+                    circular: t('team.typeCircular' as TranslationKey),
+                  }
                   return (
                     <div key={`${item.type}-${item.id}`} className="p-3 rounded-xl border border-slate-100 bg-slate-50">
                       <div className="flex items-center gap-2">
                         <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full uppercase ${badgeColors[item.type] || 'bg-slate-100 text-slate-600'}`}>
-                          {item.type}
+                          {typeLabels[item.type] || item.type}
                         </span>
                         <p className="text-xs font-bold text-slate-700 truncate flex-1">{item.title}</p>
                       </div>
@@ -154,7 +175,7 @@ export function MemberDetailDrawer({
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2 min-w-0">
                         <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full uppercase bg-slate-200 text-slate-600">
-                          task
+                          {t('team.typeTask' as TranslationKey)}
                         </span>
                         <div className="min-w-0">
                           <p className="text-xs font-bold text-slate-700 truncate">{assignment.title}</p>

@@ -239,10 +239,10 @@ export const ObservationDetailModal = memo(function ObservationDetailModal({
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} size="xl">
-      <div className={`flex flex-col lg:flex-row h-[80vh] -m-6 ${isRTL ? 'lg:flex-row-reverse' : ''}`}>
+      <div className={`flex flex-col lg:flex-row h-[80vh] -m-6`}>
         {/* Main Section */}
         <div className="flex-1 p-8 overflow-y-auto hide-scrollbar bg-white">
-          <div className={`flex items-center gap-3 mb-6 ${isRTL ? 'flex-row-reverse' : ''}`}>
+          <div className={`flex items-center gap-3 mb-6`}>
             <button
               onClick={onClose}
               className="p-2 hover:bg-slate-100 rounded-lg transition-all text-slate-400"

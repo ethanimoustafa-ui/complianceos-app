@@ -50,12 +50,35 @@ export default function RegistryPage() {
   // Preview panel state
   const [previewRow, setPreviewRow] = useState<RegistryRow | null>(null)
 
+  // Status translation map
+  const statusLabels: Record<string, string> = {
+    'pending': t('common.pending'),
+    'in-progress': t('policies.inProgress' as TranslationKey),
+    'completed': t('common.completed'),
+    'overdue': t('common.overdue'),
+    'draft': t('common.draft'),
+    'under-review': t('policies.underReview' as TranslationKey),
+    'approved': t('policies.approved' as TranslationKey),
+    'expired': t('policies.expired' as TranslationKey),
+    'requires-review': t('policies.statusRequiresReview' as TranslationKey),
+  }
+
+  // Category translation map (for policies)
+  const categoryLabels: Record<string, string> = {
+    'compliance': t('policies.categoryCompliance' as TranslationKey),
+    'it': t('policies.categoryIT' as TranslationKey),
+    'operations': t('policies.categoryOperations' as TranslationKey),
+    'risk': t('policies.categoryRisk' as TranslationKey),
+    'hr': t('policies.categoryHR' as TranslationKey),
+    'finance': t('policies.categoryFinance' as TranslationKey),
+  }
+
   // ── Registry rows (circulars + policies combined) ─────────────────────────
   const registryRows = useMemo((): RegistryRow[] => {
     const phaseNames: Record<number, string> = {
-      0: 'Phase 0: CAP Analysis',
-      1: 'Phase 1: Corrective Action Plan',
-      2: 'Phase 2: Remediation',
+      0: t('regulatoryUpdates.phaseCAP' as TranslationKey),
+      1: t('regulatoryUpdates.phaseCorrectiveActionPlan' as TranslationKey),
+      2: t('regulatoryUpdates.phaseRemediation' as TranslationKey),
     }
     const circRows: RegistryRow[] = circulars.map((c) => {
       const currentStep = c.workflowSteps?.find(s => s.status === 'current')
@@ -75,7 +98,7 @@ export default function RegistryPage() {
         status: c.status,
         dueDate: c.dueDate,
         progress: dynamicProgress,
-        phaseLabel: phaseNames[currentPhase] ?? 'Phase 0: CAP Analysis',
+        phaseLabel: phaseNames[currentPhase] ?? t('regulatoryUpdates.phaseCAP' as TranslationKey),
         phaseNumber: currentPhase,
       }
     })
@@ -144,16 +167,16 @@ export default function RegistryPage() {
                 <h1 className="text-2xl font-bold font-display text-slate-900">{t('correspondence.regulatoryRequirements')}</h1>
               </div>
               <p className={`text-sm text-slate-500 ${isRTL ? 'mr-11' : 'ml-11'}`}>{t('correspondence.comprehensiveList')}</p>
-              <div className={`flex gap-2 mt-2 ${isRTL ? 'mr-11 flex-row-reverse' : 'ml-11'}`}>
+              <div className={`flex gap-2 mt-2 ${isRTL ? 'mr-11' : 'ml-11'}`}>
                 <Link
                   href="/correspondence/regulatory-updates/rules"
-                  className={`px-3 py-1 text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 rounded-lg border border-emerald-200 flex items-center gap-1 ${isRTL ? 'flex-row-reverse' : ''}`}
+                  className={`px-3 py-1 text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 rounded-lg border border-emerald-200 flex items-center gap-1`}
                 >
                   {t('correspondence.viewRegulatoryUpdates' as TranslationKey)} <Icon icon="lucide:arrow-right" className="text-xs" />
                 </Link>
                 <Link
                   href="/correspondence/regulatory-updates/policies"
-                  className={`px-3 py-1 text-xs font-bold text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-lg border border-blue-200 flex items-center gap-1 ${isRTL ? 'flex-row-reverse' : ''}`}
+                  className={`px-3 py-1 text-xs font-bold text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-lg border border-blue-200 flex items-center gap-1`}
                 >
                   {t('correspondence.viewPolicies' as TranslationKey)} <Icon icon="lucide:arrow-right" className="text-xs" />
                 </Link>
@@ -184,13 +207,13 @@ export default function RegistryPage() {
                 >
                   <option value="">{t('correspondence.allStatuses')}</option>
                   <option value="pending">{t('common.pending')}</option>
-                  <option value="in-progress">{t('correspondence.inProgress' as TranslationKey)}</option>
+                  <option value="in-progress">{t('policies.inProgress' as TranslationKey)}</option>
                   <option value="completed">{t('common.completed')}</option>
                   <option value="overdue">{t('common.overdue')}</option>
                   <option value="draft">{t('common.draft')}</option>
-                  <option value="under-review">{t('correspondence.underReview' as TranslationKey)}</option>
-                  <option value="approved">{t('correspondence.approved' as TranslationKey)}</option>
-                  <option value="expired">{t('correspondence.expired' as TranslationKey)}</option>
+                  <option value="under-review">{t('policies.underReview' as TranslationKey)}</option>
+                  <option value="approved">{t('policies.approved' as TranslationKey)}</option>
+                  <option value="expired">{t('policies.expired' as TranslationKey)}</option>
                 </select>
               </div>
               <div>
@@ -199,7 +222,7 @@ export default function RegistryPage() {
                   onChange={(e) => setKindFilter(e.target.value)}
                   className="w-full px-4 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
                 >
-                  <option value="">All Types</option>
+                  <option value="">{t('correspondence.allTypes')}</option>
                   <option value="rule">{t('correspondence.ruleCircular' as TranslationKey)}</option>
                   <option value="policy">{t('correspondence.policyProcedure' as TranslationKey)}</option>
                 </select>
@@ -212,11 +235,11 @@ export default function RegistryPage() {
               <table className="w-full">
                 <thead className="bg-slate-50 border-b-2 border-slate-200">
                   <tr>
-                    <th className="text-left p-4 text-xs font-black text-slate-600 uppercase tracking-wider">Reference</th>
+                    <th className="text-left p-4 text-xs font-black text-slate-600 uppercase tracking-wider">{t('correspondence.reference')}</th>
                     <th className="text-left p-4 text-xs font-black text-slate-600 uppercase tracking-wider w-64">{t('correspondence.requirementName')}</th>
                     <th className="text-left p-4 text-xs font-black text-slate-600 uppercase tracking-wider">{t('correspondence.itemType' as TranslationKey)}</th>
                     <th className="text-left p-4 text-xs font-black text-slate-600 uppercase tracking-wider">{t('correspondence.category')}</th>
-                    <th className="text-left p-4 text-xs font-black text-slate-600 uppercase tracking-wider">Phase</th>
+                    <th className="text-left p-4 text-xs font-black text-slate-600 uppercase tracking-wider">{t('correspondence.phase')}</th>
                     <th className="text-left p-4 text-xs font-black text-slate-600 uppercase tracking-wider">{t('common.status')}</th>
                     <th className="text-left p-4 text-xs font-black text-slate-600 uppercase tracking-wider">{t('observations.dueDate')}</th>
                     <th className="text-left p-4 text-xs font-black text-slate-600 uppercase tracking-wider">{t('common.progress')}</th>
@@ -242,7 +265,7 @@ export default function RegistryPage() {
                         )}
                       </td>
                       <td className="p-4">
-                        <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">{row.category}</span>
+                        <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">{categoryLabels[row.category] ?? row.category}</span>
                       </td>
                       <td className="p-4">
                         {row.phaseNumber < 0 ? (
@@ -255,7 +278,7 @@ export default function RegistryPage() {
                       </td>
                       <td className="p-4">
                         <span className={`text-xs font-bold px-2 py-1 rounded-full capitalize ${registryStatusColors[row.status] ?? 'bg-slate-100 text-slate-600'}`}>
-                          {row.status.replace('-', ' ')}
+                          {statusLabels[row.status] ?? row.status}
                         </span>
                       </td>
                       <td className="p-4 text-sm text-slate-600">{row.dueDate || '—'}</td>
@@ -305,7 +328,7 @@ export default function RegistryPage() {
           <div className={`relative bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[85vh] flex flex-col overflow-hidden ${isRTL ? 'rtl' : ''}`}>
             {/* Header */}
             <div className={`p-5 border-b border-slate-100 ${isRTL ? 'text-right' : ''}`}>
-              <div className={`flex items-start gap-3 ${isRTL ? 'flex-row-reverse' : ''}`}>
+              <div className={`flex items-start gap-3`}>
                 <div className="flex-1 min-w-0">
                   <p className="text-xs font-mono text-slate-400 mb-1">{previewRow.reference}</p>
                   <h2 className="text-base font-bold text-slate-900 leading-snug">{previewRow.name}</h2>
@@ -318,7 +341,7 @@ export default function RegistryPage() {
                 </button>
               </div>
               {/* Badges */}
-              <div className={`flex flex-wrap gap-1.5 mt-3 ${isRTL ? 'flex-row-reverse' : ''}`}>
+              <div className={`flex flex-wrap gap-1.5 mt-3`}>
                 {previewRow.kind === 'rule' ? (
                   <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
                     {t('correspondence.ruleCircular' as TranslationKey)}
@@ -329,7 +352,7 @@ export default function RegistryPage() {
                   </span>
                 )}
                 <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full capitalize ${registryStatusColors[previewRow.status] ?? 'bg-slate-100 text-slate-600'}`}>
-                  {previewRow.status.replace('-', ' ')}
+                  {statusLabels[previewRow.status] ?? previewRow.status}
                 </span>
                 {previewRow.phaseNumber >= 0 && (
                   <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${phaseChipClass(previewRow.phaseNumber)}`}>
@@ -343,7 +366,7 @@ export default function RegistryPage() {
             <div className="flex-1 overflow-y-auto p-5 space-y-4">
               {/* Progress */}
               <div>
-                <div className={`flex justify-between text-xs mb-1.5 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                <div className={`flex justify-between text-xs mb-1.5`}>
                   <span className="text-slate-500">{t('common.progress')}</span>
                   <span className="font-bold text-slate-700">{previewRow.progress}%</span>
                 </div>
@@ -357,12 +380,12 @@ export default function RegistryPage() {
 
               {/* Key details */}
               <div className="space-y-2.5">
-                <div className={`flex justify-between text-xs ${isRTL ? 'flex-row-reverse' : ''}`}>
+                <div className={`flex justify-between text-xs`}>
                   <span className="text-slate-400">{t('correspondence.category')}</span>
-                  <span className="font-bold text-slate-700">{previewRow.category}</span>
+                  <span className="font-bold text-slate-700">{categoryLabels[previewRow.category] ?? previewRow.category}</span>
                 </div>
                 {previewRow.dueDate && (
-                  <div className={`flex justify-between text-xs ${isRTL ? 'flex-row-reverse' : ''}`}>
+                  <div className={`flex justify-between text-xs`}>
                     <span className="text-slate-400">{t('observations.dueDate')}</span>
                     <span className={`font-bold ${new Date(previewRow.dueDate) < new Date() ? 'text-rose-600' : 'text-slate-700'}`}>
                       {previewRow.dueDate}
@@ -373,17 +396,17 @@ export default function RegistryPage() {
                 {/* Policy-specific: owner + version + next review */}
                 {previewRow.kind === 'policy' && previewItem && 'owner' in previewItem && (
                   <>
-                    <div className={`flex justify-between text-xs ${isRTL ? 'flex-row-reverse' : ''}`}>
+                    <div className={`flex justify-between text-xs`}>
                       <span className="text-slate-400">{t('policies.policyOwner' as TranslationKey)}</span>
                       <span className="font-bold text-slate-700">{(previewItem as Policy).owner?.name}</span>
                     </div>
-                    <div className={`flex justify-between text-xs ${isRTL ? 'flex-row-reverse' : ''}`}>
+                    <div className={`flex justify-between text-xs`}>
                       <span className="text-slate-400">{t('policies.version' as TranslationKey)}</span>
                       <span className="font-bold text-slate-700">{(previewItem as Policy).version}</span>
                     </div>
                     {(previewItem as Policy).nextReviewDate && (
-                      <div className={`flex justify-between text-xs ${isRTL ? 'flex-row-reverse' : ''}`}>
-                        <span className="text-slate-400">Next Review</span>
+                      <div className={`flex justify-between text-xs`}>
+                        <span className="text-slate-400">{t('policies.nextReview')}</span>
                         <span className="font-bold text-slate-700">{(previewItem as Policy).nextReviewDate}</span>
                       </div>
                     )}
@@ -394,15 +417,15 @@ export default function RegistryPage() {
                 {previewRow.kind === 'rule' && previewItem && 'articles' in previewItem && (
                   <>
                     {(previewItem as Circular).capDeadline && (
-                      <div className={`flex justify-between text-xs ${isRTL ? 'flex-row-reverse' : ''}`}>
+                      <div className={`flex justify-between text-xs`}>
                         <span className="text-slate-400">{t('regulatoryUpdates.capDeadline' as TranslationKey)}</span>
                         <span className={`font-bold ${new Date((previewItem as Circular).capDeadline!) < new Date() ? 'text-rose-600' : 'text-slate-700'}`}>
                           {(previewItem as Circular).capDeadline}
                         </span>
                       </div>
                     )}
-                    <div className={`flex justify-between text-xs ${isRTL ? 'flex-row-reverse' : ''}`}>
-                      <span className="text-slate-400">Articles</span>
+                    <div className={`flex justify-between text-xs`}>
+                      <span className="text-slate-400">{t('correspondence.articles')}</span>
                       <span className="font-bold text-slate-700">{(previewItem as Circular).articles?.length ?? 0}</span>
                     </div>
                   </>
@@ -415,7 +438,7 @@ export default function RegistryPage() {
                   const desc = 'description' in previewItem ? (previewItem as Circular | Policy).description : undefined
                   return desc ? (
                     <div>
-                      <p className="text-[10px] font-black text-slate-400 uppercase mb-1.5">Description</p>
+                      <p className="text-[10px] font-black text-slate-400 uppercase mb-1.5">{t('common.description')}</p>
                       <p className="text-xs text-slate-600 leading-relaxed line-clamp-4">{desc}</p>
                     </div>
                   ) : null
@@ -427,7 +450,7 @@ export default function RegistryPage() {
             <div className="p-4 border-t border-slate-100 bg-slate-50/50">
               <button
                 onClick={openFullDetail}
-                className={`w-full py-2.5 px-4 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold rounded-xl transition-colors flex items-center justify-center gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}
+                className={`w-full py-2.5 px-4 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold rounded-xl transition-colors flex items-center justify-center gap-2 cursor-pointer`}
               >
                 {t('common.viewFullDetail' as TranslationKey)}
                 <Icon icon={isRTL ? 'lucide:arrow-left' : 'lucide:arrow-right'} className="text-sm" />

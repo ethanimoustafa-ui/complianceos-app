@@ -80,13 +80,13 @@ export function OfficerView({ metrics }: OfficerViewProps) {
     const items: Array<{ id: string; type: string; icon: string; title: string; dueDate: string; status: string; route: string }> = []
 
     for (const o of myObservations) {
-      items.push({ id: o.id, type: 'Observation', icon: 'lucide:eye', title: o.title, dueDate: o.dueDate, status: o.status, route: `/correspondence/observations?id=${o.id}` })
+      items.push({ id: o.id, type: t('navigation.observations'), icon: 'lucide:eye', title: o.title, dueDate: o.dueDate, status: o.status, route: `/correspondence/observations?id=${o.id}` })
     }
     for (const a of myAudits) {
-      items.push({ id: a.id, type: 'Audit', icon: 'lucide:clipboard-check', title: a.title, dueDate: a.dueDate, status: a.status, route: `/reports/${a.id}` })
+      items.push({ id: a.id, type: t('navigation.audits'), icon: 'lucide:clipboard-check', title: a.title, dueDate: a.dueDate, status: a.status, route: `/reports/${a.id}` })
     }
     for (const p of myPolicies) {
-      items.push({ id: p.id, type: 'Policy', icon: 'lucide:file-check', title: p.name, dueDate: p.nextReviewDate, status: p.status, route: `/correspondence/regulatory-updates/policies?policyId=${p.id}` })
+      items.push({ id: p.id, type: t('navigation.regulatoryUpdates'), icon: 'lucide:file-check', title: p.name, dueDate: p.nextReviewDate, status: p.status, route: `/correspondence/regulatory-updates/policies?policyId=${p.id}` })
     }
 
     return items.sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime())
@@ -100,7 +100,7 @@ export function OfficerView({ metrics }: OfficerViewProps) {
       if (l.status !== 'pending-approval') continue
       for (const step of l.approvalChain) {
         if (step.status === 'pending' && (step.assignedTo === userId || step.assignedTo === userName)) {
-          items.push({ id: l.id, title: `${l.subject} — Step ${step.step} (${step.role})`, type: 'SAMA Approval', route: `/correspondence/sama-letters?id=${l.id}` })
+          items.push({ id: l.id, title: `${l.subject} — Step ${step.step} (${step.role})`, type: t('samaLetters.title'), route: `/correspondence/sama-letters?id=${l.id}` })
         }
       }
     }
@@ -109,7 +109,7 @@ export function OfficerView({ metrics }: OfficerViewProps) {
       if (!p.workflowTimeline) continue
       for (const step of p.workflowTimeline) {
         if (step.status === 'current' && (step.user === userId || step.user === userName)) {
-          items.push({ id: p.id, title: `${p.name} — ${step.step}`, type: 'Policy Workflow', route: `/correspondence/regulatory-updates/policies?policyId=${p.id}&tab=workflow` })
+          items.push({ id: p.id, title: `${p.name} — ${step.step}`, type: t('policies.approvalWorkflow'), route: `/correspondence/regulatory-updates/policies?policyId=${p.id}&tab=workflow` })
         }
       }
     }
@@ -238,19 +238,19 @@ export function OfficerView({ metrics }: OfficerViewProps) {
           <div className="grid grid-cols-4 gap-3 w-full mt-2">
             <div className="text-center">
               <p className="text-lg font-bold text-slate-900">{workload.breakdown.observations}</p>
-              <p className="text-[9px] text-slate-400 uppercase">Obs</p>
+              <p className="text-[9px] text-slate-400 uppercase">{t('dashboard.obsShort')}</p>
             </div>
             <div className="text-center">
               <p className="text-lg font-bold text-slate-900">{workload.breakdown.audits}</p>
-              <p className="text-[9px] text-slate-400 uppercase">Audits</p>
+              <p className="text-[9px] text-slate-400 uppercase">{t('dashboard.auditsShort')}</p>
             </div>
             <div className="text-center">
               <p className="text-lg font-bold text-slate-900">{workload.breakdown.policies}</p>
-              <p className="text-[9px] text-slate-400 uppercase">Policy</p>
+              <p className="text-[9px] text-slate-400 uppercase">{t('dashboard.policyShort')}</p>
             </div>
             <div className="text-center">
               <p className="text-lg font-bold text-slate-900">{workload.breakdown.correspondence}</p>
-              <p className="text-[9px] text-slate-400 uppercase">Corr</p>
+              <p className="text-[9px] text-slate-400 uppercase">{t('dashboard.corrShort')}</p>
             </div>
           </div>
         </div>

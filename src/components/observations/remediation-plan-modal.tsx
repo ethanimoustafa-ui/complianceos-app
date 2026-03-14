@@ -65,7 +65,7 @@ export function RemediationPlanModal({
   return (
     <Modal isOpen={isOpen} onClose={handleClose} size="md">
       <div className="p-6">
-        <div className={`flex items-center gap-3 mb-6 ${isRTL ? 'flex-row-reverse' : ''}`}>
+        <div className={`flex items-center gap-3 mb-6`}>
           <div className="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center">
             <Icon icon="lucide:clipboard-check" className="text-emerald-600 text-xl" />
           </div>
@@ -80,7 +80,7 @@ export function RemediationPlanModal({
         </div>
 
         {error && (
-          <div className={`mb-4 p-3 bg-rose-50 border border-rose-200 rounded-lg flex items-center gap-2 text-sm text-rose-700 ${isRTL ? 'flex-row-reverse' : ''}`}>
+          <div className={`mb-4 p-3 bg-rose-50 border border-rose-200 rounded-lg flex items-center gap-2 text-sm text-rose-700`}>
             <Icon icon="lucide:alert-circle" />
             {error}
           </div>
@@ -140,7 +140,7 @@ export function RemediationPlanModal({
           </div>
         </div>
 
-        <div className={`flex gap-3 mt-6 ${isRTL ? 'flex-row-reverse' : ''}`}>
+        <div className={`flex gap-3 mt-6`}>
           <Button variant="ghost" onClick={handleClose} className="flex-1">
             {t('common.cancel')}
           </Button>

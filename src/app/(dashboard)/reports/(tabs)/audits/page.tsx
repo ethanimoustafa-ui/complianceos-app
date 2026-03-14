@@ -17,6 +17,7 @@ import type { Audit as AuditType } from '@/types'
 import { exportAuditsLocalized } from '@/lib/export'
 import type { TranslationKey } from '@/i18n'
 import { useFormattedDate } from '@/hooks/useFormattedDate'
+import { useComplianceScore } from '@/hooks/useComplianceScore'
 
 // Audit type definitions
 type AuditSource = 'sama_inspection' | 'internal_audit' | 'sharia_audit'
@@ -98,6 +99,9 @@ export default function ReportsAuditsPage() {
   const { t, isRTL } = useTranslation()
   const pathname = usePathname()
   const { formatDate } = useFormattedDate()
+
+  // Compliance score
+  const complianceResult = useComplianceScore('12months')
 
   // Audit store connection
   const { audits: storeAudits, fetchAll: fetchAudits, delete: deleteAudit } = useAuditStore()
@@ -343,7 +347,7 @@ export default function ReportsAuditsPage() {
             </Link>
           </div>
         </div>
-        <div className={`flex items-center gap-4 ${isRTL ? 'flex-row-reverse' : ''}`}>
+        <div className={`flex items-center gap-4`}>
           <div className="relative hidden md:block">
             <Icon icon="lucide:search" className={`absolute ${isRTL ? 'right-3' : 'left-3'} top-1/2 -translate-y-1/2 text-slate-400`} />
             <input
@@ -391,7 +395,7 @@ export default function ReportsAuditsPage() {
             </div>
             <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">{t('reports.complianceScore')}</p>
-              <p className="text-2xl font-bold text-blue-600">94%</p>
+              <p className="text-2xl font-bold text-blue-600">{Math.round(complianceResult.overall)}%</p>
             </div>
           </div>
 

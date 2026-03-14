@@ -6,13 +6,16 @@ const seedTemplates: AuditTemplate[] = [
   {
     id: 'at-001',
     name: 'NCA ECC Self-Assessment',
+    nameAr: 'التقييم الذاتي لضوابط NCA ECC',
     auditType: 'internal',
     category: 'security-compliance',
     priority: 'high',
     frequency: 'quarterly',
     frequencySchedule: { monthInQuarter: 1, dayOfMonth: 15 },
     defaultTitle: 'NCA ECC Quarterly Self-Assessment',
+    defaultTitleAr: 'التقييم الذاتي الربع سنوي لضوابط NCA ECC',
     defaultDescription: 'Comprehensive self-assessment against NCA Essential Cybersecurity Controls to evaluate organizational cybersecurity posture.',
+    defaultDescriptionAr: 'تقييم ذاتي شامل مقابل ضوابط الأمن السيبراني الأساسية لهيئة NCA لتقييم الوضع الأمني السيبراني للمنظمة.',
     defaultChecklistItems: [
       'Review access control policies',
       'Verify network security configurations',
@@ -30,13 +33,16 @@ const seedTemplates: AuditTemplate[] = [
   {
     id: 'at-002',
     name: 'SAMA Quarterly Compliance Review',
+    nameAr: 'مراجعة امتثال إطار SAMA CSF',
     auditType: 'sama',
     category: 'financial-compliance',
     priority: 'high',
     frequency: 'quarterly',
     frequencySchedule: { monthInQuarter: 1, dayOfMonth: 1 },
     defaultTitle: 'SAMA Quarterly Compliance Review',
+    defaultTitleAr: 'مراجعة الامتثال الربع سنوية لإطار SAMA CSF',
     defaultDescription: 'Quarterly review of compliance with SAMA Cyber Security Framework requirements for banking operations.',
+    defaultDescriptionAr: 'مراجعة ربع سنوية للامتثال لمتطلبات إطار الأمن السيبراني لمؤسسة النقد العربي السعودي للعمليات المصرفية.',
     defaultChecklistItems: [
       'Review transaction monitoring controls',
       'Assess AML/CTF procedures',
@@ -53,13 +59,16 @@ const seedTemplates: AuditTemplate[] = [
   {
     id: 'at-003',
     name: 'PDPL Data Mapping Audit',
+    nameAr: 'تقييم تأثير الخصوصية PDPL',
     auditType: 'internal',
     category: 'data-privacy',
     priority: 'medium',
     frequency: 'semi_annual',
     frequencySchedule: { monthOfYear: 1, dayOfMonth: 10 },
     defaultTitle: 'PDPL Data Mapping & Privacy Audit',
+    defaultTitleAr: 'تدقيق تعيين البيانات والخصوصية PDPL',
     defaultDescription: 'Semi-annual audit to map personal data flows and verify compliance with NDMO Personal Data Protection Law.',
+    defaultDescriptionAr: 'تدقيق نصف سنوي لتعيين تدفقات البيانات الشخصية والتحقق من الامتثال لنظام حماية البيانات الشخصية PDPL.',
     defaultChecklistItems: [
       'Update data processing inventory',
       'Review consent management procedures',
@@ -77,13 +86,16 @@ const seedTemplates: AuditTemplate[] = [
   {
     id: 'at-004',
     name: 'Internal Controls Review',
+    nameAr: 'فعالية الضوابط الداخلية',
     auditType: 'internal',
     category: 'internal-controls',
     priority: 'medium',
     frequency: 'annual',
     frequencySchedule: { monthOfYear: 3, dayOfMonth: 1 },
     defaultTitle: 'Annual Internal Controls Review',
+    defaultTitleAr: 'المراجعة السنوية للضوابط الداخلية',
     defaultDescription: 'Annual comprehensive review of internal control frameworks, segregation of duties, and control effectiveness.',
+    defaultDescriptionAr: 'مراجعة سنوية شاملة لأطر الرقابة الداخلية وفصل المهام وفعالية الضوابط.',
     defaultChecklistItems: [
       'Evaluate control environment',
       'Test key controls effectiveness',
@@ -99,13 +111,16 @@ const seedTemplates: AuditTemplate[] = [
   {
     id: 'at-005',
     name: 'Sharia Compliance Check',
+    nameAr: 'تدقيق الامتثال الشرعي',
     auditType: 'sharia',
     category: 'sharia-compliance',
     priority: 'high',
     frequency: 'quarterly',
     frequencySchedule: { monthInQuarter: 1, dayOfMonth: 5 },
     defaultTitle: 'Quarterly Sharia Compliance Assessment',
+    defaultTitleAr: 'تقييم الامتثال الشرعي الربع سنوي',
     defaultDescription: 'Quarterly assessment ensuring all banking products and operations comply with Sharia principles and board directives.',
+    defaultDescriptionAr: 'تقييم ربع سنوي لضمان امتثال جميع المنتجات والعمليات المصرفية لمبادئ الشريعة الإسلامية وتوجيهات الهيئة الشرعية.',
     defaultChecklistItems: [
       'Review product structures for Sharia compliance',
       'Verify profit distribution calculations',
@@ -123,13 +138,16 @@ const seedTemplates: AuditTemplate[] = [
   {
     id: 'at-006',
     name: 'Business Continuity Assessment',
+    nameAr: 'مراجعة خطة استمرارية الأعمال',
     auditType: 'internal',
     category: 'operational-compliance',
     priority: 'critical',
     frequency: 'annual',
     frequencySchedule: { monthOfYear: 6, dayOfMonth: 1 },
     defaultTitle: 'Annual Business Continuity Assessment',
+    defaultTitleAr: 'تقييم استمرارية الأعمال السنوي',
     defaultDescription: 'Annual assessment of business continuity plans, disaster recovery capabilities, and operational resilience.',
+    defaultDescriptionAr: 'تقييم سنوي لخطط استمرارية الأعمال وقدرات التعافي من الكوارث والمرونة التشغيلية.',
     defaultChecklistItems: [
       'Review BCP documentation currency',
       'Test disaster recovery procedures',
@@ -188,6 +206,15 @@ export const useAuditTemplateStore = create<AuditTemplateState>()(
           ),
         })),
     }),
-    { name: 'audit-templates-storage' }
+    {
+      name: 'audit-templates-storage',
+      version: 2,
+      migrate: (persisted: any, version: number) => {
+        if (version < 2) {
+          return { templates: seedTemplates }
+        }
+        return persisted as any
+      },
+    }
   )
 )

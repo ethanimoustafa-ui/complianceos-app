@@ -2,7 +2,7 @@
 
 **Version:** 1.0
 **Date:** February 2026
-**Last Updated:** March 13, 2026 (Observation Persistence, Burnout Polish & Arabic Help Sprint)
+**Last Updated:** March 14, 2026 (Bug Fix Sprint Round 2: RTL/i18n Polish & Bilingual Templates)
 
 ---
 
@@ -13,6 +13,8 @@
 - **Source:** `BRD` (from Business Requirements Doc) | `REC` (from architecture/strategy sessions) | `FEEDBACK` (from compliance team)
 - **Arch:** `A` (Correspondence) | `B` (Framework) | `C` (Internal Governance) | `S` (Shared/Platform)
 
+> **Bug Fix Sprint Round 2 complete (Mar 14 2026):** Comprehensive RTL/i18n polish across 53 files. OfficerView workload labels (Obs/Audits/Policy/Corr) translated. ManagerialView confidence badges (high/moderate/low/insufficient) translated. PolicyDetailsContent workflow + activity timeline RTL fixed (`left-*` → `start-*`, `pl-*` → `ps-*`). `VERSION_CHANGES_MAP` (10 entries) + 5 new `STEP_NAME_MAP` entries for full workflow step translation. `formatCycleLabel()` helper parses stored English "Review March 2026" labels into locale-aware formatting (`ar-SA`/`en-US`). Evidence cycle dropdown uses formatted labels. Upload zone text translated. Calendar create-event asterisks on required fields. Team member type badges (observation/audit/policy/advisory/sama-letter/risk/circular/task) translated in member-detail-drawer and burnout-detection-card. `CapacityRing` overflow: purple ring for >100% capacity. Bilingual template support: policy + audit template stores gain `nameAr`/`defaultDescriptionAr`/`defaultTitleAr` with Arabic seed data; settings UI shows dual-language inputs with `dir="rtl"` on Arabic fields; RTL display uses `nameAr`. Priority/frequency labels in audit templates translated. ~50 new i18n keys across dashboard, policies, settings, and team sections. I18N-013 through I18N-016, SET-016 through SET-017, POL-025, WRK-018, CAL-019 all complete.
+>
 > **Observation Persistence, Burnout Polish & Arabic Help Sprint complete (Mar 13 2026):** Observation store gained `persist` middleware (version 1) with 5 seed observations and a sync `fetchAll` replacing the old async mock. Observation burnout reassignment fixed: the burnout card now updates `assignee`, `assignees[]`, and `leaderId` together; `leaderId` added to the observation `update` action allowlists. Advisory store bumped to version 2 with a `migrate` function that deduplicates IDs in localStorage. Workload cap removed: `percentage` can now exceed 100% to faithfully reflect extreme overload. `CapacityRing` component shows a dark-purple rotating ring when capacity > 100%. Arabic help panel: `help-panel-ar.tsx` is a new standalone component with full Arabic content, Arabic video labels, and RTL layout; `help-panel.tsx` delegates to it when `isRTL` is true. Role badges on the team directory now use i18n translation keys (`team.roleOfficer`, `team.roleManager`, `team.roleAdmin`). Burnout detection card resolves department `nameAr` from the department store when in RTL mode. New file `src/lib/dashboard-pdf.ts` adds jsPDF-based dashboard report export wired to the Header export button. OBS-019 through OBS-021, WRK-002 (uncapped), I18N-010 through I18N-012, and RPT-017 all complete.
 >
 > **Notification Engine, Deep-Linking & Group Messaging Sprint complete (Mar 13 2026):** Live notification engine (`useNotificationEngine` hook) subscribes to 7 stores (audits, policies, observations, SAMA letters, circulars, training, risks) and generates 17 notification rules with ref-based dedup, max-50 cap, and priority sorting. Notification store refactored: seeds removed, `syncGeneratedNotifications` merge action added with `dedupeKey`-based dedup, persist v3 clean migration. `AppNotification` type extended with `entityId` and `dedupeKey` fields. Hook wired into `sidebar.tsx`. Message system overhauled: `MessageThread` type extended with `participantIds[]`, `isGroup`, `avatarUrl`, `createdBy`, `admins[]`; `message-store.ts` rewritten with `createThread` (multi-recipient), `kickMember`, `promoteAdmin`, `demoteAdmin`, `updateThreadAvatar`, and `deleteThread` actions; `message-panel.tsx` fully rewritten for multi-recipient compose with chips, optional group name, group avatar upload, members view with admin actions. Deep-link `?id=` URL param added to Rules/Circulars page (opens circular detail modal, Suspense-wrapped). Deep-link `?employeeId=` URL param added to Training page (opens employee detail modal, Suspense-wrapped). Sign-out modal now navigates to `/sign-in` via `router.push`. 31 new i18n keys added (EN + AR) — 18 notification title keys + 13 group chat keys. MSG-001 through MSG-010 all complete; NTF-001 through NTF-009 all complete.
@@ -148,6 +150,7 @@
 | POL-022 | Undo step clears stepState on both reverted and demoted steps | ✅ | P1 | S | FEEDBACK | Done (Sprint 3.3) — undo branch sets `stepState: undefined` on the step being reverted to `current` AND on any step being pushed back to `pending`; eliminates stuck approval-flow chips after undo |
 | POL-023 | policy-store `approve()` accepts optional notes and approvedBy, logs activity entry | ✅ | P1 | S | FEEDBACK | Done (Sprint 3.3) — `approve(id, notes?, approvedBy?)` signature extended; current step note and `stepState: undefined` written on all completed steps; `workflow_approved` activity entry appended with localized EN/AR text |
 | POL-024 | PolicyDetailsContent accepts `initialTab` prop for deep-link tab targeting | ✅ | P1 | S | FEEDBACK | Done (Sprint 3.3) — `initialTab?: DetailTab` prop added; `useState` initializes from `initialTab ?? 'overview'` allowing external callers (e.g., Pending Approvals modal) to open directly on the workflow tab |
+| POL-025 | Upload zone text translation + evidence cycle date field | ✅ | P1 | S | FEEDBACK | Done — policies page upload zone: "Click to change" → `t('policies.clickToChange')`, "Drop file here or browse" uses `t('policies.dropFileHere')` + `t('policies.browse')`; `currentReviewCycleDate: string` captured in `initiateReview()` for locale-aware evidence cycle labels |
 
 ---
 
@@ -264,6 +267,7 @@
 | CAL-016 | Full Report CSV export from event drawer | ✅ | P1 | S | FEEDBACK | Done — Full Report button in drawer triggers CSV download of the selected day's items; preserves source type, status, and route columns |
 | CAL-017 | Submissions tab — clickable items open drawer; Show Completed toggle restored | ✅ | P1 | S | FEEDBACK | Done — `SubmissionsList` component: each item row is clickable and sets `selectedDayKey` to open the event drawer; Show Completed filter button restored to toggle completed/past items visibility |
 | CAL-018 | Calendar i18n keys — 16 source-type labels (EN + AR) | ✅ | P1 | S | FEEDBACK | Done — keys added to `en.json` + `ar.json` under `calendar.*`: `sourceAudit`, `sourceObservation`, `sourcePolicy`, `sourceSamaLetter`, `sourceCircular`, `sourceTraining`, `sourceCorrespondence`, `sourceAdvisory`, `sourceRisk`, `sourceUserEvent`, and 6 additional UI label keys; Arabic translations complete |
+| CAL-019 | Required field asterisks on calendar create-event modal | ✅ | P1 | S | FEEDBACK | Done — Red asterisks (`<span className="text-rose-500 ms-1">*</span>`) added to Task Title and Date labels in `create-event-modal.tsx`; these are the only two fields validated by `handleSubmit` |
 
 ---
 
@@ -397,6 +401,8 @@
 | SET-013 | User preferences store (dashboard view, timezone, date format, notification prefs) | ✅ | P1 | S | FEEDBACK | Done — `useUserPreferencesStore`; `dashboardView`, `timezone`, `dateFormat: DateFormatPreference`; `notificationPreferences: NotificationPreferences`; persist v2 migration maps old `criticalAlertsEnabled` → new structure; `UserPreferencesSection` with profile edit modal |
 | SET-014 | Settings page decomposition (monolith → orchestrator + sub-components) | ✅ | P1 | S | FEEDBACK | Done — 905-line `settings/page.tsx` replaced with 55-line orchestrator importing 7 sub-components from `src/components/settings/`; auto-save indicator retained in header |
 | SET-015 | Date format preference with locale-aware rendering across all pages | ✅ | P2 | S | FEEDBACK | Done — `DateFormatPreference` type (DD/MM/YYYY, MM/DD/YYYY, YYYY-MM-DD); `formatDateWithPreference()` in `src/lib/date-format.ts` handles Arabic numerals; `useFormattedDate()` hook in `src/hooks/useFormattedDate.ts`; wired to correspondence feed, policies, and reports pages |
+| SET-016 | Bilingual policy template support (Arabic name + description fields, seed translations, RTL display) | ✅ | P2 | S | FEEDBACK | Done — `PolicyTemplate` type gains `nameAr?`, `defaultDescriptionAr?`; all 6 seeds include Arabic translations; `policy-template-store.ts` persist bumped to v3 with migration; `PolicyTemplatesSection` shows dual-language inputs (`dir="rtl"` on Arabic fields), table displays `isRTL ? nameAr : name`; `toLocaleString` uses `isRTL ? 'ar' : 'en'` |
+| SET-017 | Bilingual audit template support + priority/frequency label translations | ✅ | P2 | S | FEEDBACK | Done — `AuditTemplate` type gains `nameAr?`, `defaultTitleAr?`, `defaultDescriptionAr?`; all 6 seeds include Arabic translations; `audit-template-store.ts` persist v2 added with migration; `AuditTemplatesSection` shows dual-language inputs, RTL-aware display; hardcoded priority labels (Critical/High/Medium/Low) replaced with `t('settings.priorityCritical')` etc.; frequency labels translated via `t('settings.freqXxx')`; `toLocaleString` uses `isRTL ? 'ar' : 'en'` |
 
 ---
 
@@ -429,6 +435,10 @@
 | I18N-010 | Arabic help panel — full RTL standalone component | ✅ | P1 | S | FEEDBACK | Done — `src/components/help/help-panel-ar.tsx`; separate component with full Arabic article content, Arabic video labels, RTL-native layout (text-right, flex-row-reverse), Arabic category names; `help-panel.tsx` delegates to it via `if (isRTL) return <HelpPanelAr .../>` |
 | I18N-011 | Role badge i18n on team directory | ✅ | P1 | S | FEEDBACK | Done — `RoleBadge` component in `team/directory/page.tsx` now uses `t('team.roleOfficer')`, `t('team.roleManager')`, `t('team.roleAdmin')` translation keys instead of hardcoded English strings; keys exist in both `en.json` and `ar.json` |
 | I18N-012 | Department Arabic name in burnout detection card | ✅ | P1 | S | FEEDBACK | Done — `burnout-detection-card.tsx` subscribes to `useDepartmentStore`; `resolveDepName(name)` helper returns `dept.nameAr` when `isRTL` is true, falling back to the raw name; all member department labels are localized |
+| I18N-013 | Dashboard workload + confidence label translations (obsShort, auditsShort, policyShort, corrShort, confidenceHigh/Moderate/Low/Insufficient) | ✅ | P1 | S | FEEDBACK | Done — OfficerView workload breakdown and ManagerialView confidence badges now use `t()` with `dashboard.*` keys; 8 keys added to en.json + ar.json |
+| I18N-014 | Policy workflow timeline RTL fix + version change/step name translations | ✅ | P1 | S | FEEDBACK | Done — PolicyDetailsContent: `before:left-2` → `before:start-2`, `absolute left-[-1px]` → `start-[-1px]`, `absolute left-0` → `start-0`, `pl-8` → `ps-8` (workflow + activity tabs); `VERSION_CHANGES_MAP` (10 seed change descriptions); 5 new `STEP_NAME_MAP` entries (Technical Review, DPO Review, Management Review, Risk Review, Review Initiated); 25+ keys added |
+| I18N-015 | Evidence cycle label locale-aware formatting | ✅ | P1 | S | FEEDBACK | Done — `formatCycleLabel()` helper in PolicyDetailsContent: uses `currentReviewCycleDate` ISO field when available, falls back to parsing stored English "Review Month Year" labels via `Date` constructor, formats with `toLocaleDateString(isRTL ? 'ar-SA' : 'en-US')`; `currentReviewCycleDate?: string` added to `Policy` type + `policy-store.ts` `initiateReview()` action |
+| I18N-016 | Team member type badge translations (member drawer + burnout card) | ✅ | P1 | S | FEEDBACK | Done — `typeLabels` maps in `member-detail-drawer.tsx` and `burnout-detection-card.tsx` translate 9 item types (observation, audit, policy, correspondence, advisory, sama-letter, risk, circular, task) via `team.typeXxx` keys; hardcoded `"task"` badges also translated; 9 keys added to en.json + ar.json |
 
 ---
 
@@ -548,6 +558,7 @@
 | WRK-015 | Reassignment audit trail (log when task is reassigned, who approved) | 📋 | P2 | S | REC | Append to `user-log-store` when `reassignTask` is called; requires `actingUser` from auth store |
 | WRK-016 | Configurable capacity threshold (default 75%, admin-adjustable) | 📋 | P3 | S | REC | Move threshold from hardcoded to `compliance-settings-store`; affects burnout detection, workload bar color, and escalation trigger |
 | WRK-017 | Configurable escalation schedule (3-day / 7-day thresholds admin-adjustable) | 📋 | P3 | S | REC | Currently hardcoded in `useWorkload.ts`; expose in Settings → Team Configuration |
+| WRK-018 | Capacity ring purple overflow indicator for >100% workload | ✅ | P1 | S | FEEDBACK | Done — `CapacityRing` in `member-detail-drawer.tsx`: when `capacity > 100`, renders full rose base ring + thinner purple (`text-purple-500`, `strokeWidth="6"`) overflow ring showing the excess percentage; base ring clamped to 100% |
 
 ---
 
@@ -627,6 +638,8 @@
 
 ## Summary Dashboard
 
+> **Bug Fix Sprint Round 2 complete (Mar 14 2026)** — RTL/i18n polish across 53 files. OfficerView workload labels and ManagerialView confidence badges translated (I18N-013). PolicyDetailsContent workflow + activity timeline RTL fixed (`left-*` → `start-*`, `pl-*` → `ps-*`) + `VERSION_CHANGES_MAP` (10 entries) + 5 new `STEP_NAME_MAP` entries (I18N-014). `formatCycleLabel()` helper for locale-aware evidence cycle dates + `currentReviewCycleDate` on Policy type (I18N-015, POL-025). Team member type badge translations in drawer + burnout card — 9 types, 9 keys (I18N-016). `CapacityRing` purple overflow ring for >100% capacity (WRK-018). Calendar create-event required-field asterisks (CAL-019). Bilingual policy templates: `nameAr`/`defaultDescriptionAr`, 6 Arabic seeds, persist v3, dual-language settings UI (SET-016). Bilingual audit templates: `nameAr`/`defaultTitleAr`/`defaultDescriptionAr`, 6 Arabic seeds, persist v2, priority + frequency label translations (SET-017). ~50 new i18n keys across en.json + ar.json. I18N-013–016, SET-016–017, POL-025, WRK-018, CAL-019 all complete.
+>
 > **Observation Persistence, Burnout Polish & Arabic Help Sprint complete (Mar 13 2026)** — Observation store gained `persist` (v1) + 5 seed observations. Observation burnout reassignment fixed (assignee + assignees[] + leaderId updated together; leaderId added to update allowlists). Advisory store v2 migration deduplicates localStorage IDs. Workload percentage uncapped (can exceed 100%); `CapacityRing` shows dark-purple rotating ring above 100%. `help-panel-ar.tsx` new standalone Arabic help panel; `HelpPanel` delegates to it when RTL. Role badges in team directory use i18n keys. Burnout card resolves department `nameAr` from department store in RTL. `src/lib/dashboard-pdf.ts` jsPDF export wired to Header. RUL-001 through RUL-004, RUL-006, RUL-009–010 marked done (Rules & Circulars critical path complete). RSK-009 and TRN-013 marked done (engine integration complete). OBS-019–021, I18N-010–012, RPT-017 added and complete.
 >
 > **Notification Engine, Deep-Linking & Group Messaging Sprint complete (Mar 13 2026)** — Live `useNotificationEngine` hook subscribes to 7 stores and generates 17 notification rules with dedup, priority sorting, and user-preference filtering; wired into sidebar. Notification store refactored (persist v3, `syncGeneratedNotifications` merge action). `AppNotification` extended with `entityId` + `dedupeKey`. Message system overhauled: group chat (`participantIds[]`, `isGroup`, `admins[]`, `createdBy`), `message-store` rewritten with `createThread`, `kickMember`, `promoteAdmin`, `demoteAdmin`, `updateThreadAvatar`, `deleteThread`. Message panel fully rewritten for multi-recipient compose with chips, group avatar upload, and members management view. Deep-links added: Rules page `?id=` opens circular modal; Training page `?employeeId=` opens employee modal (both Suspense-wrapped). Sign-out modal extracted to `src/components/auth/sign-out-modal.tsx`, navigates to `/sign-in`. 31 new i18n keys (EN + AR). NTF-001 through NTF-014, MSG-001 through MSG-008, COR-031, TRN-024, RBAC-006 all complete.
@@ -641,20 +654,20 @@
 
 | Status | Count | % |
 |---|---|---|
-| ✅ Done | 211 | 65% |
+| ✅ Done | 221 | 66% |
 | 🔧 In Progress (UI built, logic pending) | 3 | 1% |
 | 📋 To Do (defined, not started) | 62 | 19% |
 | 💡 New Recommendation | 24 | 7% |
 | 🗺️ Roadmap (future phase) | 24 | 7% |
-| **Total** | **324** | **100%** |
+| **Total** | **334** | **100%** |
 
 ### By Priority
 
 | Priority | Count | Description |
 |---|---|---|
 | P0 — Critical | 31 | Blocks launch. Stores, engine integration, core workflows |
-| P1 — High | 97 | Needed for launch. Onboarding, framework layer, correspondence logic, PDF export, workload |
-| P2 — Medium | 64 | Post-launch. Multi-authority, advanced features, Sharia workflows |
+| P1 — High | 105 | Needed for launch. Onboarding, framework layer, correspondence logic, PDF export, workload |
+| P2 — Medium | 66 | Post-launch. Multi-authority, advanced features, Sharia workflows |
 | P3 — Low | 36 | Future phase. ZATCA, SAFIU, MISA, advanced versioning, Arabic PDF |
 
 ### By Archetype
@@ -664,7 +677,7 @@
 | A — Correspondence | 49 | Authority communication, letters, circulars, submissions |
 | B — Framework | 35 | Framework metadata, tagging, versioning, assessments |
 | C — Internal Governance | 10 | Internal audit, Sharia compliance |
-| S — Shared/Platform | 117 | Core modules, engine, calendar, settings, RBAC, i18n, PDF export, workload |
+| S — Shared/Platform | 127 | Core modules, engine, calendar, settings, RBAC, i18n, PDF export, workload |
 
 ### Critical Path (P0 items)
 

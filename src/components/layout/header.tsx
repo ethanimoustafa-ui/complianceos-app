@@ -27,10 +27,10 @@ export function Header({ title, subtitle, onExport, exportLabel }: HeaderProps) 
       </div>
 
       {onExport && (
-        <div className={`flex items-center gap-4 ${isRTL ? 'flex-row-reverse' : ''}`}>
+        <div className={`flex items-center gap-4`}>
           <button
             onClick={onExport}
-            className={`bg-slate-900 text-white px-5 py-2.5 rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-slate-800 transition-all cursor-pointer ${isRTL ? 'flex-row-reverse' : ''}`}
+            className={`bg-slate-900 text-white px-5 py-2.5 rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-slate-800 transition-all cursor-pointer`}
           >
             <Icon icon="lucide:download" />
             {exportLabel || t('common.exportCsv')}

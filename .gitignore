@@ -46,3 +46,6 @@ next-env.d.ts
 
 # Sessions
 /sessions
+
+# MCP
+/.playwright-mcp

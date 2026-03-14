@@ -17,15 +17,31 @@ import { TrainingProgressBar } from './TrainingProgressBar'
 import { TeamMemberWorkload } from './TeamMemberWorkload'
 import type { DashboardMetrics } from '@/hooks/useDashboardMetrics'
 import { useTeamWorkloads } from '@/hooks/useWorkload'
+import { useDepartmentStore } from '@/stores/department-store'
 
 interface ExecutiveViewProps {
   metrics: DashboardMetrics
 }
 
 export function ExecutiveView({ metrics }: ExecutiveViewProps) {
-  const { t } = useTranslation()
+  const { t, isRTL } = useTranslation()
   const router = useRouter()
   const targetScore = useComplianceSettingsStore(s => s.targetScore)
+  const departments = useDepartmentStore(s => s.departments)
+
+  const getDeptLabel = (name: string) => {
+    const dept = departments.find(d => d.name === name || d.id === name)
+    if (dept) return isRTL ? dept.nameAr : dept.name
+    return name
+  }
+
+  const severityLabels: Record<string, string> = {
+    critical: t('dashboard.critical'),
+    high: t('dashboard.high'),
+    medium: t('dashboard.medium'),
+    low: t('dashboard.low'),
+    minor: t('dashboard.minor'),
+  }
 
   // Smart alerts — max 2, severity-sorted
   const alerts = useMemo(() => {
@@ -290,9 +306,9 @@ export function ExecutiveView({ metrics }: ExecutiveViewProps) {
               <div key={i} className="px-5 py-3 flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <Badge variant={d.severity === 'critical' ? 'danger' : d.severity === 'high' ? 'danger' : d.severity === 'medium' ? 'warning' : 'neutral'} size="sm">
-                    {d.severity}
+                    {severityLabels[d.severity] ?? d.severity}
                   </Badge>
-                  <span className="text-sm text-slate-700">{d.description}</span>
+                  <span className="text-sm text-slate-700">{d.descriptionKey ? t(d.descriptionKey as any, d.descriptionParams) : d.description}</span>
                 </div>
                 <span className="text-sm font-bold text-rose-600">-{Math.abs(d.points).toFixed(1)}</span>
               </div>
@@ -359,7 +375,7 @@ export function ExecutiveView({ metrics }: ExecutiveViewProps) {
                   {metrics.training.departmentProgress.slice(0, 3).map(dept => (
                     <TrainingProgressBar
                       key={dept.name}
-                      label={dept.name}
+                      label={getDeptLabel(dept.name)}
                       value={dept.progress}
                       color={dept.progress >= 80 ? 'emerald' : 'amber'}
                     />

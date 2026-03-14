@@ -159,7 +159,7 @@ export default function WelcomePage() {
           {/* Gravitational pulse effect */}
           <span className="absolute inset-0 gravitational-pulse" />
 
-          <span className={`relative z-10 flex items-center gap-3 ${isRTL ? 'flex-row-reverse' : ''}`}>
+          <span className={`relative z-10 flex items-center gap-3`}>
             {t('welcome.enterDashboard')}
             <Icon
               icon={isRTL ? 'lucide:arrow-left' : 'lucide:arrow-right'}

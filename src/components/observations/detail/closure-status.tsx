@@ -69,7 +69,7 @@ export const ClosureStatus = memo(function ClosureStatus({
       {showRequestButton && !showRequestForm && (
         <button
           onClick={() => setShowRequestForm(true)}
-          className={`w-full flex items-center justify-center gap-2 px-4 py-3 bg-blue-600 text-white text-sm font-bold rounded-lg hover:bg-blue-700 transition-colors ${isRTL ? 'flex-row-reverse' : ''}`}
+          className={`w-full flex items-center justify-center gap-2 px-4 py-3 bg-blue-600 text-white text-sm font-bold rounded-lg hover:bg-blue-700 transition-colors`}
         >
           <Icon icon="lucide:check-circle" className="text-lg" />
           {t('observations.detail.requestClosure')}
@@ -86,7 +86,7 @@ export const ClosureStatus = memo(function ClosureStatus({
             className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
             rows={3}
           />
-          <div className={`flex gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
+          <div className={`flex gap-2`}>
             <button
               onClick={handleRequestSubmit}
               className="flex-1 px-3 py-2 bg-blue-600 text-white text-xs font-bold rounded-lg hover:bg-blue-700 transition-colors"
@@ -109,7 +109,7 @@ export const ClosureStatus = memo(function ClosureStatus({
       {/* Pending Closure Info */}
       {showPendingInfo && (
         <div className="space-y-3">
-          <div className={`flex items-center gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
+          <div className={`flex items-center gap-2`}>
             <span className="px-2 py-1 bg-amber-500 text-white text-[10px] font-black rounded uppercase">
               {t('observations.detail.pendingReview')}
             </span>
@@ -125,7 +125,7 @@ export const ClosureStatus = memo(function ClosureStatus({
 
           {/* Review Buttons (for leader/manager) */}
           {showReviewSection && !showReviewForm && (
-            <div className={`flex gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
+            <div className={`flex gap-2`}>
               <button
                 onClick={() => setShowReviewForm(true)}
                 className="flex-1 px-3 py-2 bg-emerald-600 text-white text-xs font-bold rounded-lg hover:bg-emerald-700 transition-colors"
@@ -145,7 +145,7 @@ export const ClosureStatus = memo(function ClosureStatus({
                 className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
                 rows={2}
               />
-              <div className={`flex gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
+              <div className={`flex gap-2`}>
                 <button
                   onClick={() => handleReviewSubmit(true)}
                   className="flex-1 px-3 py-2 bg-emerald-600 text-white text-xs font-bold rounded-lg hover:bg-emerald-700 transition-colors"
@@ -176,7 +176,7 @@ export const ClosureStatus = memo(function ClosureStatus({
       {/* Closed Status Info */}
       {showClosedInfo && (
         <div className="space-y-3">
-          <div className={`flex items-center gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
+          <div className={`flex items-center gap-2`}>
             <span className="px-2 py-1 bg-emerald-500 text-white text-[10px] font-black rounded uppercase">
               {t('observations.detail.verifiedClosed')}
             </span>

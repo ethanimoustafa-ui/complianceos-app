@@ -288,32 +288,32 @@ export default function ObservationsPage() {
           <div className="hidden lg:flex gap-2">
             <Link
               href="/correspondence/sama-letters"
-              className={`px-3 py-1.5 text-xs font-bold text-slate-600 bg-slate-50 hover:bg-slate-100 rounded-lg transition-all border border-slate-200 flex items-center gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}
+              className={`px-3 py-1.5 text-xs font-bold text-slate-600 bg-slate-50 hover:bg-slate-100 rounded-lg transition-all border border-slate-200 flex items-center gap-2`}
             >
               <Icon icon="lucide:mail" className="text-emerald-500" />
               {t('observations.samaLetters')}
             </Link>
             <Link
               href="/correspondence/regulatory-updates"
-              className={`px-3 py-1.5 text-xs font-bold text-slate-600 bg-slate-50 hover:bg-slate-100 rounded-lg transition-all border border-slate-200 flex items-center gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}
+              className={`px-3 py-1.5 text-xs font-bold text-slate-600 bg-slate-50 hover:bg-slate-100 rounded-lg transition-all border border-slate-200 flex items-center gap-2`}
             >
               <Icon icon="lucide:refresh-cw" className="text-blue-500" />
               {t('observations.regulatoryUpdates')}
             </Link>
-            <span className={`px-3 py-1.5 text-xs font-bold text-emerald-700 bg-emerald-50 rounded-lg border border-emerald-100 flex items-center gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
+            <span className={`px-3 py-1.5 text-xs font-bold text-emerald-700 bg-emerald-50 rounded-lg border border-emerald-100 flex items-center gap-2`}>
               <Icon icon="lucide:crosshair" className="text-emerald-600" />
               {t('regulatoryUpdates.observationsTracker')}
             </span>
           </div>
         </div>
 
-        <div className={`flex items-center gap-4 ${isRTL ? 'flex-row-reverse' : ''}`}>
+        <div className={`flex items-center gap-4`}>
           {/* Export Button */}
           <RoleGuard requiredPermission="export" hidden>
             <Button
               variant="outline"
               onClick={handleExport}
-              className={`hidden md:flex ${isRTL ? 'flex-row-reverse' : ''}`}
+              className={`hidden md:flex`}
             >
               <Icon icon="lucide:download" />
               {t('common.exportCsv')}

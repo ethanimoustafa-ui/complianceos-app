@@ -36,7 +36,7 @@ const StatCard = memo(function StatCard({
     <div
       className={`bg-white/80 backdrop-blur-sm border border-slate-100 p-6 rounded-2xl transition-all duration-300 hover:-translate-y-1 hover:shadow-lg ${isRTL ? borderColorRTL : borderColor}`}
     >
-      <div className={`flex justify-between items-start mb-4 ${isRTL ? 'flex-row-reverse' : ''}`}>
+      <div className={`flex justify-between items-start mb-4`}>
         <div className={`p-2 ${iconBg} rounded-lg`}>
           <Icon icon={icon} className={`text-2xl ${iconColor}`} />
         </div>
@@ -47,7 +47,7 @@ const StatCard = memo(function StatCard({
         ) : null}
       </div>
       <h3 className={`text-slate-500 text-xs font-bold uppercase tracking-wider mb-1 ${isRTL ? 'text-right' : ''}`}>{label}</h3>
-      <div className={`flex items-baseline gap-2 ${isRTL ? 'flex-row-reverse justify-end' : ''}`}>
+      <div className={`flex items-baseline gap-2`}>
         <span className="text-2xl font-bold text-slate-900">{value}</span>
         <span className="text-xs text-slate-400">{subtext}</span>
       </div>

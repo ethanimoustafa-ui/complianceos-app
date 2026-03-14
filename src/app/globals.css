@@ -353,11 +353,6 @@ body::-webkit-scrollbar {
   text-align: left;
 }
 
-/* RTL flex direction */
-.rtl .flex-row {
-  flex-direction: row-reverse;
-}
-
 /* RTL spacing utilities - flip margins and paddings */
 .rtl .ml-auto {
   margin-left: unset;

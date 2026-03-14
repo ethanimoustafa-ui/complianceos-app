@@ -66,7 +66,8 @@
     "no": "No",
     "progress": "Progress",
     "unassigned": "Unassigned",
-    "viewFullDetail": "Open Full Detail"
+    "viewFullDetail": "Open Full Detail",
+    "note": "Note"
   },
   "navigation": {
     "dashboard": "Dashboard",
@@ -295,7 +296,21 @@
       "overdueCirculars": "{{count}} overdue circular(s)",
       "insufficientData": "{{component}} has insufficient data",
       "componentLow": "{{component}} score critically low ({{score}}%)"
-    }
+    },
+    "employees": "emp.",
+    "done": "done",
+    "totalOpen": "Total Open",
+    "burnoutMild": "mild",
+    "burnoutModerate": "moderate",
+    "burnoutSevere": "severe",
+    "obsShort": "Obs",
+    "auditsShort": "Audits",
+    "policyShort": "Policy",
+    "corrShort": "Corr",
+    "confidenceHigh": "high",
+    "confidenceModerate": "moderate",
+    "confidenceLow": "low",
+    "confidenceInsufficient": "insufficient"
   },
   "calendar": {
     "title": "Compliance Calendar",
@@ -444,7 +459,16 @@
     "eventDetails": "Event Details",
     "noEventsForDay": "No events for this day",
     "eventsCount": "{{count}} event(s)",
-    "capDeadline": "CAP Deadline"
+    "capDeadline": "CAP Deadline",
+    "startTime": "Start Time",
+    "endTime": "End Time",
+    "addNotesPlaceholder": "Add notes...",
+    "typeMeeting": "Meeting",
+    "typeDeadline": "Deadline",
+    "typeSubmission": "Submission",
+    "typeReview": "Review",
+    "markAsComplete": "Mark as Complete",
+    "frameworkAgency": "Framework / Agency"
   },
   "samaLetters": {
     "title": "SAMA Letters",
@@ -1231,7 +1255,38 @@
     "managerReceivedToast": "Manager acknowledgement logged",
     "managerNotifiedToast": "Manager {{name}} has been notified",
     "unarchivePolicy": "Unarchive Policy",
-    "unarchivedToast": "Policy restored successfully"
+    "unarchivedToast": "Policy restored successfully",
+    "currentReview": "Current Review",
+    "noActivityYet": "No activity yet.",
+    "stepDraftCreated": "Draft Created",
+    "stepITReview": "IT Review",
+    "stepLegalReview": "Legal Review",
+    "stepManagementApproval": "Management Approval",
+    "stepComplianceReview": "Compliance Review",
+    "stepFinalApproval": "Final Approval",
+    "categoryIt": "IT",
+    "categoryHr": "Human Resources",
+    "tierBoard": "Board",
+    "tierManagement": "Management",
+    "tierSharia": "Sharia",
+    "tierAgm": "AGM",
+    "clickToChange": "Click to change",
+    "changeInitialDraft": "Initial draft",
+    "changeUpdatedSAT": "Updated suspicious activity thresholds",
+    "changeAddedPEP": "Added PEP screening requirements",
+    "changeRevisedCDD": "Revised CDD procedures",
+    "changeAddedCloudSecurity": "Added cloud security controls",
+    "changeUpdatedIR": "Updated incident response procedures",
+    "changePDPLRevision": "Major revision for PDPL compliance",
+    "changeUpdatedConsent": "Updated consent requirements",
+    "changeAddedCloudVendor": "Added cloud vendor requirements",
+    "changeMajorRevision": "Major revision",
+    "reviewWord": "Review",
+    "stepTechnicalReview": "Technical Review",
+    "stepDPOReview": "DPO Review",
+    "stepManagementReview": "Management Review",
+    "stepRiskReview": "Risk Review",
+    "stepReviewInitiated": "Review Initiated"
   },
   "audits": {
     "title": "Audit Management",
@@ -1592,7 +1647,16 @@
     "deleteMember": "Delete Member",
     "deleteConfirmation": "To confirm, type the member's name below:",
     "typeNameToConfirm": "Type name to confirm",
-    "memberDeleted": "Member deleted"
+    "memberDeleted": "Member deleted",
+    "typeObservation": "Observation",
+    "typeAudit": "Audit",
+    "typePolicy": "Policy",
+    "typeCorrespondence": "Correspondence",
+    "typeAdvisory": "Advisory",
+    "typeSamaLetter": "SAMA Letter",
+    "typeRisk": "Risk",
+    "typeCircular": "Circular",
+    "typeTask": "Task"
   },
   "training": {
     "overallCompletion": "Overall Completion",
@@ -1970,7 +2034,20 @@
     "notificationsActiveCount": "{{modules}} modules, {{events}} event types active",
     "notificationsDisabledHint": "All notifications are currently disabled",
     "adhocDateLabel": "Specific Date (Optional)",
-    "adhocDateHint": "Select a target date for this ad-hoc schedule"
+    "adhocDateHint": "Select a target date for this ad-hoc schedule",
+    "freqMonthly": "Monthly",
+    "freqQuarterly": "Quarterly",
+    "freqSemiAnnual": "Semi-Annual",
+    "freqAnnual": "Annual",
+    "freqAdHoc": "Ad-Hoc",
+    "nameEnglish": "Name (English)",
+    "nameArabic": "Name (Arabic)",
+    "descriptionEnglish": "Description (English)",
+    "descriptionArabic": "Description (Arabic)",
+    "priorityCritical": "Critical",
+    "priorityHigh": "High",
+    "priorityMedium": "Medium",
+    "priorityLow": "Low"
   },
   "auth": {
     "welcomeBack": "Welcome Back",
@@ -2608,7 +2685,10 @@
     "itemType": "Type",
     "viewRegulatoryUpdates": "View Regulatory Updates",
     "viewPolicies": "View Policies",
-    "viewRegistry": "View Registry"
+    "viewRegistry": "View Registry",
+    "reference": "Reference",
+    "phase": "Phase",
+    "articles": "Articles"
   },
   "advisory": {
     "title": "Advisory Requests",

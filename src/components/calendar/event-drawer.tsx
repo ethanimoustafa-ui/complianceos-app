@@ -9,6 +9,7 @@ import type { TranslationKey } from '@/i18n'
 import type { UnifiedCalendarItem } from '@/types'
 import type { CalendarType } from './calendar-types'
 import { toHijri, getHijriMonthsFull, getDueStatus, SOURCE_COLORS, SOURCE_LABEL_KEYS, PRIORITY_COLORS } from './calendar-utils'
+import { useCalendarStore } from '@/stores/calendar-store'
 
 function exportItemsToCsv(items: UnifiedCalendarItem[], dateLabel: string) {
   const headers = ['Title', 'Source Type', 'Date', 'Status', 'Priority', 'Subtitle', 'Assignee', 'Route']
@@ -46,6 +47,8 @@ interface EventDrawerProps {
 export function EventDrawer({ selectedDayKey, items, calendarType, onClose }: EventDrawerProps) {
   const { t, isRTL } = useTranslation()
   const router = useRouter()
+  const calendarEvents = useCalendarStore((s) => s.events)
+  const updateEvent = useCalendarStore((s) => s.updateEvent)
 
   const dayItems = useMemo(() => {
     if (!selectedDayKey) return []
@@ -67,7 +70,7 @@ export function EventDrawer({ selectedDayKey, items, calendarType, onClose }: Ev
       <div className="flex-1 flex flex-col h-full">
         {/* Header */}
         <div className="p-6 border-b border-slate-100">
-          <div className={`flex items-center justify-between mb-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
+          <div className={`flex items-center justify-between mb-2`}>
             <span className="text-[10px] font-black text-emerald-600 uppercase tracking-[0.2em]">{t('calendar.eventDetails')}</span>
             <button onClick={onClose} className="text-slate-400 hover:text-slate-600 transition-colors cursor-pointer">
               <Icon icon="lucide:x" className="text-xl" />
@@ -92,7 +95,7 @@ export function EventDrawer({ selectedDayKey, items, calendarType, onClose }: Ev
         <div className="flex-1 overflow-y-auto hide-scrollbar p-6 space-y-8">
           {/* Event List */}
           <section>
-            <h3 className={`text-xs font-bold text-slate-400 uppercase tracking-widest mb-4 flex items-center justify-between ${isRTL ? 'flex-row-reverse' : ''}`}>
+            <h3 className={`text-xs font-bold text-slate-400 uppercase tracking-widest mb-4 flex items-center justify-between`}>
               <span>{t('calendar.taskInformation')}</span>
               <span className="bg-slate-100 text-slate-600 px-2 py-0.5 rounded text-[9px]">{dayItems.length}</span>
             </h3>
@@ -135,13 +138,39 @@ export function EventDrawer({ selectedDayKey, items, calendarType, onClose }: Ev
                         onClick={() => router.push(item.route)}
                         className={cn(
                           'mt-1 w-full text-xs font-bold py-2 rounded-lg border transition-colors cursor-pointer flex items-center justify-center gap-2',
-                          'bg-white text-slate-700 border-slate-200 hover:border-emerald-300 hover:text-emerald-600',
-                          isRTL && 'flex-row-reverse'
+                          'bg-white text-slate-700 border-slate-200 hover:border-emerald-300 hover:text-emerald-600'
                         )}
                       >
                         {t('calendar.goToSource')} <Icon icon="lucide:arrow-right" className={cn("text-sm", isRTL && "flip-x")} />
                       </button>
                     )}
+                    {item.sourceType === 'user-event' && (() => {
+                      const calEventId = item.id.replace(/^cal-/, '')
+                      const calEvent = calendarEvents.find(e => e.id === calEventId)
+                      const isCompleted = calEvent?.completed
+
+                      if (isCompleted) {
+                        return (
+                          <div className={cn('mt-1 flex items-center justify-center gap-2 py-2 text-xs font-bold text-emerald-600')}>
+                            <Icon icon="lucide:check-circle-2" className="text-base" />
+                            <span>{t('calendar.markAsComplete' as TranslationKey)}</span>
+                          </div>
+                        )
+                      }
+
+                      return (
+                        <button
+                          onClick={() => updateEvent(calEventId, { completed: true, completedAt: new Date().toISOString() })}
+                          className={cn(
+                            'mt-1 w-full text-xs font-bold py-2 rounded-lg border transition-colors cursor-pointer flex items-center justify-center gap-2',
+                            'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100 hover:border-emerald-300'
+                          )}
+                        >
+                          <Icon icon="lucide:check-circle-2" className="text-sm" />
+                          {t('calendar.markAsComplete' as TranslationKey)}
+                        </button>
+                      )
+                    })()}
                   </div>
                 )
               })}
@@ -151,7 +180,7 @@ export function EventDrawer({ selectedDayKey, items, calendarType, onClose }: Ev
           {/* Progress */}
           <section>
             <h3 className={`text-xs font-bold text-slate-400 uppercase tracking-widest mb-4 ${isRTL ? 'text-right' : ''}`}>{t('calendar.status')}</h3>
-            <div className={`flex items-center gap-6 bg-slate-50 p-4 rounded-xl border border-slate-100 ${isRTL ? 'flex-row-reverse' : ''}`}>
+            <div className={`flex items-center gap-6 bg-slate-50 p-4 rounded-xl border border-slate-100`}>
               <div className="relative w-16 h-16">
                 <svg className="w-full h-full -rotate-90" viewBox="0 0 100 100">
                   <circle className="text-slate-200 stroke-current" strokeWidth="12" fill="transparent" r="40" cx="50" cy="50" />
@@ -193,8 +222,7 @@ export function EventDrawer({ selectedDayKey, items, calendarType, onClose }: Ev
             }}
             disabled={dayItems.length === 0}
             className={cn(
-              'w-full bg-slate-900 text-white py-3 rounded-xl font-bold text-xs uppercase tracking-widest shadow-lg hover:bg-slate-800 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed',
-              isRTL && 'flex-row-reverse'
+              'w-full bg-slate-900 text-white py-3 rounded-xl font-bold text-xs uppercase tracking-widest shadow-lg hover:bg-slate-800 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed'
             )}
           >
             <Icon icon="lucide:download" />

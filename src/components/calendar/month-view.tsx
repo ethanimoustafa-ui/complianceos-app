@@ -40,13 +40,16 @@ export function MonthView({ currentDate, itemsByDate, selectedDayKey, selectedSo
         </div>
       ))}
 
-      {days.map((date, idx) => {
+      {(() => {
+        const todayKey = formatDateKey(new Date())
+        return days.map((date, idx) => {
         if (!date) return <div key={idx} className="bg-slate-50/50 min-h-[140px]" />
 
         const key = formatDateKey(date)
         const allItems = itemsByDate[key] || []
         const filteredItems = allItems.filter(item => selectedSourceTypes.has(item.sourceType))
         const isSelected = key === selectedDayKey
+        const isToday = key === todayKey
         const isWeekend = isSaudiWeekend(date)
         const holiday = SAUDI_HOLIDAYS[key]
         const hijri = toHijri(date)
@@ -71,19 +74,20 @@ export function MonthView({ currentDate, itemsByDate, selectedDayKey, selectedSo
               'min-h-[140px] p-4 border-r border-b border-slate-100 flex flex-col cursor-pointer transition-all hover:bg-slate-50 relative group',
               isWeekend ? 'bg-slate-100/70' : 'bg-white',
               heatmapClass,
-              isSelected && 'day-card-selected'
+              isSelected && 'day-card-selected',
+              isToday && !isSelected && 'ring-2 ring-emerald-500 ring-inset'
             )}
           >
             <div className="flex justify-between items-start">
               <div className="flex flex-col">
                 {calendarType === 'gregorian' ? (
                   <>
-                    <span className="text-sm font-bold">{date.getDate()}</span>
+                    <span className={cn('text-sm font-bold', isToday && 'bg-emerald-500 text-white rounded-full w-7 h-7 flex items-center justify-center')}>{date.getDate()}</span>
                     <span className="text-[9px] text-slate-400 font-medium">{hijri.day}</span>
                   </>
                 ) : (
                   <>
-                    <span className="text-sm font-bold">{hijri.day}</span>
+                    <span className={cn('text-sm font-bold', isToday && 'bg-emerald-500 text-white rounded-full w-7 h-7 flex items-center justify-center')}>{hijri.day}</span>
                     <span className="text-[9px] text-slate-400 font-medium">{date.getDate()}</span>
                   </>
                 )}
@@ -121,7 +125,8 @@ export function MonthView({ currentDate, itemsByDate, selectedDayKey, selectedSo
             )}
           </div>
         )
-      })}
+      })
+      })()}
     </div>
   )
 }

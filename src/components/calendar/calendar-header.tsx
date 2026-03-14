@@ -71,7 +71,7 @@ export function CalendarHeader({
           </div>
 
           {/* View Toggle */}
-          <div className={`flex bg-slate-100 p-1 rounded-lg ${isRTL ? 'flex-row-reverse' : ''}`}>
+          <div className={`flex bg-slate-100 p-1 rounded-lg`}>
             {viewMode === 'submissions' && (
               <button
                 onClick={() => onSetSubmissionGroupBy('date')}
@@ -114,13 +114,12 @@ export function CalendarHeader({
           </div>
 
           {/* All / Submissions Toggle */}
-          <div className={`flex bg-slate-100 p-1 rounded-lg ${isRTL ? 'mr-3' : 'ml-3'} ${isRTL ? 'flex-row-reverse' : ''}`}>
+          <div className={`flex bg-slate-100 p-1 rounded-lg ${isRTL ? 'mr-3' : 'ml-3'}`}>
             <button
               onClick={() => onChangeView('month')}
               className={cn(
                 'px-4 py-2 text-xs font-bold rounded-md transition-all flex items-center gap-1.5 cursor-pointer',
-                viewMode !== 'submissions' ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-500 hover:text-slate-900',
-                isRTL && 'flex-row-reverse'
+                viewMode !== 'submissions' ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-500 hover:text-slate-900'
               )}
             >
               <Icon icon="lucide:layout-grid" className="text-sm" />
@@ -130,8 +129,7 @@ export function CalendarHeader({
               onClick={() => onChangeView('submissions')}
               className={cn(
                 'px-4 py-2 text-xs font-bold rounded-md transition-all flex items-center gap-1.5 cursor-pointer',
-                viewMode === 'submissions' ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-500 hover:text-slate-900',
-                isRTL && 'flex-row-reverse'
+                viewMode === 'submissions' ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-500 hover:text-slate-900'
               )}
             >
               <Icon icon="lucide:list-checks" className="text-sm" />
@@ -140,9 +138,9 @@ export function CalendarHeader({
           </div>
         </div>
 
-        <div className={`flex items-center gap-4 ${isRTL ? 'flex-row-reverse' : ''}`}>
+        <div className={`flex items-center gap-4`}>
           {/* Date Navigation */}
-          <div className={`flex items-center gap-1 bg-white border border-slate-200 p-1 rounded-lg ${isRTL ? 'flex-row-reverse' : ''}`}>
+          <div className={`flex items-center gap-1 bg-white border border-slate-200 p-1 rounded-lg`}>
             <button onClick={() => onNavigate(-1)} className="p-1.5 hover:bg-slate-50 rounded transition-colors cursor-pointer">
               <Icon icon="lucide:chevron-left" className={cn("text-slate-600", isRTL && "flip-x")} />
             </button>
@@ -170,8 +168,7 @@ export function CalendarHeader({
                   'px-4 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer flex items-center gap-2',
                   showCompleted
                     ? 'bg-emerald-600 text-white'
-                    : 'bg-slate-100 text-slate-500 hover:text-slate-900',
-                  isRTL && 'flex-row-reverse'
+                    : 'bg-slate-100 text-slate-500 hover:text-slate-900'
                 )}
               >
                 <Icon icon="lucide:check-circle" className="text-sm" />
@@ -181,8 +178,7 @@ export function CalendarHeader({
                 <button
                   onClick={onClearSubmissionFilter}
                   className={cn(
-                    'px-4 py-2 text-xs font-bold rounded-lg bg-slate-100 text-slate-500 hover:text-slate-900 transition-all cursor-pointer flex items-center gap-2',
-                    isRTL && 'flex-row-reverse'
+                    'px-4 py-2 text-xs font-bold rounded-lg bg-slate-100 text-slate-500 hover:text-slate-900 transition-all cursor-pointer flex items-center gap-2'
                   )}
                 >
                   <Icon icon="lucide:x" className="text-sm" />
@@ -195,8 +191,7 @@ export function CalendarHeader({
           <button
             onClick={onCreateEvent}
             className={cn(
-              'bg-emerald-600 text-white px-5 py-2.5 rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-emerald-700 transition-colors shadow-lg shadow-emerald-100 cursor-pointer',
-              isRTL && 'flex-row-reverse'
+              'bg-emerald-600 text-white px-5 py-2.5 rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-emerald-700 transition-colors shadow-lg shadow-emerald-100 cursor-pointer'
             )}
           >
             <Icon icon="lucide:plus" className="w-5 h-5" />
@@ -206,8 +201,8 @@ export function CalendarHeader({
       </header>
 
       {/* Source Type Filter Bar */}
-      <div className={`flex items-center justify-between p-6 pb-0 ${isRTL ? 'flex-row-reverse' : ''}`}>
-        <div className={`flex items-center gap-2 flex-wrap ${isRTL ? 'flex-row-reverse' : ''}`}>
+      <div className={`flex items-center justify-between p-6 pb-0`}>
+        <div className={`flex items-center gap-2 flex-wrap`}>
           <span className={`text-[10px] font-bold text-slate-400 uppercase tracking-widest ${isRTL ? 'ml-2' : 'mr-2'}`}>
             {t('calendar.filterByType')}:
           </span>

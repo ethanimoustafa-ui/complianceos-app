@@ -97,7 +97,7 @@ export const ChecklistSection = memo(function ChecklistSection({
       </div>
 
       {/* Add new checklist item */}
-      <div className={`flex items-center gap-2 mb-4 ${isRTL ? 'flex-row-reverse' : ''}`}>
+      <div className={`flex items-center gap-2 mb-4`}>
         <input
           type="text"
           placeholder={t((addPlaceholderKey || 'observations.detail.addChecklistItem') as Parameters<typeof t>[0])}
@@ -121,7 +121,7 @@ export const ChecklistSection = memo(function ChecklistSection({
           {items.map((item) => (
             <div
               key={item.id}
-              className={`flex items-center gap-3 p-3 border rounded-xl transition-all group ${isRTL ? 'flex-row-reverse' : ''} ${
+              className={`flex items-center gap-3 p-3 border rounded-xl transition-all group ${
                 item.completed
                   ? 'border-emerald-100 bg-emerald-50/30'
                   : 'border-slate-200 hover:border-emerald-300 hover:bg-slate-50'
@@ -129,7 +129,7 @@ export const ChecklistSection = memo(function ChecklistSection({
             >
               {editingItemId === item.id ? (
                 /* Editing mode */
-                <div className={`flex items-center gap-2 flex-1 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                <div className={`flex items-center gap-2 flex-1`}>
                   <input
                     type="text"
                     value={editingText}

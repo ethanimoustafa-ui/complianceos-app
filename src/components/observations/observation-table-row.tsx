@@ -81,7 +81,7 @@ export const ObservationTableRow = memo(function ObservationTableRow({
         #{observation.id}
       </td>
       <td className="py-4">
-        <div className={`flex items-center gap-2 ${isRTL ? 'flex-row-reverse justify-end' : ''}`}>
+        <div className={`flex items-center gap-2 `}>
           <Icon
             icon={source.icon}
             className={isClosed ? 'text-slate-400' : source.iconColor}
@@ -109,19 +109,19 @@ export const ObservationTableRow = memo(function ObservationTableRow({
         </span>
       </td>
       <td className={`py-4 text-xs font-medium text-slate-600`}>
-        <div className={`flex items-center gap-1 ${isRTL ? 'flex-row-reverse' : ''}`}>
+        <div className={`flex items-center gap-1`}>
           <Icon icon="lucide:flag" className="text-rose-400 text-[10px]" />
           <span>{formatDate(observation.dueDate, isRTL)}</span>
         </div>
         {observation.remediationSubmissionDueDate ? (
-          <div className={`flex items-center gap-1 mt-0.5 text-[10px] text-slate-400 ${isRTL ? 'flex-row-reverse' : ''}`}>
+          <div className={`flex items-center gap-1 mt-0.5 text-[10px] text-slate-400`}>
             <Icon icon="lucide:file-clock" className="text-amber-400 text-[10px]" />
             <span>{formatDate(observation.remediationSubmissionDueDate, isRTL)}</span>
           </div>
         ) : null}
       </td>
       <td className="py-4">
-        <div className={`flex items-center gap-2 justify-center ${isRTL ? 'flex-row-reverse' : ''}`}>
+        <div className={`flex items-center gap-2 justify-center`}>
           <span
             className={`w-2 h-2 rounded-full ${status.dotColor} ${
               observation.status === 'resolved' ? 'animate-pulse' : ''
@@ -175,7 +175,7 @@ export const ObservationTableRow = memo(function ObservationTableRow({
                       onMenuToggle(null)
                       onEdit?.(observation)
                     }}
-                    className={`w-full px-4 py-2 ${isRTL ? 'text-right' : 'text-left'} text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-2 cursor-pointer ${isRTL ? 'flex-row-reverse' : ''}`}
+                    className={`w-full px-4 py-2 ${isRTL ? 'text-right' : 'text-left'} text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-2 cursor-pointer`}
                   >
                     <Icon icon="lucide:pencil" className="text-slate-400" />
                     {t('observations.actions.edit')}
@@ -186,7 +186,7 @@ export const ObservationTableRow = memo(function ObservationTableRow({
                       onMenuToggle(null)
                       onDelete?.(observation.id)
                     }}
-                    className={`w-full px-4 py-2 ${isRTL ? 'text-right' : 'text-left'} text-sm text-rose-600 hover:bg-rose-50 flex items-center gap-2 cursor-pointer ${isRTL ? 'flex-row-reverse' : ''}`}
+                    className={`w-full px-4 py-2 ${isRTL ? 'text-right' : 'text-left'} text-sm text-rose-600 hover:bg-rose-50 flex items-center gap-2 cursor-pointer`}
                   >
                     <Icon icon="lucide:trash-2" />
                     {t('observations.actions.delete')}

@@ -264,7 +264,7 @@ export const AddObservationModal = memo(function AddObservationModal({ isOpen, o
                 <label className={`text-xs font-black uppercase text-slate-500 tracking-widest mb-2 block`}>
                   {t('observations.form.referenceNumber')} <span className="text-rose-500">*</span>
                 </label>
-                <div className={`flex gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                <div className={`flex gap-2`}>
                   <input
                     type="text"
                     placeholder={t('observations.form.referencePlaceholder')}
@@ -426,7 +426,7 @@ export const AddObservationModal = memo(function AddObservationModal({ isOpen, o
         </div>
 
         {/* Footer */}
-        <div className={`p-8 bg-slate-50 border-t border-slate-200 flex justify-end gap-3 ${isRTL ? 'flex-row-reverse' : ''}`}>
+        <div className={`p-8 bg-slate-50 border-t border-slate-200 flex justify-end gap-3`}>
           <Button variant="ghost" onClick={onClose}>
             {t('common.cancel')}
           </Button>

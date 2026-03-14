@@ -44,11 +44,13 @@ function UploadZone({
   fileRef,
   label,
   required,
+  t,
 }: {
   file: File | null
   fileRef: React.RefObject<HTMLInputElement | null>
   label: string
   required?: boolean
+  t: (key: any, params?: Record<string, string>) => string
 }) {
   return (
     <div>
@@ -70,7 +72,7 @@ function UploadZone({
           <Icon icon="lucide:file-check" className="text-emerald-500 text-xl shrink-0" />
           <div className="flex-1 min-w-0">
             <p className="text-xs font-bold text-emerald-700 truncate">{file.name}</p>
-            <p className="text-[10px] text-emerald-500">Click to change</p>
+            <p className="text-[10px] text-emerald-500">{t('policies.clickToChange')}</p>
           </div>
           <Icon icon="lucide:refresh-cw" className="text-emerald-400 text-sm shrink-0" />
         </div>
@@ -81,7 +83,7 @@ function UploadZone({
         >
           <Icon icon="lucide:upload-cloud" className="text-3xl text-slate-400 mx-auto mb-2" />
           <p className="text-sm text-slate-500">
-            Drop file here or <span className="text-emerald-600 font-bold">browse</span>
+            {t('policies.dropFileHere')} <span className="text-emerald-600 font-bold">{t('policies.browse')}</span>
           </p>
         </div>
       )}
@@ -704,6 +706,7 @@ export default function RegulatoryUpdatesPoliciesPage() {
                   fileRef={formEditDocFileRef}
                   label={t('policies.uploadDocument')}
                   required
+                  t={t}
                 />
               </div>
             </div>
@@ -833,6 +836,7 @@ export default function RegulatoryUpdatesPoliciesPage() {
                 fileRef={formDocFileRef}
                 label={t('policies.uploadDocument')}
                 required
+                t={t}
               />
             </div>
           </div>

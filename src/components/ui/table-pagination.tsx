@@ -19,7 +19,7 @@ export const TablePagination = memo(function TablePagination({
   itemsPerPage,
   onPageChange,
 }: TablePaginationProps) {
-  const { t, isRTL } = useTranslation()
+  const { t } = useTranslation()
 
   const startItem = (currentPage - 1) * itemsPerPage + 1
   const endItem = Math.min(currentPage * itemsPerPage, totalItems)
@@ -39,11 +39,11 @@ export const TablePagination = memo(function TablePagination({
   const visiblePages = getVisiblePages()
 
   return (
-    <div className={`flex items-center justify-between mt-8 pt-6 border-t border-slate-100 ${isRTL ? 'flex-row-reverse' : ''}`}>
+    <div className="flex items-center justify-between mt-8 pt-6 border-t border-slate-100">
       <p className="text-xs font-bold text-slate-400">
         {t('observations.pagination.showing', { start: startItem, end: endItem, total: totalItems })}
       </p>
-      <div className={`flex gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
+      <div className="flex gap-2">
         <button
           onClick={() => onPageChange(currentPage - 1)}
           disabled={currentPage === 1}

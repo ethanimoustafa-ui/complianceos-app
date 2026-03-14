@@ -66,7 +66,8 @@
     "no": "لا",
     "progress": "التقدم",
     "unassigned": "غير معين",
-    "viewFullDetail": "فتح التفاصيل الكاملة"
+    "viewFullDetail": "فتح التفاصيل الكاملة",
+    "note": "ملاحظة"
   },
   "navigation": {
     "dashboard": "لوحة التحكم",
@@ -295,7 +296,21 @@
       "overdueCirculars": "{{count}} تعميم(ات) متأخرة",
       "insufficientData": "{{component}} لا تتوفر بيانات كافية",
       "componentLow": "درجة {{component}} منخفضة بشكل حرج ({{score}}%)"
-    }
+    },
+    "employees": "موظف",
+    "done": "مكتمل",
+    "totalOpen": "الإجمالي المفتوح",
+    "burnoutMild": "خفيف",
+    "burnoutModerate": "متوسط",
+    "burnoutSevere": "شديد",
+    "obsShort": "ملاحظات",
+    "auditsShort": "تدقيق",
+    "policyShort": "سياسات",
+    "corrShort": "مراسلات",
+    "confidenceHigh": "عالي",
+    "confidenceModerate": "متوسط",
+    "confidenceLow": "منخفض",
+    "confidenceInsufficient": "غير كافٍ"
   },
   "calendar": {
     "title": "تقويم الامتثال",
@@ -444,7 +459,16 @@
     "eventDetails": "تفاصيل الحدث",
     "noEventsForDay": "لا توجد أحداث لهذا اليوم",
     "eventsCount": "{{count}} حدث/أحداث",
-    "capDeadline": "موعد خطة الإجراءات التصحيحية"
+    "capDeadline": "موعد خطة الإجراءات التصحيحية",
+    "startTime": "وقت البداية",
+    "endTime": "وقت النهاية",
+    "addNotesPlaceholder": "أضف ملاحظات...",
+    "typeMeeting": "اجتماع",
+    "typeDeadline": "موعد نهائي",
+    "typeSubmission": "تقديم",
+    "typeReview": "مراجعة",
+    "markAsComplete": "تحديد كمكتمل",
+    "frameworkAgency": "الإطار / الجهة"
   },
   "samaLetters": {
     "title": "خطابات ساما",
@@ -1231,7 +1255,38 @@
     "managerReceivedToast": "تم تسجيل إقرار المدير",
     "managerNotifiedToast": "تم إشعار المدير {{name}}",
     "unarchivePolicy": "استعادة السياسة",
-    "unarchivedToast": "تمت استعادة السياسة بنجاح"
+    "unarchivedToast": "تمت استعادة السياسة بنجاح",
+    "currentReview": "المراجعة الحالية",
+    "noActivityYet": "لا يوجد نشاط بعد.",
+    "stepDraftCreated": "تم إنشاء المسودة",
+    "stepITReview": "مراجعة تقنية المعلومات",
+    "stepLegalReview": "المراجعة القانونية",
+    "stepManagementApproval": "موافقة الإدارة",
+    "stepComplianceReview": "مراجعة الامتثال",
+    "stepFinalApproval": "الموافقة النهائية",
+    "categoryIt": "تقنية المعلومات",
+    "categoryHr": "الموارد البشرية",
+    "tierBoard": "مجلس الإدارة",
+    "tierManagement": "الإدارة",
+    "tierSharia": "الشريعة",
+    "tierAgm": "الجمعية العامة",
+    "clickToChange": "انقر للتغيير",
+    "changeInitialDraft": "المسودة الأولية",
+    "changeUpdatedSAT": "تحديث حدود النشاط المشبوه",
+    "changeAddedPEP": "إضافة متطلبات فحص الأشخاص السياسيين",
+    "changeRevisedCDD": "مراجعة إجراءات العناية الواجبة",
+    "changeAddedCloudSecurity": "إضافة ضوابط أمن السحابة",
+    "changeUpdatedIR": "تحديث إجراءات الاستجابة للحوادث",
+    "changePDPLRevision": "مراجعة رئيسية لامتثال نظام حماية البيانات",
+    "changeUpdatedConsent": "تحديث متطلبات الموافقة",
+    "changeAddedCloudVendor": "إضافة متطلبات موردي السحابة",
+    "changeMajorRevision": "مراجعة رئيسية",
+    "reviewWord": "المراجعة",
+    "stepTechnicalReview": "المراجعة الفنية",
+    "stepDPOReview": "مراجعة مسؤول حماية البيانات",
+    "stepManagementReview": "مراجعة الإدارة",
+    "stepRiskReview": "مراجعة المخاطر",
+    "stepReviewInitiated": "بدء المراجعة"
   },
   "audits": {
     "title": "إدارة التدقيق",
@@ -1592,7 +1647,16 @@
     "deleteMember": "حذف العضو",
     "deleteConfirmation": "للتأكيد، اكتب اسم العضو أدناه:",
     "typeNameToConfirm": "اكتب الاسم للتأكيد",
-    "memberDeleted": "تم حذف العضو"
+    "memberDeleted": "تم حذف العضو",
+    "typeObservation": "ملاحظة",
+    "typeAudit": "تدقيق",
+    "typePolicy": "سياسة",
+    "typeCorrespondence": "مراسلة",
+    "typeAdvisory": "استشارة",
+    "typeSamaLetter": "خطاب ساما",
+    "typeRisk": "مخاطر",
+    "typeCircular": "تعميم",
+    "typeTask": "مهمة"
   },
   "training": {
     "overallCompletion": "إجمالي الإتمام",
@@ -1970,7 +2034,20 @@
     "notificationsActiveCount": "{{modules}} وحدات، {{events}} أنواع أحداث نشطة",
     "notificationsDisabledHint": "جميع الإشعارات معطلة حالياً",
     "adhocDateLabel": "تاريخ محدد (اختياري)",
-    "adhocDateHint": "اختر تاريخاً مستهدفاً لهذا الجدول المخصص"
+    "adhocDateHint": "اختر تاريخاً مستهدفاً لهذا الجدول المخصص",
+    "freqMonthly": "شهري",
+    "freqQuarterly": "ربع سنوي",
+    "freqSemiAnnual": "نصف سنوي",
+    "freqAnnual": "سنوي",
+    "freqAdHoc": "حسب الطلب",
+    "nameEnglish": "الاسم (إنجليزي)",
+    "nameArabic": "الاسم (عربي)",
+    "descriptionEnglish": "الوصف (إنجليزي)",
+    "descriptionArabic": "الوصف (عربي)",
+    "priorityCritical": "حرج",
+    "priorityHigh": "عالي",
+    "priorityMedium": "متوسط",
+    "priorityLow": "منخفض"
   },
   "auth": {
     "welcomeBack": "مرحباً بعودتك",
@@ -2608,7 +2685,10 @@
     "itemType": "النوع",
     "viewRegulatoryUpdates": "عرض التحديثات التنظيمية",
     "viewPolicies": "عرض السياسات",
-    "viewRegistry": "عرض السجل"
+    "viewRegistry": "عرض السجل",
+    "reference": "المرجع",
+    "phase": "المرحلة",
+    "articles": "المواد"
   },
   "advisory": {
     "title": "طلبات الاستشارة",

@@ -5,6 +5,8 @@ import { differenceInCalendarDays } from 'date-fns'
 import { cn } from '@/lib/utils'
 import type { Circular, Policy, CircularPriority, CircularStatus, PolicyStatus, PolicyCategory, CAPStatus, PolicyApprovalTier } from '@/types'
 import type { TranslationKey } from '@/i18n'
+import { useDepartmentStore } from '@/stores/department-store'
+import { useTranslation } from '@/i18n'
 
 interface RegDocCardProps {
   variant: 'circular' | 'policy'
@@ -124,6 +126,8 @@ export function RegDocCard({ variant, circular, policy, onClick, isNew, t, isRTL
 }
 
 function CircularCardContent({ circular, t, isRTL }: { circular: Circular; t: RegDocCardProps['t']; isRTL: boolean }) {
+  const { isRTL: rtl } = useTranslation()
+  const departments = useDepartmentStore(s => s.departments)
   const authorityStyle = AUTHORITY_COLORS[circular.authority] ?? AUTHORITY_COLORS.SAMA
   const priorityStyle = PRIORITY_COLORS[circular.priority]
   const statusStyle = CIRCULAR_STATUS_COLORS[circular.status]
@@ -133,6 +137,26 @@ function CircularCardContent({ circular, t, isRTL }: { circular: Circular; t: Re
   const isOverdue = circular.status === 'overdue'
   const currentStep = circular.workflowSteps?.find((s) => s.status === 'current')
   const currentPhase = currentStep?.phase ?? 0
+
+  const statusLabels: Record<CircularStatus, string> = {
+    'pending': t('common.pending'),
+    'in-progress': t('policies.inProgress' as TranslationKey),
+    'completed': t('common.completed'),
+    'overdue': t('common.overdue'),
+  }
+
+  const priorityLabels: Record<CircularPriority, string> = {
+    'critical': t('regulatoryUpdates.critical'),
+    'high': t('regulatoryUpdates.high'),
+    'medium': t('regulatoryUpdates.medium'),
+    'low': t('regulatoryUpdates.low'),
+  }
+
+  const getDeptLabel = (deptName: string) => {
+    const dept = departments.find(d => d.name === deptName || d.id === deptName)
+    if (dept) return rtl ? dept.nameAr : dept.name
+    return deptName
+  }
 
   return (
     <div className={cn('flex items-center gap-6 flex-1', )}>
@@ -146,7 +170,7 @@ function CircularCardContent({ circular, t, isRTL }: { circular: Circular; t: Re
         <div className={cn('flex items-center gap-2', )}>
           <h4 className="text-sm font-bold text-slate-900 truncate">{circular.title}</h4>
           <span className={cn('px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0', statusStyle.bg, statusStyle.text)}>
-            {circular.status.replace('-', ' ').toUpperCase()}
+            {(statusLabels[circular.status] ?? circular.status).toUpperCase()}
           </span>
           {circular.referenceUrl && (
             <a
@@ -165,14 +189,14 @@ function CircularCardContent({ circular, t, isRTL }: { circular: Circular; t: Re
           <span className="text-xs font-mono font-bold text-slate-500">{circular.reference}</span>
           <span className="w-1 h-1 bg-slate-300 rounded-full"></span>
           <span className={cn('px-2 py-0.5 rounded-full text-[10px] font-bold', priorityStyle.bg, priorityStyle.text)}>
-            {circular.priority.toUpperCase()}
+            {(priorityLabels[circular.priority] ?? circular.priority).toUpperCase()}
           </span>
           <span className="w-1 h-1 bg-slate-300 rounded-full"></span>
           {/* Business Owner */}
           <span className="text-[10px] font-bold text-slate-400 uppercase">{t('regulatoryUpdates.businessOwnerDepartment')}:</span>
           {circular.businessOwnerDepartment ? (
             <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-violet-100 text-violet-700">
-              {circular.businessOwnerDepartment}
+              {getDeptLabel(circular.businessOwnerDepartment)}
             </span>
           ) : (
             <span className="text-slate-400 text-xs">—</span>
@@ -239,10 +263,18 @@ function CircularCardContent({ circular, t, isRTL }: { circular: Circular; t: Re
 }
 
 function PolicyCardContent({ policy, t, isRTL }: { policy: Policy; t: RegDocCardProps['t']; isRTL: boolean }) {
+  const { isRTL: rtl } = useTranslation()
+  const departments = useDepartmentStore(s => s.departments)
   const statusStyle = POLICY_STATUS_COLORS[policy.status]
   const categoryIcon = CATEGORY_ICONS[policy.category]
   const tierStyle = TIER_COLORS[policy.approvalTier] ?? TIER_COLORS.management
   const urgency = getReviewUrgency(policy.nextReviewDate, policy.status)
+
+  const getDeptLabel = (deptName: string) => {
+    const dept = departments.find(d => d.name === deptName || d.id === deptName)
+    if (dept) return rtl ? dept.nameAr : dept.name
+    return deptName
+  }
 
   const tierLabels: Record<string, string> = {
     board:      t('policies.approvalTierBoard'),
@@ -292,7 +324,7 @@ function PolicyCardContent({ policy, t, isRTL }: { policy: Policy; t: RegDocCard
           />
           <div>
             <p className="text-xs font-bold text-slate-700">{policy.owner.name}</p>
-            <p className="text-[10px] text-slate-400">{policy.owner.department}</p>
+            <p className="text-[10px] text-slate-400">{getDeptLabel(policy.owner.department)}</p>
           </div>
         </div>
         <div className={cn('shrink-0 text-right')}>

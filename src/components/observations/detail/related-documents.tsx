@@ -14,14 +14,13 @@ export interface RelatedDocumentsProps {
   documents: Document[]
   canUpload: boolean
   onUpload: () => void
-  isRTL: boolean
+  isRTL?: boolean
 }
 
 export const RelatedDocuments = memo(function RelatedDocuments({
   documents,
   canUpload,
   onUpload,
-  isRTL,
 }: RelatedDocumentsProps) {
   const { t } = useTranslation()
 
@@ -52,7 +51,7 @@ export const RelatedDocuments = memo(function RelatedDocuments({
       {canUpload ? (
         <button
           onClick={onUpload}
-          className={`w-full px-4 py-3 border-2 border-dashed border-slate-300 rounded-xl text-sm text-slate-500 hover:border-emerald-400 hover:text-emerald-600 transition-colors flex items-center justify-center gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}
+          className={`w-full px-4 py-3 border-2 border-dashed border-slate-300 rounded-xl text-sm text-slate-500 hover:border-emerald-400 hover:text-emerald-600 transition-colors flex items-center justify-center gap-2`}
         >
           <Icon icon="lucide:upload" />
           {t('observations.detail.uploadDocument')}

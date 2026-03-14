@@ -224,7 +224,7 @@ export default function ReportsExecutivePage() {
             </Link>
           </div>
         </div>
-        <div className={`flex items-center gap-4 ${isRTL ? 'flex-row-reverse' : ''}`}>
+        <div className={`flex items-center gap-4`}>
           {/* Custom Filter Dropdown */}
           <div className="relative">
             <button

@@ -311,6 +311,7 @@ export const usePolicyStore = create<PolicyState>()(
           workflowTimeline: [...resetTimeline, newStep],
           currentReviewCycleId: cycleId,
           currentReviewCycleLabel: cycleLabel,
+          currentReviewCycleDate: new Date().toISOString(),
           reviewCycleHistory: [...(policy.reviewCycleHistory ?? []), ...oldEntry],
           nextReviewDate,
         })

@@ -47,7 +47,7 @@ export const RemediationStatus = memo(function RemediationStatus({
       </h4>
       {showPlanUI ? (
         <div className="space-y-3">
-          <div className={`flex items-center gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
+          <div className={`flex items-center gap-2`}>
             <span className={`px-2 py-1 ${statusColors[plan.status]} text-white text-[10px] font-black rounded uppercase`}>
               {t(`observations.detail.remediationStatus.${plan.status}`)}
             </span>
@@ -78,7 +78,7 @@ export const RemediationStatus = memo(function RemediationStatus({
             </div>
           ) : null}
           {showReview ? (
-            <div className={`flex gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
+            <div className={`flex gap-2`}>
               <button
                 onClick={() => onReview(true)}
                 className="flex-1 px-3 py-2 bg-emerald-600 text-white text-xs font-bold rounded-lg hover:bg-emerald-700 transition-colors"

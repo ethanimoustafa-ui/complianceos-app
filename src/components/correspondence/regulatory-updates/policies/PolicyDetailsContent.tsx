@@ -132,6 +132,47 @@ export function PolicyDetailsContent({
 
   const tierStyle = TIER_COLORS[fresh.approvalTier] ?? TIER_COLORS.management
 
+  const STEP_NAME_MAP: Record<string, string> = {
+    'Draft Created': t('policies.stepDraftCreated'),
+    'IT Review': t('policies.stepITReview'),
+    'Legal Review': t('policies.stepLegalReview'),
+    'Management Approval': t('policies.stepManagementApproval'),
+    'Compliance Review': t('policies.stepComplianceReview'),
+    'Final Approval': t('policies.stepFinalApproval'),
+    'Technical Review': t('policies.stepTechnicalReview'),
+    'DPO Review': t('policies.stepDPOReview'),
+    'Management Review': t('policies.stepManagementReview'),
+    'Risk Review': t('policies.stepRiskReview'),
+    'Review Initiated': t('policies.stepReviewInitiated'),
+  }
+
+  const VERSION_CHANGES_MAP: Record<string, string> = {
+    'Initial draft': t('policies.changeInitialDraft'),
+    'Updated suspicious activity thresholds': t('policies.changeUpdatedSAT'),
+    'Added PEP screening requirements': t('policies.changeAddedPEP'),
+    'Revised CDD procedures': t('policies.changeRevisedCDD'),
+    'Added cloud security controls': t('policies.changeAddedCloudSecurity'),
+    'Updated incident response procedures': t('policies.changeUpdatedIR'),
+    'Major revision for PDPL compliance': t('policies.changePDPLRevision'),
+    'Updated consent requirements': t('policies.changeUpdatedConsent'),
+    'Added cloud vendor requirements': t('policies.changeAddedCloudVendor'),
+    'Major revision': t('policies.changeMajorRevision'),
+  }
+
+  /** Format a review cycle label in the current locale.
+   *  Tries currentReviewCycleDate first, then parses "Review Month Year" strings. */
+  function formatCycleLabel(label: string, isoDate?: string): string {
+    const fmt = (d: Date) => `${t('policies.reviewWord')} ${d.toLocaleDateString(isRTL ? 'ar-SA' : 'en-US', { month: 'long', year: 'numeric' })}`
+    if (isoDate) return fmt(new Date(isoDate))
+    // Parse stored English labels like "Review March 2026"
+    const m = label.match(/^Review\s+(.+)$/i)
+    if (m) {
+      const parsed = new Date(m[1])
+      if (!isNaN(parsed.getTime())) return fmt(parsed)
+    }
+    return label
+  }
+
   const tabs: { id: DetailTab; label: string; icon: string }[] = [
     { id: 'overview',  label: t('policies.tabOverview'),  icon: 'lucide:layout-dashboard' },
     { id: 'workflow',  label: t('policies.tabWorkflow'),  icon: 'lucide:git-branch'       },
@@ -143,15 +184,16 @@ export function PolicyDetailsContent({
     const cycles = new Map<string, string>()
     // History cycles first (oldest → newest)
     for (const h of fresh.reviewCycleHistory ?? []) {
-      if (!cycles.has(h.id)) cycles.set(h.id, h.label)
+      if (!cycles.has(h.id)) cycles.set(h.id, formatCycleLabel(h.label))
     }
     // Current cycle
     if (fresh.currentReviewCycleId) {
-      cycles.set(fresh.currentReviewCycleId, fresh.currentReviewCycleLabel ?? 'Current Review')
+      const raw = fresh.currentReviewCycleLabel ?? t('policies.currentReview')
+      cycles.set(fresh.currentReviewCycleId, formatCycleLabel(raw, fresh.currentReviewCycleDate))
     }
     // Fallback: any cycles found only in evidence entries
     for (const e of fresh.evidence ?? []) {
-      if (!cycles.has(e.reviewCycleId)) cycles.set(e.reviewCycleId, e.reviewCycleLabel)
+      if (!cycles.has(e.reviewCycleId)) cycles.set(e.reviewCycleId, formatCycleLabel(e.reviewCycleLabel))
     }
     return cycles
   }, [fresh.evidence, fresh.currentReviewCycleId, fresh.currentReviewCycleLabel, fresh.reviewCycleHistory])
@@ -219,7 +261,7 @@ export function PolicyDetailsContent({
   // ── Evidence handlers ────────────────────────────────────────────────
   async function handleEvidenceAdd(files: FileList) {
     const cycleId = fresh.currentReviewCycleId ?? Date.now().toString()
-    const cycleLabel = fresh.currentReviewCycleLabel ?? 'Initial Review'
+    const cycleLabel = fresh.currentReviewCycleLabel ?? t('policies.currentReview')
     const newEvidence: PolicyEvidence[] = []
     for (const file of Array.from(files)) {
       const dataUrl = await readFileAsDataUrl(file)
@@ -768,7 +810,7 @@ export function PolicyDetailsContent({
               )}
 
               {/* Workflow steps — collapsible + drag */}
-              <div className="space-y-2 relative before:absolute before:left-2 before:top-2 before:bottom-2 before:w-0.5 before:bg-slate-100">
+              <div className="space-y-2 relative before:absolute before:start-2 before:top-2 before:bottom-2 before:w-0.5 before:bg-slate-100">
                 {fresh.workflowTimeline.map((step, idx) => {
                   const isCompleted = step.status === 'completed'
                   const isExpanded = expandedStep === idx
@@ -799,7 +841,7 @@ export function PolicyDetailsContent({
                       >
                         {/* Timeline dot */}
                         <div className={cn(
-                          'w-5 h-5 rounded-full flex items-center justify-center shrink-0 absolute left-[-1px]',
+                          'w-5 h-5 rounded-full flex items-center justify-center shrink-0 absolute start-[-1px]',
                           isCompleted ? 'bg-emerald-500' :
                           step.status === 'current' ? 'border-2 border-amber-400 bg-amber-50' :
                           'border-2 border-slate-200 bg-white'
@@ -819,7 +861,7 @@ export function PolicyDetailsContent({
                         {/* Step name + action icon */}
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-1.5">
-                            <p className="text-sm font-bold text-slate-700">{step.step}</p>
+                            <p className="text-sm font-bold text-slate-700">{STEP_NAME_MAP[step.step] ?? step.step}</p>
                             {step.actionType && ACTION_TYPE_META[step.actionType] && (
                               <Icon icon={ACTION_TYPE_META[step.actionType].icon} className={cn('text-xs', ACTION_TYPE_META[step.actionType].color)} />
                             )}
@@ -869,7 +911,7 @@ export function PolicyDetailsContent({
                           )}
                           {step.note && (
                             <div className="mt-1.5 p-2 bg-slate-50 rounded-lg border border-slate-100">
-                              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Note</p>
+                              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">{t('common.note')}</p>
                               <p className="text-[10px] text-slate-600">{step.note}</p>
                             </div>
                           )}
@@ -1082,7 +1124,7 @@ export function PolicyDetailsContent({
                         value={evidenceFilter}
                         onChange={(e) => setEvidenceFilter(e.target.value)}
                       >
-                        <option value="current">{fresh.currentReviewCycleLabel ?? 'Current Review'}</option>
+                        <option value="current">{fresh.currentReviewCycleId ? evidenceCycles.get(fresh.currentReviewCycleId) : t('policies.currentReview')}</option>
                         {Array.from(evidenceCycles.entries()).map(([id, label]) => (
                           id !== fresh.currentReviewCycleId ? (
                             <option key={id} value={id}>{label}</option>
@@ -1150,11 +1192,11 @@ export function PolicyDetailsContent({
               <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-4">
                 {t('policies.activityTimeline')}
               </h3>
-              <div className={`space-y-3 relative before:absolute before:left-2 before:top-2 before:bottom-2 before:w-0.5 before:bg-slate-100`}>
+              <div className={`space-y-3 relative before:absolute before:start-2 before:top-2 before:bottom-2 before:w-0.5 before:bg-slate-100`}>
                 {[...(fresh.activityLog ?? [])].sort((a, b) => b.timestamp.localeCompare(a.timestamp)).map((entry) => (
-                  <div key={entry.id} className="relative pl-8">
+                  <div key={entry.id} className="relative ps-8">
                     <div className={cn(
-                      'absolute left-0 top-1 w-4 h-4 rounded-full border-2',
+                      'absolute start-0 top-1 w-4 h-4 rounded-full border-2',
                       entry.type === 'workflow_approved' ? 'bg-emerald-100 border-emerald-500' :
                       entry.type === 'document_removed' || entry.type === 'evidence_removed' || entry.type === 'step_reverted' || entry.type === 'step_denied' ? 'bg-rose-100 border-rose-400' :
                       'bg-slate-100 border-slate-400'
@@ -1166,14 +1208,14 @@ export function PolicyDetailsContent({
                     <p className="text-[10px] text-slate-400">{entry.date}{entry.user && ` • ${entry.user}`}</p>
                     {entry.note && (
                       <div className="mt-1 p-2 bg-slate-50 rounded-lg border border-slate-100 inline-block max-w-xs">
-                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Note</p>
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">{t('common.note')}</p>
                         <p className="text-[10px] text-slate-600">{entry.note}</p>
                       </div>
                     )}
                   </div>
                 ))}
                 {(fresh.activityLog ?? []).length === 0 && (
-                  <p className="text-xs text-slate-400 italic">No activity yet.</p>
+                  <p className="text-xs text-slate-400 italic">{t('policies.noActivityYet')}</p>
                 )}
               </div>
             </section>
@@ -1193,7 +1235,7 @@ export function PolicyDetailsContent({
                         {entry.version}
                       </span>
                       <div className="flex-1 min-w-0">
-                        <p className="text-xs font-bold text-slate-700">{entry.changes}</p>
+                        <p className="text-xs font-bold text-slate-700">{VERSION_CHANGES_MAP[entry.changes] ?? entry.changes}</p>
                         <p className="text-[10px] text-slate-400 mt-0.5">{entry.date} • {entry.author}</p>
                       </div>
                       <Icon
@@ -1213,7 +1255,7 @@ export function PolicyDetailsContent({
                           <span className="text-slate-600">{entry.date}</span>
                           <span className="text-slate-600">{entry.author}</span>
                         </div>
-                        <p className="text-[10px] text-slate-500 mt-2">{entry.changes}</p>
+                        <p className="text-[10px] text-slate-500 mt-2">{VERSION_CHANGES_MAP[entry.changes] ?? entry.changes}</p>
                       </div>
                     )}
                   </div>

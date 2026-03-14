@@ -204,11 +204,11 @@ export const AssigneeField = memo(function AssigneeField({
       </label>
       {/* Selected assignees as chips */}
       {selectedAssignees.length > 0 ? (
-        <div className={`flex flex-wrap gap-2 mb-3 max-h-20 overflow-y-auto ${isRTL ? 'flex-row-reverse' : ''}`}>
+        <div className={`flex flex-wrap gap-2 mb-3 max-h-20 overflow-y-auto`}>
           {selectedAssignees.map(member => (
             <span
               key={member.id}
-              className={`flex items-center gap-2 px-3 py-1.5 bg-emerald-50 border border-emerald-200 rounded-full text-xs font-medium text-slate-700 ${isRTL ? 'flex-row-reverse' : ''}`}
+              className={`flex items-center gap-2 px-3 py-1.5 bg-emerald-50 border border-emerald-200 rounded-full text-xs font-medium text-slate-700`}
             >
               <img
                 src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${member.avatar}`}

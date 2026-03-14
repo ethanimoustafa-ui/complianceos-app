@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { Icon } from '@iconify/react'
 import { Card } from '@/components/ui/card'
 import { Badge, getStatusVariant } from '@/components/ui/badge'
-import { useTranslation } from '@/i18n'
+import { useTranslation, type TranslationKey } from '@/i18n'
 import { useComplianceSettingsStore } from '@/stores/compliance-settings-store'
 import { useSAMALetterStore } from '@/stores/sama-letter-store'
 import { usePolicyStore } from '@/stores/policy-store'
@@ -18,6 +18,7 @@ import { TeamMemberWorkload } from './TeamMemberWorkload'
 import { ObservationCard } from './ObservationCard'
 import type { DashboardMetrics } from '@/hooks/useDashboardMetrics'
 import { useTeamWorkloads, useBurnoutDetection } from '@/hooks/useWorkload'
+import { useDepartmentStore } from '@/stores/department-store'
 
 interface ManagerialViewProps {
   metrics: DashboardMetrics
@@ -27,6 +28,13 @@ export function ManagerialView({ metrics }: ManagerialViewProps) {
   const { t, isRTL } = useTranslation()
   const router = useRouter()
   const targetScore = useComplianceSettingsStore(s => s.targetScore)
+  const departments = useDepartmentStore(s => s.departments)
+
+  const getDeptLabel = (name: string) => {
+    const dept = departments.find(d => d.name === name || d.id === name)
+    if (dept) return isRTL ? dept.nameAr : dept.name
+    return name
+  }
 
   // Pending approvals — cross-store
   const letters = useSAMALetterStore(s => s.letters)
@@ -34,21 +42,21 @@ export function ManagerialView({ metrics }: ManagerialViewProps) {
   const audits = useAuditStore(s => s.audits)
 
   const pendingApprovals = useMemo(() => {
-    const items: Array<{ id: string; type: string; title: string; status: string; dueDate?: string; route: string }> = []
+    const items: Array<{ id: string; type: string; typeKey: string; title: string; status: string; dueDate?: string; route: string }> = []
 
     for (const l of letters) {
       if (l.status === 'pending-approval') {
-        items.push({ id: l.id, type: 'SAMA Letter', title: l.subject, status: l.status, dueDate: l.responseDeadline, route: `/correspondence/sama-letters?id=${l.id}` })
+        items.push({ id: l.id, type: 'SAMA Letter', typeKey: t('samaLetters.title'), title: l.subject, status: l.status, dueDate: l.responseDeadline, route: `/correspondence/sama-letters?id=${l.id}` })
       }
     }
     for (const p of policies) {
       if (p.status === 'under-review') {
-        items.push({ id: p.id, type: 'Policy', title: p.name, status: p.status, dueDate: p.nextReviewDate, route: `/correspondence/regulatory-updates/policies?policyId=${p.id}&tab=workflow` })
+        items.push({ id: p.id, type: 'Policy', typeKey: t('navigation.regulatoryUpdates'), title: p.name, status: p.status, dueDate: p.nextReviewDate, route: `/correspondence/regulatory-updates/policies?policyId=${p.id}&tab=workflow` })
       }
     }
     for (const a of audits) {
       if (a.status === 'pending') {
-        items.push({ id: a.id, type: 'Audit', title: a.title, status: a.status, dueDate: a.dueDate, route: `/reports/${a.id}` })
+        items.push({ id: a.id, type: 'Audit', typeKey: t('navigation.audits'), title: a.title, status: a.status, dueDate: a.dueDate, route: `/reports/${a.id}` })
       }
     }
 
@@ -181,7 +189,7 @@ export function ManagerialView({ metrics }: ManagerialViewProps) {
                       <Badge variant={d.severity === 'critical' || d.severity === 'high' ? 'danger' : d.severity === 'medium' ? 'warning' : 'neutral'} size="sm">
                         {Math.abs(d.points)}pt
                       </Badge>
-                      <span className="text-slate-600 truncate">{d.description}</span>
+                      <span className="text-slate-600 truncate">{d.descriptionKey ? t(d.descriptionKey as any, d.descriptionParams) : d.description}</span>
                     </div>
                   ))}
                 </div>
@@ -218,9 +226,9 @@ export function ManagerialView({ metrics }: ManagerialViewProps) {
               <div className="flex items-center justify-between">
                 <span className="text-sm text-slate-600">{t('dashboard.overdueLabel')}</span>
                 <div className="flex items-center gap-2">
-                  {metrics.samaLetters.overdueCount > 0 && <Badge variant="danger" size="sm">{metrics.samaLetters.overdueCount} SAMA</Badge>}
-                  {metrics.audits.overdueCount > 0 && <Badge variant="danger" size="sm">{metrics.audits.overdueCount} Audit</Badge>}
-                  {metrics.policies.overdue > 0 && <Badge variant="danger" size="sm">{metrics.policies.overdue} Policy</Badge>}
+                  {metrics.samaLetters.overdueCount > 0 && <Badge variant="danger" size="sm">{metrics.samaLetters.overdueCount} {t('samaLetters.title')}</Badge>}
+                  {metrics.audits.overdueCount > 0 && <Badge variant="danger" size="sm">{metrics.audits.overdueCount} {t('navigation.audits')}</Badge>}
+                  {metrics.policies.overdue > 0 && <Badge variant="danger" size="sm">{metrics.policies.overdue} {t('navigation.regulatoryUpdates')}</Badge>}
                   {metrics.samaLetters.overdueCount === 0 && metrics.audits.overdueCount === 0 && metrics.policies.overdue === 0 && (
                     <Badge variant="success" size="sm">0</Badge>
                   )}
@@ -271,7 +279,12 @@ export function ManagerialView({ metrics }: ManagerialViewProps) {
                 <p className="text-2xl font-black text-slate-900">{score}%</p>
                 <div className="flex justify-center gap-2 mt-2">
                   <Badge variant={variant} size="sm">w: {comp.weight}%</Badge>
-                  <Badge variant="neutral" size="sm">{comp.confidence}</Badge>
+                  <Badge variant="neutral" size="sm">{({
+                    'high': t('dashboard.confidenceHigh' as TranslationKey),
+                    'moderate': t('dashboard.confidenceModerate' as TranslationKey),
+                    'low': t('dashboard.confidenceLow' as TranslationKey),
+                    'insufficient': t('dashboard.confidenceInsufficient' as TranslationKey),
+                  } as Record<string, string>)[comp.confidence] ?? comp.confidence}</Badge>
                 </div>
               </Card>
             )
@@ -300,14 +313,14 @@ export function ManagerialView({ metrics }: ManagerialViewProps) {
                     />
                     <div>
                       <p className="text-sm font-medium text-slate-900">{item.title}</p>
-                      <p className="text-[10px] text-slate-400">{item.type}</p>
+                      <p className="text-[10px] text-slate-400">{item.typeKey}</p>
                     </div>
                   </div>
                   <div className="flex items-center gap-3">
                     {item.dueDate && (
                       <span className="text-[10px] text-slate-400">{item.dueDate}</span>
                     )}
-                    <Badge variant={getStatusVariant(item.status)} size="sm">{item.status}</Badge>
+                    <Badge variant={getStatusVariant(item.status)} size="sm">{item.typeKey}</Badge>
                     <Icon icon="lucide:chevron-right" className="text-slate-300 text-sm" />
                   </div>
                 </button>
@@ -328,12 +341,12 @@ export function ManagerialView({ metrics }: ManagerialViewProps) {
           <div className="space-y-3">
             {metrics.training.departmentProgress.map(dept => (
               <Card key={dept.name} className="p-4">
-                <p className="text-xs font-bold text-slate-900 mb-1">{dept.name}</p>
+                <p className="text-xs font-bold text-slate-900 mb-1">{getDeptLabel(dept.name)}</p>
                 <div className="flex gap-4 text-[10px] text-slate-500 mb-2">
-                  <span>{dept.employees} emp.</span>
-                  <span className="text-emerald-600">{dept.completed} done</span>
-                  <span className="text-amber-600">{dept.inProgress} in progress</span>
-                  {dept.overdue > 0 && <span className="text-rose-600">{dept.overdue} overdue</span>}
+                  <span>{dept.employees} {t('dashboard.employees')}</span>
+                  <span className="text-emerald-600">{dept.completed} {t('dashboard.done')}</span>
+                  <span className="text-amber-600">{dept.inProgress} {t('policies.inProgress' as any)}</span>
+                  {dept.overdue > 0 && <span className="text-rose-600">{dept.overdue} {t('common.overdue')}</span>}
                 </div>
                 <div className="h-1.5 w-full bg-slate-100 rounded-full">
                   <div
@@ -378,7 +391,7 @@ export function ManagerialView({ metrics }: ManagerialViewProps) {
                         variant={burnout.escalationTier === 'severe' ? 'danger' : burnout.escalationTier === 'moderate' ? 'warning' : 'info'}
                         size="sm"
                       >
-                        {burnout.escalationTier}
+                        {burnout.escalationTier === 'severe' ? t('dashboard.burnoutSevere') : burnout.escalationTier === 'moderate' ? t('dashboard.burnoutModerate') : t('dashboard.burnoutMild')}
                       </Badge>
                     )}
                   </div>
@@ -447,7 +460,7 @@ export function ManagerialView({ metrics }: ManagerialViewProps) {
               ))}
             </div>
             <div className="mt-4 pt-4 border-t border-slate-100 flex justify-between">
-              <span className="text-xs text-slate-400">Total Open</span>
+              <span className="text-xs text-slate-400">{t('dashboard.totalOpen')}</span>
               <span className="text-sm font-bold text-slate-900">{metrics.risks.open}</span>
             </div>
           </Card>
@@ -464,7 +477,7 @@ export function ManagerialView({ metrics }: ManagerialViewProps) {
             {metrics.training.departmentProgress.map(dept => (
               <TrainingProgressBar
                 key={dept.name}
-                label={dept.name}
+                label={getDeptLabel(dept.name)}
                 value={dept.progress}
                 color={dept.progress >= 80 ? 'emerald' : 'amber'}
               />

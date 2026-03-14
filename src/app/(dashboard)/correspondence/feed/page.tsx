@@ -1282,10 +1282,10 @@ function TeamMemberRow({
           <span>{member.name}</span>
           <span className={colors.text}>{member.load}%</span>
         </div>
-        <div className="h-1 bg-slate-100 rounded-full">
+        <div className="h-1 bg-slate-100 rounded-full overflow-hidden">
           <div
             className={`h-full ${colors.bar} rounded-full`}
-            style={{ width: `${member.load}%` }}
+            style={{ width: `${Math.min(member.load, 100)}%` }}
           />
         </div>
       </div>

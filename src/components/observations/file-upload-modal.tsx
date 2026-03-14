@@ -98,7 +98,7 @@ export function FileUploadModal({
   return (
     <Modal isOpen={isOpen} onClose={handleClose} size="md">
       <div className="p-6">
-        <div className={`flex items-center gap-3 mb-6 ${isRTL ? 'flex-row-reverse' : ''}`}>
+        <div className={`flex items-center gap-3 mb-6`}>
           <div className="p-2 bg-emerald-100 rounded-lg">
             <Icon icon="lucide:upload" className="text-xl text-emerald-600" />
           </div>
@@ -148,7 +148,7 @@ export function FileUploadModal({
             {selectedFiles.map((file, index) => (
               <div
                 key={`${file.name}-${index}`}
-                className={`flex items-center gap-3 p-2 bg-slate-50 rounded-lg ${isRTL ? 'flex-row-reverse' : ''}`}
+                className={`flex items-center gap-3 p-2 bg-slate-50 rounded-lg`}
               >
                 <Icon icon={getFileIcon(file.name)} className="text-xl text-emerald-500 shrink-0" />
                 <div className={`flex-1 min-w-0 ${isRTL ? 'text-right' : ''}`}>
@@ -170,7 +170,7 @@ export function FileUploadModal({
         )}
 
         {/* Add to Remediation Plan Checkbox - Always show */}
-        <label className={`flex items-center gap-3 mt-4 p-3 bg-amber-50 border border-amber-200 rounded-lg cursor-pointer hover:bg-amber-100 transition-colors ${isRTL ? 'flex-row-reverse' : ''}`}>
+        <label className={`flex items-center gap-3 mt-4 p-3 bg-amber-50 border border-amber-200 rounded-lg cursor-pointer hover:bg-amber-100 transition-colors`}>
           <input
             type="checkbox"
             checked={addToRemediationPlan}
@@ -188,7 +188,7 @@ export function FileUploadModal({
         </label>
 
         {/* Actions */}
-        <div className={`flex gap-3 mt-6 ${isRTL ? 'flex-row-reverse' : ''}`}>
+        <div className={`flex gap-3 mt-6`}>
           <button
             onClick={handleClose}
             className="flex-1 px-4 py-2.5 text-sm font-medium text-slate-700 bg-slate-100 rounded-lg hover:bg-slate-200 transition-colors"

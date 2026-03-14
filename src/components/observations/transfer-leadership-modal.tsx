@@ -50,7 +50,7 @@ export function TransferLeadershipModal({
   return (
     <Modal isOpen={isOpen} onClose={handleClose} size="sm">
       <div className="p-6">
-        <div className={`flex items-center gap-3 mb-6 ${isRTL ? 'flex-row-reverse' : ''}`}>
+        <div className={`flex items-center gap-3 mb-6`}>
           <div className="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center">
             <Icon icon="lucide:arrow-right-left" className="text-emerald-600 text-xl" />
           </div>
@@ -76,7 +76,7 @@ export function TransferLeadershipModal({
                     selectedMemberId === member.id
                       ? 'border-emerald-500 bg-emerald-50 ring-2 ring-emerald-500'
                       : 'border-slate-200 hover:border-emerald-300 hover:bg-slate-50'
-                  } ${isRTL ? 'flex-row-reverse' : ''}`}
+                  }`}
                 >
                   <img
                     src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${member.avatar}`}
@@ -96,7 +96,7 @@ export function TransferLeadershipModal({
               ))}
             </div>
 
-            <div className={`flex gap-3 ${isRTL ? 'flex-row-reverse' : ''}`}>
+            <div className={`flex gap-3`}>
               <Button variant="ghost" onClick={handleClose} className="flex-1">
                 {t('common.cancel')}
               </Button>

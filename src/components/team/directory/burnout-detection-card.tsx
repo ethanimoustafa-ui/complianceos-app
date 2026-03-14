@@ -145,6 +145,18 @@ export function BurnoutDetectionCard() {
     severe: '> 7d',
   }
 
+  const typeLabels: Record<string, string> = {
+    observation: t('team.typeObservation' as TranslationKey),
+    audit: t('team.typeAudit' as TranslationKey),
+    policy: t('team.typePolicy' as TranslationKey),
+    correspondence: t('team.typeCorrespondence' as TranslationKey),
+    advisory: t('team.typeAdvisory' as TranslationKey),
+    'sama-letter': t('team.typeSamaLetter' as TranslationKey),
+    risk: t('team.typeRisk' as TranslationKey),
+    circular: t('team.typeCircular' as TranslationKey),
+    task: t('team.typeTask' as TranslationKey),
+  }
+
   return (
     <Card className="p-6">
       <h3 className="text-sm font-bold text-slate-900 mb-4 flex items-center gap-2">
@@ -218,7 +230,7 @@ export function BurnoutDetectionCard() {
                           >
                             <div className="min-w-0 flex-1 flex items-center gap-2">
                               <span className={`text-[8px] font-bold px-1.5 py-0.5 rounded-full uppercase shrink-0 ${BADGE_COLORS[wi.type] || 'bg-slate-100 text-slate-600'}`}>
-                                {wi.type}
+                                {typeLabels[wi.type] || wi.type}
                               </span>
                               <span className="text-[10px] font-bold text-slate-700 truncate">{wi.title}</span>
                             </div>
@@ -266,7 +278,7 @@ export function BurnoutDetectionCard() {
                           >
                             <div className="min-w-0 flex-1 flex items-center gap-2">
                               <span className={`text-[8px] font-bold px-1.5 py-0.5 rounded-full uppercase shrink-0 ${BADGE_COLORS.task}`}>
-                                task
+                                {typeLabels.task}
                               </span>
                               <div className="min-w-0">
                                 <span className="text-[10px] font-bold text-slate-700 block truncate">{assignment.title}</span>

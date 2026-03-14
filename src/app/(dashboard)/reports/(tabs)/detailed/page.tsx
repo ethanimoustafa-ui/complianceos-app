@@ -185,7 +185,7 @@ export default function ReportsDetailedPage() {
             </Link>
           </div>
         </div>
-        <div className={`flex items-center gap-4 ${isRTL ? 'flex-row-reverse' : ''}`}>
+        <div className={`flex items-center gap-4`}>
           <div className="relative">
             <button
               onClick={() => setShowFilterDropdown(!showFilterDropdown)}
