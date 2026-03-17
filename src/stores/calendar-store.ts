@@ -19,6 +19,8 @@ interface CalendarState {
   error: string | null
 
   // Actions (synchronous)
+  fetchAll: () => void
+  fetchById: (id: string) => CalendarEvent | null
   createEvent: (data: Omit<CalendarEvent, 'id' | 'createdAt' | 'updatedAt'>) => CalendarEvent
   updateEvent: (id: string, data: Partial<CalendarEvent>) => CalendarEvent | null
   deleteEvent: (id: string) => void
@@ -40,7 +42,17 @@ export const useCalendarStore = create<CalendarState>()(
       isLoading: false,
       error: null,
 
+      fetchAll: () => {
+        // TODO: Replace with actual API call
+      },
+
+      fetchById: (id) => {
+        // TODO: Replace with actual API call
+        return get().events.find(e => e.id === id) ?? null
+      },
+
       createEvent: (data) => {
+        // TODO: Replace with actual API call
         const newEvent: CalendarEvent = {
           ...data,
           id: crypto.randomUUID(),
@@ -52,6 +64,7 @@ export const useCalendarStore = create<CalendarState>()(
       },
 
       updateEvent: (id, data) => {
+        // TODO: Replace with actual API call
         let updatedEvent: CalendarEvent | null = null
         set((state) => ({
           events: state.events.map((e) => {
@@ -70,6 +83,7 @@ export const useCalendarStore = create<CalendarState>()(
       },
 
       deleteEvent: (id) => {
+        // TODO: Replace with actual API call
         set((state) => ({
           events: state.events.filter((e) => e.id !== id),
           selectedEvent: state.selectedEvent?.id === id ? null : state.selectedEvent,

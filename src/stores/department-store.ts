@@ -30,23 +30,28 @@ export const useDepartmentStore = create<DepartmentState>()(
       departments: seedDepartments,
 
       addDepartment: (name, nameAr) => {
+        // TODO: Replace with actual API call
         const id = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
         const dept: Department = { id, name, nameAr, isDefault: false }
         set((s) => ({ departments: [...s.departments, dept] }))
         return dept
       },
 
-      removeDepartment: (id) =>
+      removeDepartment: (id) => {
+        // TODO: Replace with actual API call
         set((s) => ({
           departments: s.departments.filter((d) => d.isDefault || d.id !== id),
-        })),
+        }))
+      },
 
-      updateDepartment: (id, data) =>
+      updateDepartment: (id, data) => {
+        // TODO: Replace with actual API call
         set((s) => ({
           departments: s.departments.map((d) =>
             d.id === id ? { ...d, ...data } : d
           ),
-        })),
+        }))
+      },
 
       getDepartments: () => get().departments,
 

@@ -29,6 +29,8 @@ interface PolicyState {
   filters: PolicyFilters
 
   // Actions
+  fetchAll: () => void
+  fetchById: (id: string) => Policy | null
   getNextId: () => string
   create: (data: Omit<Policy, 'id' | 'createdAt' | 'updatedAt'>) => Policy
   update: (id: string, data: Partial<Policy>) => void
@@ -192,6 +194,15 @@ export const usePolicyStore = create<PolicyState>()(
       selectedPolicy: null,
       filters: {},
 
+      fetchAll: () => {
+        // TODO: Replace with actual API call
+      },
+
+      fetchById: (id) => {
+        // TODO: Replace with actual API call
+        return get().policies.find(p => p.id === id) ?? null
+      },
+
       getNextId: (): string => {
         const existing = get().policies
           .map((p) => {
@@ -203,6 +214,7 @@ export const usePolicyStore = create<PolicyState>()(
       },
 
       create: (data) => {
+        // TODO: Replace with actual API call
         const now = new Date().toISOString()
         const id = get().getNextId()
         let nextReviewDate = data.nextReviewDate
@@ -224,6 +236,7 @@ export const usePolicyStore = create<PolicyState>()(
       },
 
       update: (id, data) => {
+        // TODO: Replace with actual API call
         const now = new Date().toISOString()
         set((state) => ({
           policies: state.policies.map((p) =>
@@ -237,6 +250,7 @@ export const usePolicyStore = create<PolicyState>()(
       },
 
       delete: (id) => {
+        // TODO: Replace with actual API call
         set((state) => ({
           policies: state.policies.filter((p) => p.id !== id),
           selectedPolicy: state.selectedPolicy?.id === id ? null : state.selectedPolicy,
@@ -248,6 +262,7 @@ export const usePolicyStore = create<PolicyState>()(
       clearFilters: () => set({ filters: {} }),
 
       submitForReview: (id) => {
+        // TODO: Replace with actual API call
         const policy = get().policies.find((p) => p.id === id)
         if (!policy) return
         const newTimeline = policy.workflowTimeline.map(step =>
@@ -260,6 +275,7 @@ export const usePolicyStore = create<PolicyState>()(
       },
 
       approve: (id, notes?, approvedBy?) => {
+        // TODO: Replace with actual API call
         const policy = get().policies.find((p) => p.id === id)
         if (!policy) return
         const today = new Date().toISOString().split('T')[0]
@@ -290,6 +306,7 @@ export const usePolicyStore = create<PolicyState>()(
       },
 
       initiateReview: (id) => {
+        // TODO: Replace with actual API call
         const policy = get().policies.find((p) => p.id === id)
         if (!policy) return
         const today = new Date().toISOString().split('T')[0]

@@ -13,6 +13,7 @@ interface AdvisoryState {
 
   // Actions
   fetchAll: () => void
+  fetchById: (id: string) => AdvisoryRequest | null
   create: (data: Omit<AdvisoryRequest, 'id' | 'ref' | 'notes' | 'createdAt' | 'updatedAt'>) => AdvisoryRequest
   update: (id: string, data: Partial<AdvisoryRequest>) => AdvisoryRequest
   delete: (id: string) => void
@@ -132,6 +133,7 @@ export const useAdvisoryStore = create<AdvisoryState>()(
       error: null,
 
       fetchAll: () => {
+        // TODO: Replace with actual API call
         const existing = get().advisoryRequests
         set({
           pagination: {
@@ -142,7 +144,13 @@ export const useAdvisoryStore = create<AdvisoryState>()(
         })
       },
 
+      fetchById: (id) => {
+        // TODO: Replace with actual API call
+        return get().advisoryRequests.find(r => r.id === id) ?? null
+      },
+
       create: (data) => {
+        // TODO: Replace with actual API call
         const now = new Date().toISOString()
         const ref = get().getNextRef()
         const id = ref.replace('ADV-', 'ADV-').replace(/-/g, '-')
@@ -163,6 +171,7 @@ export const useAdvisoryStore = create<AdvisoryState>()(
       },
 
       update: (id: string, data: Partial<AdvisoryRequest>) => {
+        // TODO: Replace with actual API call
         let updated: AdvisoryRequest | null = null
 
         set((state) => ({
@@ -184,6 +193,7 @@ export const useAdvisoryStore = create<AdvisoryState>()(
       },
 
       delete: (id: string) => {
+        // TODO: Replace with actual API call
         set((state) => ({
           advisoryRequests: state.advisoryRequests.filter((r) => r.id !== id),
           selectedRequest:
@@ -192,6 +202,7 @@ export const useAdvisoryStore = create<AdvisoryState>()(
       },
 
       addNote: (id: string, note: { author: string; content: string }) => {
+        // TODO: Replace with actual API call
         const newNote: AdvisoryNote = {
           id: crypto.randomUUID(),
           author: note.author,
@@ -214,6 +225,7 @@ export const useAdvisoryStore = create<AdvisoryState>()(
       },
 
       updateStatus: (id: string, status: AdvisoryStatus) => {
+        // TODO: Replace with actual API call
         set((state) => ({
           advisoryRequests: state.advisoryRequests.map((r) => {
             if (r.id === id) {
@@ -229,6 +241,7 @@ export const useAdvisoryStore = create<AdvisoryState>()(
       },
 
       reassign: (id: string, newAssignee: string) => {
+        // TODO: Replace with actual API call
         set((state) => ({
           advisoryRequests: state.advisoryRequests.map((r) => {
             if (r.id === id) {

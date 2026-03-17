@@ -145,6 +145,8 @@ interface SAMALetterState {
   error: string | null
 
   // Actions
+  fetchAll: () => void
+  fetchById: (id: string) => SAMALetter | null
   getNextReference: (type: SAMALetterType) => string
   create: (data: Omit<SAMALetter, 'id' | 'createdAt' | 'updatedAt'>) => SAMALetter
   update: (id: string, data: Partial<SAMALetter>) => void
@@ -181,6 +183,15 @@ export const useSAMALetterStore = create<SAMALetterState>()(
       isLoading: false,
       error: null,
 
+      fetchAll: () => {
+        // TODO: Replace with actual API call
+      },
+
+      fetchById: (id) => {
+        // TODO: Replace with actual API call
+        return get().letters.find(l => l.id === id) ?? null
+      },
+
       getNextReference: (type) => {
         const prefix = { 'non-objection': 'NOB', inquiry: 'INQ', submission: 'SUB', notification: 'NOT' }[type]
         const year = new Date().getFullYear()
@@ -194,6 +205,7 @@ export const useSAMALetterStore = create<SAMALetterState>()(
       },
 
       create: (data) => {
+        // TODO: Replace with actual API call
         const now = new Date().toISOString()
         const newLetter: SAMALetter = {
           ...data,
@@ -206,6 +218,7 @@ export const useSAMALetterStore = create<SAMALetterState>()(
       },
 
       update: (id, data) => {
+        // TODO: Replace with actual API call
         set((state) => ({
           letters: state.letters.map((l) =>
             l.id === id ? { ...l, ...data, updatedAt: new Date().toISOString() } : l
@@ -218,6 +231,7 @@ export const useSAMALetterStore = create<SAMALetterState>()(
       },
 
       delete: (id) => {
+        // TODO: Replace with actual API call
         set((state) => ({
           letters: state.letters.filter((l) => l.id !== id),
           selectedLetter: state.selectedLetter?.id === id ? null : state.selectedLetter,
@@ -225,6 +239,7 @@ export const useSAMALetterStore = create<SAMALetterState>()(
       },
 
       submitForApproval: (id) => {
+        // TODO: Replace with actual API call
         const now = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
         const newEvent: SAMALetterTimelineEvent = {
           id: crypto.randomUUID(),
@@ -251,6 +266,7 @@ export const useSAMALetterStore = create<SAMALetterState>()(
       },
 
       approveStep: (id, step, approverName, notes) => {
+        // TODO: Replace with actual API call
         const now = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
         set((state) => {
           const updater = (l: SAMALetter): SAMALetter => {
@@ -287,6 +303,7 @@ export const useSAMALetterStore = create<SAMALetterState>()(
       },
 
       rejectStep: (id, step, approverName, notes) => {
+        // TODO: Replace with actual API call
         const now = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
         set((state) => {
           const updater = (l: SAMALetter): SAMALetter => {
@@ -321,6 +338,7 @@ export const useSAMALetterStore = create<SAMALetterState>()(
       },
 
       send: (id) => {
+        // TODO: Replace with actual API call
         const now = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
         set((state) => {
           const updater = (l: SAMALetter): SAMALetter => {
@@ -351,6 +369,7 @@ export const useSAMALetterStore = create<SAMALetterState>()(
       },
 
       markResponseReceived: (id) => {
+        // TODO: Replace with actual API call
         const now = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
         set((state) => {
           const updater = (l: SAMALetter): SAMALetter => {

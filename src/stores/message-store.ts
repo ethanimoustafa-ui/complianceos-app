@@ -32,6 +32,7 @@ const SEED_THREADS: MessageThread[] = [
 interface MessageState {
   threads: MessageThread[]
   messages: Message[]
+  fetchAll: () => void
   sendMessage: (threadId: string, content: string, senderId: string, senderName: string) => void
   createThread: (participantNames: string[], participantIds: string[], firstMessage: string, senderId: string, senderName: string, avatarUrl?: string) => string
   markThreadAsRead: (threadId: string) => void
@@ -52,7 +53,12 @@ export const useMessageStore = create<MessageState>()(
       threads: SEED_THREADS,
       messages: SEED_MESSAGES,
 
+      fetchAll: () => {
+        // TODO: Replace with actual API call
+      },
+
       sendMessage: (threadId, content, senderId, senderName) => {
+        // TODO: Replace with actual API call
         const newMsg: Message = {
           id: crypto.randomUUID(),
           threadId,
@@ -73,6 +79,7 @@ export const useMessageStore = create<MessageState>()(
       },
 
       createThread: (participantNames, participantIds, firstMessage, senderId, senderName, avatarUrl) => {
+        // TODO: Replace with actual API call
         const threadId = crypto.randomUUID()
         const now = new Date().toISOString()
         const isGroup = participantNames.length > 1
@@ -105,6 +112,7 @@ export const useMessageStore = create<MessageState>()(
       },
 
       markThreadAsRead: (threadId) => {
+        // TODO: Replace with actual API call
         set((state) => ({
           messages: state.messages.map(m =>
             m.threadId === threadId ? { ...m, read: true } : m
@@ -116,6 +124,7 @@ export const useMessageStore = create<MessageState>()(
       },
 
       deleteThread: (threadId) => {
+        // TODO: Replace with actual API call
         set((state) => ({
           threads: state.threads.filter(t => t.id !== threadId),
           messages: state.messages.filter(m => m.threadId !== threadId),
@@ -123,6 +132,7 @@ export const useMessageStore = create<MessageState>()(
       },
 
       kickMember: (threadId, memberId) => {
+        // TODO: Replace with actual API call
         set((state) => ({
           threads: state.threads.map(t => {
             if (t.id !== threadId) return t
@@ -164,6 +174,7 @@ export const useMessageStore = create<MessageState>()(
       },
 
       addMembersToThread: (threadId, newNames, newIds) => {
+        // TODO: Replace with actual API call
         set((state) => ({
           threads: state.threads.map(t => {
             if (t.id !== threadId) return t

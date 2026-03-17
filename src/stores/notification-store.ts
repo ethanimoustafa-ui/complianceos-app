@@ -20,6 +20,7 @@ export const useNotificationStore = create<NotificationState>()(
       unreadCount: 0,
 
       addNotification: (notification) => {
+        // TODO: Replace with actual API call
         const newNotif: AppNotification = {
           ...notification,
           id: crypto.randomUUID(),
@@ -33,6 +34,7 @@ export const useNotificationStore = create<NotificationState>()(
       },
 
       markAsRead: (id) => {
+        // TODO: Replace with actual API call
         set((state) => {
           const updated = state.notifications.map(n =>
             n.id === id ? { ...n, read: true } : n
@@ -42,6 +44,7 @@ export const useNotificationStore = create<NotificationState>()(
       },
 
       markAllAsRead: () => {
+        // TODO: Replace with actual API call
         set((state) => ({
           notifications: state.notifications.map(n => ({ ...n, read: true })),
           unreadCount: 0,
@@ -49,6 +52,7 @@ export const useNotificationStore = create<NotificationState>()(
       },
 
       deleteNotification: (id) => {
+        // TODO: Replace with actual API call
         set((state) => {
           const updated = state.notifications.filter(n => n.id !== id)
           return { notifications: updated, unreadCount: updated.filter(n => !n.read).length }
@@ -56,6 +60,7 @@ export const useNotificationStore = create<NotificationState>()(
       },
 
       clearAll: () => {
+        // TODO: Replace with actual API call
         set({ notifications: [], unreadCount: 0 })
       },
 

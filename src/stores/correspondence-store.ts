@@ -87,6 +87,7 @@ export const useCorrespondenceStore = create<CorrespondenceState>()(
       error: null,
 
       fetchAll: () => {
+        // TODO: Replace with actual API call
         const existing = get().correspondence
         set({
           pagination: {
@@ -98,12 +99,14 @@ export const useCorrespondenceStore = create<CorrespondenceState>()(
       },
 
       fetchById: (id: string) => {
+        // TODO: Replace with actual API call
         const item = get().correspondence.find((c) => c.id === id) || null
         set({ selectedCorrespondence: item })
         return item
       },
 
       create: (data) => {
+        // TODO: Replace with actual API call
         const now = new Date().toISOString()
         const ref = get().getNextReference()
         const newCorrespondence: Correspondence = {
@@ -122,6 +125,7 @@ export const useCorrespondenceStore = create<CorrespondenceState>()(
       },
 
       update: (id: string, data: Partial<Correspondence>) => {
+        // TODO: Replace with actual API call
         let updated: Correspondence | null = null
 
         set((state) => ({
@@ -146,6 +150,7 @@ export const useCorrespondenceStore = create<CorrespondenceState>()(
       },
 
       delete: (id: string) => {
+        // TODO: Replace with actual API call
         set((state) => ({
           correspondence: state.correspondence.filter((c) => c.id !== id),
           selectedCorrespondence:
