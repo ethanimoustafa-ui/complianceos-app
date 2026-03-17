@@ -84,10 +84,33 @@ export const useCalendarStore = create<CalendarState>()(
     }),
     {
       name: 'calendar-store',
-      version: 1,
+      version: 2,
       partialize: (state) => ({
         events: state.events,
       }),
+      migrate: (persistedState: unknown, version: number) => {
+        const state = persistedState as { events?: any[] }
+        if (version < 2) {
+          const AGENCY_TO_FW: Record<string, string[]> = {
+            SAMA: ['sama'],
+            CMA: ['cma'],
+            ZATCA: ['zatca'],
+            MISA: ['misa'],
+            SAFIU: ['safiu'],
+            NCA: ['nca-ecc'],
+            IA: [],
+          }
+          return {
+            ...state,
+            events: (state.events ?? []).map((e: any) => ({
+              ...e,
+              frameworkIds: e.frameworkIds ?? (e.agency ? (AGENCY_TO_FW[e.agency] ?? []) : []),
+              severity: e.severity ?? undefined,
+            })),
+          }
+        }
+        return persistedState
+      },
     }
   )
 )

@@ -256,6 +256,46 @@ export function OfficerView({ metrics }: OfficerViewProps) {
         </div>
       </div>
 
+      {/* Framework Compliance */}
+      {(() => {
+        const fwEntries = metrics.frameworks.enabled
+          .filter(fw => metrics.compliance.frameworks[fw.id])
+          .map(fw => ({ id: fw.id, name: fw.name, icon: fw.icon, score: metrics.compliance.frameworks[fw.id] }))
+        if (fwEntries.length === 0) return null
+        const getColor = (s: number) => s >= 80 ? '#10b981' : s >= 60 ? '#f59e0b' : '#ef4444'
+        const r = 28, circ = 2 * Math.PI * r
+        return (
+          <div>
+            <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest mb-4">
+              {t('dashboard.frameworkCompliance' as any)}
+            </h3>
+            <div className="grid gap-4" style={{ gridTemplateColumns: `repeat(${Math.min(fwEntries.length, 5)}, minmax(0, 1fr))` }}>
+              {fwEntries.map(fw => {
+                const s = Math.round(fw.score.overall)
+                const offset = circ - (s / 100) * circ
+                return (
+                  <Card key={fw.id} className="p-4 flex flex-col items-center gap-2">
+                    <div className="relative" style={{ width: 68, height: 68 }}>
+                      <svg width="68" height="68" className="transform -rotate-90">
+                        <circle cx="34" cy="34" r={r} fill="none" stroke="#f1f5f9" strokeWidth="5" />
+                        <circle cx="34" cy="34" r={r} fill="none" stroke={getColor(s)} strokeWidth="5" strokeLinecap="round" strokeDasharray={circ} strokeDashoffset={offset} className="transition-all duration-700" />
+                      </svg>
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <span className="text-sm font-bold text-slate-900">{s}%</span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <Icon icon={fw.icon} className="w-3 h-3 text-slate-400" />
+                      <span className="text-[10px] font-medium text-slate-600 text-center">{fw.name}</span>
+                    </div>
+                  </Card>
+                )
+              })}
+            </div>
+          </div>
+        )
+      })()}
+
       {!hasAnyData ? (
         <Card className="p-12 text-center">
           <Icon icon="lucide:check-circle" className="text-4xl text-emerald-500 mx-auto mb-3" />

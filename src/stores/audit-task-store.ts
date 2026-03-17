@@ -16,6 +16,8 @@ export interface AuditTask {
   completedAt?: string
   completedBy?: string
   notes?: string
+  frameworkIds?: string[]
+  severity?: 'critical' | 'high' | 'medium' | 'low'
   createdAt: string
 }
 
@@ -162,6 +164,21 @@ export const useAuditTaskStore = create<AuditTaskState>()(
     }),
     {
       name: 'audit-task-storage',
+      version: 1,
+      migrate: (persistedState: unknown, version: number) => {
+        const state = persistedState as { tasks?: any[] }
+        if (version < 1) {
+          return {
+            ...state,
+            tasks: (state.tasks ?? []).map((t: any) => ({
+              ...t,
+              frameworkIds: t.frameworkIds ?? [],
+              severity: t.severity ?? undefined,
+            })),
+          }
+        }
+        return persistedState
+      },
       partialize: (state) => ({
         tasks: state.tasks,
       }),

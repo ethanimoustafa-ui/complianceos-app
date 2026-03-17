@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, memo, useCallback } from 'react'
+import { useState, useEffect, memo, useCallback } from 'react'
 import { Icon } from '@iconify/react'
 import { Modal } from '@/components/ui/modal'
 import { Button } from '@/components/ui/button'
@@ -9,7 +9,8 @@ import { ObservationSource, ObservationSeverity } from './observation-types'
 import { useObservationStore } from '@/stores/observation-store'
 import { useTeamStore } from '@/stores/team-store'
 import { useTranslation } from '@/i18n'
-import type { TeamMember } from '@/types'
+import type { TeamMember, RegulatoryBodyId } from '@/types'
+import { FrameworkTagSelector } from '@/components/ui/framework-tag-selector'
 import {
   SourceSelectionField,
   SeverityField,
@@ -36,6 +37,7 @@ export interface ObservationFormData {
   dueDate: string
   remediationSubmissionDueDate?: string
   attachments?: UploadedFile[]
+  frameworkIds?: RegulatoryBodyId[]
 }
 
 interface FormErrors {
@@ -73,6 +75,12 @@ export const AddObservationModal = memo(function AddObservationModal({ isOpen, o
   const [selectedAssignees, setSelectedAssignees] = useState<TeamMember[]>([])
   const [errors, setErrors] = useState<FormErrors>({})
   const [touched, setTouched] = useState<Record<string, boolean>>({})
+  const [frameworkIds, setFrameworkIds] = useState<RegulatoryBodyId[]>([])
+
+  useEffect(() => {
+    const SOURCE_TO_FW: Record<string, RegulatoryBodyId[]> = { sama: ['sama'], sharia: ['sharia-board'], internal: [] }
+    setFrameworkIds(SOURCE_TO_FW[formData.source] ?? [])
+  }, [formData.source])
 
   const handleSourceSelect = (source: ObservationSource) => {
     setFormData((prev) => ({ ...prev, source }))
@@ -161,7 +169,7 @@ export const AddObservationModal = memo(function AddObservationModal({ isOpen, o
       avatar: member.avatar || member.name,
       role: member.role,
     }))
-    onSave({ ...formData, assignees, attachments: uploadedFiles })
+    onSave({ ...formData, assignees, attachments: uploadedFiles, frameworkIds })
     // Don't call onClose() here - parent will close the modal after processing
     // Reset form for next time modal opens
     setFormData({
@@ -181,6 +189,7 @@ export const AddObservationModal = memo(function AddObservationModal({ isOpen, o
     setSelectedAssignees([])
     setErrors({})
     setTouched({})
+    setFrameworkIds([])
   }
 
   return (
@@ -409,6 +418,10 @@ export const AddObservationModal = memo(function AddObservationModal({ isOpen, o
                   isRTL={isRTL}
                   error={touched.assignees ? errors.assignees : undefined}
                 />
+              </div>
+
+              <div className="col-span-2">
+                <FrameworkTagSelector value={frameworkIds} onChange={setFrameworkIds} label="Frameworks" />
               </div>
 
               <div className="col-span-2">

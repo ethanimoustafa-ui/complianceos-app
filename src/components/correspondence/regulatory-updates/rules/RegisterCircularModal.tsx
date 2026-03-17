@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { Icon } from '@iconify/react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -10,6 +10,8 @@ import type { CircularAuthority, CircularPriority, CircularStatus, CircularAppli
 import { useDepartmentStore } from '@/stores/department-store'
 import { useTeamStore } from '@/stores/team-store'
 import { readFileAsDataUrl, normalizeUrl } from './utils'
+import { FrameworkTagSelector } from '@/components/ui/framework-tag-selector'
+import type { RegulatoryBodyId } from '@/types'
 
 type Props = {
   isOpen: boolean
@@ -36,6 +38,12 @@ export function RegisterCircularModal({ isOpen, onClose, onCreated, t }: Props) 
   const [formAssignedTo, setFormAssignedTo] = useState('')
   const [formPdfFiles, setFormPdfFiles] = useState<Array<{ name: string; dataUrl: string; size: number }>>([])
   const pdfInputRef = useRef<HTMLInputElement>(null)
+  const [frameworkIds, setFrameworkIds] = useState<RegulatoryBodyId[]>([])
+
+  useEffect(() => {
+    const AUTH_TO_FW: Record<string, RegulatoryBodyId[]> = { SAMA: ['sama'], CMA: ['cma'], ZATCA: ['zatca'], MISA: ['misa'], SAFIU: ['safiu'], IA: [] }
+    setFrameworkIds(AUTH_TO_FW[formAuthority] ?? [])
+  }, [formAuthority])
 
   function toggleDepartment(dept: string) {
     setFormDepartments((prev) =>
@@ -62,6 +70,7 @@ export function RegisterCircularModal({ isOpen, onClose, onCreated, t }: Props) 
       capStatus: 'not-started' as CAPStatus,
       articles: [],
       description: formDescription,
+      frameworkIds,
     })
     if (formPdfFiles[0]) {
       setPdfUrl(created.id, formPdfFiles[0].dataUrl)
@@ -79,6 +88,7 @@ export function RegisterCircularModal({ isOpen, onClose, onCreated, t }: Props) 
     setFormBODept('')
     setFormAssignedTo('')
     setFormPdfFiles([])
+    setFrameworkIds([])
     onCreated(t('regulatoryUpdates.circularRegistered'))
   }
 
@@ -244,6 +254,8 @@ export function RegisterCircularModal({ isOpen, onClose, onCreated, t }: Props) 
                 onChange={(e) => setFormDescription(e.target.value)}
               />
             </div>
+
+            <FrameworkTagSelector value={frameworkIds} onChange={setFrameworkIds} label="Frameworks" />
 
             <input
               ref={pdfInputRef}

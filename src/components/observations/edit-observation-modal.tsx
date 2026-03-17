@@ -11,7 +11,8 @@ import { z } from 'zod'
 import { cn } from '@/lib/utils'
 import { useTeamStore } from '@/stores/team-store'
 import { useTranslation } from '@/i18n'
-import type { TeamMember } from '@/types'
+import type { TeamMember, RegulatoryBodyId } from '@/types'
+import { FrameworkTagSelector } from '@/components/ui/framework-tag-selector'
 import {
   SeverityField,
   DepartmentField,
@@ -61,6 +62,7 @@ interface ObservationData {
   assignee?: { id?: string; name?: string; avatar?: string; role?: string }
   assignees?: { id?: string; name?: string; avatar?: string; role?: string }[]
   documents?: { id: string; name: string; type: string }[]
+  frameworkIds?: RegulatoryBodyId[]
 }
 
 interface EditObservationModalProps {
@@ -80,6 +82,7 @@ export const EditObservationModal = memo(function EditObservationModal({
   const [isLoading, setIsLoading] = useState(false)
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([])
   const [selectedAssignees, setSelectedAssignees] = useState<TeamMember[]>([])
+  const [frameworkIds, setFrameworkIds] = useState<RegulatoryBodyId[]>([])
   const { members } = useTeamStore()
   const activeMembers = useMemo(() => members.filter(m => m.status === 'active'), [members])
 
@@ -157,6 +160,7 @@ export const EditObservationModal = memo(function EditObservationModal({
         if (member) existingAssignees.push(member)
       }
       setSelectedAssignees(existingAssignees)
+      if (observation.frameworkIds) setFrameworkIds(observation.frameworkIds)
     }
   }, [observation, isOpen, reset, members])
 
@@ -193,6 +197,7 @@ export const EditObservationModal = memo(function EditObservationModal({
         department: data.department,
         assignees,
         documents,
+        frameworkIds,
       })
       handleClose()
     } catch (error) {
@@ -396,6 +401,10 @@ export const EditObservationModal = memo(function EditObservationModal({
                 {errors.description ? (
                   <p className={`text-rose-500 text-xs mt-1`}>{errors.description.message}</p>
                 ) : null}
+              </div>
+
+              <div className="col-span-2">
+                <FrameworkTagSelector value={frameworkIds} onChange={setFrameworkIds} label="Frameworks" />
               </div>
 
               <div className="col-span-2">

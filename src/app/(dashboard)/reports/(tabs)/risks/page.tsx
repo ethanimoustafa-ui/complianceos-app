@@ -14,8 +14,9 @@ import { useTranslation } from '@/i18n'
 import { useRiskStore } from '@/stores/risk-store'
 import { useTeamStore } from '@/stores/team-store'
 import { ReviewSchedulePicker } from '@/components/ui/ReviewSchedulePicker'
-import type { ReviewSchedule } from '@/types'
+import type { ReviewSchedule, RegulatoryBodyId } from '@/types'
 import { computeNextReview } from '@/lib/review-schedule'
+import { FrameworkTagSelector } from '@/components/ui/framework-tag-selector'
 import { exportRisksLocalized } from '@/lib/export'
 import type { TranslationKey } from '@/i18n'
 import { useFormattedDate } from '@/hooks/useFormattedDate'
@@ -170,11 +171,12 @@ export default function ReportsRisksPage() {
   const [newRiskMitigation, setNewRiskMitigation] = useState('')
   const [newRiskMonitoringFrequency, setNewRiskMonitoringFrequency] = useState<MonitoringFrequency>('monthly')
   const [newRiskSchedule, setNewRiskSchedule] = useState<ReviewSchedule>({ cadence: 'monthly', dayOfMonth: 1 })
+  const [frameworkIds, setFrameworkIds] = useState<RegulatoryBodyId[]>([])
 
   const resetAddRiskForm = () => {
     setNewRiskName(''); setNewRiskCategory(''); setNewRiskOwnerId(''); setNewRiskLikelihood(3); setNewRiskImpact(3)
     setNewRiskDescription(''); setNewRiskMitigation(''); setNewRiskMonitoringFrequency('monthly');
-    setNewRiskSchedule({ cadence: 'monthly', dayOfMonth: 1 }); setEditingRiskId(null)
+    setNewRiskSchedule({ cadence: 'monthly', dayOfMonth: 1 }); setFrameworkIds([]); setEditingRiskId(null)
   }
 
   const handleCreateRisk = async () => {
@@ -189,7 +191,7 @@ export default function ReportsRisksPage() {
         title: newRiskName, description: newRiskDescription, category: newRiskCategory, likelihood: newRiskLikelihood, impact: newRiskImpact,
         owner: { id: owner.id, name: owner.name, email: owner.email, role: owner.role, department: owner.department, workload: owner.workload },
         mitigationPlan: newRiskMitigation || undefined, monitoringFrequency: newRiskMonitoringFrequency,
-        reviewSchedule: newRiskSchedule,
+        reviewSchedule: newRiskSchedule, frameworkIds,
         history: [...(existingStoreRisk?.history || []), editHistoryEntry],
       })
     } else {
@@ -198,7 +200,7 @@ export default function ReportsRisksPage() {
         status: 'identified',
         owner: { id: owner.id, name: owner.name, email: owner.email, role: owner.role, department: owner.department, workload: owner.workload },
         mitigationPlan: newRiskMitigation || undefined, mitigationProgress: 0, monitoringFrequency: newRiskMonitoringFrequency,
-        reviewSchedule: newRiskSchedule,
+        reviewSchedule: newRiskSchedule, frameworkIds,
       })
     }
     resetAddRiskForm(); setShowAddRiskModal(false)
@@ -714,6 +716,8 @@ export default function ReportsRisksPage() {
                   setNewRiskLikelihood(selectedRisk.likelihood); setNewRiskImpact(selectedRisk.impact); setNewRiskMitigation(selectedRisk.mitigationPlan || '')
                   setNewRiskMonitoringFrequency(selectedRisk.monitoringFrequency)
                   setNewRiskSchedule(selectedRisk.reviewSchedule ?? { cadence: 'monthly', dayOfMonth: 1 })
+                  const storeRisk = storeRisks.find(r => r.id === selectedRisk.id)
+                  setFrameworkIds(storeRisk?.frameworkIds ?? [])
                   const matchingMember = teamMembers.find(m => m.name === selectedRisk.owner.name)
                   setNewRiskOwnerId(matchingMember?.id || ''); setShowAddRiskModal(true); setIsRiskDrawerOpen(false)
                 }}>{t('reports.editRisk' as TranslationKey)}</button>
@@ -739,6 +743,7 @@ export default function ReportsRisksPage() {
           <div><label className="text-xs font-bold text-slate-700 uppercase mb-2 block">{t('reports.description' as TranslationKey)} *</label><textarea rows={3} value={newRiskDescription} onChange={(e) => setNewRiskDescription(e.target.value)} placeholder={t('reports.enterRiskDescription' as TranslationKey)} className="w-full px-4 py-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500" /></div>
           <div><label className="text-xs font-bold text-slate-700 uppercase mb-2 block">{t('reports.mitigationPlan' as TranslationKey)}</label><textarea rows={2} value={newRiskMitigation} onChange={(e) => setNewRiskMitigation(e.target.value)} placeholder={t('reports.enterMitigationPlan' as TranslationKey)} className="w-full px-4 py-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500" /></div>
           <ReviewSchedulePicker value={newRiskSchedule} onChange={setNewRiskSchedule} t={t} isRTL={isRTL} />
+          <FrameworkTagSelector value={frameworkIds} onChange={setFrameworkIds} label="Frameworks" />
           <div className="flex gap-3 mt-6">
             <Button className="flex-1" disabled={!newRiskName || !newRiskCategory || !newRiskOwnerId || !newRiskDescription} onClick={handleCreateRisk}>
               <Icon icon={editingRiskId ? 'lucide:save' : 'lucide:plus'} />

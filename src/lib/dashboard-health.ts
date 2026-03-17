@@ -262,9 +262,19 @@ export function calculateDashboardHealth(input: DashboardHealthInput): Dashboard
   // Overall score from primary weights
   const { overall, confidence } = calcOverall(components)
 
-  // Per-pinned-framework scores
+  // Per-pinned-framework scores — FILTER data by frameworkIds
   const frameworkScores: FrameworkHealthScore[] = input.pinnedFrameworks.map((fw) => {
-    const fwComponents = computeComponents(input, fw.weights)
+    const filteredInput: DashboardHealthInput = {
+      ...input,
+      audits: input.audits.filter(a => a.frameworkIds?.includes(fw.id)),
+      observations: input.observations.filter(o => o.frameworkIds?.includes(fw.id)),
+      letters: input.letters.filter(l => l.frameworkIds?.includes(fw.id)),
+      policies: input.policies.filter(p => p.frameworkIds?.includes(fw.id)),
+      circulars: input.circulars.filter(c => c.frameworkIds?.includes(fw.id)),
+      risks: input.risks.filter(r => r.frameworkIds?.includes(fw.id)),
+      trainings: input.trainings.filter(t => t.frameworkIds?.includes(fw.id)),
+    }
+    const fwComponents = computeComponents(filteredInput, fw.weights)
     const fwOverall = calcOverall(fwComponents)
     return {
       frameworkId: fw.id,

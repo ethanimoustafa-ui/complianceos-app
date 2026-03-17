@@ -128,6 +128,7 @@ export interface Audit {
   closedOverdue?: boolean  // Flag indicating audit was completed after due date
   completedAt?: string     // Timestamp when audit was marked complete
   reviewSchedule?: ReviewSchedule
+  frameworkIds?: RegulatoryBodyId[]
   createdAt: string
   updatedAt: string
 }
@@ -258,6 +259,7 @@ export interface Observation {
   remediationPlan?: RemediationPlan
   closureRequest?: ClosureRequest   // Present when closure has been requested
   closureReview?: ClosureReview     // Present after closure has been reviewed
+  frameworkIds?: RegulatoryBodyId[]
   createdAt?: string
   updatedAt?: string
 }
@@ -301,6 +303,7 @@ export interface Risk {
   nextReviewDate?: string
   reviewSchedule?: ReviewSchedule
   history: RiskHistoryEntry[]
+  frameworkIds?: RegulatoryBodyId[]
   createdAt: string
   updatedAt: string
 }
@@ -483,6 +486,8 @@ export interface CalendarEvent {
   completed?: boolean
   completedAt?: string
   agency?: 'SAMA' | 'ZATCA' | 'CMA' | 'IA' | 'NCA' | 'MISA' | 'SAFIU' | null
+  severity?: 'critical' | 'high' | 'medium' | 'low'
+  frameworkIds?: RegulatoryBodyId[]
   createdAt: string
   updatedAt: string
 }
@@ -681,6 +686,7 @@ export interface Policy {
   currentReviewCycleDate?: string
   reviewCycleHistory?: Array<{ id: string; label: string; initiatedAt: string }>
   reviewSchedule?: ReviewSchedule
+  frameworkIds?: RegulatoryBodyId[]
   createdAt: string
   updatedAt: string
 }
@@ -823,6 +829,7 @@ export interface Circular {
   remediationDeadline?: string
   referenceUrl?: string
   pendingEdit?: CircularPendingEdit
+  frameworkIds?: RegulatoryBodyId[]
   createdAt: string
   updatedAt: string
 }
@@ -1027,6 +1034,7 @@ export interface TrainingCourse {
   completedCount: number
   overdueCount: number
   inProgressCount: number
+  frameworkIds?: RegulatoryBodyId[]
 }
 
 export interface SaudizationDepartment {

@@ -16,10 +16,10 @@ import type {
 // ── Seed Data ──────────────────────────────────────────────────────────
 
 const seedCourses: TrainingCourse[] = [
-  { id: 'CRS-001', name: 'Anti-Money Laundering Fundamentals', category: 'aml', dueDate: '2026-04-15', assignedCount: 4, completedCount: 2, overdueCount: 1, inProgressCount: 1 },
-  { id: 'CRS-002', name: 'Cybersecurity Awareness', category: 'cybersecurity', dueDate: '2026-05-01', assignedCount: 4, completedCount: 1, overdueCount: 0, inProgressCount: 2 },
-  { id: 'CRS-003', name: 'Compliance Essentials', category: 'compliance', dueDate: '2026-03-30', assignedCount: 3, completedCount: 2, overdueCount: 1, inProgressCount: 0 },
-  { id: 'CRS-004', name: 'Risk Management Framework', category: 'risk', dueDate: '2026-06-01', assignedCount: 3, completedCount: 1, overdueCount: 0, inProgressCount: 2 },
+  { id: 'CRS-001', name: 'Anti-Money Laundering Fundamentals', category: 'aml', dueDate: '2026-04-15', assignedCount: 4, completedCount: 2, overdueCount: 1, inProgressCount: 1, frameworkIds: [] },
+  { id: 'CRS-002', name: 'Cybersecurity Awareness', category: 'cybersecurity', dueDate: '2026-05-01', assignedCount: 4, completedCount: 1, overdueCount: 0, inProgressCount: 2, frameworkIds: [] },
+  { id: 'CRS-003', name: 'Compliance Essentials', category: 'compliance', dueDate: '2026-03-30', assignedCount: 3, completedCount: 2, overdueCount: 1, inProgressCount: 0, frameworkIds: [] },
+  { id: 'CRS-004', name: 'Risk Management Framework', category: 'risk', dueDate: '2026-06-01', assignedCount: 3, completedCount: 1, overdueCount: 0, inProgressCount: 2, frameworkIds: [] },
 ]
 
 const seedEmployees: TrainingEmployee[] = [
@@ -412,7 +412,7 @@ export const useTrainingStore = create<TrainingState>()(
     }),
     {
       name: 'training-storage',
-      version: 3,
+      version: 4,
       partialize: (state) => ({
         trainings: state.trainings,
         employees: state.employees,
@@ -422,7 +422,7 @@ export const useTrainingStore = create<TrainingState>()(
         overviewStats: state.overviewStats,
       }),
       migrate: (persistedState: unknown, version: number) => {
-        if (version < 3) {
+        if (version < 4) {
           return {
             trainings: (persistedState as Record<string, unknown>).trainings ?? [],
             employees: seedEmployees,

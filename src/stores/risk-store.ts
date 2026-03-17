@@ -383,9 +383,23 @@ export const useRiskStore = create<RiskState>()(
     }),
     {
       name: 'risk-storage',
+      version: 1,
       partialize: (state) => ({
         risks: state.risks,
       }),
+      migrate: (persistedState: unknown, version: number) => {
+        const state = persistedState as { risks?: any[] }
+        if (version < 1) {
+          return {
+            ...state,
+            risks: (state.risks ?? []).map((r: any) => ({
+              ...r,
+              frameworkIds: r.frameworkIds ?? [],
+            })),
+          }
+        }
+        return persistedState
+      },
     }
   )
 )

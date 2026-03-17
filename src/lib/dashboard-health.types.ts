@@ -16,6 +16,7 @@ export interface LetterSlice {
   id: string
   status: 'draft' | 'pending-approval' | 'approved' | 'sent' | 'response-received' | 'overdue'
   responseDeadline?: string
+  frameworkIds?: string[]
 }
 
 export interface CircularSlice {
@@ -23,15 +24,16 @@ export interface CircularSlice {
   priority: 'critical' | 'high' | 'medium' | 'low'
   status: 'pending' | 'in-progress' | 'completed' | 'overdue'
   progress: number
+  frameworkIds?: string[]
 }
 
 // Input for the dashboard health engine
 export interface DashboardHealthInput {
   audits: import('./compliance-engine.types').AuditSlice[]
   observations: import('./compliance-engine.types').ObservationSlice[]
-  risks: { likelihood: number; impact: number; status: string }[]
-  policies: { status: string; nextReviewDate: string }[]
-  trainings: { completionRate: number }[]
+  risks: { likelihood: number; impact: number; status: string; frameworkIds?: string[] }[]
+  policies: { status: string; nextReviewDate: string; frameworkIds?: string[] }[]
+  trainings: { completionRate: number; frameworkIds?: string[] }[]
   letters: LetterSlice[]
   circulars: CircularSlice[]
   frameworkWeights: FrameworkWeights

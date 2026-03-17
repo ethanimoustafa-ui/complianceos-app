@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Modal } from '@/components/ui/modal'
@@ -9,6 +9,8 @@ import type { Circular, CircularAuthority, CircularPriority } from '@/types'
 import { useDepartmentStore } from '@/stores/department-store'
 import { useTeamStore } from '@/stores/team-store'
 import { normalizeUrl } from './utils'
+import { FrameworkTagSelector } from '@/components/ui/framework-tag-selector'
+import type { RegulatoryBodyId } from '@/types'
 
 type Props = {
   circular: Circular
@@ -35,6 +37,12 @@ export function EditCircularModal({ circular, isOpen, onClose, onSaved, t, isRTL
   const [formDescription, setFormDescription] = useState(circular.description ?? '')
   const [formBODept, setFormBODept] = useState(circular.businessOwnerDepartment ?? '')
   const [formAssignedTo, setFormAssignedTo] = useState(circular.assignedTo ?? '')
+  const [frameworkIds, setFrameworkIds] = useState<RegulatoryBodyId[]>(circular.frameworkIds ?? [])
+
+  useEffect(() => {
+    const AUTH_TO_FW: Record<string, RegulatoryBodyId[]> = { SAMA: ['sama'], CMA: ['cma'], ZATCA: ['zatca'], MISA: ['misa'], SAFIU: ['safiu'], IA: [] }
+    setFrameworkIds(AUTH_TO_FW[formAuthority] ?? [])
+  }, [formAuthority])
 
   function toggleDept(dept: string) {
     setFormDepartments((prev) =>
@@ -55,6 +63,7 @@ export function EditCircularModal({ circular, isOpen, onClose, onSaved, t, isRTL
       description: formDescription,
       businessOwnerDepartment: formBODept || undefined,
       assignedTo: formAssignedTo || undefined,
+      frameworkIds,
     }
     requestCircularEdit(circular.id, editData)
     onSaved()
@@ -195,6 +204,8 @@ export function EditCircularModal({ circular, isOpen, onClose, onSaved, t, isRTL
                 onChange={(e) => setFormDescription(e.target.value)}
               />
             </div>
+
+            <FrameworkTagSelector value={frameworkIds} onChange={setFrameworkIds} label="Frameworks" />
           </div>
         </div>
 

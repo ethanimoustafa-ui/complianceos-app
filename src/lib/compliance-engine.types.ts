@@ -51,11 +51,36 @@ export interface FrameworkScore {
   dataPoints: number
 }
 
+// ── Per-Framework Scoring (multi-framework tagging) ─────────────────
+export interface PerFrameworkComponentScores {
+  audits: ComponentScore
+  observations: ComponentScore
+  circulars: ComponentScore
+  policies: ComponentScore
+  tasks: ComponentScore
+}
+
+export interface PerFrameworkScore {
+  frameworkId: string
+  overall: number
+  confidence: ConfidenceLevel
+  dataPoints: number
+  components: PerFrameworkComponentScores
+  taskScore: { completionRate: number; overduePenalty: number; severityBonus: number; combined: number }
+}
+
 // ── Trend ────────────────────────────────────────────────────────────
 export interface TrendDataPoint {
   month: string
   actual: number
   target: number
+}
+
+// ── Framework Config (passed to engine) ─────────────────────────────
+export interface FrameworkConfigInput {
+  id: string
+  weights: { audits: number; observations: number; letters: number; policies: number; circulars: number; riskPosture: number; training: number }
+  enabled: boolean
 }
 
 // ── Engine Result ────────────────────────────────────────────────────
@@ -70,11 +95,7 @@ export interface ComplianceScoreResult {
     policyCurrency: ComponentScore
     trainingCompletion: ComponentScore
   }
-  frameworks: {
-    sama: FrameworkScore
-    internal: FrameworkScore
-    sharia: FrameworkScore
-  }
+  frameworks: Record<string, PerFrameworkScore>
   deductions: ScoreDeduction[]
   trend: TrendDataPoint[]
 }
@@ -90,6 +111,7 @@ export interface AuditSlice {
   createdAt: string
   progress: number
   priority?: 'critical' | 'high' | 'medium' | 'low'
+  frameworkIds?: string[]
 }
 
 export interface ObservationSlice {
@@ -99,6 +121,7 @@ export interface ObservationSlice {
   status: 'open' | 'in_progress' | 'resolved' | 'closed'
   dueDate: string
   createdAt?: string
+  frameworkIds?: string[]
 }
 
 export interface RiskSlice {
@@ -107,6 +130,7 @@ export interface RiskSlice {
   impact: 1 | 2 | 3 | 4 | 5
   status: 'identified' | 'mitigating' | 'accepted' | 'resolved'
   createdAt: string
+  frameworkIds?: string[]
 }
 
 export interface PolicySlice {
@@ -114,6 +138,7 @@ export interface PolicySlice {
   status: string   // 'approved' | 'under-review' | 'draft' | 'expired' (legacy: 'active' | 'archived')
   nextReviewDate: string
   createdAt: string
+  frameworkIds?: string[]
 }
 
 export interface TrainingSlice {
@@ -121,6 +146,26 @@ export interface TrainingSlice {
   completionRate: number
   status: 'active' | 'completed' | 'overdue'
   createdAt: string
+  frameworkIds?: string[]
+}
+
+export interface CircularSlice {
+  id: string
+  priority: 'critical' | 'high' | 'medium' | 'low'
+  status: 'pending' | 'in-progress' | 'completed' | 'overdue'
+  progress: number
+  frameworkIds?: string[]
+  createdAt?: string
+}
+
+export interface TaskSlice {
+  id: string
+  completed: boolean
+  dueDate: string
+  completedAt?: string
+  severity?: 'critical' | 'high' | 'medium' | 'low'
+  frameworkIds?: string[]
+  createdAt?: string
 }
 
 // ── Engine Input ─────────────────────────────────────────────────────
@@ -130,6 +175,9 @@ export interface ComplianceEngineInput {
   risks: RiskSlice[]
   policies: PolicySlice[]
   trainings: TrainingSlice[]
+  circulars: CircularSlice[]
+  tasks: TaskSlice[]
+  frameworkConfigs: FrameworkConfigInput[]
   config: ComplianceConfig
   period: PeriodConfig
 }

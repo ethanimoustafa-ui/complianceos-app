@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import type { Audit, AuditFilters, PaginationState, SortState, AuditDocument, AuditTeamMember, AuditComment } from '@/types'
+import type { Audit, AuditFilters, PaginationState, SortState, AuditDocument, AuditTeamMember, AuditComment, RegulatoryBodyId } from '@/types'
 import { computeNextReview } from '@/lib/review-schedule'
 import { useAuditLogStore } from './audit-log-store'
 import { useAuthStore } from './auth-store'
@@ -616,9 +616,28 @@ export const useAuditStore = create<AuditState>()(
     }),
     {
       name: 'audit-storage',
+      version: 1,
       partialize: (state) => ({
         audits: state.audits,
       }),
+      migrate: (persistedState: unknown, version: number) => {
+        const state = persistedState as { audits?: any[] }
+        if (version < 1) {
+          const AUDIT_TYPE_TO_FW: Record<string, string[]> = {
+            sama: ['sama'],
+            sharia: ['sharia-board'],
+            internal: [],
+          }
+          return {
+            ...state,
+            audits: (state.audits ?? []).map((a: any) => ({
+              ...a,
+              frameworkIds: a.frameworkIds ?? (AUDIT_TYPE_TO_FW[a.type] ?? []),
+            })),
+          }
+        }
+        return persistedState
+      },
     }
   )
 )

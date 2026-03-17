@@ -29,6 +29,8 @@
     "filter": "تصفية",
     "clearFilters": "مسح الفلاتر",
     "noResults": "لم يتم العثور على نتائج",
+    "frameworks": "الأطر التنظيمية",
+    "noFrameworksEnabled": "لا توجد أطر تنظيمية مفعّلة",
     "actions": "إجراءات",
     "status": "الحالة",
     "active": "نشط",
@@ -236,7 +238,7 @@
     "configure": "تهيئة",
     "complianceHealth": "صحة الامتثال",
 
-    "departmentKpis": "مؤشرات أداء الأقسام",
+    "frameworkCompliance": "امتثال الأطر التنظيمية",
     "complianceByComponent": "الامتثال حسب المكون",
     "pendingApprovals": "الموافقات المعلقة",
     "teamWorkloadDistribution": "توزيع عبء العمل على الفريق",
@@ -467,8 +469,7 @@
     "typeDeadline": "موعد نهائي",
     "typeSubmission": "تقديم",
     "typeReview": "مراجعة",
-    "markAsComplete": "تحديد كمكتمل",
-    "frameworkAgency": "الإطار / الجهة"
+    "markAsComplete": "تحديد كمكتمل"
   },
   "samaLetters": {
     "title": "خطابات ساما",

@@ -14,6 +14,7 @@ import { useTranslation } from '@/i18n'
 import { useAuditStore } from '@/stores/audit-store'
 import { useRiskStore } from '@/stores/risk-store'
 import { useComplianceScore } from '@/hooks/useComplianceScore'
+import { useFrameworkConfigStore } from '@/stores/framework-config-store'
 import type { PeriodFilter } from '@/lib/compliance-engine.types'
 import { exportExecutiveReport } from '@/lib/export'
 import type { TranslationKey } from '@/i18n'
@@ -96,6 +97,8 @@ export default function ReportsExecutivePage() {
   const storeAudits = useAuditStore((s) => s.audits)
   const fetchAudits = useAuditStore((s) => s.fetchAll)
   const storeRisks = useRiskStore((s) => s.risks)
+  const allFrameworks = useFrameworkConfigStore((s) => s.frameworks)
+  const enabledFrameworks = useMemo(() => allFrameworks.filter((f) => f.enabled), [allFrameworks])
 
   // State
   const [periodFilter, setPeriodFilter] = useState('12months')
@@ -183,11 +186,16 @@ export default function ReportsExecutivePage() {
     { key: 'policyCurrency', i18n: 'compPolicyCurrency' },
     { key: 'trainingCompletion', i18n: 'compTrainingCompletion' },
   ]
-  const frameworkEntries: { key: keyof typeof complianceScore.frameworks; i18n: string; icon: string }[] = [
-    { key: 'sama', i18n: 'frameworkSama', icon: 'lucide:landmark' },
-    { key: 'internal', i18n: 'frameworkInternal', icon: 'lucide:clipboard-check' },
-    { key: 'sharia', i18n: 'frameworkSharia', icon: 'lucide:moon' },
-  ]
+  const frameworkEntries = useMemo(() =>
+    enabledFrameworks
+      .filter((fw) => complianceScore.frameworks[fw.id])
+      .map((fw) => ({
+        key: fw.id,
+        name: isRTL ? fw.nameAr : fw.name,
+        icon: fw.icon,
+      })),
+    [enabledFrameworks, complianceScore.frameworks, isRTL]
+  )
   const miniRadius = 28
   const miniCirc = 2 * Math.PI * miniRadius
   const getGaugeColor = (score: number): string => {
@@ -312,9 +320,9 @@ export default function ReportsExecutivePage() {
             <CardContent className="pt-3 pb-3 px-4">
               <h3 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">{t('reports.frameworkScores' as TranslationKey)}</h3>
               <div className="flex items-center justify-around">
-                {frameworkEntries.map(({ key, i18n, icon }) => {
+                {frameworkEntries.map(({ key, name, icon }) => {
                   const fwData = complianceScore.frameworks[key]
-                  const fwScore = fwData.score
+                  const fwScore = fwData?.overall ?? 0
                   const fwOffset = miniCirc - (fwScore / 100) * miniCirc
                   return (
                     <div key={key} className="flex flex-col items-center gap-1">
@@ -324,12 +332,12 @@ export default function ReportsExecutivePage() {
                           <circle cx="34" cy="34" r={miniRadius} fill="none" stroke={getGaugeColor(fwScore)} strokeWidth="5" strokeLinecap="round" strokeDasharray={miniCirc} strokeDashoffset={fwOffset} className="transition-all duration-700" />
                         </svg>
                         <div className="absolute inset-0 flex items-center justify-center">
-                          <span className="text-sm font-bold text-slate-900">{fwScore}%</span>
+                          <span className="text-sm font-bold text-slate-900">{Math.round(fwScore)}%</span>
                         </div>
                       </div>
                       <div className="flex items-center gap-1">
                         <Icon icon={icon} className="w-3 h-3 text-slate-400" />
-                        <span className="text-[10px] font-medium text-slate-600">{t(('reports.' + i18n) as TranslationKey)}</span>
+                        <span className="text-[10px] font-medium text-slate-600">{name}</span>
                       </div>
                     </div>
                   )

@@ -29,6 +29,8 @@
     "filter": "Filter",
     "clearFilters": "Clear filters",
     "noResults": "No results found",
+    "frameworks": "Frameworks",
+    "noFrameworksEnabled": "No frameworks enabled",
     "actions": "Actions",
     "status": "Status",
     "active": "Active",
@@ -236,7 +238,7 @@
     "configure": "Configure",
     "complianceHealth": "Compliance Health",
 
-    "departmentKpis": "Department KPIs",
+    "frameworkCompliance": "Framework Compliance",
     "complianceByComponent": "Compliance by Component",
     "pendingApprovals": "Pending Approvals",
     "teamWorkloadDistribution": "Team Workload Distribution",
@@ -467,8 +469,7 @@
     "typeDeadline": "Deadline",
     "typeSubmission": "Submission",
     "typeReview": "Review",
-    "markAsComplete": "Mark as Complete",
-    "frameworkAgency": "Framework / Agency"
+    "markAsComplete": "Mark as Complete"
   },
   "samaLetters": {
     "title": "SAMA Letters",

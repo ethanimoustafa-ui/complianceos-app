@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { Icon } from '@iconify/react'
 import { Modal } from '@/components/ui/modal'
 import { Button } from '@/components/ui/button'
@@ -9,7 +9,8 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { cn } from '@/lib/utils'
 import { useCalendarStore } from '@/stores/calendar-store'
-import type { CalendarEvent } from '@/types'
+import type { CalendarEvent, RegulatoryBodyId } from '@/types'
+import { FrameworkTagSelector } from '@/components/ui/framework-tag-selector'
 
 const eventSchema = z.object({
   title: z.string().min(3, 'Title must be at least 3 characters'),
@@ -32,6 +33,7 @@ interface EditEventModalProps {
 
 export function EditEventModal({ isOpen, onClose, event, onSuccess }: EditEventModalProps) {
   const { updateEvent, isLoading } = useCalendarStore()
+  const [frameworkIds, setFrameworkIds] = useState<RegulatoryBodyId[]>([])
 
   const {
     control,
@@ -62,6 +64,7 @@ export function EditEventModal({ isOpen, onClose, event, onSuccess }: EditEventM
         description: event.description || '',
         location: event.location || '',
       })
+      setFrameworkIds(event.frameworkIds ?? [])
     }
   }, [event, reset])
 
@@ -76,6 +79,7 @@ export function EditEventModal({ isOpen, onClose, event, onSuccess }: EditEventM
       endTime: data.endTime,
       description: data.description,
       location: data.location,
+      frameworkIds,
     })
     if (updatedEvent) onSuccess?.(updatedEvent)
     handleClose()
@@ -229,6 +233,8 @@ export function EditEventModal({ isOpen, onClose, event, onSuccess }: EditEventM
                 />
               </div>
             </div>
+
+            <FrameworkTagSelector value={frameworkIds} onChange={setFrameworkIds} label="Frameworks" />
 
             <div>
               <label className="text-xs font-black uppercase text-slate-500 tracking-widest mb-2 block">

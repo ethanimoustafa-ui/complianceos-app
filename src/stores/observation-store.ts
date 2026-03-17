@@ -1350,6 +1350,24 @@ export const useObservationStore = create<ObservationState>()(
       partialize: (state) => ({
         observations: state.observations,
       }),
+      migrate: (persistedState: unknown, version: number) => {
+        const state = persistedState as { observations?: any[] }
+        if (version < 1) {
+          const SOURCE_TO_FW: Record<string, string[]> = {
+            sama: ['sama'],
+            sharia: ['sharia-board'],
+            internal: [],
+          }
+          return {
+            ...state,
+            observations: (state.observations ?? []).map((o: any) => ({
+              ...o,
+              frameworkIds: o.frameworkIds ?? (SOURCE_TO_FW[o.source] ?? []),
+            })),
+          }
+        }
+        return persistedState
+      },
     }
   )
 )

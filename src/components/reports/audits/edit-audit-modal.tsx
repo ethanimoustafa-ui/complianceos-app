@@ -12,9 +12,10 @@ import { useAuditStore } from '@/stores/audit-store'
 import { useTeamStore } from '@/stores/team-store'
 import { useAuthStore } from '@/stores/auth-store'
 import { useTranslation } from '@/i18n'
-import type { Audit, AuditCategory, AuditFrequency, AuditPriority, ReviewSchedule } from '@/types'
+import type { Audit, AuditCategory, AuditFrequency, AuditPriority, ReviewSchedule, RegulatoryBodyId } from '@/types'
 import { ReviewSchedulePicker } from '@/components/ui/ReviewSchedulePicker'
 import { computeNextReview } from '@/lib/review-schedule'
+import { FrameworkTagSelector } from '@/components/ui/framework-tag-selector'
 
 const auditSchema = z.object({
   title: z.string().min(3, 'Title must be at least 3 characters'),
@@ -51,6 +52,12 @@ export function EditAuditModal({ isOpen, onClose, audit, onSuccess, calculatedPr
   ]
   const [selectedType, setSelectedType] = useState<'internal' | 'sama' | 'sharia'>('internal')
   const [schedule, setSchedule] = useState<ReviewSchedule>({ cadence: 'yearly', dayOfMonth: 1 })
+  const [frameworkIds, setFrameworkIds] = useState<RegulatoryBodyId[]>([])
+
+  useEffect(() => {
+    const TYPE_TO_FW: Record<string, RegulatoryBodyId[]> = { sama: ['sama'], sharia: ['sharia-board'], internal: [] }
+    setFrameworkIds(TYPE_TO_FW[selectedType] ?? [])
+  }, [selectedType])
 
   const {
     control,
@@ -88,6 +95,7 @@ export function EditAuditModal({ isOpen, onClose, audit, onSuccess, calculatedPr
       })
       setSelectedType(audit.type)
       setSchedule(audit.reviewSchedule ?? { cadence: 'yearly', dayOfMonth: 1 })
+      if (audit.frameworkIds) setFrameworkIds(audit.frameworkIds)
     }
   }, [audit, reset])
 
@@ -120,6 +128,7 @@ export function EditAuditModal({ isOpen, onClose, audit, onSuccess, calculatedPr
         frequency: data.frequency,
         priority: data.priority,
         reviewSchedule: schedule,
+        frameworkIds,
         assignee: selectedAssignee
           ? {
               id: selectedAssignee.id,
@@ -376,6 +385,10 @@ export function EditAuditModal({ isOpen, onClose, audit, onSuccess, calculatedPr
                     />
                   )}
                 />
+              </div>
+
+              <div className="col-span-2">
+                <FrameworkTagSelector value={frameworkIds} onChange={setFrameworkIds} label="Frameworks" />
               </div>
             </div>
           </form>

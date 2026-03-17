@@ -429,7 +429,7 @@ export function exportExecutiveReport(
     confidence: string
     change: number
     components: Record<string, { score: number; weight: number; confidence: string }>
-    frameworks: Record<string, { score: number; confidence: string }>
+    frameworks: Record<string, { score?: number; overall?: number; confidence: string }>
     deductions: Array<{ points: number; description: string; descriptionKey?: string; descriptionParams?: Record<string, string>; severity: string }>
   },
   findings: Array<{
@@ -497,16 +497,12 @@ export function exportExecutiveReport(
 
   // Section 3: Frameworks
   const fwSection = getText('export.frameworks', 'Frameworks')
-  const frameworkLabels: Record<string, string> = {
-    sama: 'SAMA',
-    internal: t ? t('reports.internalAudit') : 'Internal Audit',
-    sharia: t ? t('reports.shariaAudit') : 'Sharia Audit',
-  }
   for (const [key, fw] of Object.entries(scoreData.frameworks)) {
+    const fwScore = fw.overall ?? fw.score ?? 0
     rows.push({
       [sectionHeader]: fwSection,
-      [getText('export.component', 'Component')]: frameworkLabels[key] || key,
-      [getText('export.score', 'Score')]: `${fw.score}%`,
+      [getText('export.component', 'Component')]: key.toUpperCase(),
+      [getText('export.score', 'Score')]: `${Math.round(fwScore)}%`,
       [getText('export.confidence', 'Confidence')]: t ? t(`reports.confidence${fw.confidence.charAt(0).toUpperCase() + fw.confidence.slice(1)}`) : fw.confidence,
       [getText('export.weight', 'Weight')]: '',
       [getText('export.severity', 'Severity')]: '',

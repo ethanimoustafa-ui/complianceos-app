@@ -1,10 +1,12 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Icon } from '@iconify/react'
 import { cn } from '@/lib/utils'
 import { useTranslation } from '@/i18n'
 import { useCalendarStore } from '@/stores/calendar-store'
+import { FrameworkTagSelector } from '@/components/ui/framework-tag-selector'
+import type { RegulatoryBodyId } from '@/types'
 
 interface CreateEventModalProps {
   isOpen: boolean
@@ -23,11 +25,12 @@ export function CreateEventModal({ isOpen, onClose, onSuccess }: CreateEventModa
     description: '',
     startTime: '',
     endTime: '',
-    agency: '' as '' | 'SAMA' | 'ZATCA' | 'CMA' | 'IA' | 'NCA' | 'MISA' | 'SAFIU',
   })
+  const [frameworkIds, setFrameworkIds] = useState<RegulatoryBodyId[]>([])
 
   const handleClose = () => {
-    setForm({ title: '', date: '', type: 'meeting', description: '', startTime: '', endTime: '', agency: '' })
+    setForm({ title: '', date: '', type: 'meeting', description: '', startTime: '', endTime: '' })
+    setFrameworkIds([])
     onClose()
   }
 
@@ -41,13 +44,14 @@ export function CreateEventModal({ isOpen, onClose, onSuccess }: CreateEventModa
       description: form.description,
       startTime: form.startTime || undefined,
       endTime: form.endTime || undefined,
-      agency: form.agency || null,
       attendees: [],
       reminders: [],
+      frameworkIds,
     })
 
     onSuccess?.(form.date)
-    setForm({ title: '', date: '', type: 'meeting', description: '', startTime: '', endTime: '', agency: '' })
+    setForm({ title: '', date: '', type: 'meeting', description: '', startTime: '', endTime: '' })
+    setFrameworkIds([])
     onClose()
   }
 
@@ -103,25 +107,6 @@ export function CreateEventModal({ isOpen, onClose, onSuccess }: CreateEventModa
               </select>
             </div>
           </div>
-          <div>
-            <label className={`block text-xs font-bold text-slate-500 uppercase mb-1.5 ${isRTL ? 'text-right' : ''}`}>
-              {t('calendar.frameworkAgency')}
-            </label>
-            <select
-              value={form.agency}
-              onChange={(e) => setForm(prev => ({ ...prev, agency: e.target.value as typeof form.agency }))}
-              className={`w-full px-4 py-2.5 rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 ${isRTL ? 'text-right' : ''}`}
-            >
-              <option value="">—</option>
-              <option value="SAMA">SAMA</option>
-              <option value="ZATCA">ZATCA</option>
-              <option value="CMA">CMA</option>
-              <option value="IA">IA</option>
-              <option value="NCA">NCA</option>
-              <option value="MISA">MISA</option>
-              <option value="SAFIU">SAFIU</option>
-            </select>
-          </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className={`block text-xs font-bold text-slate-500 uppercase mb-1.5 ${isRTL ? 'text-right' : ''}`}>
@@ -146,6 +131,7 @@ export function CreateEventModal({ isOpen, onClose, onSuccess }: CreateEventModa
               />
             </div>
           </div>
+          <FrameworkTagSelector value={frameworkIds} onChange={setFrameworkIds} label="Frameworks" />
           <div>
             <label className={`block text-xs font-bold text-slate-500 uppercase mb-1.5 ${isRTL ? 'text-right' : ''}`}>
               {t('common.description')}

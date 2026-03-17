@@ -74,6 +74,7 @@ const seedPolicies: Policy[] = [
       { step: 'Compliance Review', date: '2025-08-01', user: 'Ahmed Al-Rashid', status: 'completed' },
       { step: 'Final Approval', date: '2025-08-20', user: 'Executive Committee', status: 'completed' },
     ],
+    frameworkIds: ['sama', 'safiu'],
     createdAt: '2025-07-01T00:00:00.000Z',
     updatedAt: '2025-08-20T00:00:00.000Z',
   },
@@ -99,6 +100,7 @@ const seedPolicies: Policy[] = [
       { step: 'Compliance Review', date: '2025-10-05', user: 'Sarah Connor', status: 'current' },
       { step: 'Final Approval', date: '', user: 'Board', status: 'pending' },
     ],
+    frameworkIds: ['nca-ecc'],
     createdAt: '2025-09-15T00:00:00.000Z',
     updatedAt: '2025-10-05T00:00:00.000Z',
   },
@@ -125,6 +127,7 @@ const seedPolicies: Policy[] = [
       { step: 'DPO Review', date: '2025-06-10', user: 'Privacy Officer', status: 'completed' },
       { step: 'Final Approval', date: '2025-06-25', user: 'Board', status: 'completed' },
     ],
+    frameworkIds: ['ndmo-pdpl'],
     createdAt: '2025-05-01T00:00:00.000Z',
     updatedAt: '2025-06-25T00:00:00.000Z',
   },
@@ -149,6 +152,7 @@ const seedPolicies: Policy[] = [
       { step: 'Management Review', date: '', user: 'Operations Head', status: 'pending' },
       { step: 'Final Approval', date: '', user: 'AGM', status: 'pending' },
     ],
+    frameworkIds: [],
     createdAt: '2025-10-15T00:00:00.000Z',
     updatedAt: '2025-10-15T00:00:00.000Z',
   },
@@ -175,6 +179,7 @@ const seedPolicies: Policy[] = [
       { step: 'Legal Review', date: '2024-06-05', user: 'Legal Team', status: 'completed' },
       { step: 'Final Approval', date: '2024-06-20', user: 'Executive Committee', status: 'completed' },
     ],
+    frameworkIds: [],
     createdAt: '2024-05-01T00:00:00.000Z',
     updatedAt: '2024-06-20T00:00:00.000Z',
   },
@@ -363,7 +368,7 @@ export const usePolicyStore = create<PolicyState>()(
     }),
     {
       name: 'policy-storage',
-      version: 2,
+      version: 3,
       migrate: (persistedState: unknown, version: number) => {
         const state = persistedState as { policies?: Policy[] }
         if (version === 0) {
@@ -384,6 +389,21 @@ export const usePolicyStore = create<PolicyState>()(
               workflowTimeline: p.workflowTimeline.map(s =>
                 s.actionType ? s : { ...s, actionType: 'request-approval' }
               ),
+            })),
+          }
+        }
+        if (version < 3) {
+          // Add frameworkIds to existing policies
+          const POLICY_FW_MAP: Record<string, string[]> = {
+            'POL-001': ['sama', 'safiu'],
+            'POL-002': ['nca-ecc'],
+            'POL-003': ['ndmo-pdpl'],
+          }
+          return {
+            ...state,
+            policies: (state.policies ?? seedPolicies).map((p: any) => ({
+              ...p,
+              frameworkIds: p.frameworkIds ?? (POLICY_FW_MAP[p.id] ?? []),
             })),
           }
         }

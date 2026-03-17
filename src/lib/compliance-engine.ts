@@ -3,13 +3,17 @@ import type {
   PeriodConfig,
   ConfidenceLevel,
   ComponentScore,
-  FrameworkScore,
   ScoreDeduction,
   TrendDataPoint,
   ComplianceScoreResult,
   ComplianceEngineInput,
   AuditSlice,
   ObservationSlice,
+  CircularSlice,
+  TaskSlice,
+  PerFrameworkScore,
+  PerFrameworkComponentScores,
+  FrameworkConfigInput,
 } from './compliance-engine.types'
 
 // ── Period helpers ────────────────────────────────────────────────────
@@ -234,60 +238,155 @@ export function calcOverall(components: Record<string, ComponentScore>): { overa
   return { overall: Math.min(100, Math.max(0, overall)), confidence }
 }
 
-// ── Per-framework scores ─────────────────────────────────────────────
+// ── Component: Circular Implementation ───────────────────────────────
 
-type FrameworkKey = 'sama' | 'internal' | 'sharia'
+const CIRCULAR_PRIORITY_WEIGHT: Record<string, number> = {
+  critical: 4,
+  high: 2,
+  medium: 1,
+  low: 0.5,
+}
 
-function calcFrameworkScore(
-  audits: AuditSlice[],
-  observations: ObservationSlice[],
-  framework: FrameworkKey
-): FrameworkScore {
-  const fwAudits = audits.filter((a) => a.type === framework)
-  const fwObs = observations.filter((o) => o.source === framework)
+export function calcCircularImplementation(circulars: CircularSlice[], weight: number): ComponentScore {
+  const dataPoints = circulars.length
+  const confidence = getConfidence(dataPoints)
 
-  const totalDataPoints = fwAudits.length + fwObs.length
+  if (dataPoints === 0) {
+    return { score: 0, weight, confidence, dataPoints }
+  }
 
-  // Audit sub-score
-  let auditScore: number | null = null
-  if (fwAudits.length > 0) {
-    let credit = 0
-    for (const a of fwAudits) {
-      if (a.status === 'completed') {
-        credit += a.closedOverdue ? getLatePenaltyCredit(a.dueDate, a.completedAt) : 1
-      }
+  let totalPriorityWeight = 0
+  let priorityWeightedProgress = 0
+
+  for (const circ of circulars) {
+    const pw = CIRCULAR_PRIORITY_WEIGHT[circ.priority] ?? 1
+    totalPriorityWeight += pw
+
+    if (circ.status === 'completed') {
+      priorityWeightedProgress += pw * 100
+    } else if (circ.status === 'in-progress') {
+      priorityWeightedProgress += pw * circ.progress
     }
-    auditScore = Math.round((credit / fwAudits.length) * 100)
+    // overdue & pending = 0% credit
   }
 
-  // Observation sub-score
-  let obsScore: number | null = null
-  if (fwObs.length > 0) {
-    let totalW = 0
-    let closedW = 0
-    for (const o of fwObs) {
-      const w = SEVERITY_WEIGHT[o.severity] ?? 1
-      totalW += w
-      if (o.status === 'closed' || o.status === 'resolved') closedW += w
-    }
-    obsScore = totalW > 0 ? Math.round((closedW / totalW) * 100) : 0
+  const score = totalPriorityWeight > 0
+    ? Math.round(priorityWeightedProgress / totalPriorityWeight)
+    : 0
+  return { score: Math.min(100, Math.max(0, score)), weight, confidence, dataPoints }
+}
+
+// ── Component: Task Score ───────────────────────────────────────────
+
+const TASK_SEVERITY_BONUS: Record<string, number> = {
+  critical: 1.0,
+  high: 0.7,
+  medium: 0.4,
+  low: 0.2,
+}
+
+export function calcTaskScore(tasks: TaskSlice[], weight: number): ComponentScore & {
+  taskDetail: { completionRate: number; overduePenalty: number; severityBonus: number; combined: number }
+} {
+  const dataPoints = tasks.length
+  const confidence = getConfidence(dataPoints)
+
+  if (dataPoints === 0) {
+    return { score: 0, weight, confidence, dataPoints, taskDetail: { completionRate: 0, overduePenalty: 0, severityBonus: 0, combined: 0 } }
   }
 
-  let score: number
-  if (auditScore !== null && obsScore !== null) {
-    score = Math.round((auditScore + obsScore) / 2)
-  } else if (auditScore !== null) {
-    score = auditScore
-  } else if (obsScore !== null) {
-    score = obsScore
-  } else {
-    score = 0
+  // Completion Rate (0–100)
+  const completedCount = tasks.filter(t => t.completed).length
+  const completionRate = (completedCount / dataPoints) * 100
+
+  // Overdue Penalty (0–100): ratio of overdue tasks
+  const now = new Date()
+  const overdueCount = tasks.filter(t => !t.completed && new Date(t.dueDate) < now).length
+  const overduePenalty = (overdueCount / dataPoints) * 100
+
+  // Severity Bonus (0–100): ratio of severity-weighted completed vs max possible
+  let maxSeverityCredit = 0
+  let completedSeverityCredit = 0
+  for (const t of tasks) {
+    const sw = TASK_SEVERITY_BONUS[t.severity ?? 'medium'] ?? 0.4
+    maxSeverityCredit += sw
+    if (t.completed) completedSeverityCredit += sw
   }
+  const severityBonus = maxSeverityCredit > 0
+    ? (completedSeverityCredit / maxSeverityCredit) * 100
+    : 0
+
+  // Combined: (Completion × 50%) − (Overdue × 30%) + (Severity × 20%)
+  const combined = (completionRate * 0.5) - (overduePenalty * 0.3) + (severityBonus * 0.2)
+  const score = Math.round(Math.min(100, Math.max(0, combined)))
 
   return {
-    score: Math.min(100, Math.max(0, score)),
-    confidence: getConfidence(totalDataPoints),
+    score, weight, confidence, dataPoints,
+    taskDetail: {
+      completionRate: Math.round(completionRate * 10) / 10,
+      overduePenalty: Math.round(overduePenalty * 10) / 10,
+      severityBonus: Math.round(severityBonus * 10) / 10,
+      combined: Math.round(combined * 10) / 10,
+    },
+  }
+}
+
+// ── Per-framework scores (multi-framework tagging) ───────────────────
+
+function filterByFramework<T extends { frameworkIds?: string[] }>(items: T[], frameworkId: string): T[] {
+  return items.filter(item => item.frameworkIds?.includes(frameworkId))
+}
+
+function calcPerFrameworkScore(
+  audits: AuditSlice[],
+  observations: ObservationSlice[],
+  circulars: CircularSlice[],
+  policies: { status: string; nextReviewDate: string; frameworkIds?: string[] }[],
+  tasks: TaskSlice[],
+  frameworkId: string,
+  frameworkWeights: FrameworkConfigInput['weights']
+): PerFrameworkScore {
+  // 1. Filter each array by frameworkId
+  const fwAudits = filterByFramework(audits, frameworkId)
+  const fwObs = filterByFramework(observations, frameworkId)
+  const fwCirculars = filterByFramework(circulars, frameworkId)
+  const fwPolicies = filterByFramework(policies, frameworkId)
+  const fwTasks = filterByFramework(tasks, frameworkId)
+
+  // 2. Derive 5 weights from FrameworkWeights (7 keys → 5 sources)
+  const w1 = frameworkWeights.audits
+  const w2 = frameworkWeights.observations
+  const w3 = frameworkWeights.circulars
+  const w4 = frameworkWeights.policies
+  const w5 = frameworkWeights.letters + frameworkWeights.riskPosture + frameworkWeights.training
+
+  // 3. Compute 5 component scores using filtered data
+  const auditComp = calcAuditCompletion(fwAudits, w1)
+  const obsComp = calcObservationClosure(fwObs, w2)
+  const circComp = calcCircularImplementation(fwCirculars, w3)
+  const policyComp = calcPolicyCurrency(fwPolicies, w4)
+  const taskResult = calcTaskScore(fwTasks, w5)
+
+  const components: PerFrameworkComponentScores = {
+    audits: auditComp,
+    observations: obsComp,
+    circulars: circComp,
+    policies: policyComp,
+    tasks: taskResult,
+  }
+
+  // 4. Compute overall via calcOverall()
+  const { overall, confidence } = calcOverall(components as unknown as Record<string, ComponentScore>)
+
+  const totalDataPoints = auditComp.dataPoints + obsComp.dataPoints + circComp.dataPoints + policyComp.dataPoints + taskResult.dataPoints
+
+  return {
+    frameworkId,
+    overall,
+    confidence,
     dataPoints: totalDataPoints,
+    components,
+    taskScore: taskResult.taskDetail,
   }
 }
 
@@ -488,8 +587,10 @@ export function calculateComplianceScore(input: ComplianceEngineInput): Complian
   const risks = filterByPeriod(input.risks, period)
   const policies = filterByPeriod(input.policies, period)
   const trainings = filterByPeriod(input.trainings, period)
+  const circulars = filterByPeriod(input.circulars, period)
+  const tasks = filterByPeriod(input.tasks, period)
 
-  // B. Component scores
+  // B. Component scores (overall — ALL data, framework-agnostic)
   const components = {
     auditCompletion: calcAuditCompletion(audits, config.weights.auditCompletion),
     observationClosure: calcObservationClosure(observations, config.weights.observationClosure),
@@ -501,11 +602,14 @@ export function calculateComplianceScore(input: ComplianceEngineInput): Complian
   // D. Overall score
   const { overall, confidence } = calcOverall(components)
 
-  // E. Per-framework scores
-  const frameworks = {
-    sama: calcFrameworkScore(audits, observations, 'sama'),
-    internal: calcFrameworkScore(audits, observations, 'internal'),
-    sharia: calcFrameworkScore(audits, observations, 'sharia'),
+  // E. Per-framework scores (filtered by frameworkIds)
+  const frameworks: Record<string, PerFrameworkScore> = {}
+  for (const fwConfig of input.frameworkConfigs) {
+    if (!fwConfig.enabled) continue
+    frameworks[fwConfig.id] = calcPerFrameworkScore(
+      audits, observations, circulars, policies, tasks,
+      fwConfig.id, fwConfig.weights
+    )
   }
 
   // F. Auto-generated deductions

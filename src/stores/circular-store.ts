@@ -197,6 +197,7 @@ const seedCirculars: Circular[] = [
     capAttachments: [],
     remediationAttachments: [],
     createdAt: '2026-01-15T00:00:00.000Z',
+    frameworkIds: ['sama'],
     updatedAt: '2026-01-15T00:00:00.000Z',
   },
   {
@@ -229,6 +230,7 @@ const seedCirculars: Circular[] = [
     ],
     capAttachments: [],
     remediationAttachments: [],
+    frameworkIds: ['sama'],
     createdAt: '2026-02-01T00:00:00.000Z',
     updatedAt: '2026-02-01T00:00:00.000Z',
   },
@@ -267,6 +269,7 @@ const seedCirculars: Circular[] = [
       { id: 'att1', name: 'AML-CAP-v1.pdf', url: '', type: 'pdf', size: 0, uploadedAt: '2025-11-25', uploadedBy: 'Omar Khalid' },
     ],
     remediationAttachments: [],
+    frameworkIds: ['sama'],
     createdAt: '2025-09-01T00:00:00.000Z',
     updatedAt: '2025-12-01T00:00:00.000Z',
   },
@@ -298,6 +301,7 @@ const seedCirculars: Circular[] = [
     ],
     capAttachments: [],
     remediationAttachments: [],
+    frameworkIds: ['cma'],
     createdAt: '2026-01-20T00:00:00.000Z',
     updatedAt: '2026-01-20T00:00:00.000Z',
   },
@@ -343,6 +347,7 @@ const seedCirculars: Circular[] = [
     remediationAttachments: [
       { id: 'att2', name: 'Remediation-Evidence-Pack.pdf', url: '', type: 'pdf', size: 0, uploadedAt: '2025-11-15', uploadedBy: 'Nora Al-Ghamdi' },
     ],
+    frameworkIds: ['sama'],
     createdAt: '2025-06-01T00:00:00.000Z',
     updatedAt: '2025-12-01T00:00:00.000Z',
   },
@@ -1076,7 +1081,7 @@ export const useCircularStore = create<CircularState>()(
     }),
     {
       name: 'circular-storage',
-      version: 6,
+      version: 7,
       partialize: (state) => ({ circulars: state.circulars }),
       migrate: (persisted: unknown, ver: number) => {
         if (ver < 4) return { circulars: seedCirculars }
@@ -1092,21 +1097,33 @@ export const useCircularStore = create<CircularState>()(
           'completed':   ['cap-review', 'cap-approved', 'notify-bo', 'cap-received', 'cap-under-review', 'cap-final-approved', 'remediation-in-progress', 'remediation-submitted', 'remediation-under-review', 'remediation-approved'],
         }
         const data = persisted as { circulars: Circular[] }
-        return {
-          circulars: data.circulars.map((c) => {
-            const steps = c.workflowSteps ?? []
-            const completedCount = steps.filter(s => s.status === 'completed').length
-            const currentStep = steps.find(s => s.status === 'current')
-            // Only rebuild if: no steps, OR no completed steps AND current is phase 0
-            // (meaning capStatus was never reflected in workflow steps)
-            const hasRealProgress = completedCount > 0 || (currentStep?.phase ?? 0) > 0
-            if (!hasRealProgress) {
-              const ids = capStatusSteps[c.capStatus] ?? []
-              return { ...c, workflowSteps: buildStepsWithProgress(ids) }
-            }
-            return c
-          }),
+        let circulars = data.circulars.map((c) => {
+          const steps = c.workflowSteps ?? []
+          const completedCount = steps.filter(s => s.status === 'completed').length
+          const currentStep = steps.find(s => s.status === 'current')
+          const hasRealProgress = completedCount > 0 || (currentStep?.phase ?? 0) > 0
+          if (!hasRealProgress) {
+            const ids = capStatusSteps[c.capStatus] ?? []
+            return { ...c, workflowSteps: buildStepsWithProgress(ids) }
+          }
+          return c
+        })
+        // v6 → v7: add frameworkIds derived from authority
+        if (ver < 7) {
+          const AUTH_TO_FW: Record<string, string[]> = {
+            SAMA: ['sama'],
+            CMA: ['cma'],
+            ZATCA: ['zatca'],
+            MISA: ['misa'],
+            SAFIU: ['safiu'],
+            IA: [],
+          }
+          circulars = circulars.map((c: any) => ({
+            ...c,
+            frameworkIds: c.frameworkIds ?? (AUTH_TO_FW[c.authority] ?? []),
+          }))
         }
+        return { circulars }
       },
     }
   )
