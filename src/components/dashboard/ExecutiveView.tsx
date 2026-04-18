@@ -257,7 +257,7 @@ export function ExecutiveView({ metrics }: ExecutiveViewProps) {
         <div>
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest">
-              {t('dashboard.pinnedFrameworks')}
+              {t('dashboard.activeFrameworks')}
             </h3>
             <button onClick={() => router.push('/settings')} className="text-xs font-bold text-blue-600 hover:text-blue-700 cursor-pointer">
               {t('dashboard.configure')}

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Modal } from '@/components/ui/modal'
@@ -8,9 +8,11 @@ import { useCircularStore } from '@/stores/circular-store'
 import type { Circular, CircularAuthority, CircularPriority } from '@/types'
 import { useDepartmentStore } from '@/stores/department-store'
 import { useTeamStore } from '@/stores/team-store'
+import { useFrameworkConfigStore } from '@/stores/framework-config-store'
 import { normalizeUrl } from './utils'
 import { FrameworkTagSelector } from '@/components/ui/framework-tag-selector'
 import type { RegulatoryBodyId } from '@/types'
+
 
 type Props = {
   circular: Circular
@@ -39,10 +41,23 @@ export function EditCircularModal({ circular, isOpen, onClose, onSaved, t, isRTL
   const [formAssignedTo, setFormAssignedTo] = useState(circular.assignedTo ?? '')
   const [frameworkIds, setFrameworkIds] = useState<RegulatoryBodyId[]>(circular.frameworkIds ?? [])
 
-  useEffect(() => {
-    const AUTH_TO_FW: Record<string, RegulatoryBodyId[]> = { SAMA: ['sama'], CMA: ['cma'], ZATCA: ['zatca'], MISA: ['misa'], SAFIU: ['safiu'], IA: [] }
-    setFrameworkIds(AUTH_TO_FW[formAuthority] ?? [])
-  }, [formAuthority])
+  // Options = enabled correspondence-based frameworks. The current selection
+  // is always included so editing a circular whose authority was later
+  // disabled doesn't silently switch the value.
+  const frameworksAll = useFrameworkConfigStore((s) => s.frameworks)
+  const authorityOptions = useMemo(() => {
+    const base = frameworksAll
+      .filter((f) => f.enabled && f.correspondenceBased)
+      .map((f) => ({ value: f.id as string, label: isRTL ? f.nameAr : f.name }))
+    if (formAuthority && !base.some((o) => o.value === formAuthority)) {
+      const match = frameworksAll.find((f) => f.id === formAuthority)
+      base.push({
+        value: formAuthority,
+        label: match ? (isRTL ? match.nameAr : match.name) : String(formAuthority),
+      })
+    }
+    return base
+  }, [frameworksAll, formAuthority, isRTL])
 
   function toggleDept(dept: string) {
     setFormDepartments((prev) =>
@@ -82,12 +97,9 @@ export function EditCircularModal({ circular, isOpen, onClose, onSaved, t, isRTL
                 value={formAuthority}
                 onChange={(e) => setFormAuthority(e.target.value as CircularAuthority)}
               >
-                <option value="SAMA">{t('regulatoryUpdates.authoritySAMA')}</option>
-                <option value="CMA">{t('regulatoryUpdates.authorityCMA')}</option>
-                <option value="IA">{t('regulatoryUpdates.authorityIA')}</option>
-                <option value="ZATCA">{t('regulatoryUpdates.authorityZATCA')}</option>
-                <option value="MISA">{t('regulatoryUpdates.authorityMISA')}</option>
-                <option value="SAFIU">{t('regulatoryUpdates.authoritySAFIU')}</option>
+                {authorityOptions.map((opt) => (
+                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                ))}
               </select>
             </div>
 
@@ -205,7 +217,7 @@ export function EditCircularModal({ circular, isOpen, onClose, onSaved, t, isRTL
               />
             </div>
 
-            <FrameworkTagSelector value={frameworkIds} onChange={setFrameworkIds} label="Frameworks" />
+            <FrameworkTagSelector value={frameworkIds} onChange={setFrameworkIds} label="Frameworks" selfAssessmentOnly />
           </div>
         </div>
 

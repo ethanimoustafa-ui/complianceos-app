@@ -110,10 +110,14 @@ export type AuditFrequency = 'annual' | 'semi_annual' | 'quarterly' | 'monthly' 
 export type AuditCategory = 'security_compliance' | 'financial_compliance' | 'regulatory_compliance' | 'operational_compliance' | 'hr_compliance' | 'sharia_compliance'
 export type AuditPriority = 'critical' | 'high' | 'medium' | 'low'
 
+// Audit authority type. 'internal' is always available; the rest are driven at
+// runtime by enabled correspondence-based frameworks in useFrameworkConfigStore.
+export type AuditAuthority = 'internal' | RegulatoryBodyId
+
 export interface Audit {
   id: string
   title: string
-  type: 'internal' | 'sama' | 'sharia'
+  type: AuditAuthority
   status: 'pending' | 'in_progress' | 'completed' | 'overdue'
   dueDate: string
   assignee: User
@@ -135,8 +139,9 @@ export interface Audit {
 
 // Observation types
 export type ObservationSource =
-  | 'sama' | 'cma' | 'ia' | 'zatca' | 'misa' | 'safiu'
+  | 'sama' | 'cma' | 'ia' | 'zatca' | 'misa' | 'safiu' | 'citc'
   | 'internal' | 'sharia'
+  | (string & {})
 export type ObservationSeverity = 'critical' | 'high' | 'medium' | 'low'
 export type ObservationStatus = 'open' | 'in_progress' | 'resolved' | 'closed'
 
@@ -714,7 +719,12 @@ export interface RegulatoryUpdate {
 }
 
 // Circular / Rules types
-export type CircularAuthority = 'SAMA' | 'CMA' | 'IA' | 'ZATCA' | 'MISA' | 'SAFIU'
+// CircularAuthority is the correspondence authority tag stored on circulars and
+// letters. At runtime it's the enabled framework's id (lowercase, e.g., 'sama',
+// 'citc', 'sharia-board', 'custom-abc'). Legacy uppercase values ('SAMA', ...)
+// from older persisted state remain valid strings and are resolved by the
+// display helpers that look up the framework store.
+export type CircularAuthority = string
 export type CircularPriority = 'critical' | 'high' | 'medium' | 'low'
 export type CircularStatus = 'pending' | 'in-progress' | 'completed' | 'overdue'
 export type CircularApplicability = 'applicable' | 'not-applicable' | 'pending'
@@ -1102,14 +1112,14 @@ export type RegulatoryBodyId =
 
 export type ComplianceThreshold = 'strict' | 'standard' | 'relaxed' | 'custom'
 
+// Per-framework weights cover the four correspondence surfaces that generate
+// scoring signal for that authority. Policies, training, and risk posture are
+// department-wide (not authority-owned) and live in compliance-settings-store.
 export type FrameworkWeights = {
   audits: number
   observations: number
   letters: number
-  policies: number
   circulars: number
-  riskPosture: number
-  training: number
 }
 
 export interface FrameworkConfig {
@@ -1127,6 +1137,10 @@ export interface FrameworkConfig {
   alertOnNonCompliance: boolean
   weights: FrameworkWeights
   customFieldValues?: Record<string, string>
+  // True = regulator/authority that raises correspondence (letters, audits, observations)
+  // and participates in compliance scoring. False = internal self-assessment framework
+  // (ISO, COSO, NCA ECC, SDAIA PDPL, etc.) — kept as a tag but excluded from scoring.
+  correspondenceBased: boolean
 }
 
 export interface Department {
@@ -1179,7 +1193,7 @@ export interface AuditTemplate {
   id: string
   name: string
   nameAr?: string
-  auditType: 'internal' | 'sama' | 'sharia'
+  auditType: AuditAuthority
   category: AuditTemplateCategory
   priority: AuditPriority
   frequency: AuditFrequency

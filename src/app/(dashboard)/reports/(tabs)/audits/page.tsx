@@ -154,9 +154,12 @@ export default function ReportsAuditsPage() {
     today.setHours(0, 0, 0, 0)
 
     return storeAudits.map((audit) => {
+      // Presentational source buckets for the filter pills.
+      // Correspondence-based authorities all render as 'sama_inspection'
+      // (external regulator inspection). Internal/Sharia get their own buckets.
       const sourceMap: Record<string, AuditSource> = {
         internal: 'internal_audit',
-        sama: 'sama_inspection',
+        'sharia-board': 'sharia_audit',
         sharia: 'sharia_audit',
       }
 
@@ -189,7 +192,7 @@ export default function ReportsAuditsPage() {
         status: displayStatus,
         priority: (audit.priority || 'medium') as AuditPriority,
         progress: audit.progress,
-        source: sourceMap[audit.type] || 'internal_audit',
+        source: sourceMap[audit.type] ?? 'sama_inspection',
         frequency: (audit.frequency || 'annual') as AuditFrequency,
         category: (audit.category || 'regulatory_compliance') as AuditCategory,
         closedOverdue: audit.closedOverdue,

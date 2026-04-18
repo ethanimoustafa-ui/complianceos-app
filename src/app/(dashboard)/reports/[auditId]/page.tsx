@@ -16,6 +16,8 @@ import { useAuditLogStore, type AuditLog } from '@/stores/audit-log-store'
 import { useAuditTaskStore, type AuditTask } from '@/stores/audit-task-store'
 import { useTeamStore } from '@/stores/team-store'
 import { useAuthStore } from '@/stores/auth-store'
+import { useFrameworkConfigStore } from '@/stores/framework-config-store'
+import type { RegulatoryBodyId } from '@/types'
 import { EditAuditModal } from '@/components/reports/audits/edit-audit-modal'
 import { AddAuditModal } from '@/components/reports/audits/add-audit-modal'
 import type { Audit, AuditDocument, AuditComment } from '@/types'
@@ -49,11 +51,13 @@ export default function AuditDetailPage() {
   const router = useRouter()
   const auditId = params.auditId as string
 
-  // Audit type display names
-  const auditTypeLabels: Record<string, string> = {
-    internal: t('auditDetail.internalAuditType'),
-    sama: t('auditDetail.samaAuditType'),
-    sharia: t('auditDetail.shariaAuditType'),
+  // Audit type label resolver — handles 'internal' (fixed) plus any
+  // RegulatoryBodyId looked up dynamically from the framework store.
+  const getFrameworkById = useFrameworkConfigStore((s) => s.getById)
+  const auditTypeLabel = (type: string): string => {
+    if (type === 'internal') return t('auditDetail.internalAuditType')
+    const fw = getFrameworkById(type as RegulatoryBodyId)
+    return fw ? (isRTL ? fw.nameAr : fw.name) : type
   }
 
   const auditCategoryLabels: Record<string, string> = {
@@ -656,7 +660,7 @@ export default function AuditDetailPage() {
                   <div className={isRTL ? 'text-right' : ''}>
                     <h2 className="text-2xl font-bold font-display text-slate-900 mb-3">{audit?.title || ''}</h2>
                     <p className="text-slate-600 leading-relaxed max-w-2xl">
-                      {audit?.description || (audit?.type ? `${auditTypeLabels[audit.type]} - Progress: ${calculatedProgress}%` : '')}
+                      {audit?.description || (audit?.type ? `${auditTypeLabel(audit.type)} - Progress: ${calculatedProgress}%` : '')}
                     </p>
                   </div>
                   <Badge variant={statusConfig.variant} className="shrink-0 border border-emerald-100">{statusConfig.label}</Badge>
@@ -668,7 +672,7 @@ export default function AuditDetailPage() {
                   </div>
                   <div className={`flex items-center gap-2 text-slate-500`}>
                     <Icon icon="lucide:tag" className="text-lg text-blue-500" />
-                    <span className="text-sm font-medium">{t('auditDetail.type')}: {audit?.type ? auditTypeLabels[audit.type] : '-'}</span>
+                    <span className="text-sm font-medium">{t('auditDetail.type')}: {audit?.type ? auditTypeLabel(audit.type) : '-'}</span>
                   </div>
                   <div className={`flex items-center gap-2 text-slate-500`}>
                     <Icon icon="lucide:clock" className="text-lg text-purple-500" />
@@ -1039,7 +1043,7 @@ export default function AuditDetailPage() {
                   </div>
                   <div className={`flex justify-between items-center`}>
                     <span className="text-xs text-slate-500 uppercase font-bold tracking-wider">{t('auditDetail.type')}</span>
-                    <span className="text-sm font-bold text-slate-900">{audit?.type ? auditTypeLabels[audit.type] : '-'}</span>
+                    <span className="text-sm font-bold text-slate-900">{audit?.type ? auditTypeLabel(audit.type) : '-'}</span>
                   </div>
                   <div className={`flex justify-between items-center`}>
                     <span className="text-xs text-slate-500 uppercase font-bold tracking-wider">{t('auditDetail.categoryLabel')}</span>

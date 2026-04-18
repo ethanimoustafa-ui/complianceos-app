@@ -13,12 +13,14 @@ import { useAuthStore } from '@/stores/auth-store'
 import type { SAMALetter, SAMALetterType, SAMALetterStatus, SAMALetterApprovalStep, Attachment, LetterTemplate, TemplateStatus, CircularAuthority } from '@/types'
 import { useSAMATemplateStore } from '@/stores/sama-template-store'
 import { useTeamStore } from '@/stores/team-store'
+import { useFrameworkConfigStore } from '@/stores/framework-config-store'
+import { resolveAuthorityCode, resolveAuthorityLabel } from '@/lib/authority-display'
 import {
   LETTER_AUTHORITIES,
-  AUTHORITY_FULL_NAMES,
-  AUTHORITY_COLORS,
-  AUTHORITY_DEPARTMENTS,
-  AUTHORITY_RECIPIENT_DEFAULTS,
+  getAuthorityFullName,
+  getAuthorityColors,
+  getAuthorityDepartments,
+  getAuthorityRecipientDefaults,
   getDepartmentLabel,
   getDepartmentEmail,
   getDefaultDepartmentId,
@@ -34,6 +36,51 @@ const LETTER_EMAIL_SUBJECTS: Record<SAMALetterType, { en: string; ar: string }> 
   'inquiry':       { en: 'Regulatory Inquiry',        ar: 'استفسار تنظيمي' },
   'submission':    { en: 'Regulatory Submission',     ar: 'تقديم تنظيمي' },
   'notification':  { en: 'Regulatory Notification',  ar: 'إخطار تنظيمي' },
+}
+
+// Authority <select> that lists every enabled correspondence-based framework
+// plus any hardcoded LETTER_AUTHORITIES the user's data already references.
+// Used by both the draft-letter modal and the template editor.
+function DynamicAuthoritySelect({
+  value,
+  onChange,
+  isRTL,
+}: {
+  value: CircularAuthority
+  onChange: (v: CircularAuthority) => void
+  isRTL: boolean
+}) {
+  const frameworks = useFrameworkConfigStore((s) => s.frameworks)
+  const options = useMemo(() => {
+    const seedOpts = frameworks
+      .filter((f) => f.enabled && f.correspondenceBased)
+      .map((f) => ({
+        value: f.id as CircularAuthority,
+        label: `${f.name} — ${isRTL ? f.nameAr : f.name}`,
+      }))
+    // Ensure the current value is selectable even if its framework was
+    // later disabled or still uses a legacy uppercase id.
+    if (value && !seedOpts.some((o) => o.value === value)) {
+      const match = frameworks.find((f) => f.id.toLowerCase() === String(value).toLowerCase())
+      seedOpts.push({
+        value,
+        label: match ? (isRTL ? match.nameAr : match.name) : String(value),
+      })
+    }
+    return seedOpts
+  }, [frameworks, value, isRTL])
+
+  return (
+    <select
+      value={value}
+      onChange={(e) => onChange(e.target.value as CircularAuthority)}
+      className="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-sm font-medium focus:ring-2 focus:ring-emerald-500 outline-none"
+    >
+      {options.map((opt) => (
+        <option key={opt.value} value={opt.value}>{opt.label}</option>
+      ))}
+    </select>
+  )
 }
 
 function buildLetterEmailBody(type: SAMALetterType, lang: 'en' | 'ar', reference: string, subject: string): string {
@@ -60,7 +107,10 @@ function getRecipientDefaults(
   authority: CircularAuthority,
   deptId: string,
 ): { en: { name: string; org: string; city: string }; ar: { name: string; org: string; city: string } } {
-  const auth = AUTHORITY_RECIPIENT_DEFAULTS[authority]
+  const auth = getAuthorityRecipientDefaults(authority) ?? {
+    en: { org: authority ?? '', city: '' },
+    ar: { org: authority ?? '', city: '' },
+  }
   return {
     en: { name: getDepartmentLabel(authority, deptId, 'en'), org: auth.en.org, city: auth.en.city },
     ar: { name: getDepartmentLabel(authority, deptId, 'ar'), org: auth.ar.org, city: auth.ar.city },
@@ -194,6 +244,7 @@ export default function SAMALettersPage() {
   const { user } = useAuthStore()
   const currentUser = user?.name || 'Current User'
   const teamMembers = useTeamStore(s => s.members)
+  const storeFrameworks = useFrameworkConfigStore(s => s.frameworks)
   const selectedLetter = store.selectedLetter
   const letterContentRef = useRef<HTMLDivElement>(null)
 
@@ -314,8 +365,8 @@ export default function SAMALettersPage() {
       if (authorityFilter.size > 0 && !authorityFilter.has(l.authority)) return false
       if (dateThreshold > 0 && new Date(l.updatedAt).getTime() < dateThreshold) return false
       if (q) {
-        const fullEn = AUTHORITY_FULL_NAMES[l.authority]?.en.toLowerCase() ?? ''
-        const fullAr = AUTHORITY_FULL_NAMES[l.authority]?.ar ?? ''
+        const fullEn = getAuthorityFullName(l.authority, 'en').toLowerCase()
+        const fullAr = getAuthorityFullName(l.authority, 'ar')
         const haystack = [
           l.subject,
           l.subjectAr ?? '',
@@ -726,15 +777,16 @@ export default function SAMALettersPage() {
 
   // Authority badge helper used in table & detail metadata
   const renderAuthorityBadge = (authority: CircularAuthority, opts?: { showFull?: boolean; size?: 'sm' | 'md' }) => {
-    const colors = AUTHORITY_COLORS[authority]
+    const colors = getAuthorityColors(authority)
+    const code = resolveAuthorityCode(authority, storeFrameworks)
     const size = opts?.size ?? 'sm'
     const full = opts?.showFull
-      ? (isRTL ? AUTHORITY_FULL_NAMES[authority].ar : AUTHORITY_FULL_NAMES[authority].en)
+      ? getAuthorityFullName(authority, isRTL ? 'ar' : 'en')
       : null
     return (
       <span className={`inline-flex items-center gap-1 ${size === 'md' ? 'px-2.5 py-1 text-xs' : 'px-2 py-0.5 text-[10px]'} font-bold rounded-md border ${colors.bg} ${colors.text} ${colors.border}`}>
         <span className={`w-1.5 h-1.5 rounded-full ${colors.dot}`} />
-        {authority}
+        {code}
         {full && <span className="font-medium opacity-75 truncate max-w-[160px]">{full}</span>}
       </span>
     )
@@ -1146,23 +1198,26 @@ export default function SAMALettersPage() {
                         <div>
                           <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">{t('samaLetters.filterByAuthority')}</p>
                           <div className="grid grid-cols-3 gap-1.5">
-                            {LETTER_AUTHORITIES.map((a) => {
-                              const checked = authorityFilter.has(a)
-                              const colors = AUTHORITY_COLORS[a]
-                              return (
-                                <button
-                                  key={a}
-                                  onClick={() => toggleAuthorityFilter(a)}
-                                  className={`px-2 py-1.5 rounded-lg text-[11px] font-bold border transition-colors cursor-pointer ${
-                                    checked
-                                      ? `${colors.bg} ${colors.text} ${colors.border}`
-                                      : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'
-                                  }`}
-                                >
-                                  {a}
-                                </button>
-                              )
-                            })}
+                            {storeFrameworks
+                              .filter((f) => f.enabled && f.correspondenceBased)
+                              .map((f) => {
+                                const a = f.id
+                                const checked = authorityFilter.has(a)
+                                const colors = getAuthorityColors(a)
+                                return (
+                                  <button
+                                    key={a}
+                                    onClick={() => toggleAuthorityFilter(a)}
+                                    className={`px-2 py-1.5 rounded-lg text-[11px] font-bold border transition-colors cursor-pointer ${
+                                      checked
+                                        ? `${colors.bg} ${colors.text} ${colors.border}`
+                                        : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'
+                                    }`}
+                                  >
+                                    {resolveAuthorityCode(a, storeFrameworks)}
+                                  </button>
+                                )
+                              })}
                           </div>
                         </div>
                         <div>
@@ -1654,7 +1709,7 @@ export default function SAMALettersPage() {
                           onBlur={() => setEditingMeta(null)}
                           className="text-xs font-bold text-slate-900 bg-transparent border-b border-dashed border-slate-400 focus:outline-none cursor-pointer"
                         >
-                          {AUTHORITY_DEPARTMENTS[selectedLetter.authority].map((d) => (
+                          {getAuthorityDepartments(selectedLetter.authority).map((d) => (
                             <option key={d.id} value={d.id}>
                               {isRTL ? d.ar : d.en}
                             </option>
@@ -2235,16 +2290,16 @@ function CreateLetterForm({
   const [bodyEn, setBodyEn] = useState('')
   const [bodyAr, setBodyAr] = useState('')
   const [subCategory, setSubCategory] = useState<string>('key-function')
-  const [authority, setAuthority] = useState<CircularAuthority>(template?.defaultAuthority ?? 'SAMA')
+  const [authority, setAuthority] = useState<CircularAuthority>(template?.defaultAuthority ?? 'sama')
   const [samaDepartment, setSamaDepartment] = useState<string>(
-    template?.defaultSamaDepartment || getDefaultDepartmentId(template?.defaultAuthority ?? 'SAMA'),
+    template?.defaultSamaDepartment || getDefaultDepartmentId(template?.defaultAuthority ?? 'sama'),
   )
   const createAttachFileRef = useRef<HTMLInputElement>(null)
   const [draftAttachments, setDraftAttachments] = useState<Attachment[]>([])
 
   // When authority changes, reset department to that authority's first option
   useEffect(() => {
-    const validIds = AUTHORITY_DEPARTMENTS[authority].map((d) => d.id)
+    const validIds = getAuthorityDepartments(authority).map((d) => d.id)
     if (!validIds.includes(samaDepartment)) {
       setSamaDepartment(getDefaultDepartmentId(authority))
     }
@@ -2364,17 +2419,11 @@ function CreateLetterForm({
         <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-2">
           {t('samaLetters.authorityField')}
         </label>
-        <select
+        <DynamicAuthoritySelect
           value={authority}
-          onChange={(e) => setAuthority(e.target.value as CircularAuthority)}
-          className="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-sm font-medium focus:ring-2 focus:ring-emerald-500 outline-none"
-        >
-          {LETTER_AUTHORITIES.map((a) => (
-            <option key={a} value={a}>
-              {a} — {isRTL ? AUTHORITY_FULL_NAMES[a].ar : AUTHORITY_FULL_NAMES[a].en}
-            </option>
-          ))}
-        </select>
+          onChange={(v) => setAuthority(v as CircularAuthority)}
+          isRTL={isRTL}
+        />
       </div>
 
       <div className="grid grid-cols-2 gap-8 mb-8">
@@ -2425,7 +2474,7 @@ function CreateLetterForm({
               onChange={(e) => setSamaDepartment(e.target.value)}
               className="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-sm font-medium focus:ring-2 focus:ring-emerald-500 outline-none"
             >
-              {AUTHORITY_DEPARTMENTS[authority].map((d) => (
+              {getAuthorityDepartments(authority).map((d) => (
                 <option key={d.id} value={d.id}>
                   {isRTL ? d.ar : d.en}
                 </option>
@@ -2666,9 +2715,9 @@ function TemplateEditForm({
   const [defaultSignerNameAr, setDefaultSignerNameAr]   = useState(template?.defaultSignerNameAr || '')
   const [defaultSignerTitleAr, setDefaultSignerTitleAr] = useState(template?.defaultSignerTitleAr || '')
   const [defaultSignatureImageUrl, setDefaultSignatureImageUrl] = useState(template?.defaultSignatureImageUrl || '')
-  const [defaultAuthority, setDefaultAuthority] = useState<CircularAuthority>(template?.defaultAuthority || 'SAMA')
+  const [defaultAuthority, setDefaultAuthority] = useState<CircularAuthority>(template?.defaultAuthority || 'sama')
   const [defaultSamaDepartment, setDefaultSamaDepartment] = useState<string>(
-    template?.defaultSamaDepartment || getDefaultDepartmentId(template?.defaultAuthority || 'SAMA'),
+    template?.defaultSamaDepartment || getDefaultDepartmentId(template?.defaultAuthority || 'sama'),
   )
   const [defaultRecipientName, setDefaultRecipientName]     = useState(template?.defaultRecipientName || '')
   const [defaultRecipientOrg, setDefaultRecipientOrg]       = useState(template?.defaultRecipientOrg || '')
@@ -3059,17 +3108,11 @@ function TemplateEditForm({
               <label className={`text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-2`}>
                 {t('samaLetters.authorityField')}
               </label>
-              <select
+              <DynamicAuthoritySelect
                 value={defaultAuthority}
-                onChange={(e) => handleAuthorityChange(e.target.value as CircularAuthority)}
-                className={`w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-sm font-medium focus:ring-2 focus:ring-emerald-500 outline-none`}
-              >
-                {LETTER_AUTHORITIES.map((a) => (
-                  <option key={a} value={a}>
-                    {a} — {isRTL ? AUTHORITY_FULL_NAMES[a].ar : AUTHORITY_FULL_NAMES[a].en}
-                  </option>
-                ))}
-              </select>
+                onChange={(v) => handleAuthorityChange(v as CircularAuthority)}
+                isRTL={isRTL}
+              />
             </div>
             <div>
               <label className={`text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-2`}>
@@ -3080,7 +3123,7 @@ function TemplateEditForm({
                 onChange={(e) => handleDeptChange(e.target.value)}
                 className={`w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-sm font-medium focus:ring-2 focus:ring-emerald-500 outline-none`}
               >
-                {AUTHORITY_DEPARTMENTS[defaultAuthority].map((d) => (
+                {getAuthorityDepartments(defaultAuthority).map((d) => (
                   <option key={d.id} value={d.id}>
                     {isRTL ? d.ar : d.en}
                   </option>

@@ -776,7 +776,14 @@ export default function ReportsExecutivePage() {
       <Drawer isOpen={isDrawerOpen} onClose={() => setIsDrawerOpen(false)} size="md" hideBackdrop isRTL={isRTL}>
         {selectedFinding && (() => {
           const sourceAudit = storeAudits.find(a => a.id === selectedFinding.sourceAuditId)
-          const auditTypeLabels: Record<string, string> = { sama: t('reports.samaInspection'), internal: t('reports.internalAudit'), sharia: t('reports.shariaAudit') }
+          // Presentational label map. Dynamic correspondence-based types
+          // fall through to a generic inspection label + framework name.
+          const auditTypeLabels: Record<string, string> = {
+            sama: t('reports.samaInspection'),
+            internal: t('reports.internalAudit'),
+            'sharia-board': t('reports.shariaAudit'),
+            sharia: t('reports.shariaAudit'),
+          }
           const docTypeIcons: Record<string, string> = { pdf: 'lucide:file-text', image: 'lucide:image', doc: 'lucide:file' }
           const docTypeColors: Record<string, string> = { pdf: 'text-rose-500', image: 'text-blue-500', doc: 'text-emerald-500' }
           return (

@@ -10,7 +10,7 @@ interface ModalProps {
   title?: string
   subtitle?: string
   children: React.ReactNode
-  size?: 'sm' | 'md' | 'lg' | 'xl'
+  size?: 'sm' | 'md' | 'lg' | 'xl' | '2xl'
 }
 
 const sizeClasses = {
@@ -18,6 +18,7 @@ const sizeClasses = {
   md: 'max-w-lg',
   lg: 'max-w-2xl',
   xl: 'max-w-4xl',
+  '2xl': 'max-w-5xl',
 }
 
 export function Modal({ isOpen, onClose, title, subtitle, children, size = 'md' }: ModalProps) {

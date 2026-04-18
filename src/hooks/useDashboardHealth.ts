@@ -25,19 +25,31 @@ export function useDashboardHealth(): DashboardHealthResult {
   const frameworks = useFrameworkConfigStore(s => s.frameworks)
   const pinnedIds = useFrameworkConfigStore(s => s.pinnedIds)
   const targetScore = useComplianceSettingsStore(s => s.targetScore)
+  const globalWeights = useComplianceSettingsStore(s => s.weights)
 
+  // Only correspondence-based pinned frameworks get dashboard gauges —
+  // self-assessment frameworks don't produce scoring signal.
   const pinnedFrameworks = useMemo(() => {
     return pinnedIds
       .map(id => frameworks.find(f => f.id === id))
-      .filter((f): f is FrameworkConfig => !!f)
+      .filter((f): f is FrameworkConfig => !!f && f.correspondenceBased)
       .map(f => ({ id: f.id, name: f.name, weights: f.weights }))
   }, [pinnedIds, frameworks])
 
-  // Primary weights = first pinned framework's weights, or balanced default
+  // Primary weights = first pinned framework's 4 correspondence weights,
+  // merged with department-wide globals for policies/risk/training. Fallback
+  // when no framework is pinned keeps every surface live at a balanced split.
   const primaryWeights = useMemo(() => {
-    if (pinnedFrameworks.length > 0) return pinnedFrameworks[0].weights
-    return { audits: 20, observations: 15, letters: 10, policies: 20, circulars: 10, riskPosture: 15, training: 10 }
-  }, [pinnedFrameworks])
+    const fw = pinnedFrameworks.length > 0
+      ? pinnedFrameworks[0].weights
+      : { audits: 30, observations: 25, letters: 20, circulars: 25 }
+    return {
+      ...fw,
+      policies: globalWeights.policyCurrency,
+      riskPosture: globalWeights.riskPosture,
+      training: globalWeights.trainingCompletion,
+    }
+  }, [pinnedFrameworks, globalWeights])
 
   return useMemo(
     () =>

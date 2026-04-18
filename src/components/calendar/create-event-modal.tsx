@@ -5,8 +5,6 @@ import { Icon } from '@iconify/react'
 import { cn } from '@/lib/utils'
 import { useTranslation } from '@/i18n'
 import { useCalendarStore } from '@/stores/calendar-store'
-import { FrameworkTagSelector } from '@/components/ui/framework-tag-selector'
-import type { RegulatoryBodyId } from '@/types'
 
 interface CreateEventModalProps {
   isOpen: boolean
@@ -26,11 +24,9 @@ export function CreateEventModal({ isOpen, onClose, onSuccess }: CreateEventModa
     startTime: '',
     endTime: '',
   })
-  const [frameworkIds, setFrameworkIds] = useState<RegulatoryBodyId[]>([])
 
   const handleClose = () => {
     setForm({ title: '', date: '', type: 'meeting', description: '', startTime: '', endTime: '' })
-    setFrameworkIds([])
     onClose()
   }
 
@@ -46,12 +42,10 @@ export function CreateEventModal({ isOpen, onClose, onSuccess }: CreateEventModa
       endTime: form.endTime || undefined,
       attendees: [],
       reminders: [],
-      frameworkIds,
     })
 
     onSuccess?.(form.date)
     setForm({ title: '', date: '', type: 'meeting', description: '', startTime: '', endTime: '' })
-    setFrameworkIds([])
     onClose()
   }
 
@@ -131,7 +125,6 @@ export function CreateEventModal({ isOpen, onClose, onSuccess }: CreateEventModa
               />
             </div>
           </div>
-          <FrameworkTagSelector value={frameworkIds} onChange={setFrameworkIds} label="Frameworks" />
           <div>
             <label className={`block text-xs font-bold text-slate-500 uppercase mb-1.5 ${isRTL ? 'text-right' : ''}`}>
               {t('common.description')}

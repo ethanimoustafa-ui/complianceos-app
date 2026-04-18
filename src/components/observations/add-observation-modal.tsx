@@ -77,11 +77,6 @@ export const AddObservationModal = memo(function AddObservationModal({ isOpen, o
   const [touched, setTouched] = useState<Record<string, boolean>>({})
   const [frameworkIds, setFrameworkIds] = useState<RegulatoryBodyId[]>([])
 
-  useEffect(() => {
-    const SOURCE_TO_FW: Record<string, RegulatoryBodyId[]> = { sama: ['sama'], sharia: ['sharia-board'], internal: [] }
-    setFrameworkIds(SOURCE_TO_FW[formData.source] ?? [])
-  }, [formData.source])
-
   const handleSourceSelect = (source: ObservationSource) => {
     setFormData((prev) => ({ ...prev, source }))
   }
@@ -421,7 +416,7 @@ export const AddObservationModal = memo(function AddObservationModal({ isOpen, o
               </div>
 
               <div className="col-span-2">
-                <FrameworkTagSelector value={frameworkIds} onChange={setFrameworkIds} label="Frameworks" />
+                <FrameworkTagSelector value={frameworkIds} onChange={setFrameworkIds} label="Frameworks" selfAssessmentOnly />
               </div>
 
               <div className="col-span-2">

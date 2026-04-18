@@ -3,6 +3,7 @@ import type {
   DashboardHealthInput,
   DashboardHealthResult,
   DashboardHealthComponentKey,
+  DashboardWeights,
   FrameworkHealthScore,
   LetterSlice,
   CircularSlice,
@@ -101,7 +102,7 @@ export function calcCircularHealth(circulars: CircularSlice[], weight: number): 
 
 function computeComponents(
   input: DashboardHealthInput,
-  weights: FrameworkWeights
+  weights: DashboardWeights
 ): Record<DashboardHealthComponentKey, ComponentScore> {
   return {
     audits: calcAuditCompletion(input.audits, weights.audits),
@@ -251,9 +252,18 @@ function generateHealthDeductions(
 // ── Main orchestrator ────────────────────────────────────────────────
 
 export function calculateDashboardHealth(input: DashboardHealthInput): DashboardHealthResult {
-  // Primary framework = first pinned → drives overall score
-  const primaryWeights = input.pinnedFrameworks.length > 0
-    ? input.pinnedFrameworks[0].weights
+  // Frameworks own the 4 correspondence weights; policies/risk/training are
+  // department-wide. Merge the pinned framework's weights with those globals
+  // to produce the 7-key DashboardWeights the component functions expect.
+  const mergeWeights = (fw: FrameworkWeights): DashboardWeights => ({
+    ...fw,
+    policies: input.frameworkWeights.policies,
+    riskPosture: input.frameworkWeights.riskPosture,
+    training: input.frameworkWeights.training,
+  })
+
+  const primaryWeights: DashboardWeights = input.pinnedFrameworks.length > 0
+    ? mergeWeights(input.pinnedFrameworks[0].weights)
     : input.frameworkWeights
 
   // Compute primary 7-component breakdown
@@ -274,7 +284,7 @@ export function calculateDashboardHealth(input: DashboardHealthInput): Dashboard
       risks: input.risks.filter(r => r.frameworkIds?.includes(fw.id)),
       trainings: input.trainings.filter(t => t.frameworkIds?.includes(fw.id)),
     }
-    const fwComponents = computeComponents(filteredInput, fw.weights)
+    const fwComponents = computeComponents(filteredInput, mergeWeights(fw.weights))
     const fwOverall = calcOverall(fwComponents)
     return {
       frameworkId: fw.id,

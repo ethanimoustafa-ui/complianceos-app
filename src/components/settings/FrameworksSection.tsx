@@ -7,6 +7,7 @@ import { useFrameworkConfigStore } from '@/stores/framework-config-store'
 import { useTranslation } from '@/i18n'
 import { RoleGuard } from '@/components/auth/role-guard'
 import { FrameworkConfigModal } from './FrameworkConfigModal'
+import { AddFrameworkModal } from './AddFrameworkModal'
 import type { RegulatoryBodyId, FrameworkConfig } from '@/types'
 
 const iconColorMap: Record<string, string> = {
@@ -27,6 +28,7 @@ export function FrameworksSection() {
   const { frameworks, toggleEnabled, pinnedIds, pinFramework, unpinFramework, replacePinned } = useFrameworkConfigStore()
   const [configureId, setConfigureId] = useState<RegulatoryBodyId | null>(null)
   const [showAllModal, setShowAllModal] = useState(false)
+  const [showAddModal, setShowAddModal] = useState(false)
   const [replaceDropdownFor, setReplaceDropdownFor] = useState<RegulatoryBodyId | null>(null)
   const [allSearchQuery, setAllSearchQuery] = useState('')
 
@@ -41,6 +43,8 @@ export function FrameworksSection() {
       f.description.toLowerCase().includes(q)
     )
   })
+  const correspondenceFiltered = allFiltered.filter((f) => f.correspondenceBased)
+  const selfAssessmentFiltered = allFiltered.filter((f) => !f.correspondenceBased)
 
   function handlePin(id: RegulatoryBodyId) {
     if (pinnedIds.includes(id)) {
@@ -55,6 +59,94 @@ export function FrameworksSection() {
   function handleReplace(oldId: RegulatoryBodyId, newId: RegulatoryBodyId) {
     replacePinned(oldId, newId)
     setReplaceDropdownFor(null)
+  }
+
+  function renderFrameworkRow(fw: FrameworkConfig) {
+    const name = language === 'ar' ? fw.nameAr : fw.name
+    const isPinned = pinnedIds.includes(fw.id)
+    return (
+      <div
+        key={fw.id}
+        className="flex items-center justify-between p-4 border border-slate-200 rounded-xl hover:border-slate-300 transition-colors"
+      >
+        <div className="flex items-center gap-3">
+          <div className={`p-2 ${iconColorMap[fw.iconColor] || 'bg-slate-50 text-slate-600'} rounded-lg`}>
+            <Icon icon={fw.icon} className="text-lg" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <p className="text-sm font-bold text-slate-900">{name}</p>
+              {isPinned && <Icon icon="lucide:pin" className="text-emerald-500 text-xs" />}
+            </div>
+            <p className="text-xs text-slate-500">
+              {language === 'ar' ? fw.descriptionAr : fw.description}
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-3 shrink-0">
+          {/* Pin button — correspondence-based only. Self-assessment
+              frameworks aren't pinnable because pinning drives the scored
+              dashboard, which excludes them. */}
+          {fw.correspondenceBased && (
+            <div className="relative">
+              <button
+                onClick={() => handlePin(fw.id)}
+                className={`text-sm transition-colors cursor-pointer ${
+                  isPinned ? 'text-emerald-500 hover:text-emerald-600' : 'text-slate-300 hover:text-slate-500'
+                }`}
+                title={isPinned ? t('settings.unpinFramework') : t('settings.pinFramework')}
+              >
+                <Icon icon={isPinned ? 'lucide:pin-off' : 'lucide:pin'} />
+              </button>
+              {replaceDropdownFor === fw.id && (
+                <div className="absolute top-8 end-0 z-10 bg-white border border-slate-200 rounded-xl shadow-lg p-3 w-56">
+                  <p className="text-xs font-bold text-slate-700 mb-2">{t('settings.replacePin')}</p>
+                  {pinnedIds.map((pid) => {
+                    const pinFw = frameworks.find((f) => f.id === pid)
+                    if (!pinFw) return null
+                    return (
+                      <button
+                        key={pid}
+                        onClick={() => handleReplace(pid, fw.id)}
+                        className="w-full text-start text-xs text-slate-600 hover:bg-slate-50 px-2 py-1.5 rounded-lg cursor-pointer"
+                      >
+                        {language === 'ar' ? pinFw.nameAr : pinFw.name}
+                      </button>
+                    )
+                  })}
+                  <button
+                    onClick={() => setReplaceDropdownFor(null)}
+                    className="w-full text-start text-xs text-slate-400 hover:text-slate-600 px-2 py-1 mt-1 cursor-pointer"
+                  >
+                    {t('common.cancel')}
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+          <button
+            className={`w-9 h-5 rounded-full relative transition-colors cursor-pointer ${
+              fw.enabled ? 'bg-emerald-500' : 'bg-slate-200'
+            }`}
+            onClick={() => toggleEnabled(fw.id)}
+          >
+            <span
+              className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${
+                fw.enabled ? 'start-4' : 'start-0.5'
+              }`}
+            />
+          </button>
+          <RoleGuard adminOnly hidden>
+            <button
+              onClick={() => { setShowAllModal(false); setConfigureId(fw.id) }}
+              className="text-xs font-bold text-slate-400 hover:text-slate-700 cursor-pointer"
+            >
+              {t('settings.configure')}
+            </button>
+          </RoleGuard>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -101,103 +193,56 @@ export function FrameworksSection() {
         size="xl"
       >
         <div className="space-y-4">
-          <div className="relative">
-            <Icon icon="lucide:search" className="absolute start-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm" />
-            <input
-              type="text"
-              value={allSearchQuery}
-              onChange={(e) => setAllSearchQuery(e.target.value)}
-              placeholder={t('settings.searchFrameworks')}
-              className="w-full ps-9 pe-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
-            />
+          <div className="flex items-center gap-2">
+            <div className="relative flex-1">
+              <Icon icon="lucide:search" className="absolute start-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm" />
+              <input
+                type="text"
+                value={allSearchQuery}
+                onChange={(e) => setAllSearchQuery(e.target.value)}
+                placeholder={t('settings.searchFrameworks')}
+                className="w-full ps-9 pe-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+              />
+            </div>
+            <RoleGuard adminOnly hidden>
+              <button
+                onClick={() => setShowAddModal(true)}
+                className="shrink-0 inline-flex items-center gap-1.5 px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold rounded-xl cursor-pointer transition-colors"
+              >
+                <Icon icon="lucide:plus" className="text-sm" />
+                <span>{t('settings.addFramework')}</span>
+              </button>
+            </RoleGuard>
           </div>
-          <div className="max-h-[60vh] overflow-y-auto space-y-2">
-            {allFiltered.map((fw) => {
-              const name = language === 'ar' ? fw.nameAr : fw.name
-              const isPinned = pinnedIds.includes(fw.id)
-              return (
-                <div
-                  key={fw.id}
-                  className="flex items-center justify-between p-4 border border-slate-200 rounded-xl hover:border-slate-300 transition-colors"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className={`p-2 ${iconColorMap[fw.iconColor] || 'bg-slate-50 text-slate-600'} rounded-lg`}>
-                      <Icon icon={fw.icon} className="text-lg" />
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <p className="text-sm font-bold text-slate-900">{name}</p>
-                        {isPinned && <Icon icon="lucide:pin" className="text-emerald-500 text-xs" />}
-                      </div>
-                      <p className="text-xs text-slate-500">
-                        {language === 'ar' ? fw.descriptionAr : fw.description}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-3 shrink-0">
-                    {/* Pin button */}
-                    <div className="relative">
-                      <button
-                        onClick={() => handlePin(fw.id)}
-                        className={`text-sm transition-colors cursor-pointer ${
-                          isPinned ? 'text-emerald-500 hover:text-emerald-600' : 'text-slate-300 hover:text-slate-500'
-                        }`}
-                        title={isPinned ? t('settings.unpinFramework') : t('settings.pinFramework')}
-                      >
-                        <Icon icon={isPinned ? 'lucide:pin-off' : 'lucide:pin'} />
-                      </button>
-                      {/* Replace dropdown */}
-                      {replaceDropdownFor === fw.id && (
-                        <div className="absolute top-8 end-0 z-10 bg-white border border-slate-200 rounded-xl shadow-lg p-3 w-56">
-                          <p className="text-xs font-bold text-slate-700 mb-2">{t('settings.replacePin')}</p>
-                          {pinnedIds.map((pid) => {
-                            const pinFw = frameworks.find((f) => f.id === pid)
-                            if (!pinFw) return null
-                            return (
-                              <button
-                                key={pid}
-                                onClick={() => handleReplace(pid, fw.id)}
-                                className="w-full text-start text-xs text-slate-600 hover:bg-slate-50 px-2 py-1.5 rounded-lg cursor-pointer"
-                              >
-                                {language === 'ar' ? pinFw.nameAr : pinFw.name}
-                              </button>
-                            )
-                          })}
-                          <button
-                            onClick={() => setReplaceDropdownFor(null)}
-                            className="w-full text-start text-xs text-slate-400 hover:text-slate-600 px-2 py-1 mt-1 cursor-pointer"
-                          >
-                            {t('common.cancel')}
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                    {/* Enable toggle */}
-                    <button
-                      className={`w-9 h-5 rounded-full relative transition-colors cursor-pointer ${
-                        fw.enabled ? 'bg-emerald-500' : 'bg-slate-200'
-                      }`}
-                      onClick={() => toggleEnabled(fw.id)}
-                    >
-                      <span
-                        className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${
-                          fw.enabled ? 'start-4' : 'start-0.5'
-                        }`}
-                      />
-                    </button>
-                    {/* Configure */}
-                    <RoleGuard adminOnly hidden>
-                      <button
-                        onClick={() => { setShowAllModal(false); setConfigureId(fw.id) }}
-                        className="text-xs font-bold text-slate-400 hover:text-slate-700 cursor-pointer"
-                      >
-                        {t('settings.configure')}
-                      </button>
-                    </RoleGuard>
-                  </div>
+          <div className="max-h-[60vh] overflow-y-auto space-y-6">
+            {correspondenceFiltered.length > 0 && (
+              <section>
+                <div className="flex items-center gap-3 mb-3">
+                  <h4 className="text-[11px] font-black uppercase tracking-widest text-indigo-700 shrink-0">
+                    {t('settings.correspondenceBased')}
+                  </h4>
+                  <div className="flex-1 h-px bg-gradient-to-r from-indigo-200 to-transparent" />
+                  <span className="text-[10px] font-bold text-slate-400">{correspondenceFiltered.length}</span>
                 </div>
-              )
-            })}
+                <div className="space-y-2">
+                  {correspondenceFiltered.map((fw) => renderFrameworkRow(fw))}
+                </div>
+              </section>
+            )}
+            {selfAssessmentFiltered.length > 0 && (
+              <section>
+                <div className="flex items-center gap-3 mb-3">
+                  <h4 className="text-[11px] font-black uppercase tracking-widest text-slate-500 shrink-0">
+                    {t('settings.selfAssessment')}
+                  </h4>
+                  <div className="flex-1 h-px bg-gradient-to-r from-slate-200 to-transparent" />
+                  <span className="text-[10px] font-bold text-slate-400">{selfAssessmentFiltered.length}</span>
+                </div>
+                <div className="space-y-2">
+                  {selfAssessmentFiltered.map((fw) => renderFrameworkRow(fw))}
+                </div>
+              </section>
+            )}
           </div>
         </div>
       </Modal>
@@ -209,6 +254,8 @@ export function FrameworksSection() {
           onClose={() => setConfigureId(null)}
         />
       )}
+
+      <AddFrameworkModal isOpen={showAddModal} onClose={() => setShowAddModal(false)} />
     </section>
   )
 }
@@ -268,7 +315,19 @@ function FrameworkCard({
         </div>
       </div>
 
-      <h3 className="font-bold text-slate-900">{name}</h3>
+      <div className="flex items-center gap-2 flex-wrap">
+        <h3 className="font-bold text-slate-900">{name}</h3>
+        <span
+          className={`text-[9px] font-black uppercase px-1.5 py-0.5 rounded-md border ${
+            framework.correspondenceBased
+              ? 'text-indigo-700 bg-indigo-50 border-indigo-200'
+              : 'text-slate-600 bg-slate-50 border-slate-200'
+          }`}
+          title={framework.correspondenceBased ? t('settings.correspondenceBasedHelp') : t('settings.selfAssessmentHelp')}
+        >
+          {framework.correspondenceBased ? t('settings.correspondenceBadge') : t('settings.selfAssessmentBadge')}
+        </span>
+      </div>
       <p className="text-xs text-slate-500 mt-1 mb-4">{description}</p>
       <div className="flex items-center justify-between pt-4 border-t border-slate-50">
         <span className={`text-[10px] font-black ${framework.enabled ? 'text-emerald-600' : 'text-slate-400'}`}>

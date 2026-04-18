@@ -27,6 +27,15 @@ export interface CircularSlice {
   frameworkIds?: string[]
 }
 
+// Dashboard combines per-framework weights (audits/observations/letters/circulars)
+// with department-wide weights for policy/risk/training, producing a 7-component
+// health snapshot.
+export type DashboardWeights = FrameworkWeights & {
+  policies: number
+  riskPosture: number
+  training: number
+}
+
 // Input for the dashboard health engine
 export interface DashboardHealthInput {
   audits: import('./compliance-engine.types').AuditSlice[]
@@ -36,7 +45,7 @@ export interface DashboardHealthInput {
   trainings: { completionRate: number; frameworkIds?: string[] }[]
   letters: LetterSlice[]
   circulars: CircularSlice[]
-  frameworkWeights: FrameworkWeights
+  frameworkWeights: DashboardWeights
   pinnedFrameworks: Array<{ id: string; name: string; weights: FrameworkWeights }>
   targetScore: number
 }

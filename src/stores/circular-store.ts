@@ -134,7 +134,7 @@ const seedCirculars: Circular[] = [
   {
     id: 'circ-001',
     reference: 'SAMA-2026-001',
-    authority: 'SAMA',
+    authority: 'sama',
     title: 'ESG Disclosure & Reporting Framework',
     priority: 'critical',
     status: 'in-progress',
@@ -203,7 +203,7 @@ const seedCirculars: Circular[] = [
   {
     id: 'circ-002',
     reference: 'SAMA-2026-002',
-    authority: 'SAMA',
+    authority: 'sama',
     title: 'Open Banking API Security Standards V2',
     priority: 'high',
     status: 'in-progress',
@@ -237,7 +237,7 @@ const seedCirculars: Circular[] = [
   {
     id: 'circ-003',
     reference: 'SAMA-2025-047',
-    authority: 'SAMA',
+    authority: 'sama',
     title: 'Anti-Money Laundering Guidelines Update',
     priority: 'critical',
     status: 'overdue',
@@ -276,7 +276,7 @@ const seedCirculars: Circular[] = [
   {
     id: 'circ-004',
     reference: 'CMA-2026-001',
-    authority: 'CMA',
+    authority: 'cma',
     title: 'Capital Market Conduct Rules Revision',
     priority: 'high',
     status: 'pending',
@@ -308,7 +308,7 @@ const seedCirculars: Circular[] = [
   {
     id: 'circ-005',
     reference: 'SAMA-2025-031',
-    authority: 'SAMA',
+    authority: 'sama',
     title: 'Consumer Protection Rulebook V2.1',
     priority: 'low',
     status: 'completed',
@@ -1081,7 +1081,7 @@ export const useCircularStore = create<CircularState>()(
     }),
     {
       name: 'circular-storage',
-      version: 7,
+      version: 8,
       partialize: (state) => ({ circulars: state.circulars }),
       migrate: (persisted: unknown, ver: number) => {
         if (ver < 4) return { circulars: seedCirculars }
@@ -1121,6 +1121,20 @@ export const useCircularStore = create<CircularState>()(
           circulars = circulars.map((c: any) => ({
             ...c,
             frameworkIds: c.frameworkIds ?? (AUTH_TO_FW[c.authority] ?? []),
+          }))
+        }
+        // v7 → v8: authority values are now lowercase framework ids ('sama',
+        // 'cma', 'ia', 'zatca', 'misa', 'safiu', 'citc', 'sharia-board').
+        // Map legacy uppercase values to their framework-id equivalents.
+        if (ver < 8) {
+          const UPPER_TO_ID: Record<string, string> = {
+            SAMA: 'sama', CMA: 'cma', IA: 'ia',
+            ZATCA: 'zatca', MISA: 'misa', SAFIU: 'safiu',
+            CITC: 'citc', SHARIA: 'sharia-board',
+          }
+          circulars = circulars.map((c: any) => ({
+            ...c,
+            authority: UPPER_TO_ID[c.authority] ?? c.authority,
           }))
         }
         return { circulars }

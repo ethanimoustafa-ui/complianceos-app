@@ -9,8 +9,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { cn } from '@/lib/utils'
 import { useCalendarStore } from '@/stores/calendar-store'
-import type { CalendarEvent, RegulatoryBodyId } from '@/types'
-import { FrameworkTagSelector } from '@/components/ui/framework-tag-selector'
+import type { CalendarEvent } from '@/types'
 
 const eventSchema = z.object({
   title: z.string().min(3, 'Title must be at least 3 characters'),
@@ -44,7 +43,6 @@ export function AddEventModal({ isOpen, onClose, onSuccess, initialDate }: AddEv
   const [selectedType, setSelectedType] = useState<'deadline' | 'meeting' | 'submission' | 'review'>(
     'meeting'
   )
-  const [frameworkIds, setFrameworkIds] = useState<RegulatoryBodyId[]>([])
 
   const {
     control,
@@ -82,7 +80,6 @@ export function AddEventModal({ isOpen, onClose, onSuccess, initialDate }: AddEv
       location: data.location,
       attendees: data.attendees || [],
       reminders: [],
-      frameworkIds,
     }
 
     const newEvent = createEvent(eventData)
@@ -93,7 +90,6 @@ export function AddEventModal({ isOpen, onClose, onSuccess, initialDate }: AddEv
   const handleClose = () => {
     reset()
     setSelectedType('meeting')
-    setFrameworkIds([])
     onClose()
   }
 
@@ -254,8 +250,6 @@ export function AddEventModal({ isOpen, onClose, onSuccess, initialDate }: AddEv
                   />
                 </div>
               </div>
-
-              <FrameworkTagSelector value={frameworkIds} onChange={setFrameworkIds} label="Frameworks" />
 
               <div>
                 <label className="text-xs font-black uppercase text-slate-500 tracking-widest mb-2 block">

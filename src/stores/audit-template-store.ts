@@ -112,7 +112,7 @@ const seedTemplates: AuditTemplate[] = [
     id: 'at-005',
     name: 'Sharia Compliance Check',
     nameAr: 'تدقيق الامتثال الشرعي',
-    auditType: 'sharia',
+    auditType: 'sharia-board',
     category: 'sharia-compliance',
     priority: 'high',
     frequency: 'quarterly',

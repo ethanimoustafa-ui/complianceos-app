@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useMemo } from 'react'
 import { Icon } from '@iconify/react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -9,9 +9,12 @@ import { useCircularStore } from '@/stores/circular-store'
 import type { CircularAuthority, CircularPriority, CircularStatus, CircularApplicability, CAPStatus } from '@/types'
 import { useDepartmentStore } from '@/stores/department-store'
 import { useTeamStore } from '@/stores/team-store'
+import { useFrameworkConfigStore } from '@/stores/framework-config-store'
+import { useTranslation } from '@/i18n'
 import { readFileAsDataUrl, normalizeUrl } from './utils'
 import { FrameworkTagSelector } from '@/components/ui/framework-tag-selector'
 import type { RegulatoryBodyId } from '@/types'
+
 
 type Props = {
   isOpen: boolean
@@ -21,6 +24,7 @@ type Props = {
 }
 
 export function RegisterCircularModal({ isOpen, onClose, onCreated, t }: Props) {
+  const { isRTL } = useTranslation()
   const { create, setPdfUrl } = useCircularStore()
   const { departments: allDepartments } = useDepartmentStore()
   const { members: teamMembers } = useTeamStore()
@@ -40,10 +44,18 @@ export function RegisterCircularModal({ isOpen, onClose, onCreated, t }: Props) 
   const pdfInputRef = useRef<HTMLInputElement>(null)
   const [frameworkIds, setFrameworkIds] = useState<RegulatoryBodyId[]>([])
 
-  useEffect(() => {
-    const AUTH_TO_FW: Record<string, RegulatoryBodyId[]> = { SAMA: ['sama'], CMA: ['cma'], ZATCA: ['zatca'], MISA: ['misa'], SAFIU: ['safiu'], IA: [] }
-    setFrameworkIds(AUTH_TO_FW[formAuthority] ?? [])
-  }, [formAuthority])
+  // Authority picker is driven directly by enabled correspondence-based
+  // frameworks — including any custom frameworks the user added via settings.
+  // Selecting the stable frameworks ref then deriving via useMemo avoids the
+  // Zustand getServerSnapshot infinite-loop warning.
+  const frameworksAll = useFrameworkConfigStore((s) => s.frameworks)
+  const authorityOptions = useMemo(
+    () =>
+      frameworksAll
+        .filter((f) => f.enabled && f.correspondenceBased)
+        .map((f) => ({ value: f.id, label: isRTL ? f.nameAr : f.name })),
+    [frameworksAll, isRTL]
+  )
 
   function toggleDepartment(dept: string) {
     setFormDepartments((prev) =>
@@ -115,12 +127,9 @@ export function RegisterCircularModal({ isOpen, onClose, onCreated, t }: Props) 
                 onChange={(e) => setFormAuthority(e.target.value as CircularAuthority | '')}
               >
                 <option value="">{t('regulatoryUpdates.selectAuthority')}</option>
-                <option value="SAMA">{t('regulatoryUpdates.authoritySAMA')}</option>
-                <option value="CMA">{t('regulatoryUpdates.authorityCMA')}</option>
-                <option value="IA">{t('regulatoryUpdates.authorityIA')}</option>
-                <option value="ZATCA">{t('regulatoryUpdates.authorityZATCA')}</option>
-                <option value="MISA">{t('regulatoryUpdates.authorityMISA')}</option>
-                <option value="SAFIU">{t('regulatoryUpdates.authoritySAFIU')}</option>
+                {authorityOptions.map((opt) => (
+                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                ))}
               </select>
             </div>
 
@@ -255,7 +264,7 @@ export function RegisterCircularModal({ isOpen, onClose, onCreated, t }: Props) 
               />
             </div>
 
-            <FrameworkTagSelector value={frameworkIds} onChange={setFrameworkIds} label="Frameworks" />
+            <FrameworkTagSelector value={frameworkIds} onChange={setFrameworkIds} label="Frameworks" selfAssessmentOnly />
 
             <input
               ref={pdfInputRef}

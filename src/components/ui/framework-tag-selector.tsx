@@ -12,12 +12,20 @@ interface FrameworkTagSelectorProps {
   onChange: (value: RegulatoryBodyId[]) => void
   label?: string
   className?: string
+  // When true (default for create/edit modals), restrict to enabled
+  // self-assessment frameworks. Correspondence-based authorities live in the
+  // authority/source/type picker on the same modal — they shouldn't also appear
+  // as framework tags.
+  selfAssessmentOnly?: boolean
 }
 
-export function FrameworkTagSelector({ value, onChange, label, className }: FrameworkTagSelectorProps) {
+export function FrameworkTagSelector({ value, onChange, label, className, selfAssessmentOnly }: FrameworkTagSelectorProps) {
   const { t, isRTL } = useTranslation()
   const frameworks = useFrameworkConfigStore((s) => s.frameworks)
-  const enabledFrameworks = useMemo(() => frameworks.filter((f) => f.enabled), [frameworks])
+  const enabledFrameworks = useMemo(
+    () => frameworks.filter((f) => f.enabled && (!selfAssessmentOnly || !f.correspondenceBased)),
+    [frameworks, selfAssessmentOnly]
+  )
 
   const toggle = (id: RegulatoryBodyId) => {
     if (value.includes(id)) {

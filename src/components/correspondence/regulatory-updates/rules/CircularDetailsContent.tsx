@@ -5,6 +5,8 @@ import { Icon } from '@iconify/react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { useCircularStore } from '@/stores/circular-store'
+import { useFrameworkConfigStore } from '@/stores/framework-config-store'
+import { resolveAuthorityLabel } from '@/lib/authority-display'
 import type { Circular, CircularArticle } from '@/types'
 import { WorkflowStepRow } from './WorkflowStepRow'
 import { AdvanceWorkflowModal } from './AdvanceWorkflowModal'
@@ -52,6 +54,8 @@ export function CircularDetailsContent({ circular, onClose, onOpenBOModal, onEdi
 
   // Always use fresh circular data from store
   const freshCircular = allCirculars.find(c => c.id === circular.id) ?? circular
+  const frameworks = useFrameworkConfigStore(s => s.frameworks)
+  const authorityLabel = resolveAuthorityLabel(freshCircular.authority, frameworks, isRTL)
 
   const priorityColors: Record<string, string> = {
     critical: 'bg-rose-100 text-rose-700',
@@ -510,7 +514,7 @@ export function CircularDetailsContent({ circular, onClose, onOpenBOModal, onEdi
       <div className={`w-full md:w-72 bg-slate-50 -mx-6 -mb-4 md:mx-0 md:mb-0 p-6 md:rounded-xl space-y-5`}>
         <div>
           <h3 className="text-[10px] font-black text-slate-400 uppercase mb-1">{t('regulatoryUpdates.authority')}</h3>
-          <p className="text-sm font-bold text-slate-900">{freshCircular.authority}</p>
+          <p className="text-sm font-bold text-slate-900">{authorityLabel}</p>
           <p className="text-xs font-mono text-slate-500">{freshCircular.reference}</p>
         </div>
 

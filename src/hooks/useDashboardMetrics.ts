@@ -277,9 +277,13 @@ export function useDashboardMetrics(): DashboardMetrics {
   }), [circulars])
 
   const frameworkMetrics = useMemo(() => {
+    // Active frameworks on the dashboard = first 3 correspondence-based pins.
+    // Self-assessment frameworks don't produce scores, so we filter them out
+    // defensively even if a stale persisted pin still references one.
     const pinned = pinnedIds
       .map(id => frameworks.find(f => f.id === id))
-      .filter((f): f is FrameworkConfig => !!f)
+      .filter((f): f is FrameworkConfig => !!f && f.correspondenceBased)
+      .slice(0, 3)
     const enabled = frameworks.filter(f => f.enabled)
     return { pinned, enabled }
   }, [frameworks, pinnedIds])

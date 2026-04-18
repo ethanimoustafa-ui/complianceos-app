@@ -24,6 +24,8 @@ import { useFormattedDate } from '@/hooks/useFormattedDate'
 import { formatDateWithPreference } from '@/lib/date-format'
 import { useUserPreferencesStore } from '@/stores/user-preferences-store'
 import { useTeamWorkloads } from '@/hooks/useWorkload'
+import { useFrameworkConfigStore } from '@/stores/framework-config-store'
+import { resolveAuthorityCode } from '@/lib/authority-display'
 
 // Risk type for heatmap display (mapped from risk-store)
 interface HeatmapRisk {
@@ -1232,6 +1234,8 @@ function CircularRow({ circular, isRTL, t, onClick }: {
   t: (key: TranslationKey, params?: Record<string, string | number>) => string;
   onClick?: () => void;
 }) {
+  const frameworks = useFrameworkConfigStore((s) => s.frameworks)
+  const authorityCode = resolveAuthorityCode(circular.authority, frameworks)
   const statusConfig: Record<string, { bg: string; text: string; label: string }> = {
     'in-progress': { bg: 'bg-amber-100', text: 'text-amber-700', label: t('correspondence.inProgressStatus' as TranslationKey) },
     overdue:       { bg: 'bg-rose-100', text: 'text-rose-700', label: t('correspondence.overdue') },
@@ -1264,7 +1268,7 @@ function CircularRow({ circular, isRTL, t, onClick }: {
         </div>
         <div>
           <p className="text-sm font-bold text-slate-900">{circular.title}</p>
-          <p className="text-[10px] text-slate-500">{circular.authority} · {circular.reference}</p>
+          <p className="text-[10px] text-slate-500">{authorityCode} · {circular.reference}</p>
         </div>
       </div>
       <div className={`flex items-center gap-6`}>

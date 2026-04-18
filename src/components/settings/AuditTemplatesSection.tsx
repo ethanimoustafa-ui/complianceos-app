@@ -1,15 +1,16 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { Icon } from '@iconify/react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Modal } from '@/components/ui/modal'
 import { useAuditTemplateStore } from '@/stores/audit-template-store'
+import { useFrameworkConfigStore } from '@/stores/framework-config-store'
 import { useTranslation } from '@/i18n'
 import { RoleGuard } from '@/components/auth/role-guard'
 import { SortHeader, type SortState } from '@/components/ui/sort-header'
-import type { AuditTemplate, AuditTemplateCategory, AuditPriority, AuditFrequency, FrequencySchedule } from '@/types'
+import type { AuditAuthority, AuditTemplate, AuditTemplateCategory, AuditPriority, AuditFrequency, FrequencySchedule } from '@/types'
 
 type SortCol = 'name' | 'category' | 'updatedAt' | 'usageCount'
 
@@ -243,14 +244,7 @@ function AuditTemplateFormModal({
         <Input label={t('settings.nameEnglish')} value={name} onChange={(e) => setName(e.target.value)} placeholder={t('settings.templateNamePlaceholder')} />
         <Input label={t('settings.nameArabic')} value={nameAr} onChange={(e) => setNameAr(e.target.value)} placeholder={t('settings.templateNamePlaceholder')} dir="rtl" />
         <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('settings.templateType')}</label>
-            <select value={auditType} onChange={(e) => setAuditType(e.target.value as any)} className="flex h-11 w-full rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent">
-              <option value="internal">Internal</option>
-              <option value="sama">SAMA</option>
-              <option value="sharia">Sharia</option>
-            </select>
-          </div>
+          <AuditTypeSelect auditType={auditType} setAuditType={setAuditType} t={t} isRTL={isRTL} />
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('settings.categoryCol')}</label>
             <select value={category} onChange={(e) => setCategory(e.target.value as AuditTemplateCategory)} className="flex h-11 w-full rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent">
@@ -376,5 +370,39 @@ function AuditTemplateFormModal({
         </div>
       </div>
     </Modal>
+  )
+}
+
+// Dynamic audit-type dropdown driven by enabled correspondence-based frameworks.
+function AuditTypeSelect({
+  auditType,
+  setAuditType,
+  t,
+  isRTL,
+}: {
+  auditType: AuditAuthority
+  setAuditType: (v: AuditAuthority) => void
+  t: (key: any) => string
+  isRTL: boolean
+}) {
+  const frameworks = useFrameworkConfigStore((s) => s.frameworks)
+  const enabledCorrespondence = useMemo(
+    () => frameworks.filter((f) => f.enabled && f.correspondenceBased),
+    [frameworks]
+  )
+  return (
+    <div>
+      <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('settings.templateType')}</label>
+      <select
+        value={auditType}
+        onChange={(e) => setAuditType(e.target.value as AuditAuthority)}
+        className="flex h-11 w-full rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+      >
+        <option value="internal">{t('auditDetail.internalAuditType')}</option>
+        {enabledCorrespondence.map((fw) => (
+          <option key={fw.id} value={fw.id}>{isRTL ? fw.nameAr : fw.name}</option>
+        ))}
+      </select>
+    </div>
   )
 }

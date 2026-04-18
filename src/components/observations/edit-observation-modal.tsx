@@ -10,6 +10,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { cn } from '@/lib/utils'
 import { useTeamStore } from '@/stores/team-store'
+import { useFrameworkConfigStore } from '@/stores/framework-config-store'
 import { useTranslation } from '@/i18n'
 import type { TeamMember, RegulatoryBodyId } from '@/types'
 import { FrameworkTagSelector } from '@/components/ui/framework-tag-selector'
@@ -25,7 +26,7 @@ const observationSchema = z.object({
   title: z.string().min(3, 'Title must be at least 3 characters'),
   subTitle: z.string().optional(),
   description: z.string().min(10, 'Description must be at least 10 characters'),
-  source: z.enum(['sama', 'cma', 'ia', 'zatca', 'misa', 'safiu', 'internal', 'sharia']),
+  source: z.string().min(1),
   severity: z.enum(['critical', 'high', 'medium', 'low']),
   status: z.enum(['open', 'in_progress', 'resolved', 'closed']),
   dueDate: z.string().min(1, 'Due date is required'),
@@ -279,14 +280,7 @@ export const EditObservationModal = memo(function EditObservationModal({
                   name="source"
                   control={control}
                   render={({ field }) => (
-                    <select
-                      {...field}
-                      className={`w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 `}
-                    >
-                      <option value="sama">{t('observations.sama')}</option>
-                      <option value="internal">{t('observations.sources.internal')}</option>
-                      <option value="sharia">{t('observations.sources.sharia')}</option>
-                    </select>
+                    <SourceDropdown value={field.value} onChange={field.onChange} />
                   )}
                 />
               </div>
@@ -404,7 +398,7 @@ export const EditObservationModal = memo(function EditObservationModal({
               </div>
 
               <div className="col-span-2">
-                <FrameworkTagSelector value={frameworkIds} onChange={setFrameworkIds} label="Frameworks" />
+                <FrameworkTagSelector value={frameworkIds} onChange={setFrameworkIds} label="Frameworks" selfAssessmentOnly />
               </div>
 
               <div className="col-span-2">
@@ -445,3 +439,60 @@ export const EditObservationModal = memo(function EditObservationModal({
     </Modal>
   )
 })
+
+// Source dropdown driven by enabled correspondence-based frameworks.
+// Keeps the currently-selected value visible even if its framework was disabled.
+const SOURCE_LABEL_KEYS: Record<string, string> = {
+  sama: 'observations.sama',
+  cma: 'observations.sources.cma',
+  ia: 'observations.sources.ia',
+  zatca: 'observations.sources.zatca',
+  misa: 'observations.sources.misa',
+  safiu: 'observations.sources.safiu',
+  citc: 'observations.sources.citc',
+  internal: 'observations.sources.internal',
+  sharia: 'observations.sources.sharia',
+}
+
+const SOURCE_TO_FRAMEWORK_ID: Record<string, RegulatoryBodyId | null> = {
+  sama: 'sama', cma: 'cma', ia: 'ia', zatca: 'zatca', misa: 'misa', safiu: 'safiu', citc: 'citc',
+  internal: null, sharia: 'sharia-board',
+}
+
+function SourceDropdown({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const { t, isRTL } = useTranslation()
+  const frameworks = useFrameworkConfigStore((s) => s.frameworks)
+  const options = useMemo(() => {
+    const order: string[] = ['sama', 'cma', 'ia', 'zatca', 'misa', 'safiu', 'citc', 'sharia', 'internal']
+    const seedOpts = order
+      .filter((source) => {
+        if (source === 'internal' || source === value) return true
+        const fwId = SOURCE_TO_FRAMEWORK_ID[source]
+        if (!fwId) return true
+        const fw = frameworks.find((f) => f.id === fwId)
+        return !!fw?.enabled && !!fw.correspondenceBased
+      })
+      .map((source) => ({ value: source, label: t(SOURCE_LABEL_KEYS[source] as any) }))
+
+    const seedFwIds = new Set(
+      Object.values(SOURCE_TO_FRAMEWORK_ID).filter((v): v is NonNullable<typeof v> => !!v)
+    )
+    const customOpts = frameworks
+      .filter((f) => f.enabled && f.correspondenceBased && !seedFwIds.has(f.id))
+      .map((f) => ({ value: f.id, label: isRTL ? f.nameAr : f.name }))
+
+    return [...seedOpts, ...customOpts]
+  }, [frameworks, value, t, isRTL])
+
+  return (
+    <select
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+    >
+      {options.map((opt) => (
+        <option key={opt.value} value={opt.value}>{opt.label}</option>
+      ))}
+    </select>
+  )
+}

@@ -51,13 +51,12 @@ export interface FrameworkScore {
   dataPoints: number
 }
 
-// ── Per-Framework Scoring (multi-framework tagging) ─────────────────
+// ── Per-Framework Scoring (correspondence-based authorities only) ────
 export interface PerFrameworkComponentScores {
   audits: ComponentScore
   observations: ComponentScore
   circulars: ComponentScore
   policies: ComponentScore
-  tasks: ComponentScore
 }
 
 export interface PerFrameworkScore {
@@ -66,7 +65,6 @@ export interface PerFrameworkScore {
   confidence: ConfidenceLevel
   dataPoints: number
   components: PerFrameworkComponentScores
-  taskScore: { completionRate: number; overduePenalty: number; severityBonus: number; combined: number }
 }
 
 // ── Trend ────────────────────────────────────────────────────────────
@@ -79,8 +77,9 @@ export interface TrendDataPoint {
 // ── Framework Config (passed to engine) ─────────────────────────────
 export interface FrameworkConfigInput {
   id: string
-  weights: { audits: number; observations: number; letters: number; policies: number; circulars: number; riskPosture: number; training: number }
+  weights: { audits: number; observations: number; letters: number; circulars: number }
   enabled: boolean
+  correspondenceBased: boolean
 }
 
 // ── Engine Result ────────────────────────────────────────────────────
@@ -103,7 +102,7 @@ export interface ComplianceScoreResult {
 // ── Slim data slices (only fields the engine needs) ──────────────────
 export interface AuditSlice {
   id: string
-  type: 'internal' | 'sama' | 'sharia'
+  type: string  // 'internal' or any RegulatoryBodyId (enabled correspondence authority)
   status: 'pending' | 'in_progress' | 'completed' | 'overdue'
   dueDate: string
   completedAt?: string
@@ -116,7 +115,7 @@ export interface AuditSlice {
 
 export interface ObservationSlice {
   id: string
-  source: 'sama' | 'cma' | 'ia' | 'zatca' | 'misa' | 'safiu' | 'internal' | 'sharia'
+  source: string  // framework id (lowercase) or 'internal'
   severity: 'critical' | 'high' | 'medium' | 'low'
   status: 'open' | 'in_progress' | 'resolved' | 'closed'
   dueDate: string
@@ -158,17 +157,9 @@ export interface CircularSlice {
   createdAt?: string
 }
 
-export interface TaskSlice {
-  id: string
-  completed: boolean
-  dueDate: string
-  completedAt?: string
-  severity?: 'critical' | 'high' | 'medium' | 'low'
-  frameworkIds?: string[]
-  createdAt?: string
-}
-
 // ── Engine Input ─────────────────────────────────────────────────────
+// Calendar events and audit-tasks are intentionally excluded — they are
+// user-owned planning artifacts and do not participate in compliance scoring.
 export interface ComplianceEngineInput {
   audits: AuditSlice[]
   observations: ObservationSlice[]
@@ -176,7 +167,6 @@ export interface ComplianceEngineInput {
   policies: PolicySlice[]
   trainings: TrainingSlice[]
   circulars: CircularSlice[]
-  tasks: TaskSlice[]
   frameworkConfigs: FrameworkConfigInput[]
   config: ComplianceConfig
   period: PeriodConfig

@@ -35,7 +35,7 @@ const seedLetters: SAMALetter[] = [
   {
     id: 'sama-001',
     reference: 'NOB-2024-082',
-    authority: 'SAMA',
+    authority: 'sama',
     type: 'non-objection',
     subCategory: 'key-function',
     samaDepartment: 'banking-supervision',
@@ -78,7 +78,7 @@ We remain at your disposal for any further information or clarification required
   {
     id: 'sama-002',
     reference: 'SUB-2024-114',
-    authority: 'SAMA',
+    authority: 'sama',
     type: 'submission',
     subCategory: 'quarterly-aml',
     samaDepartment: 'compliance-aml',
@@ -112,7 +112,7 @@ We remain at your disposal for any further information or clarification required
   {
     id: 'sama-003',
     reference: 'INQ-2024-005',
-    authority: 'SAMA',
+    authority: 'sama',
     type: 'inquiry',
     subCategory: 'circular-clarification',
     samaDepartment: 'banking-supervision',
@@ -413,19 +413,32 @@ export const useSAMALetterStore = create<SAMALetterState>()(
     }),
     {
       name: 'sama-letter-store',
-      version: 4,
+      version: 5,
       partialize: (state) => ({ letters: state.letters }),
       migrate: (persistedState: unknown, version: number) => {
         const state = (persistedState as { letters?: SAMALetter[] }) ?? {}
+        let letters = state.letters ?? []
         if (version < 4) {
-          // v3 → v4: every letter gains an `authority` field. Defaults to 'SAMA' (legacy data).
-          const letters = (state.letters ?? []).map((l) => ({
+          // v3 → v4: every letter gains an `authority` field. Defaults to 'sama'.
+          letters = letters.map((l) => ({
             ...l,
-            authority: l.authority ?? ('SAMA' as CircularAuthority),
+            authority: l.authority ?? ('sama' as CircularAuthority),
           }))
-          return { letters }
         }
-        return state
+        if (version < 5) {
+          // v4 → v5: authority is now the framework id (lowercase). Map legacy
+          // uppercase seed values ('SAMA', 'CMA', ...) to their lowercase ids.
+          const UPPER_TO_ID: Record<string, string> = {
+            SAMA: 'sama', CMA: 'cma', IA: 'ia',
+            ZATCA: 'zatca', MISA: 'misa', SAFIU: 'safiu',
+            CITC: 'citc', SHARIA: 'sharia-board',
+          }
+          letters = letters.map((l) => ({
+            ...l,
+            authority: (UPPER_TO_ID[l.authority as string] ?? l.authority) as CircularAuthority,
+          }))
+        }
+        return { letters }
       },
     }
   )

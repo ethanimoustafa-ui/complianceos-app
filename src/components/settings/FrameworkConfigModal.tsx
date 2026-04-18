@@ -15,22 +15,19 @@ interface Props {
   onClose: () => void
 }
 
-const WEIGHT_KEYS: (keyof FrameworkWeights)[] = ['audits', 'observations', 'letters', 'policies', 'circulars', 'riskPosture', 'training']
+const WEIGHT_KEYS: (keyof FrameworkWeights)[] = ['audits', 'observations', 'letters', 'circulars']
 
 const WEIGHT_I18N: Record<keyof FrameworkWeights, string> = {
   audits: 'settings.auditsWeight',
   observations: 'settings.observationsWeight',
   letters: 'settings.lettersWeight',
-  policies: 'settings.policiesWeight',
   circulars: 'settings.circularsWeight',
-  riskPosture: 'settings.riskPostureWeight',
-  training: 'settings.trainingWeight',
 }
 
 export function FrameworkConfigModal({ frameworkId, isOpen, onClose }: Props) {
   const { t, language } = useTranslation()
   const { getById, updateConfig, toggleEnabled } = useFrameworkConfigStore()
-  const { departments: allDepartments, addDepartment } = useDepartmentStore()
+  const { departments: allDepartments, addDepartment, removeDepartment } = useDepartmentStore()
   const framework = getById(frameworkId)
 
   const [enabled, setEnabled] = useState(framework?.enabled ?? false)
@@ -118,8 +115,23 @@ export function FrameworkConfigModal({ frameworkId, isOpen, onClose }: Props) {
       size="lg"
     >
       <div className="space-y-4 max-h-[70vh] overflow-y-auto pe-1">
-        <div className="p-4 bg-slate-50 rounded-xl">
-          <p className="text-sm text-slate-600">{description}</p>
+        <div className="p-4 bg-slate-50 rounded-xl space-y-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">{t('settings.frameworkType')}:</span>
+            <span
+              className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-md border ${
+                framework.correspondenceBased
+                  ? 'text-indigo-700 bg-indigo-50 border-indigo-200'
+                  : 'text-slate-600 bg-white border-slate-200'
+              }`}
+            >
+              {framework.correspondenceBased ? t('settings.correspondenceBased') : t('settings.selfAssessment')}
+            </span>
+          </div>
+          <p className="text-xs text-slate-500">
+            {framework.correspondenceBased ? t('settings.correspondenceBasedHelp') : t('settings.selfAssessmentHelp')}
+          </p>
+          <p className="text-sm text-slate-600 pt-1">{description}</p>
         </div>
 
         {/* Enable/Disable */}
@@ -148,15 +160,32 @@ export function FrameworkConfigModal({ frameworkId, isOpen, onClose }: Props) {
           />
           <div className="max-h-40 overflow-y-auto border border-slate-200 rounded-xl p-2 space-y-1">
             {filteredDepts.map((dept) => (
-              <label key={dept.id} className="flex items-center gap-2 px-2 py-1.5 hover:bg-slate-50 rounded-lg cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={departments.includes(dept.name)}
-                  onChange={() => toggleDept(dept.name)}
-                  className="rounded text-emerald-600 focus:ring-emerald-500"
-                />
-                <span className="text-sm text-slate-700">{language === 'ar' ? dept.nameAr : dept.name}</span>
-              </label>
+              <div key={dept.id} className="flex items-center gap-2 px-2 py-1.5 hover:bg-slate-50 rounded-lg group">
+                <label className="flex items-center gap-2 flex-1 cursor-pointer min-w-0">
+                  <input
+                    type="checkbox"
+                    checked={departments.includes(dept.name)}
+                    onChange={() => toggleDept(dept.name)}
+                    className="rounded text-emerald-600 focus:ring-emerald-500"
+                  />
+                  <span className="text-sm text-slate-700 truncate">{language === 'ar' ? dept.nameAr : dept.name}</span>
+                </label>
+                {/* Only user-created departments can be removed — defaults are
+                    shared infrastructure and stay locked. */}
+                {!dept.isDefault && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDepartments((prev) => prev.filter((d) => d !== dept.name))
+                      removeDepartment(dept.id)
+                    }}
+                    className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-rose-500 transition-opacity cursor-pointer p-1"
+                    title={t('settings.deleteDepartment')}
+                  >
+                    <Icon icon="lucide:trash-2" className="text-sm" />
+                  </button>
+                )}
+              </div>
             ))}
             {!showNewDept ? (
               <button
@@ -190,7 +219,9 @@ export function FrameworkConfigModal({ frameworkId, isOpen, onClose }: Props) {
           </div>
         </div>
 
-        {/* Compliance Threshold */}
+        {/* Compliance Threshold — correspondence-based only. Self-assessment
+            frameworks don't produce a score, so a threshold has nothing to gate. */}
+        {framework.correspondenceBased && (
         <div>
           <div className="flex items-center gap-2 mb-1.5">
             <label className="block text-sm font-medium text-slate-700">{t('settings.complianceThreshold')}</label>
@@ -226,8 +257,10 @@ export function FrameworkConfigModal({ frameworkId, isOpen, onClose }: Props) {
             </div>
           )}
         </div>
+        )}
 
-        {/* Weightage Section */}
+        {/* Weightage Section — correspondence-based only */}
+        {framework.correspondenceBased ? (
         <div className="border border-slate-200 rounded-xl p-4">
           <div className="flex items-center justify-between mb-3">
             <div>
@@ -275,8 +308,14 @@ export function FrameworkConfigModal({ frameworkId, isOpen, onClose }: Props) {
             <p className="text-xs text-rose-500 mt-1">{t('settings.totalMustBe100')}</p>
           )}
         </div>
+        ) : (
+          <div className="border border-dashed border-slate-200 rounded-xl p-4 bg-slate-50">
+            <p className="text-xs text-slate-500">{t('settings.weightsDisabledForSelfAssessment')}</p>
+          </div>
+        )}
 
-        {/* Alert toggle */}
+        {/* Alert toggle — correspondence-based only. No score = no breach to alert on. */}
+        {framework.correspondenceBased && (
         <div className="flex items-center justify-between p-4 border border-slate-200 rounded-xl">
           <div>
             <p className="text-sm font-bold text-slate-900">{t('settings.alertOnNonCompliance')}</p>
@@ -289,6 +328,7 @@ export function FrameworkConfigModal({ frameworkId, isOpen, onClose }: Props) {
             <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${alertOn ? 'left-4' : 'left-0.5'}`} />
           </button>
         </div>
+        )}
 
         <div className="flex gap-3 pt-4">
           <Button variant="outline" className="flex-1" onClick={onClose}>{t('common.cancel')}</Button>

@@ -1,11 +1,12 @@
 'use client'
 
-import { memo } from 'react'
+import { memo, useMemo } from 'react'
 import { Icon } from '@iconify/react'
 import { useTranslation, type TranslationKey } from '@/i18n'
 import { ObservationSource, ObservationSeverity, sourceConfig } from './observation-types'
-import type { TeamMember } from '@/types'
+import type { TeamMember, RegulatoryBodyId } from '@/types'
 import { useDepartmentStore } from '@/stores/department-store'
+import { useFrameworkConfigStore } from '@/stores/framework-config-store'
 
 // Department keys for translation lookup (kept for backward compatibility)
 export const departmentKeys: Record<string, string> = {
@@ -34,9 +35,24 @@ export interface ObservationFormFieldsProps {
   isRTL: boolean
 }
 
-// Source Selection Cards — covers correspondence authorities + legacy internal/sharia.
-// Authorities first so they surface as primary options.
-const SOURCE_ORDER: ObservationSource[] = ['sama', 'cma', 'ia', 'zatca', 'misa', 'safiu', 'internal', 'sharia']
+// Source Selection Cards.
+// Correspondence-based sources are filtered at runtime by which frameworks
+// are enabled in settings. 'internal' is always available.
+const SOURCE_ORDER: ObservationSource[] = ['sama', 'cma', 'ia', 'zatca', 'misa', 'safiu', 'citc', 'sharia', 'internal']
+
+// Maps each observation source to the framework-config id that governs it.
+// 'internal' has no framework — always shown.
+const SOURCE_TO_FRAMEWORK_ID: Record<ObservationSource, RegulatoryBodyId | null> = {
+  sama:     'sama',
+  cma:      'cma',
+  ia:       'ia',
+  zatca:    'zatca',
+  misa:     'misa',
+  safiu:    'safiu',
+  citc:     'citc',
+  internal: null,
+  sharia:   'sharia-board',
+}
 
 const SOURCE_LABEL_KEYS: Record<ObservationSource, string> = {
   sama:     'observations.sama',
@@ -45,6 +61,7 @@ const SOURCE_LABEL_KEYS: Record<ObservationSource, string> = {
   zatca:    'observations.sources.zatca',
   misa:     'observations.sources.misa',
   safiu:    'observations.sources.safiu',
+  citc:     'observations.sources.citc',
   internal: 'observations.sources.internal',
   sharia:   'observations.sources.sharia',
 }
@@ -56,7 +73,46 @@ export const SourceSelectionField = memo(function SourceSelectionField({
   value: ObservationSource
   onChange: (source: ObservationSource) => void
 }) {
-  const { t } = useTranslation()
+  const { t, isRTL } = useTranslation()
+  const frameworks = useFrameworkConfigStore((s) => s.frameworks)
+
+  // Build the picker options directly from the framework store so
+  // user-added custom correspondence frameworks surface automatically.
+  // 'Internal' is always available; the currently-selected source stays
+  // visible even if its backing framework was later disabled.
+  type Option = { source: string; label: string; icon: string; iconColor: string }
+  const options = useMemo<Option[]>(() => {
+    const seedOpts: Option[] = SOURCE_ORDER
+      .filter((source) => {
+        if (source === 'internal' || source === value) return true
+        const fwId = SOURCE_TO_FRAMEWORK_ID[source as keyof typeof SOURCE_TO_FRAMEWORK_ID]
+        if (!fwId) return true
+        const fw = frameworks.find((f) => f.id === fwId)
+        return !!fw?.enabled && !!fw.correspondenceBased
+      })
+      .map((source) => ({
+        source,
+        label: t(SOURCE_LABEL_KEYS[source] as TranslationKey),
+        icon: sourceConfig[source].icon,
+        iconColor: sourceConfig[source].iconColor,
+      }))
+
+    // Custom enabled correspondence frameworks (not already in SOURCE_ORDER
+    // and not mapped to a seed source) tack on at the end.
+    const seedFwIds = new Set(
+      Object.values(SOURCE_TO_FRAMEWORK_ID).filter((v): v is NonNullable<typeof v> => !!v)
+    )
+    const customOpts: Option[] = frameworks
+      .filter((f) => f.enabled && f.correspondenceBased && !seedFwIds.has(f.id))
+      .map((f) => ({
+        source: f.id,
+        label: isRTL ? f.nameAr : f.name,
+        icon: f.icon,
+        iconColor: `text-${f.iconColor}-500`,
+      }))
+
+    return [...seedOpts, ...customOpts]
+  }, [frameworks, value, t, isRTL])
 
   return (
     <div>
@@ -64,24 +120,21 @@ export const SourceSelectionField = memo(function SourceSelectionField({
         {t('observations.form.sourceSelection')}
       </label>
       <div className="grid grid-cols-4 gap-3">
-        {SOURCE_ORDER.map((source) => {
-          const config = sourceConfig[source]
-          const isSelected = value === source
+        {options.map((opt) => {
+          const isSelected = value === opt.source
           return (
             <button
-              key={source}
+              key={opt.source}
               type="button"
-              onClick={() => onChange(source)}
+              onClick={() => onChange(opt.source)}
               className={`p-3 border rounded-xl flex flex-col items-center gap-2 transition-all cursor-pointer ${
                 isSelected
                   ? 'border-emerald-500 bg-emerald-50 ring-2 ring-emerald-500'
                   : 'border-slate-200 hover:border-emerald-400 hover:bg-emerald-50/50'
               }`}
             >
-              <Icon icon={config.icon} className={`text-2xl ${config.iconColor}`} />
-              <span className="text-xs font-bold text-slate-900">
-                {t(SOURCE_LABEL_KEYS[source] as TranslationKey)}
-              </span>
+              <Icon icon={opt.icon} className={`text-2xl ${opt.iconColor}`} />
+              <span className="text-xs font-bold text-slate-900">{opt.label}</span>
             </button>
           )
         })}

@@ -6,6 +6,8 @@ import { cn } from '@/lib/utils'
 import type { Circular, Policy, CircularPriority, CircularStatus, PolicyStatus, PolicyCategory, CAPStatus, PolicyApprovalTier } from '@/types'
 import type { TranslationKey } from '@/i18n'
 import { useDepartmentStore } from '@/stores/department-store'
+import { useFrameworkConfigStore } from '@/stores/framework-config-store'
+import { resolveAuthorityCode, resolveAuthorityLabel } from '@/lib/authority-display'
 import { useTranslation } from '@/i18n'
 
 interface RegDocCardProps {
@@ -20,14 +22,19 @@ interface RegDocCardProps {
 
 // ── Circular helpers ──────────────────────────────────────────────────────────
 
+// Authority badge palette keyed by framework id (lowercase). Custom
+// frameworks the user adds fall back to a neutral slate style.
 const AUTHORITY_COLORS: Record<string, { bg: string; text: string; border: string }> = {
-  SAMA:  { bg: 'bg-emerald-50',  text: 'text-emerald-700',  border: 'border-emerald-200' },
-  CMA:   { bg: 'bg-blue-50',     text: 'text-blue-700',     border: 'border-blue-200'    },
-  IA:    { bg: 'bg-violet-50',   text: 'text-violet-700',   border: 'border-violet-200'  },
-  ZATCA: { bg: 'bg-amber-50',    text: 'text-amber-700',    border: 'border-amber-200'   },
-  MISA:  { bg: 'bg-sky-50',      text: 'text-sky-700',      border: 'border-sky-200'     },
-  SAFIU: { bg: 'bg-rose-50',     text: 'text-rose-700',     border: 'border-rose-200'    },
+  sama:          { bg: 'bg-indigo-50',  text: 'text-indigo-700',  border: 'border-indigo-200' },
+  cma:           { bg: 'bg-emerald-50', text: 'text-emerald-700', border: 'border-emerald-200' },
+  ia:            { bg: 'bg-violet-50',  text: 'text-violet-700',  border: 'border-violet-200' },
+  zatca:         { bg: 'bg-teal-50',    text: 'text-teal-700',    border: 'border-teal-200' },
+  misa:          { bg: 'bg-orange-50',  text: 'text-orange-700',  border: 'border-orange-200' },
+  safiu:         { bg: 'bg-slate-50',   text: 'text-slate-700',   border: 'border-slate-200' },
+  citc:          { bg: 'bg-violet-50',  text: 'text-violet-700',  border: 'border-violet-200' },
+  'sharia-board':{ bg: 'bg-amber-50',   text: 'text-amber-700',   border: 'border-amber-200' },
 }
+const AUTHORITY_FALLBACK = { bg: 'bg-slate-50', text: 'text-slate-700', border: 'border-slate-200' }
 
 const PRIORITY_COLORS: Record<CircularPriority, { bg: string; text: string }> = {
   critical: { bg: 'bg-rose-100',   text: 'text-rose-700'   },
@@ -128,7 +135,10 @@ export function RegDocCard({ variant, circular, policy, onClick, isNew, t, isRTL
 function CircularCardContent({ circular, t, isRTL }: { circular: Circular; t: RegDocCardProps['t']; isRTL: boolean }) {
   const { isRTL: rtl } = useTranslation()
   const departments = useDepartmentStore(s => s.departments)
-  const authorityStyle = AUTHORITY_COLORS[circular.authority] ?? AUTHORITY_COLORS.SAMA
+  const frameworks = useFrameworkConfigStore(s => s.frameworks)
+  const authorityKey = circular.authority?.toLowerCase?.() ?? ''
+  const authorityStyle = AUTHORITY_COLORS[authorityKey] ?? AUTHORITY_FALLBACK
+  const authorityCode = resolveAuthorityCode(circular.authority, frameworks)
   const priorityStyle = PRIORITY_COLORS[circular.priority]
   const statusStyle = CIRCULAR_STATUS_COLORS[circular.status]
   const capStyle = CAP_COLORS[circular.capStatus]
@@ -162,7 +172,7 @@ function CircularCardContent({ circular, t, isRTL }: { circular: Circular; t: Re
     <div className={cn('flex items-center gap-6 flex-1', )}>
       {/* Authority badge */}
       <div className={cn('flex flex-col items-center justify-center px-4 py-3 rounded-xl border shrink-0', authorityStyle.bg, authorityStyle.border)}>
-        <span className={cn('text-xs font-black', authorityStyle.text)}>{circular.authority}</span>
+        <span className={cn('text-xs font-black uppercase', authorityStyle.text)}>{authorityCode}</span>
       </div>
 
       {/* Main info */}

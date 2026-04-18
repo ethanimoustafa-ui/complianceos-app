@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { Icon } from '@iconify/react'
 import { Modal } from '@/components/ui/modal'
 import { Button } from '@/components/ui/button'
@@ -11,16 +11,17 @@ import { cn } from '@/lib/utils'
 import { useAuditStore } from '@/stores/audit-store'
 import { useTeamStore } from '@/stores/team-store'
 import { useAuthStore } from '@/stores/auth-store'
-import { useTranslation } from '@/i18n'
-import type { Audit, AuditCategory, AuditFrequency, AuditPriority, ReviewSchedule, RegulatoryBodyId } from '@/types'
+import { useTranslation, type TranslationKey } from '@/i18n'
+import type { Audit, AuditAuthority, AuditCategory, AuditFrequency, AuditPriority, ReviewSchedule, RegulatoryBodyId } from '@/types'
 import { ReviewSchedulePicker } from '@/components/ui/ReviewSchedulePicker'
 import { computeNextReview } from '@/lib/review-schedule'
 import { useAuditTemplateStore } from '@/stores/audit-template-store'
+import { useFrameworkConfigStore, frameworkIconTextClass } from '@/stores/framework-config-store'
 import { FrameworkTagSelector } from '@/components/ui/framework-tag-selector'
 
 const auditSchema = z.object({
   title: z.string().min(3, 'Title must be at least 3 characters'),
-  type: z.enum(['internal', 'sama', 'sharia']),
+  type: z.string().min(1, 'Audit type is required'),
   status: z.enum(['pending', 'in_progress', 'completed', 'overdue']),
   assigneeId: z.string().min(1, 'Lead author is required'),
   scope: z.string().optional(),
@@ -45,21 +46,34 @@ export function AddAuditModal({ isOpen, onClose, onSuccess, initialValues }: Add
   const { members } = useTeamStore()
   const currentUser = useAuthStore((state) => state.user)
   const { templates: auditTemplates, incrementUsage } = useAuditTemplateStore()
+  // Select the stable `frameworks` array reference, then derive with useMemo.
+  // Zustand selectors must return referentially stable values — filtering inline
+  // produces a new array each render and triggers getServerSnapshot warnings
+  // plus infinite update loops.
+  const frameworks = useFrameworkConfigStore((s) => s.frameworks)
+  const enabledCorrespondence = useMemo(
+    () => frameworks.filter((f) => f.enabled && f.correspondenceBased),
+    [frameworks]
+  )
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>('')
 
-  const auditTypes = [
-    { id: 'internal' as const, label: t('auditDetail.internalAuditType'), icon: 'lucide:clipboard-check', color: 'blue' },
-    { id: 'sama' as const, label: t('auditDetail.samaAuditType'), icon: 'lucide:landmark', color: 'emerald' },
-    { id: 'sharia' as const, label: t('auditDetail.shariaAuditType'), icon: 'lucide:moon', color: 'amber' },
-  ]
-  const [selectedType, setSelectedType] = useState<'internal' | 'sama' | 'sharia'>('internal')
+  // Dynamic audit-type cards: a fixed "Internal" option plus every enabled
+  // correspondence-based framework configured in settings.
+  const auditTypes = useMemo(
+    () => [
+      { id: 'internal', label: t('auditDetail.internalAuditType'), icon: 'lucide:clipboard-check', iconClass: 'text-blue-600' },
+      ...enabledCorrespondence.map((fw) => ({
+        id: fw.id,
+        label: isRTL ? fw.nameAr : fw.name,
+        icon: fw.icon,
+        iconClass: frameworkIconTextClass(fw.iconColor),
+      })),
+    ],
+    [enabledCorrespondence, t, isRTL]
+  )
+  const [selectedType, setSelectedType] = useState<string>('internal')
   const [schedule, setSchedule] = useState<ReviewSchedule>({ cadence: 'yearly', dayOfMonth: 1 })
   const [frameworkIds, setFrameworkIds] = useState<RegulatoryBodyId[]>([])
-
-  useEffect(() => {
-    const TYPE_TO_FW: Record<string, RegulatoryBodyId[]> = { sama: ['sama'], sharia: ['sharia-board'], internal: [] }
-    setFrameworkIds(TYPE_TO_FW[selectedType] ?? [])
-  }, [selectedType])
 
   const {
     control,
@@ -115,7 +129,7 @@ export function AddAuditModal({ isOpen, onClose, onSuccess, initialValues }: Add
     setValue('type', tmpl.auditType)
   }
 
-  const handleTypeSelect = (type: 'internal' | 'sama' | 'sharia') => {
+  const handleTypeSelect = (type: string) => {
     setSelectedType(type)
     setValue('type', type)
   }
@@ -134,7 +148,7 @@ export function AddAuditModal({ isOpen, onClose, onSuccess, initialValues }: Add
 
       const auditData = {
         title: data.title,
-        type: data.type,
+        type: data.type as AuditAuthority,
         status: data.status,
         dueDate: computeNextReview(schedule),
         progress: 0,
@@ -215,34 +229,31 @@ export function AddAuditModal({ isOpen, onClose, onSuccess, initialValues }: Add
               </select>
             </div>
 
-            {/* Audit Type Selection */}
+            {/* Audit Type Selection — dynamic from enabled correspondence authorities */}
             <div>
               <label className="text-xs font-black uppercase text-slate-500 tracking-widest mb-4 block">
                 {t('auditDetail.auditTypeLabel')}
               </label>
-              <div className="grid grid-cols-3 gap-4">
+              {auditTypes.length === 1 ? (
+                <p className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-lg p-3">
+                  {t('auditDetail.noAuthoritiesEnabled' as TranslationKey)}
+                </p>
+              ) : null}
+              <div className="grid grid-cols-4 gap-3">
                 {auditTypes.map((type) => (
                   <button
                     key={type.id}
                     type="button"
                     onClick={() => handleTypeSelect(type.id)}
                     className={cn(
-                      'p-4 border rounded-xl flex flex-col items-center gap-3 transition-all cursor-pointer',
+                      'p-3 border rounded-xl flex flex-col items-center gap-2 transition-all cursor-pointer',
                       selectedType === type.id
                         ? 'border-emerald-500 bg-emerald-50 ring-2 ring-emerald-500'
                         : 'border-slate-200 hover:border-emerald-400 hover:bg-emerald-50/50'
                     )}
                   >
-                    <Icon
-                      icon={type.icon}
-                      className={cn(
-                        'text-3xl',
-                        type.color === 'blue' && 'text-blue-600',
-                        type.color === 'emerald' && 'text-emerald-600',
-                        type.color === 'amber' && 'text-amber-600'
-                      )}
-                    />
-                    <span className="text-sm font-bold text-slate-900">{type.label}</span>
+                    <Icon icon={type.icon} className={cn('text-2xl', type.iconClass)} />
+                    <span className="text-xs font-bold text-slate-900">{type.label}</span>
                   </button>
                 ))}
               </div>
@@ -411,7 +422,7 @@ export function AddAuditModal({ isOpen, onClose, onSuccess, initialValues }: Add
               </div>
 
               <div className="col-span-2">
-                <FrameworkTagSelector value={frameworkIds} onChange={setFrameworkIds} label="Frameworks" />
+                <FrameworkTagSelector value={frameworkIds} onChange={setFrameworkIds} label="Frameworks" selfAssessmentOnly />
               </div>
             </div>
           </form>
