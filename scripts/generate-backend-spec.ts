@@ -215,8 +215,9 @@ function section3(): (Paragraph | Table)[] {
     h2('3.1 Strategy: Row-Level Security'),
     p('Every data table includes a tenant_id UUID column. PostgreSQL RLS policies ensure that even if application code has a bug, one tenant can never access another tenant\'s data.'),
     spacer(),
-    h2('3.2 RLS Policy Template'),
-    ...codeBlock(`-- Applied to every data table
+    h2('3.2 RLS Policy Template — Top-Level Tables'),
+    p('Applies to every top-level table that carries its own tenant_id column (audits, observations, risks, policies, circulars, sama_letters, frameworks, etc.):'),
+    ...codeBlock(`-- Applied to every top-level data table
 ALTER TABLE audits ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY tenant_isolation ON audits
@@ -225,6 +226,39 @@ CREATE POLICY tenant_isolation ON audits
 CREATE POLICY tenant_insert ON audits
   FOR INSERT
   WITH CHECK (tenant_id = current_setting('app.current_tenant_id')::uuid);`),
+    spacer(),
+    h2('3.2.1 RLS Policy Template — Child / Junction Tables'),
+    p('Many child tables (timelines, checklists, approval steps, workflow steps, version history, junction rows) intentionally OMIT a tenant_id column to avoid denormalization — they inherit tenancy from their parent via a foreign key. The Section 3.2 template will fail with column "tenant_id" does not exist on these tables. Use the parent-join variant below instead:'),
+    ...codeBlock(`-- Example: observation_assignees inherits tenancy from observations
+ALTER TABLE observation_assignees ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY tenant_isolation ON observation_assignees
+  USING (EXISTS (
+    SELECT 1 FROM observations o
+    WHERE o.id = observation_assignees.observation_id
+      AND o.tenant_id = current_setting('app.current_tenant_id')::uuid
+  ));
+
+CREATE POLICY tenant_insert ON observation_assignees
+  FOR INSERT
+  WITH CHECK (EXISTS (
+    SELECT 1 FROM observations o
+    WHERE o.id = observation_assignees.observation_id
+      AND o.tenant_id = current_setting('app.current_tenant_id')::uuid
+  ));`),
+    p('Tables that use the child-table RLS template (parent in parentheses):'),
+    bullet('observation_assignees, observation_checklist, observation_timeline, closure_requests, closure_reviews (observations)'),
+    bullet('risk_mitigation_checklist, risk_history (risks)'),
+    bullet('policy_versions, policy_workflow_steps, policy_activity_log, policy_review_cycles (policies)'),
+    bullet('circular_articles, circular_workflow_steps, circular_timeline, circular_versions, circular_pending_edits (circulars)'),
+    bullet('sama_letter_approval_steps, sama_letter_timeline, sama_letter_observations, sama_letter_attachments (sama_letters)'),
+    bullet('advisory_notes (advisory_requests)'),
+    bullet('audit_team_members (audits)'),
+    bullet('framework_departments, framework_weights (frameworks)'),
+    bullet('team_member_assignments, team_member_access_controls (users)'),
+    bullet('employee_course_progress (training_courses + employees)'),
+    bullet('message_thread_participants (message_threads)'),
+    p('Implementation note: writing parent-join policies is more verbose but avoids tenant_id duplication and keeps child-row tenancy authoritative on the parent. If migration speed is preferred over normalization, an alternative is to add a denormalized tenant_id column to every child table and use the Section 3.2 template uniformly — at the cost of update triggers to keep child tenant_id in sync with the parent.'),
     spacer(),
     h2('3.3 JWT Custom Claims'),
     ...codeBlock(`{
@@ -304,7 +338,8 @@ CREATE TABLE users (
 function section4(): (Paragraph | Table)[] {
   const items: (Paragraph | Table)[] = [
     h1('4. Full Database Schema'),
-    p('All tables include: id UUID PK, tenant_id UUID FK → tenants(id), created_at TIMESTAMPTZ DEFAULT now(), updated_at TIMESTAMPTZ DEFAULT now(), deleted_at TIMESTAMPTZ (soft delete) — unless noted otherwise. The tenants table itself omits tenant_id and deleted_at. Junction tables omit timestamps where noted.'),
+    p('Top-level tables include: id UUID PK, tenant_id UUID FK → tenants(id), created_at TIMESTAMPTZ DEFAULT now(), updated_at TIMESTAMPTZ DEFAULT now(), deleted_at TIMESTAMPTZ (soft delete) — unless noted otherwise. The tenants table itself omits tenant_id and deleted_at.'),
+    p('Child / junction tables (timelines, checklists, approval steps, workflow steps, version history, junction rows) intentionally OMIT tenant_id and inherit tenancy from their parent via a foreign key. These tables MUST use the parent-join RLS template defined in Section 3.2.1 — applying the Section 3.2 template will fail with column "tenant_id" does not exist. Junction tables also omit created_at/updated_at/deleted_at where noted.'),
     p('Note: The tenants and users tables are defined in Section 3.5. They are not repeated here.'),
     spacer(),
   ]
@@ -900,7 +935,7 @@ CREATE TABLE sama_letter_timeline (
   id        UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   letter_id UUID NOT NULL REFERENCES sama_letters(id) ON DELETE CASCADE,
   title     TEXT NOT NULL,
-  date      TEXT NOT NULL,
+  date      TIMESTAMPTZ NOT NULL DEFAULT now(),
   user_name TEXT,
   status    TEXT DEFAULT 'pending'
 );
@@ -1281,7 +1316,7 @@ CREATE TABLE user_preferences (
 CREATE TABLE compliance_scores (
   id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   tenant_id       UUID NOT NULL REFERENCES tenants(id),
-  framework_id    TEXT,
+  framework_id    TEXT NOT NULL DEFAULT 'overall',
   period_filter   TEXT NOT NULL,
   overall         NUMERIC NOT NULL,
   change_pct      NUMERIC DEFAULT 0,
@@ -1292,6 +1327,10 @@ CREATE TABLE compliance_scores (
   calculated_at   TIMESTAMPTZ DEFAULT now(),
   UNIQUE(tenant_id, framework_id, period_filter)
 );
+-- Note: framework_id uses sentinel 'overall' (not NULL) for the Track A score.
+-- This ensures the UNIQUE constraint and ON CONFLICT upsert in Section 6.6 work
+-- correctly — PostgreSQL's default NULLS DISTINCT semantics would otherwise allow
+-- duplicate overall-score rows per (tenant_id, period_filter).
 
 CREATE TABLE requirements (
   id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -1670,12 +1709,15 @@ function section6(): (Paragraph | Table)[] {
     ]),
     spacer(),
     h2('6.2 Track B — Per-Framework Scores'),
-    p('Each enabled framework has 7 configurable weights (stored in framework_weights). Data is filtered by frameworkIds array overlap. Five components are computed from filtered data:'),
-    bullet('Audits (filtered by frameworkIds) → calcAuditCompletion'),
-    bullet('Observations (filtered) → calcObservationClosure'),
-    bullet('Circulars (filtered) → calcCircularImplementation (priority-weighted progress)'),
-    bullet('Policies (filtered) → calcPolicyCurrency'),
-    bullet('Tasks (filtered) → calcTaskScore (completion×50% − overdue×30% + severity×20%)'),
+    p('Each enabled framework has 7 configurable weights (stored in framework_weights: audits, observations, letters, policies, circulars, risk_posture, training — summing to 100%). Data is filtered by frameworkIds array overlap. The 7 stored weights map to 5 computed components as follows:'),
+    tbl(['Component', 'Source Weight(s)', 'Calculator', 'Notes'], [
+      ['Audits', 'audits', 'calcAuditCompletion', 'Filtered by frameworkIds.'],
+      ['Observations', 'observations', 'calcObservationClosure', 'Filtered by frameworkIds.'],
+      ['Circulars', 'circulars', 'calcCircularImplementation', 'Priority-weighted progress; filtered by frameworkIds.'],
+      ['Policies', 'policies', 'calcPolicyCurrency', 'Filtered by frameworkIds.'],
+      ['Tasks', 'letters + risk_posture + training', 'calcTaskScore', 'Combined weight = letters + risk_posture + training. Formula: completion×50% − overdue×30% + severity×20%. See calcPerFrameworkScore() in src/lib/compliance-engine.ts.'],
+    ]),
+    p('Implementation note: the 7→5 collapse keeps the per-framework calculator aligned with the simpler per-framework data model (which does not separately track letters, risk posture, or training per framework). Backend implementers MUST preserve this mapping to match the frontend engine bit-for-bit.'),
     spacer(),
     h2('6.3 Deduction Rules'),
     tbl(['Rule', 'Points', 'Severity', 'Component'], [
@@ -1755,6 +1797,20 @@ export async function policyStatusCheck(job: Job) {
           title: 'Policy Overdue',
           message: \`Policy "\${policy.name}" is past its review date\`,
           type: 'warning',
+          route: \`/policies?id=\${policy.id}\`,
+        })
+      } else if (
+        policy.next_review_date <= ninetyDays &&
+        policy.status === 'approved'
+      ) {
+        await policyRepo.update(tenantId, policy.id, {
+          status: 'requires-review',
+        })
+        await notificationService.create(tenantId, {
+          userId: policy.owner_id,
+          title: 'Policy Review Due Soon',
+          message: \`Policy "\${policy.name}" is within 90 days of its review date\`,
+          type: 'info',
           route: \`/policies?id=\${policy.id}\`,
         })
       }
@@ -1877,40 +1933,43 @@ function section9(): (Paragraph | Table)[] {
     bullet('Backend middleware validates JWT, extracts tenant_id, sets RLS context'),
     spacer(),
     h2('9.2 Role Mapping'),
-    p('The frontend uses officer/manager/admin. The backend maps to more granular roles:'),
+    p('The frontend uses officer/manager/admin. The backend introduces a fourth read-only role (viewer) for stakeholders that should not mutate observations:'),
     tbl(['Frontend Role', 'Backend Role', 'Description'], [
-      ['officer', 'viewer / auditor', 'View-only + full observation access. Cannot create audits, policies, etc.'],
+      ['officer (default)', 'auditor', 'View-only across modules + FULL observation access (create, edit, comment). This is the default backend role assigned when a frontend officer is provisioned.'],
+      ['officer (read-only)', 'viewer', 'View-only across all modules including observations. Cannot mutate any data. Provisioned only when explicitly requested via the team-invite "Read-only stakeholder" toggle.'],
       ['manager', 'compliance_officer', 'Can create, edit, comment, export. Cannot delete or manage settings.'],
       ['admin', 'org_admin', 'Full access including delete, settings, team management.'],
     ]),
+    p('Provisioning rule: POST /api/team/invite with role=officer creates a backend user with role=auditor by default. If the invite payload sets readOnly=true, the backend user is created with role=viewer instead. This decision is one-way at provisioning time; changing later requires an admin to edit the user record.'),
     spacer(),
     h2('9.3 Permission Matrix'),
-    p('Derived from src/lib/permissions.ts (25 permissions × 3 roles):'),
-    tbl(['Permission', 'Officer', 'Manager', 'Admin'], [
-      ['view', '✓', '✓', '✓'],
-      ['comment', '✓', '✓', '✓'],
-      ['create', '—', '✓', '✓'],
-      ['edit', '—', '✓', '✓'],
-      ['delete', '—', '—', '✓'],
-      ['audit:view', '✓', '✓', '✓'],
-      ['audit:comment', '—', '✓', '✓'],
-      ['audit:create', '—', '✓', '✓'],
-      ['audit:edit', '—', '✓', '✓'],
-      ['audit:delete', '—', '—', '✓'],
-      ['observation:view', '✓', '✓', '✓'],
-      ['observation:create', '✓', '✓', '✓'],
-      ['observation:edit', '✓', '✓', '✓'],
-      ['observation:delete', '—', '—', '✓'],
-      ['report:view', '✓', '✓', '✓'],
-      ['report:create', '—', '✓', '✓'],
-      ['report:delete', '—', '—', '✓'],
-      ['export', '✓', '✓', '✓'],
-      ['settings:view', '—', '—', '✓'],
-      ['settings:edit', '—', '—', '✓'],
-      ['team:view', '—', '—', '✓'],
-      ['team:invite', '—', '—', '✓'],
-      ['team:edit', '—', '—', '✓'],
-      ['team:remove', '—', '—', '✓'],
+    p('Derived from src/lib/permissions.ts (25 permissions × 4 backend roles). Viewer is strictly read-only; auditor adds observation create/edit/comment to match the frontend officer role:'),
+    tbl(['Permission', 'Viewer', 'Auditor', 'Manager', 'Admin'], [
+      ['view', '✓', '✓', '✓', '✓'],
+      ['comment', '—', '✓', '✓', '✓'],
+      ['create', '—', '—', '✓', '✓'],
+      ['edit', '—', '—', '✓', '✓'],
+      ['delete', '—', '—', '—', '✓'],
+      ['audit:view', '✓', '✓', '✓', '✓'],
+      ['audit:comment', '—', '—', '✓', '✓'],
+      ['audit:create', '—', '—', '✓', '✓'],
+      ['audit:edit', '—', '—', '✓', '✓'],
+      ['audit:delete', '—', '—', '—', '✓'],
+      ['observation:view', '✓', '✓', '✓', '✓'],
+      ['observation:comment', '—', '✓', '✓', '✓'],
+      ['observation:create', '—', '✓', '✓', '✓'],
+      ['observation:edit', '—', '✓', '✓', '✓'],
+      ['observation:delete', '—', '—', '—', '✓'],
+      ['report:view', '✓', '✓', '✓', '✓'],
+      ['report:create', '—', '—', '✓', '✓'],
+      ['report:delete', '—', '—', '—', '✓'],
+      ['export', '✓', '✓', '✓', '✓'],
+      ['settings:view', '—', '—', '—', '✓'],
+      ['settings:edit', '—', '—', '—', '✓'],
+      ['team:view', '—', '—', '—', '✓'],
+      ['team:invite', '—', '—', '—', '✓'],
+      ['team:edit', '—', '—', '—', '✓'],
+      ['team:remove', '—', '—', '—', '✓'],
     ]),
     spacer(),
     h2('9.4 Express Permission Middleware'),
@@ -2010,7 +2069,7 @@ function section11(): (Paragraph | Table)[] {
     tbl(['#', 'Task', 'Dependencies', 'Notes'], [
       ['1', 'Supabase project setup', '—', 'Create project, enable Auth, configure Storage buckets'],
       ['2', 'Run database migrations', 'Step 1', 'Execute all CREATE TABLE statements from Section 4'],
-      ['3', 'Enable RLS on all tables', 'Step 2', 'Apply tenant_isolation policy from Section 3.2 to every table'],
+      ['3', 'Enable RLS on all tables', 'Step 2', 'Apply Section 3.2 template to top-level tables (tenant_id column present); apply Section 3.2.1 parent-join template to child / junction tables (tenant_id absent)'],
       ['4', 'Express API scaffold', '—', 'TypeScript, controller-service-repository structure, error handling'],
       ['5', 'Auth middleware + tenant context', 'Steps 1, 4', 'JWT validation, RLS context setting per Section 3.4'],
       ['6', 'RBAC middleware', 'Step 5', 'Permission checking per Section 9.4'],
