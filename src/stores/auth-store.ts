@@ -123,7 +123,7 @@ export const useAuthStore = create<AuthState>()(
     }),
     {
       name: 'auth-storage',
-      version: 2,
+      version: 3,
       migrate: () => ({
         user: {
           id: 'current-user',

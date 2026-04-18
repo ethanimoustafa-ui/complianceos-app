@@ -16,7 +16,7 @@ import { useRiskStore } from '@/stores/risk-store'
 import { useComplianceScore } from '@/hooks/useComplianceScore'
 import { useFrameworkConfigStore } from '@/stores/framework-config-store'
 import type { PeriodFilter } from '@/lib/compliance-engine.types'
-import { exportExecutiveReport } from '@/lib/export'
+import { exportExecutiveReport, generatePrintableReport } from '@/lib/export'
 import type { TranslationKey } from '@/i18n'
 
 // Types
@@ -700,7 +700,28 @@ export default function ReportsExecutivePage() {
             <button onClick={() => setShowBreakdownModal(false)} className="px-6 py-3 bg-white border border-slate-200 text-slate-600 rounded-xl font-bold text-sm hover:bg-slate-50 transition-all cursor-pointer">
               {t('reports.dismiss')}
             </button>
-            <button className="flex-1 bg-emerald-600 text-white py-3 rounded-xl font-bold text-sm hover:bg-emerald-700 transition-all shadow-lg flex items-center justify-center gap-2 cursor-pointer">
+            <button
+              onClick={() => {
+                if (risks.length === 0) return
+                const sorted = [...risks].sort((a, b) => (b.likelihood * b.impact) - (a.likelihood * a.impact))
+                const rows = sorted.map((r) => ({
+                  [t('reports.id')]: r.id,
+                  Title: r.title,
+                  Category: riskDistributionLabels[r.category] || r.category,
+                  [t('reports.likelihood' as TranslationKey)]: r.likelihood,
+                  [t('reports.impact' as TranslationKey)]: r.impact,
+                  [t('reports.score')]: r.likelihood * r.impact,
+                  [t('reports.status')]: r.status,
+                }))
+                const distSummary = riskDistribution
+                  .map((d) => `${riskDistributionLabels[d.category] || d.category}: ${d.percentage}%`)
+                  .join(' • ')
+                generatePrintableReport(t('reports.detailedRiskBreakdown'), rows, {
+                  subtitle: `${t('reports.totalRegisteredRisks' as TranslationKey)}: ${risks.length}  •  ${distSummary}`,
+                })
+              }}
+              className="flex-1 bg-emerald-600 text-white py-3 rounded-xl font-bold text-sm hover:bg-emerald-700 transition-all shadow-lg flex items-center justify-center gap-2 cursor-pointer"
+            >
               <Icon icon="lucide:file-text" />
               {t('reports.generateDetailedReportPdf')}
             </button>
@@ -883,11 +904,31 @@ export default function ReportsExecutivePage() {
                 )}
               </div>
               <div className="pt-6 border-t border-slate-100 flex gap-3">
-                <button className="flex-1 bg-slate-100 text-slate-900 py-3 rounded-xl font-bold text-xs uppercase tracking-widest hover:bg-slate-200 transition-all cursor-pointer">
+                <button
+                  onClick={() => {
+                    const rows = [{
+                      [t('reports.auditName')]: selectedFinding.auditName,
+                      [t('reports.id')]: selectedFinding.id,
+                      Category: auditTypeLabels[selectedFinding.category] || selectedFinding.category,
+                      [t('reports.severity')]: severityLabels[selectedFinding.severity],
+                      [t('reports.status')]: statusLabels[selectedFinding.status],
+                      [t('reports.owner')]: selectedFinding.owner.name,
+                      [t('reports.dueDate')]: selectedFinding.dueDate.toLocaleDateString(),
+                      [t('reports.progress')]: `${sourceAudit?.progress ?? 0}%`,
+                      [t('reports.issueSummary')]: selectedFinding.description,
+                    }]
+                    generatePrintableReport(
+                      `${t('reports.findingDetail')} — ${selectedFinding.auditName}`,
+                      rows,
+                      { subtitle: auditTypeLabels[selectedFinding.category] || selectedFinding.category },
+                    )
+                  }}
+                  className="flex-1 bg-slate-100 text-slate-900 py-3 rounded-xl font-bold text-xs uppercase tracking-widest hover:bg-slate-200 transition-all cursor-pointer"
+                >
                   {t('reports.shareReport')}
                 </button>
                 {sourceAudit && (
-                  <Link href={`/audits/${sourceAudit.id}`} className="flex-1 bg-slate-900 text-white py-3 px-4 rounded-xl font-bold text-xs uppercase tracking-wider shadow-lg hover:bg-slate-800 transition-all flex items-center justify-center gap-2 text-center">
+                  <Link href={`/reports/${sourceAudit.id}`} className="flex-1 bg-slate-900 text-white py-3 px-4 rounded-xl font-bold text-xs uppercase tracking-wider shadow-lg hover:bg-slate-800 transition-all flex items-center justify-center gap-2 text-center">
                     {t('reports.viewAuditDetails')} <Icon icon="lucide:external-link" className="w-3 h-3 shrink-0" />
                   </Link>
                 )}
