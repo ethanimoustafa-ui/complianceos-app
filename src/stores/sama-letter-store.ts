@@ -5,6 +5,7 @@ import type {
   SAMALetterType,
   SAMALetterApprovalStep,
   SAMALetterTimelineEvent,
+  CircularAuthority,
   PaginationState,
   SortState,
 } from '@/types'
@@ -12,6 +13,7 @@ import type {
 interface SAMALetterFilters {
   type?: SAMALetterType[]
   status?: SAMALetter['status'][]
+  authority?: CircularAuthority[]
   dateRange?: { from: string; to: string }
   search?: string
 }
@@ -33,6 +35,7 @@ const seedLetters: SAMALetter[] = [
   {
     id: 'sama-001',
     reference: 'NOB-2024-082',
+    authority: 'SAMA',
     type: 'non-objection',
     subCategory: 'key-function',
     samaDepartment: 'banking-supervision',
@@ -61,7 +64,7 @@ We remain at your disposal for any further information or clarification required
       { id: 't1', title: 'Draft Created', date: 'Oct 10, 2024', user: 'Felix H.', status: 'completed' },
       { id: 't2', title: 'Compliance Approved', date: 'Oct 11, 2024', user: 'Sarah C.', status: 'completed' },
       { id: 't3', title: 'Sent to SAMA', date: 'Oct 12, 2024', user: 'Automated System', status: 'active' },
-      { id: 't4', title: 'Pending SAMA Reply', date: 'Expected: Nov 12, 2024', status: 'pending' },
+      { id: 't4', title: 'Pending SAMA reply', date: 'Expected: Nov 12, 2024', status: 'pending' },
     ],
     sentDate: '2024-10-12T00:00:00.000Z',
     attachments: [
@@ -75,6 +78,7 @@ We remain at your disposal for any further information or clarification required
   {
     id: 'sama-002',
     reference: 'SUB-2024-114',
+    authority: 'SAMA',
     type: 'submission',
     subCategory: 'quarterly-aml',
     samaDepartment: 'compliance-aml',
@@ -96,7 +100,7 @@ We remain at your disposal for any further information or clarification required
       { id: 't2', title: 'Submitted for Approval', date: 'Oct 21, 2024', user: 'Sarah L.', status: 'completed' },
       { id: 't3', title: 'All Steps Approved', date: 'Oct 23, 2024', user: 'CEO Office', status: 'completed' },
       { id: 't4', title: 'Sent to SAMA', date: 'Oct 24, 2024', user: 'Automated System', status: 'active' },
-      { id: 't5', title: 'Pending SAMA Reply', date: 'Expected: Dec 8, 2024', status: 'pending' },
+      { id: 't5', title: 'Pending SAMA reply', date: 'Expected: Dec 8, 2024', status: 'pending' },
     ],
     sentDate: '2024-10-24T00:00:00.000Z',
     responseDeadline: '2024-12-08T00:00:00.000Z',
@@ -108,6 +112,7 @@ We remain at your disposal for any further information or clarification required
   {
     id: 'sama-003',
     reference: 'INQ-2024-005',
+    authority: 'SAMA',
     type: 'inquiry',
     subCategory: 'circular-clarification',
     samaDepartment: 'banking-supervision',
@@ -355,8 +360,8 @@ export const useSAMALetterStore = create<SAMALetterState>()(
               responseDeadline: deadlineDate.toISOString(),
               timeline: [
                 ...l.timeline.map((t) => ({ ...t, status: 'completed' as const })),
-                { id: crypto.randomUUID(), title: 'Sent to SAMA', date: now, user: 'System', status: 'active' as const },
-                { id: crypto.randomUUID(), title: 'Pending SAMA Reply', date: `Expected: ${deadlineFormatted}`, status: 'pending' as const },
+                { id: crypto.randomUUID(), title: `Sent to ${l.authority}`, date: now, user: 'System', status: 'active' as const },
+                { id: crypto.randomUUID(), title: `Pending ${l.authority} reply`, date: `Expected: ${deadlineFormatted}`, status: 'pending' as const },
               ],
               updatedAt: new Date().toISOString(),
             }
@@ -408,8 +413,20 @@ export const useSAMALetterStore = create<SAMALetterState>()(
     }),
     {
       name: 'sama-letter-store',
-      version: 3,
+      version: 4,
       partialize: (state) => ({ letters: state.letters }),
+      migrate: (persistedState: unknown, version: number) => {
+        const state = (persistedState as { letters?: SAMALetter[] }) ?? {}
+        if (version < 4) {
+          // v3 → v4: every letter gains an `authority` field. Defaults to 'SAMA' (legacy data).
+          const letters = (state.letters ?? []).map((l) => ({
+            ...l,
+            authority: l.authority ?? ('SAMA' as CircularAuthority),
+          }))
+          return { letters }
+        }
+        return state
+      },
     }
   )
 )

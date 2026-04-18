@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useMemo } from 'react'
+import React, { useState, useMemo, useEffect } from 'react'
 import { usePathname } from 'next/navigation'
 import Link from 'next/link'
 import { Icon } from '@iconify/react'
@@ -66,6 +66,8 @@ export default function TeamLogsPage() {
   const [logSort, setLogSort] = useState<{ col: 'timestamp' | 'user'; dir: 'asc' | 'desc' } | null>(null)
   const [selectedLogMember, setSelectedLogMember] = useState<TeamMember | null>(null)
   const [isProfileDrawerOpen, setIsProfileDrawerOpen] = useState(false)
+  const LOGS_PER_PAGE = 10
+  const [currentPage, setCurrentPage] = useState(1)
 
   const userLogs = useUserLogStore((s) => s.logs)
   const members = useTeamStore((s) => s.members)
@@ -132,6 +134,23 @@ export default function TeamLogsPage() {
     })
     return list
   }, [filteredLogs, logSort])
+
+  const totalPages = Math.max(1, Math.ceil(sortedLogs.length / LOGS_PER_PAGE))
+
+  // Reset to page 1 whenever filters / sort / search change the result set
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [logSearch, filterUser, filterAction, filterStatus, logSort])
+
+  // Clamp page if data shrinks below current page
+  useEffect(() => {
+    if (currentPage > totalPages) setCurrentPage(totalPages)
+  }, [currentPage, totalPages])
+
+  const pagedLogs = useMemo(() => {
+    const start = (currentPage - 1) * LOGS_PER_PAGE
+    return sortedLogs.slice(start, start + LOGS_PER_PAGE)
+  }, [sortedLogs, currentPage])
 
   const toggleLogExpand = (logId: number) => {
     setExpandedLogs((prev) =>
@@ -288,7 +307,7 @@ export default function TeamLogsPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50">
-                {sortedLogs.map((log) => (
+                {pagedLogs.map((log) => (
                   <React.Fragment key={log.id}>
                     <tr
                       onClick={() => toggleLogExpand(log.id)}
@@ -400,11 +419,58 @@ export default function TeamLogsPage() {
           </div>
           <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex items-center justify-between">
             <p className="text-xs text-slate-500 font-medium">
-              {t('team.showingLogs').replace('{shown}', filteredLogs.length.toString()).replace('{total}', userLogs.length.toString())}
+              {sortedLogs.length === 0
+                ? t('team.showingLogs').replace('{shown}', '0').replace('{total}', userLogs.length.toString())
+                : t('team.showingLogs')
+                    .replace('{shown}', `${(currentPage - 1) * LOGS_PER_PAGE + 1}–${Math.min(currentPage * LOGS_PER_PAGE, sortedLogs.length)}`)
+                    .replace('{total}', sortedLogs.length.toString())}
             </p>
-            <Button variant="outline" size="sm">
-              {t('team.loadMore')}
-            </Button>
+            {totalPages > 1 && (
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                  disabled={currentPage === 1}
+                  className="px-3 py-1 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-600 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors cursor-pointer"
+                >
+                  <Icon icon="lucide:chevron-left" className="inline w-3 h-3 me-1" />
+                  {t('observations.pagination.previous' as TranslationKey)}
+                </button>
+                {Array.from({ length: totalPages }, (_, i) => i + 1)
+                  .filter((p) => p === 1 || p === totalPages || Math.abs(p - currentPage) <= 1)
+                  .reduce<(number | 'dots')[]>((acc, p) => {
+                    const last = acc[acc.length - 1]
+                    if (last !== undefined && last !== 'dots' && p - (last as number) > 1) acc.push('dots')
+                    acc.push(p)
+                    return acc
+                  }, [])
+                  .map((p, idx) =>
+                    p === 'dots' ? (
+                      <span key={`d${idx}`} className="px-1 text-xs text-slate-400">…</span>
+                    ) : (
+                      <button
+                        key={p}
+                        onClick={() => setCurrentPage(p as number)}
+                        className={cn(
+                          'px-3 py-1 border rounded-lg text-xs font-bold transition-colors cursor-pointer',
+                          currentPage === p
+                            ? 'text-emerald-600 bg-emerald-50 border-emerald-100'
+                            : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                        )}
+                      >
+                        {p}
+                      </button>
+                    )
+                  )}
+                <button
+                  onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={currentPage === totalPages}
+                  className="px-3 py-1 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-600 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors cursor-pointer"
+                >
+                  {t('observations.pagination.next' as TranslationKey)}
+                  <Icon icon="lucide:chevron-right" className="inline w-3 h-3 ms-1" />
+                </button>
+              </div>
+            )}
           </div>
         </Card>
         </div>

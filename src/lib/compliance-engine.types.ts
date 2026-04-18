@@ -116,7 +116,7 @@ export interface AuditSlice {
 
 export interface ObservationSlice {
   id: string
-  source: 'sama' | 'internal' | 'sharia'
+  source: 'sama' | 'cma' | 'ia' | 'zatca' | 'misa' | 'safiu' | 'internal' | 'sharia'
   severity: 'critical' | 'high' | 'medium' | 'low'
   status: 'open' | 'in_progress' | 'resolved' | 'closed'
   dueDate: string

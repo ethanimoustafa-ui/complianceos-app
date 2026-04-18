@@ -2,7 +2,7 @@
 
 import { memo } from 'react'
 import { Icon } from '@iconify/react'
-import { useTranslation } from '@/i18n'
+import { useTranslation, type TranslationKey } from '@/i18n'
 import { ObservationSource, ObservationSeverity, sourceConfig } from './observation-types'
 import type { TeamMember } from '@/types'
 import { useDepartmentStore } from '@/stores/department-store'
@@ -34,7 +34,21 @@ export interface ObservationFormFieldsProps {
   isRTL: boolean
 }
 
-// Source Selection Cards
+// Source Selection Cards — covers correspondence authorities + legacy internal/sharia.
+// Authorities first so they surface as primary options.
+const SOURCE_ORDER: ObservationSource[] = ['sama', 'cma', 'ia', 'zatca', 'misa', 'safiu', 'internal', 'sharia']
+
+const SOURCE_LABEL_KEYS: Record<ObservationSource, string> = {
+  sama:     'observations.sama',
+  cma:      'observations.sources.cma',
+  ia:       'observations.sources.ia',
+  zatca:    'observations.sources.zatca',
+  misa:     'observations.sources.misa',
+  safiu:    'observations.sources.safiu',
+  internal: 'observations.sources.internal',
+  sharia:   'observations.sources.sharia',
+}
+
 export const SourceSelectionField = memo(function SourceSelectionField({
   value,
   onChange,
@@ -49,38 +63,24 @@ export const SourceSelectionField = memo(function SourceSelectionField({
       <label className={`text-xs font-black uppercase text-slate-500 tracking-widest mb-4 block`}>
         {t('observations.form.sourceSelection')}
       </label>
-      <div className="grid grid-cols-3 gap-4">
-        {(Object.keys(sourceConfig) as ObservationSource[]).map((source) => {
+      <div className="grid grid-cols-4 gap-3">
+        {SOURCE_ORDER.map((source) => {
           const config = sourceConfig[source]
           const isSelected = value === source
-
           return (
             <button
               key={source}
               type="button"
               onClick={() => onChange(source)}
-              className={`p-4 border rounded-xl flex flex-col items-center gap-3 transition-all cursor-pointer ${
+              className={`p-3 border rounded-xl flex flex-col items-center gap-2 transition-all cursor-pointer ${
                 isSelected
                   ? 'border-emerald-500 bg-emerald-50 ring-2 ring-emerald-500'
                   : 'border-slate-200 hover:border-emerald-400 hover:bg-emerald-50/50'
               }`}
             >
-              <Icon
-                icon={config.icon}
-                className={`text-3xl ${
-                  source === 'sama'
-                    ? 'text-emerald-600'
-                    : source === 'internal'
-                    ? 'text-blue-600'
-                    : 'text-amber-600'
-                }`}
-              />
-              <span className="text-sm font-bold text-slate-900">
-                {source === 'sama'
-                  ? t('observations.sama')
-                  : source === 'internal'
-                  ? t('observations.sources.internal')
-                  : t('observations.sources.sharia')}
+              <Icon icon={config.icon} className={`text-2xl ${config.iconColor}`} />
+              <span className="text-xs font-bold text-slate-900">
+                {t(SOURCE_LABEL_KEYS[source] as TranslationKey)}
               </span>
             </button>
           )

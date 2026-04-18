@@ -56,6 +56,7 @@ type UpcomingItem = {
   subtitle: string
   dueDate: string
   source: 'registry' | 'sama-letter' | 'observation'
+  authority?: string
 }
 
 export default function CorrespondenceFeedPage() {
@@ -81,6 +82,7 @@ export default function CorrespondenceFeedPage() {
   const [isNewCorrespondenceOpen, setIsNewCorrespondenceOpen] = useState(false)
   const [isRiskMatrixOpen, setIsRiskMatrixOpen] = useState(false)
   const [isLetterDetailOpen, setIsLetterDetailOpen] = useState(false)
+  const [isFeedAllOpen, setIsFeedAllOpen] = useState(false)
   const [selectedLetter, setSelectedLetter] = useState<Correspondence | null>(null)
   const [selectedCellRisks, setSelectedCellRisks] = useState<HeatmapRisk[] | null>(null)
   const [toastMessage, setToastMessage] = useState<string | null>(null)
@@ -204,12 +206,13 @@ export default function CorrespondenceFeedPage() {
         dueDate: c.dueDate, source: 'registry'
       }))
 
-    // SAMA Letters (responseDeadline)
+    // Letters (responseDeadline) — kept legacy `source: 'sama-letter'` for routing back-compat
     samaLetterStore.letters
       .filter(l => l.responseDeadline && new Date(l.responseDeadline) > now && l.status !== 'response-received')
       .forEach(l => items.push({
         id: l.id, name: l.subject, subtitle: l.type,
-        dueDate: l.responseDeadline!, source: 'sama-letter'
+        dueDate: l.responseDeadline!, source: 'sama-letter',
+        authority: l.authority,
       }))
 
     // Observations (dueDate)
@@ -324,7 +327,7 @@ export default function CorrespondenceFeedPage() {
           <div className="hidden lg:flex gap-2">
             <Link href="/correspondence/sama-letters" className={`px-3 py-1.5 text-xs font-bold text-slate-600 bg-slate-50 hover:bg-slate-100 rounded-lg border border-slate-200 flex items-center gap-2`}>
               <Icon icon="lucide:mail" className="text-emerald-500" />
-              {t('observations.samaLetters' as TranslationKey)}
+              {t('samaLetters.tabLetters' as TranslationKey)}
             </Link>
             <Link href="/correspondence/regulatory-updates" className={`px-3 py-1.5 text-xs font-bold text-slate-600 bg-slate-50 hover:bg-slate-100 rounded-lg border border-slate-200 flex items-center gap-2`}>
               <Icon icon="lucide:refresh-cw" className="text-blue-500" />
@@ -367,8 +370,8 @@ export default function CorrespondenceFeedPage() {
             <MetricCard
               icon="lucide:file-check"
               iconColor="emerald"
-              label={t('correspondence.samaSubmissions')}
-              title={t('correspondence.samaSubmissions')}
+              label={t('correspondence.letterSubmissions')}
+              title={t('correspondence.letterSubmissions')}
               value={String(samaSubmissionCount)}
               subtitle={currentQuarterLabel}
               isRTL={isRTL}
@@ -437,6 +440,7 @@ export default function CorrespondenceFeedPage() {
                       key={circ.id}
                       circular={circ}
                       isRTL={isRTL}
+                      t={t}
                       onClick={() => router.push(`/correspondence/regulatory-updates/rules`)}
                     />
                   ))}
@@ -492,27 +496,39 @@ export default function CorrespondenceFeedPage() {
                       )}
                     </div>
                   </div>
-                  <div className="space-y-4">
-                    {correspondenceStore.correspondence
+                  {(() => {
+                    const filtered = correspondenceStore.correspondence
                       .filter(l => correspondenceFilter === 'all' ? true : correspondenceFilter === 'archived' ? l.archived : !l.archived)
                       .filter(l => typeFilter === 'all' ? true : l.type === typeFilter)
-                      .map((letter) => (
-                        <CommunicationLogItem
-                          key={letter.id}
-                          letter={letter}
-                          onView={() => handleViewLetter(letter)}
-                          onArchive={() => handleArchive(letter.id)}
-                          t={t}
-                          isRTL={isRTL}
-                        />
-                      ))}
-                    {correspondenceStore.correspondence
-                      .filter(l => correspondenceFilter === 'all' ? true : correspondenceFilter === 'archived' ? l.archived : !l.archived)
-                      .filter(l => typeFilter === 'all' ? true : l.type === typeFilter)
-                      .length === 0 && (
-                      <p className="text-sm text-slate-400 text-center py-4">{t('correspondence.noCorrespondence')}</p>
-                    )}
-                  </div>
+                    return (
+                      <>
+                        <div className="space-y-4 max-h-[380px] overflow-y-auto pr-1 hide-scrollbar">
+                          {filtered.map((letter) => (
+                            <CommunicationLogItem
+                              key={letter.id}
+                              letter={letter}
+                              onView={() => handleViewLetter(letter)}
+                              onArchive={() => handleArchive(letter.id)}
+                              t={t}
+                              isRTL={isRTL}
+                            />
+                          ))}
+                          {filtered.length === 0 && (
+                            <p className="text-sm text-slate-400 text-center py-4">{t('correspondence.noCorrespondence')}</p>
+                          )}
+                        </div>
+                        {filtered.length > 0 && (
+                          <button
+                            onClick={() => setIsFeedAllOpen(true)}
+                            className="mt-4 w-full py-2 text-[11px] font-bold text-emerald-600 hover:text-emerald-700 bg-emerald-50 hover:bg-emerald-100 rounded-lg flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
+                          >
+                            {t('correspondence.viewAll' as TranslationKey)} ({filtered.length})
+                            <Icon icon="lucide:external-link" className="w-3 h-3" />
+                          </button>
+                        )}
+                      </>
+                    )
+                  })()}
                 </section>
 
                 {/* Policy Status + Rules & Circulars */}
@@ -685,7 +701,7 @@ export default function CorrespondenceFeedPage() {
                               <p className="text-xs text-slate-500 mt-0.5">{item.subtitle}</p>
                             </div>
                             <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full shrink-0 ${sourceChip[item.source]}`}>
-                              {item.source === 'registry' ? 'Registry' : item.source === 'sama-letter' ? 'SAMA' : 'Obs'}
+                              {item.source === 'registry' ? 'Registry' : item.source === 'sama-letter' ? (item.authority || 'Letter') : 'Obs'}
                             </span>
                           </div>
                           <div className={`flex items-center justify-between mt-3 pt-3 border-t border-slate-100`}>
@@ -1057,6 +1073,82 @@ export default function CorrespondenceFeedPage() {
         )}
       </Modal>
 
+      {/* View All Correspondence Feed Modal */}
+      <Modal
+        isOpen={isFeedAllOpen}
+        onClose={() => setIsFeedAllOpen(false)}
+        title={t('correspondence.correspondenceFeed' as TranslationKey)}
+        subtitle={t('correspondence.viewAllSubtitle' as TranslationKey)}
+        size="xl"
+      >
+        {(() => {
+          const filtered = correspondenceStore.correspondence
+            .filter(l => correspondenceFilter === 'all' ? true : correspondenceFilter === 'archived' ? l.archived : !l.archived)
+            .filter(l => typeFilter === 'all' ? true : l.type === typeFilter)
+          return (
+            <div className={`flex flex-col gap-4 ${isRTL ? 'rtl' : ''}`}>
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-slate-500">
+                  {filtered.length} {t('correspondence.items' as TranslationKey)}
+                </span>
+                <div className="flex gap-2">
+                  <select
+                    value={correspondenceFilter}
+                    onChange={(e) => setCorrespondenceFilter(e.target.value as 'active' | 'archived' | 'all')}
+                    className="text-[10px] font-bold text-slate-600 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                  >
+                    <option value="active">{t('correspondence.filterActive')}</option>
+                    <option value="archived">{t('correspondence.filterArchived')}</option>
+                    <option value="all">{t('correspondence.filterAll')}</option>
+                  </select>
+                  <select
+                    value={typeFilter}
+                    onChange={(e) => setTypeFilter(e.target.value as Correspondence['type'] | 'all')}
+                    className="text-[10px] font-bold text-slate-600 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                  >
+                    <option value="all">{t('correspondence.allTypes' as TranslationKey)}</option>
+                    <option value="sama">{t('correspondence.typeSama' as TranslationKey)}</option>
+                    <option value="cma">{t('correspondence.typeCma' as TranslationKey)}</option>
+                    <option value="internal">{t('correspondence.typeInternal' as TranslationKey)}</option>
+                    <option value="external_auditor">{t('correspondence.typeExternalAuditor' as TranslationKey)}</option>
+                    <option value="sharia_board">{t('correspondence.typeShariaBoard' as TranslationKey)}</option>
+                    <option value="vendor">{t('correspondence.typeVendor' as TranslationKey)}</option>
+                    <option value="other">{t('correspondence.typeOther' as TranslationKey)}</option>
+                  </select>
+                  {filtered.length > 0 && (
+                    <button
+                      onClick={() => {
+                        exportCorrespondenceLocalized(filtered, 'correspondence', t, isRTL)
+                        showToast(t('correspondence.exportToCsv'))
+                      }}
+                      className="text-[10px] font-bold text-slate-500 hover:text-slate-700 cursor-pointer flex items-center gap-1 px-2"
+                    >
+                      <Icon icon="lucide:download" className="text-sm" />
+                    </button>
+                  )}
+                </div>
+              </div>
+              <div className="max-h-[60vh] overflow-y-auto pr-1 space-y-3 hide-scrollbar">
+                {filtered.length === 0 ? (
+                  <p className="text-sm text-slate-400 text-center py-8">{t('correspondence.noCorrespondence')}</p>
+                ) : (
+                  filtered.map((letter) => (
+                    <CommunicationLogItem
+                      key={letter.id}
+                      letter={letter}
+                      onView={() => { setIsFeedAllOpen(false); handleViewLetter(letter) }}
+                      onArchive={() => handleArchive(letter.id)}
+                      t={t}
+                      isRTL={isRTL}
+                    />
+                  ))
+                )}
+              </div>
+            </div>
+          )
+        })()}
+      </Modal>
+
     </div>
   )
 }
@@ -1134,19 +1226,28 @@ function MetricCard({
   )
 }
 
-function CircularRow({ circular, isRTL, onClick }: { circular: Circular; isRTL: boolean; onClick?: () => void }) {
+function CircularRow({ circular, isRTL, t, onClick }: {
+  circular: Circular;
+  isRTL: boolean;
+  t: (key: TranslationKey, params?: Record<string, string | number>) => string;
+  onClick?: () => void;
+}) {
   const statusConfig: Record<string, { bg: string; text: string; label: string }> = {
-    'in-progress': { bg: 'bg-amber-100', text: 'text-amber-700', label: 'In Progress' },
-    overdue:       { bg: 'bg-rose-100', text: 'text-rose-700', label: 'Overdue' },
-    pending:       { bg: 'bg-slate-100', text: 'text-slate-700', label: 'Pending' },
-    completed:     { bg: 'bg-emerald-100', text: 'text-emerald-700', label: 'Completed' },
+    'in-progress': { bg: 'bg-amber-100', text: 'text-amber-700', label: t('correspondence.inProgressStatus' as TranslationKey) },
+    overdue:       { bg: 'bg-rose-100', text: 'text-rose-700', label: t('correspondence.overdue') },
+    pending:       { bg: 'bg-slate-100', text: 'text-slate-700', label: t('correspondence.pendingStatus' as TranslationKey) },
+    completed:     { bg: 'bg-emerald-100', text: 'text-emerald-700', label: t('correspondence.completedStatus' as TranslationKey) },
   }
   const config = statusConfig[circular.status] ?? statusConfig.pending
   const isCompleted = circular.status === 'completed'
   const now = new Date()
   const due = new Date(circular.dueDate)
   const diffDays = Math.ceil((due.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
-  const dueText = isCompleted ? 'Completed' : diffDays <= 0 ? 'Overdue' : `Due in ${diffDays}d`
+  const dueText = isCompleted
+    ? t('correspondence.completedStatus' as TranslationKey)
+    : diffDays <= 0
+      ? t('correspondence.overdue')
+      : t('correspondence.dueInDaysShort' as TranslationKey, { count: String(diffDays) })
   const isDueSoon = !isCompleted && diffDays <= 7
 
   return (
@@ -1167,7 +1268,7 @@ function CircularRow({ circular, isRTL, onClick }: { circular: Circular; isRTL: 
         </div>
       </div>
       <div className={`flex items-center gap-6`}>
-        <div className={'text-right'}>
+        <div className={'text-end'}>
           <span className={`text-[10px] font-black uppercase ${isDueSoon ? 'text-rose-500' : isCompleted ? 'text-emerald-600' : 'text-slate-400'}`}>
             {dueText}
           </span>

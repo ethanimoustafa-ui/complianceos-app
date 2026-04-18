@@ -134,7 +134,9 @@ export interface Audit {
 }
 
 // Observation types
-export type ObservationSource = 'sama' | 'internal' | 'sharia'
+export type ObservationSource =
+  | 'sama' | 'cma' | 'ia' | 'zatca' | 'misa' | 'safiu'
+  | 'internal' | 'sharia'
 export type ObservationSeverity = 'critical' | 'high' | 'medium' | 'low'
 export type ObservationStatus = 'open' | 'in_progress' | 'resolved' | 'closed'
 
@@ -389,6 +391,7 @@ export interface LetterTemplate {
   defaultSignerNameAr?: string
   defaultSignerTitleAr?: string
   defaultSignatureImageUrl?: string  // base64 data URL
+  defaultAuthority?: CircularAuthority
   defaultSamaDepartment?: SAMADepartment
   defaultRecipientName?: string
   defaultRecipientOrg?: string
@@ -408,7 +411,9 @@ export type SAMALetterStatus =
   | 'overdue'
 
 export type SAMALetterType = 'non-objection' | 'inquiry' | 'submission' | 'notification'
-export type SAMADepartment = 'banking-supervision' | 'payment-systems' | 'compliance-aml'
+// Department id is now an opaque string scoped per authority (see src/lib/letter-authority.ts).
+// Existing SAMA dept IDs (banking-supervision, payment-systems, compliance-aml) remain valid.
+export type SAMADepartment = string
 export type SAMASubCategory =
   | 'key-function' | 'product-launch' | 'equity-participation'
   | 'circular-clarification' | 'regulatory-interpretation'
@@ -436,6 +441,7 @@ export interface SAMALetterTimelineEvent {
 export interface SAMALetter {
   id: string
   reference: string
+  authority: CircularAuthority
   type: SAMALetterType
   subCategory?: SAMASubCategory
   samaDepartment?: SAMADepartment
@@ -1078,16 +1084,20 @@ export interface SortState {
 // ── Settings Page Types ──────────────────────────────────────────────────────
 
 export type RegulatoryBodyId =
-  | 'sama'
-  | 'nca-ecc'
-  | 'ndmo-pdpl'
-  | 'nca-cscc'
-  | 'citc'
-  | 'nca-ccc'
-  | 'cma'
-  | 'zatca'
-  | 'misa'
-  | 'safiu'
+  // Correspondence authorities (also act as buckets for progress tracking)
+  | 'sama' | 'cma' | 'ia' | 'zatca' | 'misa' | 'safiu'
+  // NCA cybersecurity frameworks
+  | 'nca-ecc' | 'nca-cscc' | 'nca-ccc'
+  // Privacy / data protection
+  | 'ndmo-pdpl'   // legacy — kept for persisted state back-compat
+  | 'sdaia-pdpl'  // current (2023 revision)
+  // ISO
+  | 'iso-27001' | 'iso-22301' | 'iso-31000'
+  // COSO
+  | 'coso-ic' | 'coso-erm'
+  // Other Saudi regulators / standards
+  | 'citc' | 'saso'
+  // Islamic finance governance
   | 'sharia-board'
 
 export type ComplianceThreshold = 'strict' | 'standard' | 'relaxed' | 'custom'

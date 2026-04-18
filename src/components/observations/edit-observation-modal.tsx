@@ -25,7 +25,7 @@ const observationSchema = z.object({
   title: z.string().min(3, 'Title must be at least 3 characters'),
   subTitle: z.string().optional(),
   description: z.string().min(10, 'Description must be at least 10 characters'),
-  source: z.enum(['sama', 'internal', 'sharia']),
+  source: z.enum(['sama', 'cma', 'ia', 'zatca', 'misa', 'safiu', 'internal', 'sharia']),
   severity: z.enum(['critical', 'high', 'medium', 'low']),
   status: z.enum(['open', 'in_progress', 'resolved', 'closed']),
   dueDate: z.string().min(1, 'Due date is required'),
@@ -111,7 +111,7 @@ export const EditObservationModal = memo(function EditObservationModal({
     if (observation && isOpen) {
       console.log('EditObservationModal: Populating form with observation:', observation)
       // Use source value directly (sama, internal, sharia)
-      const validSources: ObservationFormData['source'][] = ['sama', 'internal', 'sharia']
+      const validSources: ObservationFormData['source'][] = ['sama', 'cma', 'ia', 'zatca', 'misa', 'safiu', 'internal', 'sharia']
       const source = validSources.includes(observation.source as ObservationFormData['source'])
         ? (observation.source as ObservationFormData['source'])
         : 'sama'

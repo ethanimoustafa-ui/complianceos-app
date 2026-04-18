@@ -1,6 +1,7 @@
 'use client'
 
-import { memo, useRef, useState, useEffect } from 'react'
+import { memo, useState, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { Icon } from '@iconify/react'
 import { useTranslation } from '@/i18n'
 import { Observation, severityConfig, statusConfig, sourceConfig } from './observation-types'
@@ -41,8 +42,10 @@ export const ObservationTableRow = memo(function ObservationTableRow({
   isRTL,
 }: ObservationTableRowProps) {
   const { t } = useTranslation()
-  const menuButtonRef = useRef<HTMLButtonElement>(null)
   const [menuPosition, setMenuPosition] = useState({ top: 0, left: 0 })
+  const [isMounted, setIsMounted] = useState(false)
+  useEffect(() => { setIsMounted(true) }, [])
+
   const severity = severityConfig[observation.severity]
   const status = statusConfig[observation.status]
   const source = sourceConfig[observation.source as keyof typeof sourceConfig] || {
@@ -52,23 +55,21 @@ export const ObservationTableRow = memo(function ObservationTableRow({
   }
   const isClosed = observation.status === 'closed'
 
-  // Calculate menu position when opening
-  useEffect(() => {
-    if (isMenuOpen && menuButtonRef.current) {
-      const rect = menuButtonRef.current.getBoundingClientRect()
-      const menuHeight = 88 // Approximate menu height (2 items * 40px + padding)
-      const spaceBelow = window.innerHeight - rect.bottom
-      const spaceAbove = rect.top
+  const MENU_WIDTH = 172
+  const MENU_HEIGHT = 92
 
-      // Determine if menu should open upward
-      const openUp = spaceBelow < menuHeight && spaceAbove > menuHeight
-
-      setMenuPosition({
-        top: openUp ? rect.top - menuHeight : rect.bottom + 4,
-        left: isRTL ? rect.left : rect.right - 140, // 140px is min-width of menu
-      })
-    }
-  }, [isMenuOpen, isRTL])
+  // Position the action menu next to the cursor. In LTR, the menu's left edge sits
+  // just right of the cursor; in RTL, the menu's right edge sits just left of the cursor.
+  // Always clamp so the menu never spills off-screen.
+  const positionMenuAtCursor = (e: React.MouseEvent) => {
+    const OFFSET = 6
+    const maxLeft = window.innerWidth - MENU_WIDTH - 8
+    const maxTop  = window.innerHeight - MENU_HEIGHT - 8
+    const desiredLeft = isRTL ? e.clientX - MENU_WIDTH - OFFSET : e.clientX + OFFSET
+    const left = Math.max(8, Math.min(desiredLeft, maxLeft))
+    const top  = Math.max(8, Math.min(e.clientY + OFFSET, maxTop))
+    setMenuPosition({ top, left })
+  }
 
   return (
     <tr
@@ -146,9 +147,9 @@ export const ObservationTableRow = memo(function ObservationTableRow({
         ) : (
           <div className="relative">
             <button
-              ref={menuButtonRef}
               onClick={(e) => {
                 e.stopPropagation()
+                if (!isMenuOpen) positionMenuAtCursor(e)
                 onMenuToggle(isMenuOpen ? null : observation.id)
               }}
               className="text-slate-400 hover:text-slate-900 transition-colors cursor-pointer"
@@ -156,44 +157,87 @@ export const ObservationTableRow = memo(function ObservationTableRow({
               <Icon icon="lucide:more-horizontal" className="text-xl" />
             </button>
 
-            {isMenuOpen ? (
-              <>
-                <div
-                  className="fixed inset-0 z-40"
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    onMenuToggle(null)
-                  }}
-                />
-                <div
-                  className="fixed z-50 bg-white border border-slate-200 rounded-xl shadow-lg py-1 min-w-[140px]"
-                  style={{ top: menuPosition.top, left: menuPosition.left }}
-                >
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      onMenuToggle(null)
-                      onEdit?.(observation)
-                    }}
-                    className={`w-full px-4 py-2 ${isRTL ? 'text-right' : 'text-left'} text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-2 cursor-pointer`}
-                  >
-                    <Icon icon="lucide:pencil" className="text-slate-400" />
-                    {t('observations.actions.edit')}
-                  </button>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      onMenuToggle(null)
-                      onDelete?.(observation.id)
-                    }}
-                    className={`w-full px-4 py-2 ${isRTL ? 'text-right' : 'text-left'} text-sm text-rose-600 hover:bg-rose-50 flex items-center gap-2 cursor-pointer`}
-                  >
-                    <Icon icon="lucide:trash-2" />
-                    {t('observations.actions.delete')}
-                  </button>
-                </div>
-              </>
-            ) : null}
+            {isMenuOpen && isMounted
+              ? createPortal(
+                  <>
+                    <div
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        onMenuToggle(null)
+                      }}
+                      style={{ position: 'fixed', inset: 0, zIndex: 9998 }}
+                    />
+                    <div
+                      style={{
+                        position: 'fixed',
+                        top: menuPosition.top,
+                        left: menuPosition.left,
+                        width: MENU_WIDTH,
+                        zIndex: 9999,
+                        background: 'white',
+                        border: '1px solid #e2e8f0',
+                        borderRadius: 12,
+                        boxShadow: '0 10px 30px -10px rgba(15, 23, 42, 0.25)',
+                        padding: '4px 0',
+                      }}
+                    >
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          onMenuToggle(null)
+                          onEdit?.(observation)
+                        }}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 8,
+                          width: '100%',
+                          padding: '8px 16px',
+                          fontSize: 14,
+                          color: '#334155',
+                          background: 'transparent',
+                          border: 0,
+                          cursor: 'pointer',
+                          textAlign: isRTL ? 'right' : 'left',
+                          justifyContent: isRTL ? 'flex-end' : 'flex-start',
+                        }}
+                        onMouseEnter={(e) => (e.currentTarget.style.background = '#f8fafc')}
+                        onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                      >
+                        <Icon icon="lucide:pencil" style={{ color: '#94a3b8' }} />
+                        <span>{t('observations.actions.edit')}</span>
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          onMenuToggle(null)
+                          onDelete?.(observation.id)
+                        }}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 8,
+                          width: '100%',
+                          padding: '8px 16px',
+                          fontSize: 14,
+                          color: '#e11d48',
+                          background: 'transparent',
+                          border: 0,
+                          cursor: 'pointer',
+                          textAlign: isRTL ? 'right' : 'left',
+                          justifyContent: isRTL ? 'flex-end' : 'flex-start',
+                        }}
+                        onMouseEnter={(e) => (e.currentTarget.style.background = '#fff1f2')}
+                        onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                      >
+                        <Icon icon="lucide:trash-2" />
+                        <span>{t('observations.actions.delete')}</span>
+                      </button>
+                    </div>
+                  </>,
+                  document.body,
+                )
+              : null}
           </div>
         )}
       </td>

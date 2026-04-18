@@ -2,7 +2,11 @@ export type ObservationSeverity = 'critical' | 'high' | 'medium' | 'low'
 
 export type ObservationStatus = 'open' | 'in_progress' | 'resolved' | 'closed'
 
-export type ObservationSource = 'sama' | 'internal' | 'sharia'
+export type ObservationSource =
+  // Correspondence authorities (mirror LetterAuthority union — lowercased)
+  | 'sama' | 'cma' | 'ia' | 'zatca' | 'misa' | 'safiu'
+  // Legacy internal sources
+  | 'internal' | 'sharia'
 
 // Remediation Plan types
 export type RemediationPlanStatus = 'draft' | 'submitted' | 'approved' | 'rejected'
@@ -184,19 +188,12 @@ export const sourceConfig: Record<
   ObservationSource,
   { label: string; icon: string; iconColor: string }
 > = {
-  sama: {
-    label: 'SAMA',
-    icon: 'lucide:landmark',
-    iconColor: 'text-emerald-500',
-  },
-  internal: {
-    label: 'Internal',
-    icon: 'lucide:clipboard-check',
-    iconColor: 'text-blue-500',
-  },
-  sharia: {
-    label: 'Sharia',
-    icon: 'lucide:moon',
-    iconColor: 'text-amber-500',
-  },
+  sama:    { label: 'SAMA',     icon: 'lucide:landmark',        iconColor: 'text-emerald-500' },
+  cma:     { label: 'CMA',      icon: 'lucide:line-chart',      iconColor: 'text-blue-500'    },
+  ia:      { label: 'IA',       icon: 'lucide:shield',          iconColor: 'text-violet-500'  },
+  zatca:   { label: 'ZATCA',    icon: 'lucide:coins',           iconColor: 'text-amber-500'   },
+  misa:    { label: 'MISA',     icon: 'lucide:briefcase',       iconColor: 'text-sky-500'     },
+  safiu:   { label: 'SAFIU',    icon: 'lucide:eye',             iconColor: 'text-rose-500'    },
+  internal:{ label: 'Internal', icon: 'lucide:clipboard-check', iconColor: 'text-blue-600'    },
+  sharia:  { label: 'Sharia',   icon: 'lucide:moon',            iconColor: 'text-amber-600'   },
 }

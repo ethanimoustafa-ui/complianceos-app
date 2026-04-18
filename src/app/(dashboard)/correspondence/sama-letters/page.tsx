@@ -10,30 +10,33 @@ import { useTranslation } from '@/i18n'
 import { RoleGuard } from '@/components/auth/role-guard'
 import { useSAMALetterStore } from '@/stores/sama-letter-store'
 import { useAuthStore } from '@/stores/auth-store'
-import type { SAMALetter, SAMALetterType, SAMALetterStatus, SAMALetterApprovalStep, Attachment, LetterTemplate, TemplateStatus } from '@/types'
+import type { SAMALetter, SAMALetterType, SAMALetterStatus, SAMALetterApprovalStep, Attachment, LetterTemplate, TemplateStatus, CircularAuthority } from '@/types'
 import { useSAMATemplateStore } from '@/stores/sama-template-store'
 import { useTeamStore } from '@/stores/team-store'
+import {
+  LETTER_AUTHORITIES,
+  AUTHORITY_FULL_NAMES,
+  AUTHORITY_COLORS,
+  AUTHORITY_DEPARTMENTS,
+  AUTHORITY_RECIPIENT_DEFAULTS,
+  getDepartmentLabel,
+  getDepartmentEmail,
+  getDefaultDepartmentId,
+} from '@/lib/letter-authority'
 
 // Sort types
-type LetterSortCol = 'reference' | 'type' | 'subject' | 'status' | 'updatedAt'
+type LetterSortCol = 'authority' | 'reference' | 'type' | 'subject' | 'status' | 'updatedAt'
 type LetterSortState = { col: LetterSortCol; dir: 'asc' | 'desc' } | null
 
-// SAMA department email mapping
-const SAMA_DEPT_EMAILS: Record<string, string> = {
-  'banking-supervision': 'bankingsupervision@sama.gov.sa',
-  'payment-systems':     'paymentsystems@sama.gov.sa',
-  'compliance-aml':      'correspondence@sama.gov.sa',
-}
-
-// Email subject templates per letter type and language
-const SAMA_EMAIL_SUBJECTS: Record<SAMALetterType, { en: string; ar: string }> = {
+// Email subject templates per letter type and language (authority-agnostic)
+const LETTER_EMAIL_SUBJECTS: Record<SAMALetterType, { en: string; ar: string }> = {
   'non-objection': { en: 'Non-Objection Request',    ar: 'طلب عدم ممانعة' },
   'inquiry':       { en: 'Regulatory Inquiry',        ar: 'استفسار تنظيمي' },
   'submission':    { en: 'Regulatory Submission',     ar: 'تقديم تنظيمي' },
   'notification':  { en: 'Regulatory Notification',  ar: 'إخطار تنظيمي' },
 }
 
-function buildSAMAEmailBody(type: SAMALetterType, lang: 'en' | 'ar', reference: string, subject: string): string {
+function buildLetterEmailBody(type: SAMALetterType, lang: 'en' | 'ar', reference: string, subject: string): string {
   if (lang === 'ar') {
     const intros: Record<SAMALetterType, string> = {
       'non-objection': `السادة الكرام،\n\nأتقدم بموجب هذا الخطاب بطلب عدم ممانعة بالرجوع إلى المرجع ${reference} بشأن: ${subject}. نرفق طيه الوثائق الداعمة للدراسة والاعتماد. ونبقى رهن الإشارة لتزويدكم بأي معلومات إضافية.`,
@@ -52,20 +55,16 @@ function buildSAMAEmailBody(type: SAMALetterType, lang: 'en' | 'ar', reference: 
   return intros[type]
 }
 
-// SAMA Department recipient defaults (used by TemplateEditForm)
-const DEPT_RECIPIENT_DEFAULTS: Record<string, { en: { name: string; org: string; city: string }; ar: { name: string; org: string; city: string } }> = {
-  'banking-supervision': {
-    en: { name: 'Banking Supervision Department', org: 'Saudi Central Bank (SAMA)', city: 'Riyadh, Saudi Arabia' },
-    ar: { name: 'إدارة الرقابة المصرفية', org: 'البنك المركزي السعودي (ساما)', city: 'الرياض، المملكة العربية السعودية' },
-  },
-  'payment-systems': {
-    en: { name: 'Payment Systems Department', org: 'Saudi Central Bank (SAMA)', city: 'Riyadh, Saudi Arabia' },
-    ar: { name: 'إدارة أنظمة الدفع', org: 'البنك المركزي السعودي (ساما)', city: 'الرياض، المملكة العربية السعودية' },
-  },
-  'compliance-aml': {
-    en: { name: 'Compliance Department', org: 'Saudi Central Bank (SAMA)', city: 'Riyadh, Saudi Arabia' },
-    ar: { name: 'إدارة الالتزام', org: 'البنك المركزي السعودي (ساما)', city: 'الرياض، المملكة العربية السعودية' },
-  },
+// Recipient defaults derived from authority + department (see src/lib/letter-authority.ts).
+function getRecipientDefaults(
+  authority: CircularAuthority,
+  deptId: string,
+): { en: { name: string; org: string; city: string }; ar: { name: string; org: string; city: string } } {
+  const auth = AUTHORITY_RECIPIENT_DEFAULTS[authority]
+  return {
+    en: { name: getDepartmentLabel(authority, deptId, 'en'), org: auth.en.org, city: auth.en.city },
+    ar: { name: getDepartmentLabel(authority, deptId, 'ar'), org: auth.ar.org, city: auth.ar.city },
+  }
 }
 
 // Helper to get display templates for the dashboard cards
@@ -134,17 +133,28 @@ function LetterSortHeader({ label, col, sort, onSort, onClear }: {
   )
 }
 
-function translateTimelineTitle(title: string, t: (key: string) => string): string {
+function translateTimelineTitle(
+  title: string,
+  t: (key: string, params?: Record<string, string | number>) => string,
+): string {
   const EXACT: Record<string, string> = {
     'Draft Created':          t('samaLetters.letterCreatedDraft'),
     'Submitted for Approval': t('samaLetters.letterSubmittedApproval'),
     'Compliance Approved':    t('samaLetters.complianceApproved'),
     'All Steps Approved':     t('samaLetters.allStepsApproved'),
+    // Legacy literals (pre-authority): keep mapping so old persisted timelines still translate
     'Sent to SAMA':           t('samaLetters.letterSentToSama'),
     'Pending SAMA Reply':     t('samaLetters.pendingSamaReply'),
+    'Pending SAMA reply':     t('samaLetters.pendingSamaReply'),
     'Response Received':      t('samaLetters.letterResponseReceived'),
   }
   if (EXACT[title]) return EXACT[title]
+
+  // Dynamic authority forms: 'Sent to <AUTHORITY>' / 'Pending <AUTHORITY> reply'
+  const sentMatch = title.match(/^Sent to ([A-Z]+)$/)
+  if (sentMatch) return t('samaLetters.letterSentToAuthority', { authority: sentMatch[1] })
+  const pendingMatch = title.match(/^Pending ([A-Z]+) (?:Reply|reply)$/)
+  if (pendingMatch) return t('samaLetters.pendingAuthorityReply', { authority: pendingMatch[1] })
 
   // Translate legacy "Field updated" events from the removed editLetter feature
   const FIELD_UPDATED: Record<string, string> = {
@@ -260,16 +270,77 @@ export default function SAMALettersPage() {
   const handleLetterSort = (col: LetterSortCol) =>
     setSort(prev => prev?.col === col ? { col, dir: prev.dir === 'asc' ? 'desc' : 'asc' } : { col, dir: 'asc' })
 
-  // Sorted letters
+  // Search + filter state (table)
+  const [letterSearch, setLetterSearch] = useState('')
+  const [authorityFilter, setAuthorityFilter] = useState<Set<CircularAuthority>>(new Set())
+  const [dateFilter, setDateFilter] = useState<'any' | '30d' | '90d' | '365d'>('any')
+  const [showFilterPopover, setShowFilterPopover] = useState(false)
+  const filterPopoverRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!showFilterPopover) return
+    const handler = (e: MouseEvent) => {
+      if (filterPopoverRef.current && !filterPopoverRef.current.contains(e.target as Node)) {
+        setShowFilterPopover(false)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [showFilterPopover])
+
+  const toggleAuthorityFilter = (a: CircularAuthority) => {
+    setAuthorityFilter(prev => {
+      const next = new Set(prev)
+      if (next.has(a)) next.delete(a); else next.add(a)
+      return next
+    })
+  }
+
+  const resetFilters = () => {
+    setAuthorityFilter(new Set())
+    setDateFilter('any')
+    setLetterSearch('')
+  }
+
+  // Filtered + sorted letters
+  const filteredLetters = useMemo(() => {
+    const q = letterSearch.trim().toLowerCase()
+    const dateThreshold = (() => {
+      if (dateFilter === 'any') return 0
+      const days = dateFilter === '30d' ? 30 : dateFilter === '90d' ? 90 : 365
+      return Date.now() - days * 24 * 60 * 60 * 1000
+    })()
+    return store.letters.filter((l) => {
+      if (authorityFilter.size > 0 && !authorityFilter.has(l.authority)) return false
+      if (dateThreshold > 0 && new Date(l.updatedAt).getTime() < dateThreshold) return false
+      if (q) {
+        const fullEn = AUTHORITY_FULL_NAMES[l.authority]?.en.toLowerCase() ?? ''
+        const fullAr = AUTHORITY_FULL_NAMES[l.authority]?.ar ?? ''
+        const haystack = [
+          l.subject,
+          l.subjectAr ?? '',
+          l.reference,
+          l.authority,
+          fullEn,
+          fullAr,
+        ].join(' ').toLowerCase()
+        if (!haystack.includes(q)) return false
+      }
+      return true
+    })
+  }, [store.letters, letterSearch, authorityFilter, dateFilter])
+
+  // Sorted letters (post-filter)
   const sortedLetters = useMemo(() => {
-    if (!sort) return store.letters
+    if (!sort) return filteredLetters
     const { col, dir } = sort
     const mul = dir === 'asc' ? 1 : -1
     const statusOrder: Record<SAMALetterStatus, number> = {
       draft: 0, 'pending-approval': 1, approved: 2, sent: 3, 'response-received': 4, overdue: 5,
     }
-    return [...store.letters].sort((a, b) => {
+    return [...filteredLetters].sort((a, b) => {
       switch (col) {
+        case 'authority': return mul * a.authority.localeCompare(b.authority)
         case 'reference': return mul * a.reference.localeCompare(b.reference)
         case 'type':      return mul * a.type.localeCompare(b.type)
         case 'subject':   return mul * a.subject.localeCompare(b.subject)
@@ -278,7 +349,7 @@ export default function SAMALettersPage() {
         default: return 0
       }
     })
-  }, [store.letters, sort])
+  }, [filteredLetters, sort])
 
   // Actions dropdown state
   const [openMenuId, setOpenMenuId] = useState<string | null>(null)
@@ -317,26 +388,20 @@ export default function SAMALettersPage() {
       setEditSubjectAr(selectedLetter.subjectAr || '')
       setEditBodyAr(selectedLetter.bodyAr || '')
       setEditAssignedTo(selectedLetter.assignedTo || '')
-      setEditDepartment(selectedLetter.samaDepartment || 'compliance-aml')
+      const fallbackDept = getDefaultDepartmentId(selectedLetter.authority)
+      setEditDepartment(selectedLetter.samaDepartment || fallbackDept)
       setEditSignerName(selectedLetter.signerName || selectedLetter.createdBy || '')
       setEditSignerTitle(selectedLetter.signerTitle || 'Head of Compliance')
       setEditSignerNameAr(selectedLetter.signerNameAr || 'فيليكس هندرسون')
       setEditSignerTitleAr(selectedLetter.signerTitleAr || 'رئيس إدارة الالتزام')
-      // Recipient defaults derived from samaDepartment so each template carries its own target
-      const deptEn = selectedLetter.recipientName
-        ?? (selectedLetter.samaDepartment === 'banking-supervision' ? 'Banking Supervision Department'
-          : selectedLetter.samaDepartment === 'payment-systems' ? 'Payment Systems Department'
-          : 'Compliance Department')
-      const deptAr = selectedLetter.recipientNameAr
-        ?? (selectedLetter.samaDepartment === 'banking-supervision' ? 'إدارة الرقابة المصرفية'
-          : selectedLetter.samaDepartment === 'payment-systems' ? 'إدارة أنظمة الدفع'
-          : 'إدارة الالتزام')
-      setEditRecipientName(deptEn)
-      setEditRecipientOrg(selectedLetter.recipientOrg ?? 'Saudi Central Bank (SAMA)')
-      setEditRecipientCity(selectedLetter.recipientCity ?? 'Riyadh, Saudi Arabia')
-      setEditRecipientNameAr(deptAr)
-      setEditRecipientOrgAr(selectedLetter.recipientOrgAr ?? 'البنك المركزي السعودي (ساما)')
-      setEditRecipientCityAr(selectedLetter.recipientCityAr ?? 'الرياض، المملكة العربية السعودية')
+      // Recipient defaults derived from authority + department
+      const recipientDefaults = getRecipientDefaults(selectedLetter.authority, selectedLetter.samaDepartment || fallbackDept)
+      setEditRecipientName(selectedLetter.recipientName ?? recipientDefaults.en.name)
+      setEditRecipientOrg(selectedLetter.recipientOrg ?? recipientDefaults.en.org)
+      setEditRecipientCity(selectedLetter.recipientCity ?? recipientDefaults.en.city)
+      setEditRecipientNameAr(selectedLetter.recipientNameAr ?? recipientDefaults.ar.name)
+      setEditRecipientOrgAr(selectedLetter.recipientOrgAr ?? recipientDefaults.ar.org)
+      setEditRecipientCityAr(selectedLetter.recipientCityAr ?? recipientDefaults.ar.city)
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedLetter?.id])
@@ -573,14 +638,14 @@ export default function SAMALettersPage() {
 
   // Pure mail helper — opens mailto and marks the letter sent. Safe to call without a PDF download
   // (e.g. from the summary table where the letter content DOM is not rendered).
-  const openSAMAMail = useCallback((letter: SAMALetter, lang: 'en' | 'ar') => {
-    const toEmail = SAMA_DEPT_EMAILS[letter.samaDepartment || 'compliance-aml']
-    const subjectText = SAMA_EMAIL_SUBJECTS[letter.type][lang]
+  const openAuthorityMail = useCallback((letter: SAMALetter, lang: 'en' | 'ar') => {
+    const toEmail = getDepartmentEmail(letter.authority, letter.samaDepartment) ?? ''
+    const subjectText = LETTER_EMAIL_SUBJECTS[letter.type][lang]
     const letterSubj = lang === 'ar'
       ? (letter.subjectAr || letter.subject)
       : letter.subject
     const emailSubject = `${subjectText} — ${letter.reference}: ${letterSubj}`
-    const emailBody = buildSAMAEmailBody(letter.type, lang, letter.reference, letterSubj)
+    const emailBody = buildLetterEmailBody(letter.type, lang, letter.reference, letterSubj)
     const mailto = `mailto:${toEmail}?subject=${encodeURIComponent(emailSubject)}&body=${encodeURIComponent(emailBody)}`
     window.open(mailto, '_blank')
     store.send(letter.id)
@@ -591,8 +656,8 @@ export default function SAMALettersPage() {
   const handleSendToSama = useCallback(async () => {
     if (!selectedLetter) return
     await handleDownloadPdf()
-    openSAMAMail(selectedLetter, language)
-  }, [selectedLetter, handleDownloadPdf, openSAMAMail, language])
+    openAuthorityMail(selectedLetter, language)
+  }, [selectedLetter, handleDownloadPdf, openAuthorityMail, language])
 
   // Auto-trigger send after navigating from table to detail view
   useEffect(() => {
@@ -652,11 +717,27 @@ export default function SAMALettersPage() {
       case 'draft': return t('samaLetters.drafting')
       case 'pending-approval': return t('samaLetters.pendingApproval')
       case 'approved': return t('samaLetters.approvedForSending')
-      case 'sent': return t('samaLetters.sentToSama')
+      case 'sent': return t('samaLetters.statusSentToAuthority')
       case 'response-received': return t('samaLetters.statusResponseReceived')
       case 'overdue': return t('samaLetters.statusOverdue')
       default: return status
     }
+  }
+
+  // Authority badge helper used in table & detail metadata
+  const renderAuthorityBadge = (authority: CircularAuthority, opts?: { showFull?: boolean; size?: 'sm' | 'md' }) => {
+    const colors = AUTHORITY_COLORS[authority]
+    const size = opts?.size ?? 'sm'
+    const full = opts?.showFull
+      ? (isRTL ? AUTHORITY_FULL_NAMES[authority].ar : AUTHORITY_FULL_NAMES[authority].en)
+      : null
+    return (
+      <span className={`inline-flex items-center gap-1 ${size === 'md' ? 'px-2.5 py-1 text-xs' : 'px-2 py-0.5 text-[10px]'} font-bold rounded-md border ${colors.bg} ${colors.text} ${colors.border}`}>
+        <span className={`w-1.5 h-1.5 rounded-full ${colors.dot}`} />
+        {authority}
+        {full && <span className="font-medium opacity-75 truncate max-w-[160px]">{full}</span>}
+      </span>
+    )
   }
 
   return (
@@ -671,9 +752,9 @@ export default function SAMALettersPage() {
             <Icon icon={isRTL ? 'lucide:arrow-right' : 'lucide:arrow-left'} className="text-base" />
           </Link>
           <div>
-            <h1 className="text-xl font-bold font-display text-slate-900">{t('samaLetters.title')}</h1>
+            <h1 className="text-xl font-bold font-display text-slate-900">{t('samaLetters.pageTitleLetters')}</h1>
             <p className="text-xs text-slate-500 font-medium tracking-wide uppercase">
-              {t('samaLetters.subtitle')}
+              {t('samaLetters.pageSubtitleLetters')}
             </p>
           </div>
 
@@ -685,7 +766,7 @@ export default function SAMALettersPage() {
               className={`px-3 py-1.5 text-xs font-bold text-emerald-700 bg-emerald-50 rounded-lg transition-all border border-emerald-100 flex items-center gap-2`}
             >
               <Icon icon="lucide:mail" className="text-emerald-500" />
-              {t('observations.samaLetters')}
+              {t('samaLetters.tabLetters')}
             </Link>
             <Link
               href="/correspondence/regulatory-updates"
@@ -1031,19 +1112,92 @@ export default function SAMALettersPage() {
                     />
                     <input
                       type="text"
-                      placeholder={t('samaLetters.searchReference')}
-                      className={`${isRTL ? 'pr-10 pl-4' : 'pl-10 pr-4'} py-2 bg-slate-100 rounded-lg text-xs focus:ring-2 focus:ring-emerald-500 outline-none w-64`}
+                      value={letterSearch}
+                      onChange={(e) => setLetterSearch(e.target.value)}
+                      placeholder={t('samaLetters.searchByNameRefAuthority')}
+                      className={`${isRTL ? 'pr-10 pl-4' : 'pl-10 pr-4'} py-2 bg-slate-100 rounded-lg text-xs focus:ring-2 focus:ring-emerald-500 outline-none w-72`}
                     />
                   </div>
-                  <button className="p-2 bg-slate-100 rounded-lg text-slate-600 hover:bg-slate-200 transition-colors cursor-pointer">
-                    <Icon icon="lucide:filter" />
-                  </button>
+                  <div className="relative" ref={filterPopoverRef}>
+                    <button
+                      onClick={() => setShowFilterPopover(s => !s)}
+                      className={`p-2 rounded-lg transition-colors cursor-pointer flex items-center gap-1.5 ${
+                        authorityFilter.size > 0 || dateFilter !== 'any'
+                          ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'
+                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                      }`}
+                      title={t('samaLetters.filtersTitle')}
+                    >
+                      <Icon icon="lucide:filter" />
+                      {(authorityFilter.size > 0 || dateFilter !== 'any') && (
+                        <span className="text-[10px] font-bold">
+                          {authorityFilter.size + (dateFilter !== 'any' ? 1 : 0)}
+                        </span>
+                      )}
+                    </button>
+                    {showFilterPopover && (
+                      <div className={`absolute z-30 mt-2 ${isRTL ? 'left-0' : 'right-0'} w-72 bg-white border border-slate-200 rounded-xl shadow-xl p-4 space-y-4`}>
+                        <div className="flex items-center justify-between">
+                          <h3 className="text-xs font-black uppercase tracking-widest text-slate-500">{t('samaLetters.filtersTitle')}</h3>
+                          <button onClick={resetFilters} className="text-[10px] font-bold text-slate-400 hover:text-slate-700 cursor-pointer">
+                            {t('samaLetters.filterReset')}
+                          </button>
+                        </div>
+                        <div>
+                          <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">{t('samaLetters.filterByAuthority')}</p>
+                          <div className="grid grid-cols-3 gap-1.5">
+                            {LETTER_AUTHORITIES.map((a) => {
+                              const checked = authorityFilter.has(a)
+                              const colors = AUTHORITY_COLORS[a]
+                              return (
+                                <button
+                                  key={a}
+                                  onClick={() => toggleAuthorityFilter(a)}
+                                  className={`px-2 py-1.5 rounded-lg text-[11px] font-bold border transition-colors cursor-pointer ${
+                                    checked
+                                      ? `${colors.bg} ${colors.text} ${colors.border}`
+                                      : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'
+                                  }`}
+                                >
+                                  {a}
+                                </button>
+                              )
+                            })}
+                          </div>
+                        </div>
+                        <div>
+                          <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">{t('samaLetters.filterByDate')}</p>
+                          <div className="space-y-1">
+                            {([
+                              ['any',  t('samaLetters.dateAnyTime')],
+                              ['30d',  t('samaLetters.dateLast30Days')],
+                              ['90d',  t('samaLetters.dateLast90Days')],
+                              ['365d', t('samaLetters.dateLast365Days')],
+                            ] as const).map(([val, label]) => (
+                              <button
+                                key={val}
+                                onClick={() => setDateFilter(val)}
+                                className={`w-full ${isRTL ? 'text-right' : 'text-left'} px-3 py-2 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
+                                  dateFilter === val
+                                    ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                    : 'text-slate-600 hover:bg-slate-50'
+                                }`}
+                              >
+                                {label}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
               <div className="overflow-x-auto">
                 <table className={`w-full`}>
                   <thead className="bg-slate-50/50 text-slate-500 uppercase text-[10px] font-bold tracking-widest border-b border-slate-100">
                     <tr>
+                      <th className={`px-6 py-4`}><LetterSortHeader label={t('samaLetters.tableAuthority')} col="authority" sort={sort} onSort={handleLetterSort} onClear={() => setSort(null)} /></th>
                       <th className={`px-6 py-4`}><LetterSortHeader label={t('samaLetters.reference')} col="reference" sort={sort} onSort={handleLetterSort} onClear={() => setSort(null)} /></th>
                       <th className={`px-6 py-4`}><LetterSortHeader label={t('common.type')} col="type" sort={sort} onSort={handleLetterSort} onClear={() => setSort(null)} /></th>
                       <th className={`px-6 py-4`}><LetterSortHeader label={t('samaLetters.subject')} col="subject" sort={sort} onSort={handleLetterSort} onClear={() => setSort(null)} /></th>
@@ -1061,6 +1215,7 @@ export default function SAMALettersPage() {
                           onClick={() => handleViewLetter(letter)}
                           className="hover:bg-slate-50 cursor-pointer transition-colors group"
                         >
+                          <td className="px-6 py-4">{renderAuthorityBadge(letter.authority)}</td>
                           <td className="px-6 py-4">
                             <span className="text-sm font-bold text-slate-900 font-display">
                               {letter.reference}
@@ -1481,8 +1636,12 @@ export default function SAMALettersPage() {
                       </span>
                     </div>
                     <div className={`flex justify-between items-center`}>
+                      <span className="text-xs text-slate-500">{t('samaLetters.authorityField')}</span>
+                      {selectedLetter && renderAuthorityBadge(selectedLetter.authority, { showFull: true })}
+                    </div>
+                    <div className={`flex justify-between items-center`}>
                       <span className="text-xs text-slate-500">{t('samaLetters.recipientDept')}</span>
-                      {editingMeta === 'samaDepartment' ? (
+                      {editingMeta === 'samaDepartment' && selectedLetter ? (
                         <select
                           // eslint-disable-next-line jsx-a11y/no-autofocus
                           autoFocus
@@ -1495,20 +1654,21 @@ export default function SAMALettersPage() {
                           onBlur={() => setEditingMeta(null)}
                           className="text-xs font-bold text-slate-900 bg-transparent border-b border-dashed border-slate-400 focus:outline-none cursor-pointer"
                         >
-                          <option value="banking-supervision">{t('samaLetters.bankingSupervision')}</option>
-                          <option value="payment-systems">{t('samaLetters.paymentSystems')}</option>
-                          <option value="compliance-aml">{t('samaLetters.complianceAml')}</option>
+                          {AUTHORITY_DEPARTMENTS[selectedLetter.authority].map((d) => (
+                            <option key={d.id} value={d.id}>
+                              {isRTL ? d.ar : d.en}
+                            </option>
+                          ))}
                         </select>
                       ) : (
                         <span
                           onClick={() => setEditingMeta('samaDepartment')}
-                          className="text-xs font-bold text-slate-900 cursor-pointer hover:text-emerald-600 transition-colors group/dept flex items-center gap-1"
+                          className="text-xs font-bold text-slate-900 cursor-pointer hover:text-emerald-600 transition-colors group/dept flex items-center gap-1 truncate max-w-[180px]"
                           title="Click to edit"
                         >
-                          {editDepartment === 'banking-supervision' ? t('samaLetters.bankingSupervision')
-                            : editDepartment === 'payment-systems' ? t('samaLetters.paymentSystems')
-                            : editDepartment === 'compliance-aml' ? t('samaLetters.complianceAml')
-                            : t('departments.compliance')}
+                          {selectedLetter
+                            ? (getDepartmentLabel(selectedLetter.authority, editDepartment, isRTL ? 'ar' : 'en') || t('departments.compliance'))
+                            : ''}
                           <Icon icon="lucide:pencil" className="text-[9px] text-slate-300 group-hover/dept:text-emerald-400" />
                         </span>
                       )}
@@ -1537,7 +1697,7 @@ export default function SAMALettersPage() {
                           onBlur={() => { saveField({ assignedTo: editAssignedTo }); setEditingMeta(null) }}
                           className="text-xs font-bold text-emerald-600 bg-transparent border-b border-dashed border-emerald-300 focus:outline-none cursor-pointer"
                         >
-                          <option value="">{t('common.select' as any)}</option>
+                          <option value="">{t('common.select')}</option>
                           {teamMembers.filter(m => m.status === 'active').map(m => (
                             <option key={m.id} value={m.name}>{m.name} — {m.department}</option>
                           ))}
@@ -2075,9 +2235,21 @@ function CreateLetterForm({
   const [bodyEn, setBodyEn] = useState('')
   const [bodyAr, setBodyAr] = useState('')
   const [subCategory, setSubCategory] = useState<string>('key-function')
-  const [samaDepartment, setSamaDepartment] = useState<string>('banking-supervision')
+  const [authority, setAuthority] = useState<CircularAuthority>(template?.defaultAuthority ?? 'SAMA')
+  const [samaDepartment, setSamaDepartment] = useState<string>(
+    template?.defaultSamaDepartment || getDefaultDepartmentId(template?.defaultAuthority ?? 'SAMA'),
+  )
   const createAttachFileRef = useRef<HTMLInputElement>(null)
   const [draftAttachments, setDraftAttachments] = useState<Attachment[]>([])
+
+  // When authority changes, reset department to that authority's first option
+  useEffect(() => {
+    const validIds = AUTHORITY_DEPARTMENTS[authority].map((d) => d.id)
+    if (!validIds.includes(samaDepartment)) {
+      setSamaDepartment(getDefaultDepartmentId(authority))
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authority])
 
   // Pre-populate from template defaults
   useEffect(() => {
@@ -2086,6 +2258,7 @@ function CreateLetterForm({
     if (template.defaultSubjectAr)  setSubjectAr(template.defaultSubjectAr)
     if (template.defaultBodyEn)     setBodyEn(template.defaultBodyEn)
     if (template.defaultBodyAr)     setBodyAr(template.defaultBodyAr)
+    if (template.defaultAuthority)  setAuthority(template.defaultAuthority)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [template?.id])
 
@@ -2116,34 +2289,40 @@ function CreateLetterForm({
     status: 'completed' as const,
   })
 
-  const letterBaseData = () => ({
-    reference,
-    type: selectedType,
-    subCategory: subCategory as import('@/types').SAMASubCategory,
-    samaDepartment: samaDepartment as import('@/types').SAMADepartment,
-    subject: subjectEn || `(Draft ${reference})`,
-    subjectAr: subjectAr || undefined,
-    body: bodyEn,
-    bodyAr: bodyAr || undefined,
-    status: 'draft' as const,
-    priority,
-    createdBy,
-    signerName:           template?.defaultSignerName || undefined,
-    signerTitle:          template?.defaultSignerTitle || undefined,
-    signerNameAr:         template?.defaultSignerNameAr || undefined,
-    signerTitleAr:        template?.defaultSignerTitleAr || undefined,
-    signatureImageUrl:    template?.defaultSignatureImageUrl || undefined,
-    recipientName:        template?.defaultRecipientName || undefined,
-    recipientOrg:         template?.defaultRecipientOrg || undefined,
-    recipientCity:        template?.defaultRecipientCity || undefined,
-    recipientNameAr:      template?.defaultRecipientNameAr || undefined,
-    recipientOrgAr:       template?.defaultRecipientOrgAr || undefined,
-    recipientCityAr:      template?.defaultRecipientCityAr || undefined,
-    approvalChain: [] as import('@/types').SAMALetterApprovalStep[],
-    timeline: [buildTimelineEvent(t('samaLetters.letterCreatedDraft'))],
-    attachments: draftAttachments,
-    relatedObservations: [] as string[],
-  })
+  const letterBaseData = () => {
+    // Recipient defaults derived from currently selected authority + department, falling back
+    // to template explicit overrides when set.
+    const recipientDefaults = getRecipientDefaults(authority, samaDepartment)
+    return {
+      reference,
+      authority,
+      type: selectedType,
+      subCategory: subCategory as import('@/types').SAMASubCategory,
+      samaDepartment: samaDepartment as import('@/types').SAMADepartment,
+      subject: subjectEn || `(Draft ${reference})`,
+      subjectAr: subjectAr || undefined,
+      body: bodyEn,
+      bodyAr: bodyAr || undefined,
+      status: 'draft' as const,
+      priority,
+      createdBy,
+      signerName:           template?.defaultSignerName || undefined,
+      signerTitle:          template?.defaultSignerTitle || undefined,
+      signerNameAr:         template?.defaultSignerNameAr || undefined,
+      signerTitleAr:        template?.defaultSignerTitleAr || undefined,
+      signatureImageUrl:    template?.defaultSignatureImageUrl || undefined,
+      recipientName:        template?.defaultRecipientName || recipientDefaults.en.name,
+      recipientOrg:         template?.defaultRecipientOrg  || recipientDefaults.en.org,
+      recipientCity:        template?.defaultRecipientCity || recipientDefaults.en.city,
+      recipientNameAr:      template?.defaultRecipientNameAr || recipientDefaults.ar.name,
+      recipientOrgAr:       template?.defaultRecipientOrgAr  || recipientDefaults.ar.org,
+      recipientCityAr:      template?.defaultRecipientCityAr || recipientDefaults.ar.city,
+      approvalChain: [] as import('@/types').SAMALetterApprovalStep[],
+      timeline: [buildTimelineEvent(t('samaLetters.letterCreatedDraft'))],
+      attachments: draftAttachments,
+      relatedObservations: [] as string[],
+    }
+  }
 
   const handleSaveDraft = () => {
     store.create(letterBaseData())
@@ -2178,6 +2357,24 @@ function CreateLetterForm({
         >
           <Icon icon="lucide:x" className="text-2xl text-slate-400" />
         </button>
+      </div>
+
+      {/* Authority spans full width at the top so both columns below stay balanced (2 rows each) */}
+      <div className="mb-6">
+        <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-2">
+          {t('samaLetters.authorityField')}
+        </label>
+        <select
+          value={authority}
+          onChange={(e) => setAuthority(e.target.value as CircularAuthority)}
+          className="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-sm font-medium focus:ring-2 focus:ring-emerald-500 outline-none"
+        >
+          {LETTER_AUTHORITIES.map((a) => (
+            <option key={a} value={a}>
+              {a} — {isRTL ? AUTHORITY_FULL_NAMES[a].ar : AUTHORITY_FULL_NAMES[a].en}
+            </option>
+          ))}
+        </select>
       </div>
 
       <div className="grid grid-cols-2 gap-8 mb-8">
@@ -2221,16 +2418,18 @@ function CreateLetterForm({
         <div className="space-y-4">
           <div>
             <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-2">
-              {t('samaLetters.targetDepartmentSama')}
+              {t('samaLetters.targetDepartment')}
             </label>
             <select
               value={samaDepartment}
               onChange={(e) => setSamaDepartment(e.target.value)}
               className="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-sm font-medium focus:ring-2 focus:ring-emerald-500 outline-none"
             >
-              <option value="banking-supervision">{t('samaLetters.bankingSupervision')}</option>
-              <option value="payment-systems">{t('samaLetters.paymentSystems')}</option>
-              <option value="compliance-aml">{t('samaLetters.complianceAml')}</option>
+              {AUTHORITY_DEPARTMENTS[authority].map((d) => (
+                <option key={d.id} value={d.id}>
+                  {isRTL ? d.ar : d.en}
+                </option>
+              ))}
             </select>
           </div>
           <div>
@@ -2467,7 +2666,10 @@ function TemplateEditForm({
   const [defaultSignerNameAr, setDefaultSignerNameAr]   = useState(template?.defaultSignerNameAr || '')
   const [defaultSignerTitleAr, setDefaultSignerTitleAr] = useState(template?.defaultSignerTitleAr || '')
   const [defaultSignatureImageUrl, setDefaultSignatureImageUrl] = useState(template?.defaultSignatureImageUrl || '')
-  const [defaultSamaDepartment, setDefaultSamaDepartment] = useState<string>(template?.defaultSamaDepartment || 'banking-supervision')
+  const [defaultAuthority, setDefaultAuthority] = useState<CircularAuthority>(template?.defaultAuthority || 'SAMA')
+  const [defaultSamaDepartment, setDefaultSamaDepartment] = useState<string>(
+    template?.defaultSamaDepartment || getDefaultDepartmentId(template?.defaultAuthority || 'SAMA'),
+  )
   const [defaultRecipientName, setDefaultRecipientName]     = useState(template?.defaultRecipientName || '')
   const [defaultRecipientOrg, setDefaultRecipientOrg]       = useState(template?.defaultRecipientOrg || '')
   const [defaultRecipientCity, setDefaultRecipientCity]     = useState(template?.defaultRecipientCity || '')
@@ -2481,8 +2683,21 @@ function TemplateEditForm({
 
   const handleDeptChange = (dept: string) => {
     setDefaultSamaDepartment(dept)
-    const defaults = DEPT_RECIPIENT_DEFAULTS[dept]
-    if (!defaults) return
+    const defaults = getRecipientDefaults(defaultAuthority, dept)
+    setDefaultRecipientName(defaults.en.name)
+    setDefaultRecipientOrg(defaults.en.org)
+    setDefaultRecipientCity(defaults.en.city)
+    setDefaultRecipientNameAr(defaults.ar.name)
+    setDefaultRecipientOrgAr(defaults.ar.org)
+    setDefaultRecipientCityAr(defaults.ar.city)
+  }
+
+  const handleAuthorityChange = (next: CircularAuthority) => {
+    setDefaultAuthority(next)
+    // Reset department to that authority's first option and re-derive defaults
+    const nextDept = getDefaultDepartmentId(next)
+    setDefaultSamaDepartment(nextDept)
+    const defaults = getRecipientDefaults(next, nextDept)
     setDefaultRecipientName(defaults.en.name)
     setDefaultRecipientOrg(defaults.en.org)
     setDefaultRecipientCity(defaults.en.city)
@@ -2524,6 +2739,7 @@ function TemplateEditForm({
         defaultSignerNameAr:   defaultSignerNameAr || undefined,
         defaultSignerTitleAr:  defaultSignerTitleAr || undefined,
         defaultSignatureImageUrl: defaultSignatureImageUrl || undefined,
+        defaultAuthority,
         defaultSamaDepartment: defaultSamaDepartment as import('@/types').SAMADepartment,
         defaultRecipientName:  defaultRecipientName || undefined,
         defaultRecipientOrg:   defaultRecipientOrg || undefined,
@@ -2838,19 +3054,39 @@ function TemplateEditForm({
       {/* Tab 4: Recipient */}
       {activeTab === 'recipient' && (
         <div className="space-y-6">
-          <div>
-            <label className={`text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-2`}>
-              {t('samaLetters.templateDefaultDept')}
-            </label>
-            <select
-              value={defaultSamaDepartment}
-              onChange={(e) => handleDeptChange(e.target.value)}
-              className={`w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-sm font-medium focus:ring-2 focus:ring-emerald-500 outline-none`}
-            >
-              <option value="banking-supervision">{t('samaLetters.bankingSupervision')}</option>
-              <option value="payment-systems">{t('samaLetters.paymentSystems')}</option>
-              <option value="compliance-aml">{t('samaLetters.complianceAml')}</option>
-            </select>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className={`text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-2`}>
+                {t('samaLetters.authorityField')}
+              </label>
+              <select
+                value={defaultAuthority}
+                onChange={(e) => handleAuthorityChange(e.target.value as CircularAuthority)}
+                className={`w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-sm font-medium focus:ring-2 focus:ring-emerald-500 outline-none`}
+              >
+                {LETTER_AUTHORITIES.map((a) => (
+                  <option key={a} value={a}>
+                    {a} — {isRTL ? AUTHORITY_FULL_NAMES[a].ar : AUTHORITY_FULL_NAMES[a].en}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className={`text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-2`}>
+                {t('samaLetters.targetDepartment')}
+              </label>
+              <select
+                value={defaultSamaDepartment}
+                onChange={(e) => handleDeptChange(e.target.value)}
+                className={`w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-sm font-medium focus:ring-2 focus:ring-emerald-500 outline-none`}
+              >
+                {AUTHORITY_DEPARTMENTS[defaultAuthority].map((d) => (
+                  <option key={d.id} value={d.id}>
+                    {isRTL ? d.ar : d.en}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-4">

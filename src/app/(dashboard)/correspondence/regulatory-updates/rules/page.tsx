@@ -116,7 +116,7 @@ function RegulatoryUpdatesRulesPageContent() {
           <div className="hidden lg:flex gap-2">
             <Link href="/correspondence/sama-letters" className={`px-3 py-1.5 text-xs font-bold text-slate-600 bg-slate-50 hover:bg-slate-100 rounded-lg border border-slate-200 flex items-center gap-2`}>
               <Icon icon="lucide:mail" className="text-emerald-500" />
-              {t('observations.samaLetters')}
+              {t('samaLetters.tabLetters')}
             </Link>
             <span className={`px-3 py-1.5 text-xs font-bold text-emerald-700 bg-emerald-50 rounded-lg border border-emerald-100 flex items-center gap-2`}>
               <Icon icon="lucide:refresh-cw" className="text-emerald-600" />

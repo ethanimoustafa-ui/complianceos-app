@@ -58,6 +58,11 @@ export function ObservationFilters({
         >
           <option value="all">{t('observations.filters.allSources')}</option>
           <option value="sama">{t('observations.sources.sama')}</option>
+          <option value="cma">{t('observations.sources.cma')}</option>
+          <option value="ia">{t('observations.sources.ia')}</option>
+          <option value="zatca">{t('observations.sources.zatca')}</option>
+          <option value="misa">{t('observations.sources.misa')}</option>
+          <option value="safiu">{t('observations.sources.safiu')}</option>
           <option value="internal">{t('observations.sources.internal')}</option>
           <option value="sharia">{t('observations.sources.sharia')}</option>
         </select>

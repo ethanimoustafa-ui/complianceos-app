@@ -154,6 +154,118 @@ const seedFrameworks: FrameworkConfig[] = [
     weights: { ...DEFAULT_WEIGHTS_BALANCED },
   },
   {
+    id: 'ia',
+    name: 'IA',
+    nameAr: 'هيئة التأمين',
+    description: 'Insurance Authority regulatory framework for the KSA insurance sector.',
+    descriptionAr: 'الإطار التنظيمي لهيئة التأمين لقطاع التأمين في المملكة.',
+    icon: 'lucide:shield',
+    iconColor: 'violet',
+    enabled: false,
+    departments: ['Compliance', 'Underwriting', 'Claims'],
+    threshold: 'standard',
+    alertOnNonCompliance: true,
+    weights: { ...DEFAULT_WEIGHTS_BALANCED },
+  },
+  {
+    id: 'sdaia-pdpl',
+    name: 'SDAIA PDPL',
+    nameAr: 'نظام حماية البيانات الشخصية (سدايا)',
+    description: 'Personal Data Protection Law administered by SDAIA (2023 revision).',
+    descriptionAr: 'نظام حماية البيانات الشخصية الصادر عن الهيئة السعودية للبيانات والذكاء الاصطناعي (تحديث 2023).',
+    icon: 'lucide:user-check',
+    iconColor: 'fuchsia',
+    enabled: false,
+    departments: ['Legal', 'IT', 'Compliance', 'Data Governance'],
+    threshold: 'strict',
+    alertOnNonCompliance: true,
+    weights: { ...DEFAULT_WEIGHTS_BALANCED },
+  },
+  {
+    id: 'iso-27001',
+    name: 'ISO/IEC 27001',
+    nameAr: 'أيزو 27001',
+    description: 'Information Security Management System standard (ISO/IEC 27001:2022).',
+    descriptionAr: 'معيار نظام إدارة أمن المعلومات (أيزو/آي إي سي 27001:2022).',
+    icon: 'lucide:lock',
+    iconColor: 'blue',
+    enabled: false,
+    departments: ['IT Security', 'Compliance'],
+    threshold: 'standard',
+    alertOnNonCompliance: false,
+    weights: { ...DEFAULT_WEIGHTS_BALANCED },
+  },
+  {
+    id: 'iso-22301',
+    name: 'ISO 22301',
+    nameAr: 'أيزو 22301',
+    description: 'Business Continuity Management System standard (ISO 22301:2019).',
+    descriptionAr: 'معيار نظام إدارة استمرارية الأعمال (أيزو 22301:2019).',
+    icon: 'lucide:activity',
+    iconColor: 'teal',
+    enabled: false,
+    departments: ['Business Continuity', 'Operations', 'Risk Management'],
+    threshold: 'standard',
+    alertOnNonCompliance: false,
+    weights: { ...DEFAULT_WEIGHTS_BALANCED },
+  },
+  {
+    id: 'iso-31000',
+    name: 'ISO 31000',
+    nameAr: 'أيزو 31000',
+    description: 'Enterprise Risk Management guidelines (ISO 31000:2018).',
+    descriptionAr: 'إرشادات إدارة المخاطر المؤسسية (أيزو 31000:2018).',
+    icon: 'lucide:gauge',
+    iconColor: 'cyan',
+    enabled: false,
+    departments: ['Risk Management', 'Compliance', 'Internal Audit'],
+    threshold: 'standard',
+    alertOnNonCompliance: false,
+    weights: { ...DEFAULT_WEIGHTS_BALANCED },
+  },
+  {
+    id: 'coso-ic',
+    name: 'COSO IC',
+    nameAr: 'إطار الرقابة الداخلية (COSO)',
+    description: 'COSO Internal Control — Integrated Framework.',
+    descriptionAr: 'إطار الرقابة الداخلية المتكامل الصادر عن COSO.',
+    icon: 'lucide:layers',
+    iconColor: 'emerald',
+    enabled: false,
+    departments: ['Internal Audit', 'Finance', 'Compliance'],
+    threshold: 'standard',
+    alertOnNonCompliance: false,
+    weights: { ...DEFAULT_WEIGHTS_BALANCED },
+  },
+  {
+    id: 'coso-erm',
+    name: 'COSO ERM',
+    nameAr: 'إطار إدارة مخاطر المؤسسة (COSO)',
+    description: 'COSO Enterprise Risk Management — Integrating with Strategy and Performance.',
+    descriptionAr: 'إطار إدارة مخاطر المؤسسة الصادر عن COSO — التكامل مع الاستراتيجية والأداء.',
+    icon: 'lucide:target',
+    iconColor: 'lime',
+    enabled: false,
+    departments: ['Risk Management', 'Strategy', 'Internal Audit'],
+    threshold: 'standard',
+    alertOnNonCompliance: false,
+    weights: { ...DEFAULT_WEIGHTS_BALANCED },
+  },
+  {
+    id: 'saso',
+    name: 'SASO',
+    nameAr: 'الهيئة السعودية للمواصفات والمقاييس والجودة',
+    description: 'Saudi Standards, Metrology and Quality Organization technical regulations.',
+    descriptionAr: 'اللوائح الفنية الصادرة عن الهيئة السعودية للمواصفات والمقاييس والجودة.',
+    icon: 'lucide:badge-check',
+    iconColor: 'yellow',
+    enabled: false,
+    departments: ['Quality Assurance', 'Operations'],
+    threshold: 'standard',
+    alertOnNonCompliance: false,
+    weights: { ...DEFAULT_WEIGHTS_BALANCED },
+  },
+  {
     id: 'sharia-board',
     name: 'Sharia Board',
     nameAr: 'الهيئة الشرعية',
@@ -224,20 +336,34 @@ export const useFrameworkConfigStore = create<FrameworkConfigState>()(
     }),
     {
       name: 'framework-config-storage',
-      version: 2,
+      version: 3,
       partialize: (state) => ({ frameworks: state.frameworks, pinnedIds: state.pinnedIds }),
-      migrate: (persisted: any, version: number) => {
+      migrate: (persisted: unknown, version: number) => {
+        type PersistShape = { frameworks?: (FrameworkConfig & { syncFrequency?: unknown })[]; pinnedIds?: RegulatoryBodyId[] }
+        let state: PersistShape = (persisted as PersistShape) ?? {}
+
         if (version < 2) {
-          const frameworks = (persisted.frameworks ?? seedFrameworks).map((f: any) => {
-            const { syncFrequency, ...rest } = f
+          const frameworks = (state.frameworks ?? seedFrameworks).map((f) => {
+            const { syncFrequency: _drop, ...rest } = f as FrameworkConfig & { syncFrequency?: unknown }
+            void _drop
             return {
               ...rest,
               weights: rest.weights ?? getDefaultWeights(rest.id),
             }
           })
-          return { frameworks, pinnedIds: persisted.pinnedIds ?? ['sama', 'nca-ecc', 'sharia-board'] }
+          state = { frameworks, pinnedIds: state.pinnedIds ?? ['sama', 'nca-ecc', 'sharia-board'] }
         }
-        return persisted as any
+
+        if (version < 3) {
+          // v3: merge in any new preset frameworks that aren't already in the user's persisted list.
+          // Preserves user edits (enabled flag, weights, thresholds) on existing entries.
+          const existing = state.frameworks ?? seedFrameworks
+          const existingIds = new Set(existing.map((f) => f.id))
+          const missing = seedFrameworks.filter((f) => !existingIds.has(f.id))
+          state = { ...state, frameworks: [...existing, ...missing] }
+        }
+
+        return state as unknown as FrameworkConfigState
       },
     }
   )
