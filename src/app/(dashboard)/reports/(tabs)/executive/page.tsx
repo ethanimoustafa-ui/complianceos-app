@@ -577,7 +577,7 @@ export default function ReportsExecutivePage() {
                     </thead>
                     <tbody className="divide-y divide-slate-50">
                       {auditFindings.map((finding) => (
-                        <tr key={finding.id} onClick={() => handleFindingClick(finding)} className="group hover:bg-slate-50/50 cursor-pointer transition-colors">
+                        <tr key={finding.sourceAuditId} onClick={() => handleFindingClick(finding)} className="group hover:bg-slate-50/50 cursor-pointer transition-colors">
                           <td className="px-2 py-2 text-[10px] font-bold text-slate-400">#{finding.id}</td>
                           <td className="px-2 py-2">
                             <div className="flex flex-col">
@@ -593,7 +593,7 @@ export default function ReportsExecutivePage() {
                           <td className="px-2 py-2">
                             <div className="flex items-center gap-1.5">
                               {finding.owner.avatar ? (
-                                <img src={finding.owner.avatar} className="w-5 h-5 rounded-full" alt={finding.owner.name} />
+                                <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${finding.owner.avatar}`} className="w-5 h-5 rounded-full" alt={finding.owner.name} />
                               ) : (
                                 <div className="w-5 h-5 rounded-full bg-slate-200 flex items-center justify-center text-[8px] font-bold text-slate-500">{finding.owner.name.charAt(0)}</div>
                               )}
@@ -831,7 +831,7 @@ export default function ReportsExecutivePage() {
                   <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">{t('reports.owner')}</h3>
                   <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg">
                     {selectedFinding.owner.avatar ? (
-                      <img src={selectedFinding.owner.avatar} className="w-8 h-8 rounded-full" alt={selectedFinding.owner.name} />
+                      <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${selectedFinding.owner.avatar}`} className="w-8 h-8 rounded-full" alt={selectedFinding.owner.name} />
                     ) : (
                       <div className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center text-xs font-bold text-slate-500">{selectedFinding.owner.name.charAt(0)}</div>
                     )}
@@ -861,7 +861,7 @@ export default function ReportsExecutivePage() {
                       {sourceAudit.team.map((member) => (
                         <div key={member.id} className="flex items-center gap-3 p-2 rounded-lg hover:bg-slate-50 transition-colors">
                           {member.avatar ? (
-                            <img src={member.avatar} className="w-6 h-6 rounded-full" alt={member.name} />
+                            <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${member.avatar}`} className="w-6 h-6 rounded-full" alt={member.name} />
                           ) : (
                             <div className="w-6 h-6 rounded-full bg-slate-200 flex items-center justify-center text-[9px] font-bold text-slate-500">{member.name.charAt(0)}</div>
                           )}
@@ -896,7 +896,7 @@ export default function ReportsExecutivePage() {
                         <div key={comment.id} className="p-3 bg-slate-50 rounded-lg">
                           <div className="flex items-center gap-2 mb-2">
                             {comment.author.avatar ? (
-                              <img src={comment.author.avatar} className="w-5 h-5 rounded-full" alt={comment.author.name} />
+                              <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${comment.author.avatar}`} className="w-5 h-5 rounded-full" alt={comment.author.name} />
                             ) : (
                               <div className="w-5 h-5 rounded-full bg-slate-200 flex items-center justify-center text-[8px] font-bold text-slate-500">{comment.author.name.charAt(0)}</div>
                             )}

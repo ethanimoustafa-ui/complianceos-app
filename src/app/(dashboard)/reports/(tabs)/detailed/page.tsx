@@ -379,7 +379,7 @@ export default function ReportsDetailedPage() {
                         </td>
                         <td className="px-4 py-4">
                           <div className="flex items-center gap-2">
-                            <img src={log.user.avatar} className="w-6 h-6 rounded-full" alt={log.user.name} />
+                            <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${log.user.avatar || log.user.name}`} className="w-6 h-6 rounded-full" alt={log.user.name} />
                             <span className="text-xs font-medium text-slate-700">{log.user.name}</span>
                           </div>
                         </td>
@@ -401,7 +401,7 @@ export default function ReportsDetailedPage() {
                             <div className={`${isRTL ? 'mr-8' : 'ml-8'} p-5 bg-white rounded-xl border border-slate-200 shadow-sm`}>
                               <div className="grid grid-cols-4 gap-6">
                                 <div className="flex items-center gap-3">
-                                  <img src={log.user.avatar} className="w-10 h-10 rounded-full border-2 border-white shadow-sm" alt={log.user.name} />
+                                  <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${log.user.avatar || log.user.name}`} className="w-10 h-10 rounded-full border-2 border-white shadow-sm" alt={log.user.name} />
                                   <div className={isRTL ? 'text-right' : ''}>
                                     <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{t('reports.performedBy')}</p>
                                     <p className="text-sm font-bold text-slate-900">{log.user.name}</p>

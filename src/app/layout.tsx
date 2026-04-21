@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import './globals.css'
 import { LanguageProvider } from '@/i18n'
+import { DemoReset } from '@/components/DemoReset'
 
 export const metadata: Metadata = {
   title: 'ComplianceOS - Governance, Risk & Compliance Platform',
@@ -24,7 +25,7 @@ export default function RootLayout({
       </head>
       <body className="antialiased">
         <LanguageProvider>
-          {children}
+          <DemoReset>{children}</DemoReset>
         </LanguageProvider>
       </body>
     </html>
