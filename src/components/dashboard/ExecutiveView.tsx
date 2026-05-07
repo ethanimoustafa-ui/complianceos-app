@@ -68,12 +68,12 @@ export function ExecutiveView({ metrics }: ExecutiveViewProps) {
       })
     }
 
-    if (metrics.health.overall < targetScore) {
+    if (metrics.health.businessComplianceScore < targetScore) {
       list.push({
         type: 'warning',
         title: t('dashboard.trendAlert'),
-        message: t('dashboard.alertComplianceLow', { score: String(Math.round(metrics.health.overall)), target: String(targetScore) }),
-        route: '/reports',
+        message: t('dashboard.alertComplianceLow', { score: String(Math.round(metrics.health.businessComplianceScore)), target: String(targetScore) }),
+        route: '/reports/compliance-review',
       })
     }
 
@@ -105,8 +105,11 @@ export function ExecutiveView({ metrics }: ExecutiveViewProps) {
     return Math.round(topWorkers.reduce((s, w) => s + w.computed, 0) / topWorkers.length)
   }, [topWorkers])
 
-  const isAtRisk = metrics.health.overall < targetScore
-  const complianceScore = Math.round(metrics.health.overall)
+  // Hero ring + at-risk flag are driven by the new business-compliance score
+  // (sourced from /reports/compliance-review). The 7-component `overall`
+  // continues to power the renamed Team Score paths elsewhere.
+  const complianceScore = Math.round(metrics.health.businessComplianceScore)
+  const isAtRisk = complianceScore < targetScore
 
   // Policy counts
   const policiesOk = metrics.policies.approved

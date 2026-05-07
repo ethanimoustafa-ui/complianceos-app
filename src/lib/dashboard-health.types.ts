@@ -66,4 +66,9 @@ export interface DashboardHealthResult {
   components: Record<DashboardHealthComponentKey, ComponentScore>
   frameworkScores: FrameworkHealthScore[]
   deductions: ScoreDeduction[]
+  // Per-department compliance score sourced from the Compliance Review tab
+  // (rules + policies marked compliant/non-compliant). Surfaced on the
+  // dashboard's "Compliance Health" hero card; the existing `overall` is
+  // re-labelled "Team Score" in the UI.
+  businessComplianceScore: number
 }

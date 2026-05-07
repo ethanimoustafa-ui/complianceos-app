@@ -101,6 +101,10 @@ export function PolicyDetailsContent({
   // Collapsible steps
   const [expandedStep, setExpandedStep] = useState<number | null>(null)
 
+  // Inline rename state for workflow steps
+  const [renamingStepIdx, setRenamingStepIdx] = useState<number | null>(null)
+  const [renameDraft, setRenameDraft] = useState('')
+
   // Drag reorder
   const [dragIdx, setDragIdx] = useState<number | null>(null)
   const [dragOverIdx, setDragOverIdx] = useState<number | null>(null)
@@ -863,8 +867,56 @@ export function PolicyDetailsContent({
 
                         {/* Step name + action icon */}
                         <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-1.5">
-                            <p className="text-sm font-bold text-slate-700">{STEP_NAME_MAP[step.step] ?? step.step}</p>
+                          <div className="flex items-center gap-1.5 group/rename">
+                            {renamingStepIdx === idx ? (
+                              <input
+                                autoFocus
+                                value={renameDraft}
+                                onClick={(e) => e.stopPropagation()}
+                                onChange={(e) => setRenameDraft(e.target.value)}
+                                onBlur={() => {
+                                  const trimmed = renameDraft.trim()
+                                  if (trimmed && trimmed !== step.step) {
+                                    usePolicyStore.getState().renameWorkflowStep(fresh.id, idx, trimmed, actingUser)
+                                  }
+                                  setRenamingStepIdx(null)
+                                  setRenameDraft('')
+                                }}
+                                onKeyDown={(e) => {
+                                  e.stopPropagation()
+                                  if (e.key === 'Enter') {
+                                    const trimmed = renameDraft.trim()
+                                    if (trimmed && trimmed !== step.step) {
+                                      usePolicyStore.getState().renameWorkflowStep(fresh.id, idx, trimmed, actingUser)
+                                    }
+                                    setRenamingStepIdx(null)
+                                    setRenameDraft('')
+                                  } else if (e.key === 'Escape') {
+                                    setRenamingStepIdx(null)
+                                    setRenameDraft('')
+                                  }
+                                }}
+                                className="text-sm font-bold text-slate-700 bg-white border border-emerald-300 rounded px-1.5 py-0.5 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 max-w-[220px]"
+                              />
+                            ) : (
+                              <>
+                                <p className="text-sm font-bold text-slate-700">{STEP_NAME_MAP[step.step] ?? step.step}</p>
+                                {!isCompleted && (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      setRenameDraft(step.step)
+                                      setRenamingStepIdx(idx)
+                                    }}
+                                    title={t('policies.renameStep')}
+                                    className="opacity-0 group-hover/rename:opacity-100 transition-opacity p-0.5 rounded hover:bg-slate-200 text-slate-400 hover:text-slate-600"
+                                  >
+                                    <Icon icon="lucide:pencil" className="text-[10px]" />
+                                  </button>
+                                )}
+                              </>
+                            )}
                             {step.actionType && ACTION_TYPE_META[step.actionType] && (
                               <Icon icon={ACTION_TYPE_META[step.actionType].icon} className={cn('text-xs', ACTION_TYPE_META[step.actionType].color)} />
                             )}

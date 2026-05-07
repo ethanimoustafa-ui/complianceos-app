@@ -28,9 +28,11 @@ export function OfficerView({ metrics }: OfficerViewProps) {
   const userId = metrics.currentUser?.id ?? ''
   const userName = metrics.currentUser?.name ?? ''
 
-  // Health
-  const isAtRisk = metrics.health.overall < targetScore
-  const healthScore = Math.round(metrics.health.overall)
+  // Hero card "Compliance Health" reads the business compliance score
+  // (per-department compliant/non-compliant from /reports/compliance-review).
+  // The 7-component team-execution score lives elsewhere as Team Score.
+  const healthScore = Math.round(metrics.health.businessComplianceScore)
+  const isAtRisk = healthScore < targetScore
   const policiesOk = metrics.policies.approved
   const policiesOverdue = metrics.policies.overdue + metrics.policies.requiresReview
 

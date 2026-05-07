@@ -4,6 +4,7 @@ import { Icon } from '@iconify/react'
 import type { CircularAuthority, PolicyCategory, PolicyStatus } from '@/types'
 import type { TranslationKey } from '@/i18n'
 import { useDepartmentStore } from '@/stores/department-store'
+import { useFrameworkConfigStore } from '@/stores/framework-config-store'
 
 interface RegDocFilterBarProps {
   variant: 'circular' | 'policy'
@@ -45,6 +46,10 @@ export function RegDocFilterBar({
   isRTL,
 }: RegDocFilterBarProps) {
   const { departments: allDepartments } = useDepartmentStore()
+  const allFrameworks = useFrameworkConfigStore((s) => s.frameworks)
+  // Authority filter only surfaces correspondence-based frameworks — these are
+  // the authorities that actually issue circulars/rules.
+  const authorityFrameworks = allFrameworks.filter((f) => f.correspondenceBased)
   const selectClass = `px-4 py-2 bg-white border border-slate-200 rounded-lg text-sm text-slate-600 focus:ring-2 focus:ring-emerald-500/20 focus:outline-none`
 
   return (
@@ -74,12 +79,11 @@ export function RegDocFilterBar({
               onChange={(e) => onAuthorityChange?.(e.target.value as CircularAuthority | 'all')}
             >
               <option value="all">{t('regulatoryUpdates.allAuthorities')}</option>
-              <option value="SAMA">{t('regulatoryUpdates.authoritySAMA')}</option>
-              <option value="CMA">{t('regulatoryUpdates.authorityCMA')}</option>
-              <option value="IA">{t('regulatoryUpdates.authorityIA')}</option>
-              <option value="ZATCA">{t('regulatoryUpdates.authorityZATCA')}</option>
-              <option value="MISA">{t('regulatoryUpdates.authorityMISA')}</option>
-              <option value="SAFIU">{t('regulatoryUpdates.authoritySAFIU')}</option>
+              {authorityFrameworks.map((f) => (
+                <option key={f.id} value={f.id}>
+                  {isRTL ? f.nameAr : f.name}
+                </option>
+              ))}
             </select>
             <select
               className={selectClass}

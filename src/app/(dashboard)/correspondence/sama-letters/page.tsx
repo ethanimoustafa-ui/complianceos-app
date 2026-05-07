@@ -27,9 +27,10 @@ import {
   getDefaultDepartmentId,
 } from '@/lib/letter-authority'
 import { useAuthorityDeptStore } from '@/stores/authority-department-store'
+import { useSAMASubCategoryStore } from '@/stores/sama-sub-category-store'
 import { EditableSelect } from '@/components/ui/editable-select'
 import { PlaceholderDefEditor } from '@/components/correspondence/sama-letters/PlaceholderDefEditor'
-import { PlaceholderPicker } from '@/components/correspondence/sama-letters/PlaceholderPicker'
+import { PlaceholderChip } from '@/components/correspondence/sama-letters/PlaceholderChip'
 import {
   reconcilePlaceholderDefs,
   renderTemplate,
@@ -2285,6 +2286,235 @@ function TemplateCard({
   )
 }
 
+// Hybrid editor: editable textarea backed by `{{token}}` plus a live preview
+// row above that renders the same string with `<PlaceholderChip>` components
+// at the token positions. Editing happens in the textarea (raw `{{token}}`),
+// but clicking a chip in the preview opens a popover that fills the value.
+// This mirrors the @-mention experience without the bidi/cursor-position
+// hazards of a true contenteditable.
+function LetterBodyEditor({
+  value,
+  onChange,
+  placeholderDefs,
+  placeholderValues,
+  onPlaceholderChange,
+  rows = 8,
+  dir,
+  fontFamily,
+  textSize = 'text-sm',
+  placeholder,
+  inputType = 'textarea',
+}: {
+  value: string
+  onChange: (v: string) => void
+  placeholderDefs: PlaceholderDef[]
+  placeholderValues: Record<string, PlaceholderValue | undefined>
+  onPlaceholderChange: (key: string, v: PlaceholderValue | undefined) => void
+  rows?: number
+  dir?: 'ltr' | 'rtl'
+  fontFamily?: string
+  textSize?: string
+  placeholder?: string
+  inputType?: 'textarea' | 'input'
+}) {
+  const isRTL = dir === 'rtl'
+  // Build alternating text/chip segments by splitting on `{{token}}`. Tokens
+  // not declared in placeholderDefs are still rendered as a chip with a
+  // synthetic def so the user gets feedback that their token is recognised.
+  const segments = useMemo(() => {
+    const re = /\{\{\s*([a-zA-Z0-9_\-.]+)\s*\}\}/g
+    const out: Array<{ kind: 'text'; text: string } | { kind: 'chip'; key: string }> = []
+    let last = 0
+    let m: RegExpExecArray | null
+    re.lastIndex = 0
+    while ((m = re.exec(value)) !== null) {
+      if (m.index > last) {
+        out.push({ kind: 'text', text: value.slice(last, m.index) })
+      }
+      out.push({ kind: 'chip', key: m[1] })
+      last = m.index + m[0].length
+    }
+    if (last < value.length) {
+      out.push({ kind: 'text', text: value.slice(last) })
+    }
+    return out
+  }, [value])
+
+  const defByKey = useMemo(() => {
+    const map = new Map<string, PlaceholderDef>()
+    for (const d of placeholderDefs) map.set(d.key, d)
+    return map
+  }, [placeholderDefs])
+
+  const hasTokens = segments.some((s) => s.kind === 'chip')
+
+  return (
+    <div className="w-full bg-slate-50 border border-slate-100 rounded-xl p-4 space-y-3">
+      {/* Inline preview rendered with chips. Only shown when the body
+          contains at least one {{token}}; otherwise it would be a redundant
+          mirror of the textarea. */}
+      {hasTokens && (
+        <div
+          dir={dir}
+          style={{ fontFamily }}
+          className={cn(
+            'rounded-lg bg-white border border-slate-200 px-3 py-2 leading-relaxed text-slate-700 whitespace-pre-wrap break-words',
+            textSize,
+          )}
+        >
+          {segments.map((seg, idx) =>
+            seg.kind === 'text' ? (
+              <span key={idx}>{seg.text}</span>
+            ) : (
+              <PlaceholderChip
+                key={`${idx}-${seg.key}`}
+                def={defByKey.get(seg.key) ?? { key: seg.key, label: seg.key, type: 'text' }}
+                value={placeholderValues[seg.key]}
+                onChange={(v) => onPlaceholderChange(seg.key, v)}
+                onClear={() => onPlaceholderChange(seg.key, undefined)}
+                isRTL={isRTL}
+                size="sm"
+              />
+            ),
+          )}
+        </div>
+      )}
+
+      {/* Toolbar (decorative — matches the previous editor look) */}
+      <div className="flex gap-2 border-b border-slate-200 pb-2">
+        <button type="button" className="p-1 hover:bg-slate-200 rounded text-slate-500">
+          <Icon icon="lucide:bold" />
+        </button>
+        <button type="button" className="p-1 hover:bg-slate-200 rounded text-slate-500">
+          <Icon icon="lucide:italic" />
+        </button>
+        <button type="button" className="p-1 hover:bg-slate-200 rounded text-slate-500">
+          <Icon icon="lucide:list" />
+        </button>
+      </div>
+
+      {inputType === 'input' ? (
+        <input
+          type="text"
+          value={value}
+          dir={dir}
+          style={{ fontFamily }}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={placeholder}
+          className={cn(
+            'w-full bg-transparent text-slate-700 focus:outline-none placeholder:text-slate-400',
+            textSize,
+          )}
+        />
+      ) : (
+        <textarea
+          value={value}
+          dir={dir}
+          style={{ fontFamily }}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={placeholder}
+          rows={rows}
+          className={cn(
+            'w-full bg-transparent resize-none text-slate-700 focus:outline-none placeholder:text-slate-400',
+            textSize,
+          )}
+        />
+      )}
+    </div>
+  )
+}
+
+// Subject input variant: reuses LetterBodyEditor styled as a single-line
+// input + inline preview for any tokens it contains.
+function LetterSubjectEditor({
+  value,
+  onChange,
+  placeholderDefs,
+  placeholderValues,
+  onPlaceholderChange,
+  dir,
+  fontFamily,
+  textSize = 'text-sm',
+  placeholder,
+}: {
+  value: string
+  onChange: (v: string) => void
+  placeholderDefs: PlaceholderDef[]
+  placeholderValues: Record<string, PlaceholderValue | undefined>
+  onPlaceholderChange: (key: string, v: PlaceholderValue | undefined) => void
+  dir?: 'ltr' | 'rtl'
+  fontFamily?: string
+  textSize?: string
+  placeholder?: string
+}) {
+  const isRTL = dir === 'rtl'
+  const segments = useMemo(() => {
+    const re = /\{\{\s*([a-zA-Z0-9_\-.]+)\s*\}\}/g
+    const out: Array<{ kind: 'text'; text: string } | { kind: 'chip'; key: string }> = []
+    let last = 0
+    let m: RegExpExecArray | null
+    re.lastIndex = 0
+    while ((m = re.exec(value)) !== null) {
+      if (m.index > last) out.push({ kind: 'text', text: value.slice(last, m.index) })
+      out.push({ kind: 'chip', key: m[1] })
+      last = m.index + m[0].length
+    }
+    if (last < value.length) out.push({ kind: 'text', text: value.slice(last) })
+    return out
+  }, [value])
+
+  const defByKey = useMemo(() => {
+    const map = new Map<string, PlaceholderDef>()
+    for (const d of placeholderDefs) map.set(d.key, d)
+    return map
+  }, [placeholderDefs])
+
+  const hasTokens = segments.some((s) => s.kind === 'chip')
+
+  return (
+    <div className="space-y-2">
+      <input
+        type="text"
+        value={value}
+        dir={dir}
+        style={{ fontFamily }}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        className={cn(
+          'w-full p-3 bg-slate-50 border border-slate-100 rounded-xl font-medium focus:ring-2 focus:ring-emerald-500 outline-none',
+          textSize,
+        )}
+      />
+      {hasTokens && (
+        <div
+          dir={dir}
+          style={{ fontFamily }}
+          className={cn(
+            'rounded-lg bg-white border border-slate-200 px-3 py-1.5 text-slate-700 break-words',
+            textSize,
+          )}
+        >
+          {segments.map((seg, idx) =>
+            seg.kind === 'text' ? (
+              <span key={idx}>{seg.text}</span>
+            ) : (
+              <PlaceholderChip
+                key={`${idx}-${seg.key}`}
+                def={defByKey.get(seg.key) ?? { key: seg.key, label: seg.key, type: 'text' }}
+                value={placeholderValues[seg.key]}
+                onChange={(v) => onPlaceholderChange(seg.key, v)}
+                onClear={() => onPlaceholderChange(seg.key, undefined)}
+                isRTL={isRTL}
+                size="sm"
+              />
+            ),
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // Create Letter Form Component (Bilingual)
 function CreateLetterForm({
   selectedType,
@@ -2310,6 +2540,7 @@ function CreateLetterForm({
   const [bodyEn, setBodyEn] = useState('')
   const [bodyAr, setBodyAr] = useState('')
   const [subCategory, setSubCategory] = useState<string>('key-function')
+  const subCategoryStore = useSAMASubCategoryStore()
   const [authority, setAuthority] = useState<CircularAuthority>(template?.defaultAuthority ?? 'sama')
   const [samaDepartment, setSamaDepartment] = useState<string>(
     template?.defaultSamaDepartment || getDefaultDepartmentId(template?.defaultAuthority ?? 'sama'),
@@ -2322,6 +2553,33 @@ function CreateLetterForm({
     [template?.placeholderDefs, bodyEn, subjectEn],
   )
 
+  // Template-registry-aware select. The "Use Template" entry path pre-fills
+  // `template`; the bare "Draft New Letter" path leaves it null. Either way
+  // the user can pick a different template from this select to (re-)apply.
+  const allTemplates = templateStore.templates
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string>(template?.id ?? '')
+
+  // Apply template defaults — shared by both the initial-template prop path
+  // and the in-modal template-select path.
+  const applyTemplate = useCallback((t: LetterTemplate | undefined) => {
+    if (!t) return
+    if (t.defaultSubjectEn)  setSubjectEn(t.defaultSubjectEn)
+    if (t.defaultSubjectAr)  setSubjectAr(t.defaultSubjectAr)
+    if (t.defaultBodyEn)     setBodyEn(t.defaultBodyEn)
+    if (t.defaultBodyAr)     setBodyAr(t.defaultBodyAr)
+    if (t.defaultAuthority)  setAuthority(t.defaultAuthority)
+    if (t.defaultSamaDepartment) setSamaDepartment(t.defaultSamaDepartment)
+    // Reset placeholder values — they belong to the previous template.
+    setPlaceholderValues({})
+  }, [])
+
+  // Templates filtered by the currently-selected letter type so picking
+  // "Inquiry" only surfaces inquiry-type templates.
+  const filteredTemplates = useMemo(
+    () => allTemplates.filter((t) => t.type === selectedType && t.status === 'Active'),
+    [allTemplates, selectedType],
+  )
+
   // When authority changes, reset department to that authority's first option
   useEffect(() => {
     const validIds = getAuthorityDepartments(authority).map((d) => d.id)
@@ -2331,16 +2589,23 @@ function CreateLetterForm({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authority])
 
-  // Pre-populate from template defaults
+  // Pre-populate from template defaults — runs on the original "Use Template"
+  // path (template prop changes) only. The in-modal select uses the
+  // `applyTemplate` callback directly via onChange.
   useEffect(() => {
     if (!template) return
-    if (template.defaultSubjectEn)  setSubjectEn(template.defaultSubjectEn)
-    if (template.defaultSubjectAr)  setSubjectAr(template.defaultSubjectAr)
-    if (template.defaultBodyEn)     setBodyEn(template.defaultBodyEn)
-    if (template.defaultBodyAr)     setBodyAr(template.defaultBodyAr)
-    if (template.defaultAuthority)  setAuthority(template.defaultAuthority)
+    applyTemplate(template)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [template?.id])
+
+  // Clear the template select if the user switches to a letter type that the
+  // currently-selected template doesn't belong to.
+  useEffect(() => {
+    if (!selectedTemplateId) return
+    const tpl = allTemplates.find((t) => t.id === selectedTemplateId)
+    if (!tpl || tpl.type !== selectedType) setSelectedTemplateId('')
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedType])
 
   const reference = store.getNextReference(selectedType)
   const createdBy = user?.name || 'Current User'
@@ -2477,23 +2742,54 @@ function CreateLetterForm({
           </div>
           <div>
             <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-2">
-              {t('samaLetters.subCategory')}
+              {t('samaLetters.chooseTemplate')}
             </label>
             <select
-              value={subCategory}
-              onChange={(e) => setSubCategory(e.target.value)}
+              value={selectedTemplateId}
+              onChange={(e) => {
+                const id = e.target.value
+                setSelectedTemplateId(id)
+                if (id) {
+                  const tpl = allTemplates.find((tt) => tt.id === id)
+                  applyTemplate(tpl)
+                }
+              }}
               className="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-sm font-medium focus:ring-2 focus:ring-emerald-500 outline-none"
             >
-              <option value="key-function">{t('samaLetters.keyFunctionAppointment')}</option>
-              <option value="product-launch">{t('samaLetters.productLaunch')}</option>
-              <option value="equity-participation">{t('samaLetters.equityParticipation')}</option>
-              <option value="circular-clarification">{t('samaLetters.templateCircularClarification')}</option>
-              <option value="regulatory-interpretation">{t('samaLetters.templateRegulatoryInterpretation')}</option>
-              <option value="quarterly-aml">{t('samaLetters.templateQuarterlyAmlReport')}</option>
-              <option value="annual-compliance">{t('samaLetters.templateAnnualComplianceReport')}</option>
-              <option value="incident-notification">{t('samaLetters.templateIncidentNotification')}</option>
-              <option value="system-outage">{t('samaLetters.templateSystemOutageReport')}</option>
+              <option value="">{t('samaLetters.noTemplateBlank')}</option>
+              {filteredTemplates.map((tpl) => (
+                <option key={tpl.id} value={tpl.id}>
+                  {tpl.name}
+                </option>
+              ))}
             </select>
+            {filteredTemplates.length === 0 && (
+              <p className="text-[10px] text-slate-400 mt-1">
+                {t('samaLetters.noTemplatesForType')}
+              </p>
+            )}
+          </div>
+          <div>
+            <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-2">
+              {t('samaLetters.subCategory')}
+            </label>
+            <EditableSelect
+              value={subCategory || null}
+              onChange={(id) => setSubCategory(id)}
+              items={subCategoryStore.subCategories.map((sc) => ({
+                id: sc.id,
+                label: sc.label,
+                labelAr: sc.labelAr,
+                isDefault: sc.isDefault,
+              }))}
+              placeholder={t('samaLetters.subCategory')}
+              onAdd={(label, labelAr) => subCategoryStore.add(label, labelAr)}
+              onEdit={(id, label, labelAr) =>
+                subCategoryStore.update(id, { label, labelAr: labelAr ?? label })
+              }
+              onDelete={(id) => subCategoryStore.remove(id)}
+              isRTL={isRTL}
+            />
           </div>
         </div>
         <div className="space-y-4">
@@ -2540,44 +2836,29 @@ function CreateLetterForm({
         </div>
       </div>
 
-      {/* Smart placeholders — only when the template defines any */}
+      {/* Placeholder completion banner — surface only how many tokens are still
+          unfilled. The chips themselves live inline in the body/subject preview
+          rows below. */}
       {placeholderDefs.length > 0 && (() => {
         const completion = placeholderValuesComplete(placeholderDefs, placeholderValues)
         return (
-          <div className="mb-8 p-5 bg-blue-50/40 border border-blue-100 rounded-xl">
-            <div className="flex items-center justify-between mb-3">
-              <div>
-                <p className="text-xs font-bold text-slate-700 uppercase tracking-widest">
-                  Fill in placeholders
-                </p>
-                <p className="text-[11px] text-slate-500 mt-0.5">
-                  These values are substituted into the subject and body before the letter is sent.
-                </p>
-              </div>
-              <span className={cn(
-                'text-[10px] font-bold px-2 py-0.5 rounded-full',
-                completion.complete ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700',
-              )}>
-                {completion.complete ? 'All filled' : `${completion.missing.length} pending`}
+          <div className={cn(
+            'mb-4 px-4 py-2 rounded-lg border flex items-center justify-between gap-3',
+            completion.complete
+              ? 'bg-emerald-50/60 border-emerald-200 text-emerald-800'
+              : 'bg-amber-50/60 border-amber-200 text-amber-800',
+          )}>
+            <div className="flex items-center gap-2 text-xs font-medium">
+              <Icon icon={completion.complete ? 'lucide:check-circle-2' : 'lucide:alert-circle'} />
+              <span>
+                {completion.complete
+                  ? t('samaLetters.placeholdersAllFilled')
+                  : t('samaLetters.placeholdersPending').replace('{count}', String(completion.missing.length))}
               </span>
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              {placeholderDefs.map((def) => (
-                <div key={def.key}>
-                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 block">
-                    {def.label}
-                    <code className="ms-1 text-[10px] text-slate-400 font-mono">{`{{${def.key}}}`}</code>
-                  </label>
-                  <PlaceholderPicker
-                    def={def}
-                    value={placeholderValues[def.key]}
-                    onChange={(v) =>
-                      setPlaceholderValues((prev) => ({ ...prev, [def.key]: v }))
-                    }
-                  />
-                </div>
-              ))}
-            </div>
+            <span className="text-[10px] text-slate-500">
+              {t('samaLetters.placeholdersHint')}
+            </span>
           </div>
         )
       })()}
@@ -2589,77 +2870,79 @@ function CreateLetterForm({
           <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-2">
             {t('samaLetters.subjectEnglish')}
           </label>
-          <input
-            type="text"
-            value={subjectEn}
-            onChange={(e) => setSubjectEn(e.target.value)}
-            placeholder={t('samaLetters.enterEnglishSubject')}
-            className="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-sm font-medium focus:ring-2 focus:ring-emerald-500 outline-none mb-4"
-          />
+          <div className="mb-4">
+            <LetterSubjectEditor
+              value={subjectEn}
+              onChange={setSubjectEn}
+              placeholderDefs={placeholderDefs}
+              placeholderValues={placeholderValues}
+              onPlaceholderChange={(key, v) =>
+                setPlaceholderValues((prev) => ({ ...prev, [key]: v }))
+              }
+              dir="ltr"
+              placeholder={t('samaLetters.enterEnglishSubject')}
+            />
+          </div>
           <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-2">
             {t('samaLetters.contentEnglish')}
           </label>
-          <div className="min-h-[200px] w-full bg-slate-50 border border-slate-100 rounded-xl p-4">
-            <div className="flex gap-2 border-b border-slate-200 pb-2 mb-3">
-              <button className="p-1 hover:bg-slate-200 rounded text-slate-500">
-                <Icon icon="lucide:bold" />
-              </button>
-              <button className="p-1 hover:bg-slate-200 rounded text-slate-500">
-                <Icon icon="lucide:italic" />
-              </button>
-              <button className="p-1 hover:bg-slate-200 rounded text-slate-500">
-                <Icon icon="lucide:list" />
-              </button>
-            </div>
-            <textarea
-              value={bodyEn}
-              onChange={(e) => setBodyEn(e.target.value)}
-              placeholder={t('samaLetters.typeMessageHere')}
-              className="w-full h-32 bg-transparent resize-none text-sm text-slate-700 focus:outline-none placeholder:text-slate-400"
-            />
-          </div>
+          <LetterBodyEditor
+            value={bodyEn}
+            onChange={setBodyEn}
+            placeholderDefs={placeholderDefs}
+            placeholderValues={placeholderValues}
+            onPlaceholderChange={(key, v) =>
+              setPlaceholderValues((prev) => ({ ...prev, [key]: v }))
+            }
+            rows={6}
+            dir="ltr"
+            placeholder={t('samaLetters.typeMessageHere')}
+          />
         </div>
 
         {/* Arabic Side */}
-        <div dir="rtl" style={{ fontFamily: "'Amiri', serif" }}>
+        <div>
           <label
             className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-2"
             style={{ fontFamily: 'Inter, sans-serif' }}
           >
             {t('samaLetters.subjectArabic')}
           </label>
-          <input
-            type="text"
-            value={subjectAr}
-            onChange={(e) => setSubjectAr(e.target.value)}
-            placeholder={t('samaLetters.enterArabicSubject')}
-            className="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-lg font-medium focus:ring-2 focus:ring-emerald-500 outline-none mb-4"
-          />
+          <div className="mb-4">
+            <LetterSubjectEditor
+              value={subjectAr}
+              onChange={setSubjectAr}
+              placeholderDefs={placeholderDefs}
+              placeholderValues={placeholderValues}
+              onPlaceholderChange={(key, v) =>
+                setPlaceholderValues((prev) => ({ ...prev, [key]: v }))
+              }
+              dir="rtl"
+              fontFamily="'Amiri', serif"
+              textSize="text-lg"
+              placeholder={t('samaLetters.enterArabicSubject')}
+            />
+          </div>
           <label
             className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-2"
             style={{ fontFamily: 'Inter, sans-serif' }}
           >
             {t('samaLetters.contentArabic')}
           </label>
-          <div className="min-h-[200px] w-full bg-slate-50 border border-slate-100 rounded-xl p-4">
-            <div className="flex gap-2 border-b border-slate-200 pb-2 mb-3">
-              <button className="p-1 hover:bg-slate-200 rounded text-slate-500">
-                <Icon icon="lucide:bold" />
-              </button>
-              <button className="p-1 hover:bg-slate-200 rounded text-slate-500">
-                <Icon icon="lucide:italic" />
-              </button>
-              <button className="p-1 hover:bg-slate-200 rounded text-slate-500">
-                <Icon icon="lucide:list" />
-              </button>
-            </div>
-            <textarea
-              value={bodyAr}
-              onChange={(e) => setBodyAr(e.target.value)}
-              placeholder={t('samaLetters.typeMessageHere')}
-              className="w-full h-32 bg-transparent resize-none text-lg text-slate-700 focus:outline-none placeholder:text-slate-400"
-            />
-          </div>
+          <LetterBodyEditor
+            value={bodyAr}
+            onChange={setBodyAr}
+            placeholderDefs={placeholderDefs}
+            placeholderValues={placeholderValues}
+            onPlaceholderChange={(key, v) =>
+              setPlaceholderValues((prev) => ({ ...prev, [key]: v }))
+            }
+            rows={6}
+            dir="rtl"
+            fontFamily="'Amiri', serif"
+            textSize="text-lg"
+            placeholder={t('samaLetters.typeMessageHere')}
+          />
         </div>
       </div>
 

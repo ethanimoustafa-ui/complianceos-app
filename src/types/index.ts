@@ -477,11 +477,10 @@ export type SAMALetterType = 'non-objection' | 'inquiry' | 'submission' | 'notif
 // Department id is now an opaque string scoped per authority (see src/lib/letter-authority.ts).
 // Existing SAMA dept IDs (banking-supervision, payment-systems, compliance-aml) remain valid.
 export type SAMADepartment = string
-export type SAMASubCategory =
-  | 'key-function' | 'product-launch' | 'equity-participation'
-  | 'circular-clarification' | 'regulatory-interpretation'
-  | 'quarterly-aml' | 'annual-compliance'
-  | 'incident-notification' | 'system-outage'
+// Sub-category id is now an opaque string. Default seeds match the legacy
+// kebab-case values (key-function, product-launch, …) so existing letters keep
+// matching; users can add custom sub-categories via useSAMASubCategoryStore.
+export type SAMASubCategory = string
 
 export interface SAMALetterApprovalStep {
   step: 1 | 2 | 3
@@ -726,7 +725,7 @@ export interface PolicyActivityEntry {
   id: string
   timestamp: string   // ISO string, used for ordering
   date: string        // YYYY-MM-DD, for display
-  type: 'created' | 'edited' | 'step_advanced' | 'step_reverted' | 'document_uploaded' | 'document_removed' | 'step_added' | 'workflow_approved' | 'step_denied' | 'evidence_uploaded' | 'evidence_removed' | 'phase_deadline_set' | 'phase_deadline_changed' | 'checklist_deadline_set'
+  type: 'created' | 'edited' | 'step_advanced' | 'step_reverted' | 'document_uploaded' | 'document_removed' | 'step_added' | 'step_renamed' | 'workflow_approved' | 'step_denied' | 'evidence_uploaded' | 'evidence_removed' | 'phase_deadline_set' | 'phase_deadline_changed' | 'checklist_deadline_set'
   textEn: string
   textAr: string
   user?: string
@@ -826,15 +825,27 @@ export interface CircularWorkflowStep {
   actionLabelAr: string
   requiresNotes: boolean
   actionType: 'approve' | 'notify-bo' | 'notify-authority' | 'advance' | 'submit' | 'acknowledge' | 'start' | 'complete' | 'review'
+  deadline?: string                  // YYYY-MM-DD; must be ≤ parent circular dueDate (or capDeadline for CAP-phase steps)
 }
+
+export type CircularTimelineEventType =
+  | 'phase_deadline_set'
+  | 'phase_deadline_changed'
+  | 'step_added'
+  | 'step_renamed'
+  | 'step_removed'
+  | 'steps_reordered'
 
 export interface CircularTimelineEvent {
   id: string
   title: string
   titleAr?: string
+  textEn?: string
+  textAr?: string
   date: string
   user?: string
   status: 'completed' | 'active' | 'pending'
+  type?: CircularTimelineEventType
 }
 
 export interface CircularVersionEntry {

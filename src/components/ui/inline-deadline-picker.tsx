@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Icon } from '@iconify/react'
 import { cn } from '@/lib/utils'
 import { validateChildDeadline, isOverdue } from '@/lib/deadline-validation'
+import { useTranslation } from '@/i18n'
 
 interface InlineDeadlinePickerProps {
   value: string | undefined           // YYYY-MM-DD
@@ -18,14 +19,18 @@ export function InlineDeadlinePicker({
   value,
   onChange,
   parentDeadline,
-  label = 'Deadline',
+  label,
   disabled = false,
   size = 'sm',
 }: InlineDeadlinePickerProps) {
+  const { t } = useTranslation()
   const [open, setOpen] = useState(false)
   const [draft, setDraft] = useState(value ?? '')
   const [error, setError] = useState<string | null>(null)
   const rootRef = useRef<HTMLDivElement>(null)
+
+  // Caller may override the label; otherwise use the localized default.
+  const effectiveLabel = label ?? t('inlineDeadlinePicker.deadline')
 
   useEffect(() => {
     setDraft(value ?? '')
@@ -49,8 +54,8 @@ export function InlineDeadlinePicker({
     if (!validation.ok) {
       setError(
         validation.reason === 'after-parent'
-          ? `Cannot be after parent deadline (${parentDeadline ?? 'unknown'})`
-          : 'Invalid date',
+          ? t('inlineDeadlinePicker.errorAfterParent', { parent: parentDeadline ?? t('inlineDeadlinePicker.unknown') })
+          : t('inlineDeadlinePicker.errorInvalidDate'),
       )
       return
     }
@@ -89,12 +94,12 @@ export function InlineDeadlinePicker({
         )}
       >
         <Icon icon={value ? 'lucide:calendar-clock' : 'lucide:calendar-plus'} className="text-[11px]" />
-        {value ? value : `+ ${label}`}
+        {value ? value : `+ ${effectiveLabel}`}
       </button>
 
       {open && (
         <div className="absolute z-50 mt-1 right-0 w-64 bg-white border border-slate-200 rounded-lg shadow-xl p-3">
-          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">{label}</p>
+          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">{effectiveLabel}</p>
           <input
             type="date"
             value={draft}
@@ -106,7 +111,7 @@ export function InlineDeadlinePicker({
             className="w-full px-2 py-1.5 text-xs border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
           />
           {parentDeadline && (
-            <p className="text-[10px] text-slate-400 mt-1">Must be ≤ {parentDeadline}</p>
+            <p className="text-[10px] text-slate-400 mt-1">{t('inlineDeadlinePicker.mustBeBefore', { date: parentDeadline })}</p>
           )}
           {error && <p className="text-[10px] text-rose-600 mt-1">{error}</p>}
           <div className="flex items-center gap-2 mt-3">
@@ -115,7 +120,7 @@ export function InlineDeadlinePicker({
               onClick={submit}
               className="flex-1 px-2 py-1.5 text-[10px] font-bold text-white bg-emerald-600 rounded-md hover:bg-emerald-700 cursor-pointer"
             >
-              Save
+              {t('inlineDeadlinePicker.save')}
             </button>
             {value && (
               <button
@@ -123,7 +128,7 @@ export function InlineDeadlinePicker({
                 onClick={clear}
                 className="px-2 py-1.5 text-[10px] font-bold text-rose-600 bg-rose-50 rounded-md hover:bg-rose-100 cursor-pointer"
               >
-                Clear
+                {t('inlineDeadlinePicker.clear')}
               </button>
             )}
             <button
@@ -134,7 +139,7 @@ export function InlineDeadlinePicker({
               }}
               className="px-2 py-1.5 text-[10px] font-bold text-slate-600 bg-slate-100 rounded-md hover:bg-slate-200 cursor-pointer"
             >
-              Cancel
+              {t('inlineDeadlinePicker.cancel')}
             </button>
           </div>
         </div>

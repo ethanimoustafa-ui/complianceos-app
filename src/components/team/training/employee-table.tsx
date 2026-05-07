@@ -117,11 +117,11 @@ export function EmployeeTable({ employees, onViewEmployee, onHrReminder, onExpor
                 className="px-3 py-1.5 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
               >
                 <option value="">{t('training.allDepartments' as TranslationKey)}</option>
-                <option value="Compliance">{t('training.compliance' as TranslationKey)}</option>
-                <option value="Risk Management">{t('training.riskManagement' as TranslationKey)}</option>
-                <option value="Finance">{t('training.finance' as TranslationKey)}</option>
-                <option value="IT">{t('training.it' as TranslationKey)}</option>
-                <option value="Operations">{t('training.operations' as TranslationKey)}</option>
+                {departments.map((dept) => (
+                  <option key={dept.id} value={dept.name}>
+                    {isRTL ? dept.nameAr : dept.name}
+                  </option>
+                ))}
               </select>
               <select
                 value={statusFilter}

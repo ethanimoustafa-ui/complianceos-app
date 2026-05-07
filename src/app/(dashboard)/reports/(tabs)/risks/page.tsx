@@ -132,6 +132,7 @@ export default function ReportsRisksPage() {
   const assignDept = useRiskStore((s) => s.assignDepartment)
   const setMitigationDeadlineAction = useRiskStore((s) => s.setMitigationDeadline)
   const sendToDepartment = useRiskStore((s) => s.sendToDepartment)
+  const submitDepartmentPlan = useRiskStore((s) => s.submitDepartmentPlan)
   const acceptDepartmentPlan = useRiskStore((s) => s.acceptDepartmentPlan)
   const toggleDeptPlanItem = useRiskStore((s) => s.toggleDepartmentPlanItem)
   const { departments: deptList, addDepartment: addDept, updateDepartment: updateDept, removeDepartment: removeDept } = useDepartmentStore()
@@ -184,6 +185,25 @@ export default function ReportsRisksPage() {
   const [newRiskMonitoringFrequency, setNewRiskMonitoringFrequency] = useState<MonitoringFrequency>('monthly')
   const [newRiskSchedule, setNewRiskSchedule] = useState<ReviewSchedule>({ cadence: 'monthly', dayOfMonth: 1 })
   const [frameworkIds, setFrameworkIds] = useState<RegulatoryBodyId[]>([])
+
+  // Propose mitigation plan (department-side workflow) form state
+  const [proposePlanOpen, setProposePlanOpen] = useState(false)
+  const [proposePlanText, setProposePlanText] = useState('')
+  const [proposePlanItems, setProposePlanItems] = useState<Array<{ text: string; deadline?: string }>>([
+    { text: '', deadline: undefined },
+  ])
+  const resetProposePlanForm = () => {
+    setProposePlanOpen(false)
+    setProposePlanText('')
+    setProposePlanItems([{ text: '', deadline: undefined }])
+  }
+  const submitProposePlan = (riskId: string) => {
+    const validItems = proposePlanItems.filter((it) => it.text.trim().length > 0)
+    if (proposePlanText.trim().length === 0 || validItems.length === 0) return
+    const submittedBy = authUser?.name ?? 'Department User'
+    submitDepartmentPlan(riskId, proposePlanText.trim(), validItems, submittedBy)
+    resetProposePlanForm()
+  }
 
   const resetAddRiskForm = () => {
     setNewRiskName(''); setNewRiskCategory(''); setNewRiskOwnerId(''); setNewRiskLikelihood(3); setNewRiskImpact(3)
@@ -338,10 +358,10 @@ export default function ReportsRisksPage() {
         <div className="flex items-center gap-8">
           <div className={isRTL ? 'text-right' : ''}>
             <h1 className="text-xl font-bold font-display text-slate-900">
-              {pathname.startsWith('/reports/audits') ? t('reports.auditManagement' as TranslationKey) : t('reports.auditReports' as TranslationKey)}
+              {t('reports.headerRiskRegister' as TranslationKey)}
             </h1>
             <p className="text-xs text-slate-500 font-medium tracking-wide uppercase">
-              {pathname.startsWith('/reports/audits') ? t('reports.organizationAudits' as TranslationKey) : t('reports.analyticsFindings' as TranslationKey)}
+              {t('reports.headerRiskRegisterSubtitle' as TranslationKey)}
             </p>
           </div>
           <div className="flex bg-slate-100 p-1 rounded-lg">
@@ -600,7 +620,11 @@ export default function ReportsRisksPage() {
                     const categoryConfig = riskCategoryConfig[risk.category]
                     const statusConf = riskStatusConfig[risk.status]
                     return (
-                      <tr key={risk.id} className="border-b border-slate-50 hover:bg-slate-50 transition-colors">
+                      <tr
+                        key={risk.id}
+                        className="border-b border-slate-50 hover:bg-slate-50 transition-colors cursor-pointer"
+                        onClick={() => { setSelectedRisk(risk); setIsRiskDrawerOpen(true) }}
+                      >
                         <td className="px-6 py-4">
                           <div><span className="text-xs font-bold text-slate-400">{risk.id}</span><p className="text-sm font-bold text-slate-900">{risk.name}</p><p className="text-xs text-slate-500 line-clamp-1">{risk.description}</p></div>
                         </td>
@@ -625,8 +649,8 @@ export default function ReportsRisksPage() {
                         </td>
                         <td className="px-6 py-4">
                           <div className="flex items-center gap-1">
-                            <button onClick={() => { setSelectedRisk(risk); setIsRiskDrawerOpen(true) }} className="text-emerald-600 hover:text-emerald-700 p-2 hover:bg-emerald-50 rounded-lg transition-all cursor-pointer"><Icon icon="lucide:eye" className="text-lg" /></button>
-                            <button onClick={() => { setRiskToDelete(risk); setShowRiskDeleteConfirm(true) }} className="text-slate-400 hover:text-rose-600 p-2 hover:bg-rose-50 rounded-lg transition-all cursor-pointer"><Icon icon="lucide:trash-2" className="text-lg" /></button>
+                            <button onClick={(e) => { e.stopPropagation(); setSelectedRisk(risk); setIsRiskDrawerOpen(true) }} className="text-emerald-600 hover:text-emerald-700 p-2 hover:bg-emerald-50 rounded-lg transition-all cursor-pointer"><Icon icon="lucide:eye" className="text-lg" /></button>
+                            <button onClick={(e) => { e.stopPropagation(); setRiskToDelete(risk); setShowRiskDeleteConfirm(true) }} className="text-slate-400 hover:text-rose-600 p-2 hover:bg-rose-50 rounded-lg transition-all cursor-pointer"><Icon icon="lucide:trash-2" className="text-lg" /></button>
                           </div>
                         </td>
                       </tr>
@@ -745,10 +769,129 @@ export default function ReportsRisksPage() {
                         </button>
                       )}
                       {wfStatus === 'sent-to-department' && (
-                        <p className="text-[11px] text-slate-500 italic">
-                          Awaiting mitigation plan from{' '}
-                          {deptList.find((d) => d.id === storeRisk.intendedDepartmentId)?.name ?? 'department'}.
-                        </p>
+                        <div className="space-y-2">
+                          <p className="text-[11px] text-slate-500 italic">
+                            Awaiting mitigation plan from{' '}
+                            {deptList.find((d) => d.id === storeRisk.intendedDepartmentId)?.name ?? 'department'}.
+                          </p>
+                          {!proposePlanOpen && (
+                            <button
+                              type="button"
+                              onClick={() => setProposePlanOpen(true)}
+                              className="w-full py-2 text-xs font-bold rounded-lg bg-violet-600 text-white hover:bg-violet-700 transition-all cursor-pointer"
+                            >
+                              <Icon icon="lucide:clipboard-plus" className="inline-block mr-1" />
+                              {t('risks.proposeMitigationPlanCta' as TranslationKey)}
+                            </button>
+                          )}
+                          {proposePlanOpen && (() => {
+                            const validItems = proposePlanItems.filter((it) => it.text.trim().length > 0)
+                            const isValid = proposePlanText.trim().length > 0 && validItems.length > 0
+                            return (
+                              <div className="mt-1 p-3 bg-violet-50/60 rounded-lg border border-violet-200 space-y-3">
+                                <p className="text-xs font-bold text-violet-700 uppercase tracking-wider">
+                                  {t('risks.proposeMitigationPlan' as TranslationKey)}
+                                </p>
+                                <div>
+                                  <label className="text-[10px] font-bold text-slate-500 uppercase mb-1 block">
+                                    {t('risks.planDescription' as TranslationKey)}
+                                  </label>
+                                  <textarea
+                                    rows={3}
+                                    value={proposePlanText}
+                                    onChange={(e) => setProposePlanText(e.target.value)}
+                                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-violet-500"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="text-[10px] font-bold text-slate-500 uppercase mb-1 block">
+                                    {t('risks.checklistItems' as TranslationKey)}
+                                  </label>
+                                  <div className="space-y-2">
+                                    {proposePlanItems.map((item, idx) => (
+                                      <div
+                                        key={idx}
+                                        className="flex items-center gap-2 p-2 bg-white rounded-md border border-slate-200"
+                                      >
+                                        <input
+                                          type="text"
+                                          value={item.text}
+                                          placeholder={t('risks.itemTextPlaceholder' as TranslationKey)}
+                                          onChange={(e) => {
+                                            const next = [...proposePlanItems]
+                                            next[idx] = { ...next[idx], text: e.target.value }
+                                            setProposePlanItems(next)
+                                          }}
+                                          className="flex-1 px-2 py-1 border border-slate-200 rounded text-xs focus:outline-none focus:ring-2 focus:ring-violet-500"
+                                        />
+                                        <InlineDeadlinePicker
+                                          value={item.deadline}
+                                          onChange={(next) => {
+                                            const updated = [...proposePlanItems]
+                                            updated[idx] = { ...updated[idx], deadline: next }
+                                            setProposePlanItems(updated)
+                                          }}
+                                          parentDeadline={storeRisk.mitigationDeadline}
+                                          label="deadline"
+                                          size="sm"
+                                        />
+                                        {proposePlanItems.length > 1 && (
+                                          <button
+                                            type="button"
+                                            onClick={() =>
+                                              setProposePlanItems(
+                                                proposePlanItems.filter((_, i) => i !== idx),
+                                              )
+                                            }
+                                            className="p-1 text-slate-400 hover:text-rose-600 cursor-pointer"
+                                            aria-label="Remove item"
+                                          >
+                                            <Icon icon="lucide:x" className="text-sm" />
+                                          </button>
+                                        )}
+                                      </div>
+                                    ))}
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      setProposePlanItems([
+                                        ...proposePlanItems,
+                                        { text: '', deadline: undefined },
+                                      ])
+                                    }
+                                    className="mt-2 text-[11px] font-bold text-violet-700 hover:text-violet-900 cursor-pointer flex items-center gap-1"
+                                  >
+                                    <Icon icon="lucide:plus" className="text-xs" />
+                                    {t('risks.addChecklistItem' as TranslationKey)}
+                                  </button>
+                                </div>
+                                <div className="flex gap-2 pt-1">
+                                  <button
+                                    type="button"
+                                    disabled={!isValid}
+                                    onClick={() => submitProposePlan(storeRisk.id)}
+                                    className={cn(
+                                      'flex-1 py-2 text-xs font-bold rounded-lg transition-all',
+                                      isValid
+                                        ? 'bg-violet-600 text-white hover:bg-violet-700 cursor-pointer'
+                                        : 'bg-slate-100 text-slate-400 cursor-not-allowed',
+                                    )}
+                                  >
+                                    {t('risks.submit' as TranslationKey)}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={resetProposePlanForm}
+                                    className="px-3 py-2 text-xs font-bold rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200 cursor-pointer"
+                                  >
+                                    {t('risks.cancel' as TranslationKey)}
+                                  </button>
+                                </div>
+                              </div>
+                            )
+                          })()}
+                        </div>
                       )}
                       {storeRisk.departmentProposedPlan && (
                         <div className="mt-2 p-3 bg-slate-50 rounded-lg border border-slate-200">
@@ -758,12 +901,26 @@ export default function ReportsRisksPage() {
                             Submitted by {storeRisk.departmentProposedPlan.submittedBy} on{' '}
                             {new Date(storeRisk.departmentProposedPlan.submittedAt).toLocaleDateString()}
                           </p>
+                          {storeRisk.departmentProposedPlan.checklist.length > 0 && (
+                            <ul className="mt-2 space-y-1">
+                              {storeRisk.departmentProposedPlan.checklist.map((it) => (
+                                <li key={it.id} className="flex items-center gap-2 text-[11px] text-slate-700">
+                                  <Icon icon="lucide:circle" className="text-[10px] text-slate-400" />
+                                  <span>{it.text}</span>
+                                  {it.deadline && (
+                                    <span className="ms-auto text-[10px] text-slate-400">{it.deadline}</span>
+                                  )}
+                                </li>
+                              ))}
+                            </ul>
+                          )}
                           {wfStatus === 'plan-proposed' && (
                             <button
                               type="button"
                               onClick={() => acceptDepartmentPlan(storeRisk.id, actingUser)}
-                              className="mt-2 w-full py-1.5 text-[10px] font-bold text-white bg-emerald-600 rounded-md hover:bg-emerald-700 cursor-pointer"
+                              className="mt-3 w-full py-2.5 text-xs font-bold text-white bg-emerald-600 rounded-lg hover:bg-emerald-700 transition-all cursor-pointer shadow-sm shadow-emerald-100 flex items-center justify-center gap-1.5"
                             >
+                              <Icon icon="lucide:check-circle-2" className="text-sm" />
                               Accept plan and start tracking
                             </button>
                           )}

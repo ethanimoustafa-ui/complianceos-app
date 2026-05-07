@@ -211,10 +211,10 @@ export default function ReportsExecutivePage() {
         <div className="flex items-center gap-8">
           <div className={isRTL ? 'text-right' : ''}>
             <h1 className="text-xl font-bold font-display text-slate-900">
-              {pathname.startsWith('/reports/audits') ? t('reports.auditManagement' as TranslationKey) : t('reports.auditReports' as TranslationKey)}
+              {t('reports.headerTeamScore' as TranslationKey)}
             </h1>
             <p className="text-xs text-slate-500 font-medium tracking-wide uppercase">
-              {pathname.startsWith('/reports/audits') ? t('reports.organizationAudits' as TranslationKey) : t('reports.analyticsFindings' as TranslationKey)}
+              {t('reports.headerTeamScoreSubtitle' as TranslationKey)}
             </p>
           </div>
           <div className="flex bg-slate-100 p-1 rounded-lg">

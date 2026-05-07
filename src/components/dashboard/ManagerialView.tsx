@@ -73,8 +73,8 @@ export function ManagerialView({ metrics }: ManagerialViewProps) {
     if (metrics.samaLetters.overdueCount > 0) {
       list.push({ type: 'critical', title: t('dashboard.criticalActionRequired'), message: t('dashboard.alertSamaOverdue', { count: String(metrics.samaLetters.overdueCount) }), route: '/correspondence' })
     }
-    if (metrics.health.overall < targetScore) {
-      list.push({ type: 'warning', title: t('dashboard.trendAlert'), message: t('dashboard.alertComplianceLow', { score: String(Math.round(metrics.health.overall)), target: String(targetScore) }), route: '/reports' })
+    if (metrics.health.businessComplianceScore < targetScore) {
+      list.push({ type: 'warning', title: t('dashboard.trendAlert'), message: t('dashboard.alertComplianceLow', { score: String(Math.round(metrics.health.businessComplianceScore)), target: String(targetScore) }), route: '/reports/compliance-review' })
     }
     return list.slice(0, 2)
   }, [metrics, targetScore, t])
@@ -91,10 +91,14 @@ export function ManagerialView({ metrics }: ManagerialViewProps) {
       .sort((a, b) => b.computed - a.computed)
   }, [metrics.team.members, workloads])
 
-  // Health components (7-component)
+  // Health components (7-component) — used for the bottom Team Score grid.
   const components = metrics.health.components
-  const isAtRisk = metrics.health.overall < targetScore
-  const healthScore = Math.round(metrics.health.overall)
+  // Hero card "Compliance Health" + threshold bar reads the business
+  // compliance score (per-department compliant/non-compliant from the
+  // Compliance Review tab); the 7-component score is shown separately below
+  // labelled as Team Score.
+  const healthScore = Math.round(metrics.health.businessComplianceScore)
+  const isAtRisk = healthScore < targetScore
 
   // Observations by source
   const obsTotal = metrics.observations.total || 1

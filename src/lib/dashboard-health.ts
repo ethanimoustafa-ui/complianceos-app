@@ -304,5 +304,9 @@ export function calculateDashboardHealth(input: DashboardHealthInput): Dashboard
     components,
     frameworkScores,
     deductions,
+    // Filled in by useDashboardHealth from calculateComplianceReviewScore.
+    // Defaulted to 0 here so direct callers (tests, non-hook consumers) can
+    // still receive a complete shape.
+    businessComplianceScore: 0,
   }
 }

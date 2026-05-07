@@ -6,9 +6,10 @@ import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { useCircularStore } from '@/stores/circular-store'
 import { useFrameworkConfigStore } from '@/stores/framework-config-store'
+import { useAuthStore } from '@/stores/auth-store'
 import { resolveAuthorityLabel } from '@/lib/authority-display'
-import type { Circular, CircularArticle } from '@/types'
-import { WorkflowStepRow } from './WorkflowStepRow'
+import { InlineDeadlinePicker } from '@/components/ui/inline-deadline-picker'
+import type { Circular, CircularArticle, CircularWorkflowStep } from '@/types'
 import { AdvanceWorkflowModal } from './AdvanceWorkflowModal'
 import { ArticleDetailModal } from './ArticleDetailModal'
 import { downloadFile, normalizeUrl, readFileAsDataUrl, getBONotifyLabel } from './utils'
@@ -40,6 +41,15 @@ export function CircularDetailsContent({ circular, onClose, onOpenBOModal, onEdi
   const capFileRef = useRef<HTMLInputElement>(null)
   const remFileRef = useRef<HTMLInputElement>(null)
 
+  // Workflow editing state
+  const [renamingStepId, setRenamingStepId] = useState<string | null>(null)
+  const [renameDraft, setRenameDraft] = useState('')
+  const [dragId, setDragId] = useState<string | null>(null)
+  const [dragOverId, setDragOverId] = useState<string | null>(null)
+  const [showAddStep, setShowAddStep] = useState(false)
+  const [newStepLabel, setNewStepLabel] = useState('')
+  const [deadlineError, setDeadlineError] = useState<string | null>(null)
+
   const {
     circulars: allCirculars,
     addCAPAttachment,
@@ -50,7 +60,14 @@ export function CircularDetailsContent({ circular, onClose, onOpenBOModal, onEdi
     clearPdfUrl,
     approveCircularEditStep,
     rejectCircularEditStep,
+    setRuleStepDeadline,
+    addWorkflowStep,
+    renameWorkflowStep,
+    removeWorkflowStep,
+    reorderWorkflowSteps,
   } = useCircularStore()
+  const authUser = useAuthStore(s => s.user)
+  const actingUser = authUser?.name ?? 'Current User'
 
   // Always use fresh circular data from store
   const freshCircular = allCirculars.find(c => c.id === circular.id) ?? circular
@@ -295,20 +312,233 @@ export function CircularDetailsContent({ circular, onClose, onOpenBOModal, onEdi
                   {phaseLabels[phase]}
                 </h3>
                 <div className="space-y-2 relative before:absolute before:left-2 before:top-2 before:bottom-2 before:w-0.5 before:bg-slate-100">
-                  {stepsGrouped[phase].map((step) => (
-                    <WorkflowStepRow
-                      key={step.id}
-                      step={step}
-                      onAdvance={() => setAdvanceConfirm({ open: true, stepId: step.id, stepLabel: step.label })}
-                      isRTL={isRTL}
-                    />
-                  ))}
+                  {stepsGrouped[phase].map((step) => {
+                    const flatIdx = (freshCircular.workflowSteps ?? []).findIndex(s => s.id === step.id)
+                    const isCompleted = step.status === 'completed'
+                    const isCurrent = step.status === 'current'
+                    const isRenaming = renamingStepId === step.id
+                    const isDragging = dragId === step.id
+                    const isDragOver = dragOverId === step.id && dragId !== step.id && !isCompleted
+                    const dotColor =
+                      isCompleted ? 'bg-emerald-100 border-emerald-500' :
+                      isCurrent ? 'bg-blue-100 border-blue-500' :
+                      'bg-slate-100 border-slate-300'
+                    const actionLabel = isRTL ? step.actionLabelAr : step.actionLabel
+                    const parentDeadline = (step.phase === 0 || step.phase === 1)
+                      ? (freshCircular.capDeadline ?? freshCircular.dueDate)
+                      : freshCircular.dueDate
+
+                    return (
+                      <div
+                        key={step.id}
+                        draggable={!isCompleted}
+                        onDragStart={() => !isCompleted && setDragId(step.id)}
+                        onDragOver={(e) => {
+                          e.preventDefault()
+                          if (!isCompleted) setDragOverId(step.id)
+                        }}
+                        onDragEnd={() => { setDragId(null); setDragOverId(null) }}
+                        onDrop={() => {
+                          if (dragId && dragId !== step.id) {
+                            const allSteps = freshCircular.workflowSteps ?? []
+                            const fromIdx = allSteps.findIndex(s => s.id === dragId)
+                            const toIdx = allSteps.findIndex(s => s.id === step.id)
+                            if (fromIdx !== -1 && toIdx !== -1) {
+                              reorderWorkflowSteps(freshCircular.id, fromIdx, toIdx, actingUser)
+                            }
+                          }
+                          setDragId(null); setDragOverId(null)
+                        }}
+                        className={cn(
+                          'relative py-2 rounded-lg transition-all',
+                          isRTL ? 'pr-8' : 'pl-8',
+                          isDragOver && 'ring-1 ring-emerald-300 bg-emerald-50/40',
+                          isDragging && 'opacity-40',
+                        )}
+                      >
+                        <div className={`absolute ${isRTL ? 'right-0' : 'left-0'} top-3 w-4 h-4 rounded-full border-2 ${dotColor}`} />
+                        <div className="flex items-start justify-between gap-2 group/row">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-1.5">
+                              {isRenaming ? (
+                                <input
+                                  autoFocus
+                                  value={renameDraft}
+                                  onChange={(e) => setRenameDraft(e.target.value)}
+                                  onBlur={() => {
+                                    const trimmed = renameDraft.trim()
+                                    if (trimmed && trimmed !== step.label && flatIdx !== -1) {
+                                      renameWorkflowStep(freshCircular.id, flatIdx, trimmed, actingUser)
+                                    }
+                                    setRenamingStepId(null)
+                                    setRenameDraft('')
+                                  }}
+                                  onKeyDown={(e) => {
+                                    e.stopPropagation()
+                                    if (e.key === 'Enter') {
+                                      const trimmed = renameDraft.trim()
+                                      if (trimmed && trimmed !== step.label && flatIdx !== -1) {
+                                        renameWorkflowStep(freshCircular.id, flatIdx, trimmed, actingUser)
+                                      }
+                                      setRenamingStepId(null)
+                                      setRenameDraft('')
+                                    } else if (e.key === 'Escape') {
+                                      setRenamingStepId(null)
+                                      setRenameDraft('')
+                                    }
+                                  }}
+                                  className="text-sm font-bold text-slate-900 bg-white border border-emerald-300 rounded px-1.5 py-0.5 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 max-w-[260px]"
+                                />
+                              ) : (
+                                <>
+                                  <p className={cn(
+                                    'text-sm font-bold',
+                                    isCompleted ? 'text-slate-500 line-through' :
+                                    isCurrent ? 'text-slate-900' : 'text-slate-300',
+                                  )}>
+                                    {isRTL ? step.labelAr : step.label}
+                                  </p>
+                                  {!isCompleted && (
+                                    <>
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setRenameDraft(step.label)
+                                          setRenamingStepId(step.id)
+                                        }}
+                                        title={t('regulatoryUpdates.renameStep')}
+                                        className="opacity-0 group-hover/row:opacity-100 transition-opacity p-0.5 rounded hover:bg-slate-200 text-slate-400 hover:text-slate-600"
+                                      >
+                                        <Icon icon="lucide:pencil" className="text-[10px]" />
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          if (flatIdx !== -1) {
+                                            removeWorkflowStep(freshCircular.id, flatIdx, actingUser)
+                                          }
+                                        }}
+                                        title={t('regulatoryUpdates.deleteStep')}
+                                        className="opacity-0 group-hover/row:opacity-100 transition-opacity p-0.5 rounded hover:bg-rose-100 text-slate-400 hover:text-rose-600"
+                                      >
+                                        <Icon icon="lucide:trash-2" className="text-[10px]" />
+                                      </button>
+                                      <Icon
+                                        icon="lucide:grip-vertical"
+                                        className="opacity-0 group-hover/row:opacity-100 transition-opacity text-slate-300 text-xs cursor-grab"
+                                      />
+                                    </>
+                                  )}
+                                </>
+                              )}
+                            </div>
+                            {step.date && (
+                              <p className="text-[10px] text-slate-400 mt-0.5">{step.date}{step.user && ` • ${step.user}`}</p>
+                            )}
+                            {step.notes && (
+                              <p className="text-[10px] text-slate-500 italic mt-0.5">{step.notes}</p>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0">
+                            {!isCompleted && (
+                              <InlineDeadlinePicker
+                                value={step.deadline}
+                                parentDeadline={parentDeadline}
+                                label={t('regulatoryUpdates.phaseDeadline')}
+                                onChange={(next) => {
+                                  if (flatIdx === -1) return false
+                                  const result = setRuleStepDeadline(freshCircular.id, flatIdx, next, actingUser)
+                                  if (!result.ok) {
+                                    setDeadlineError(t('regulatoryUpdates.deadlineRejected'))
+                                    setTimeout(() => setDeadlineError(null), 4000)
+                                    return false
+                                  }
+                                  return true
+                                }}
+                              />
+                            )}
+                            {isCompleted && step.deadline && (
+                              <span className="text-[10px] text-slate-400">due {step.deadline}</span>
+                            )}
+                            {isCurrent && (
+                              <button
+                                onClick={() => setAdvanceConfirm({ open: true, stepId: step.id, stepLabel: step.label })}
+                                className="px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg transition-colors flex items-center gap-1 cursor-pointer"
+                              >
+                                {actionLabel}
+                              </button>
+                            )}
+                            {isCompleted && (
+                              <Icon icon="lucide:check-circle" className="text-emerald-500 text-base mt-0.5" />
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })}
                   {stepsGrouped[phase].length === 0 && (
                     <p className="text-xs text-slate-400 pl-8">—</p>
                   )}
                 </div>
               </section>
             ))}
+
+            {/* Add step UI */}
+            {deadlineError && (
+              <div className="px-3 py-2 bg-rose-50 border border-rose-200 rounded-lg text-xs text-rose-700">
+                {deadlineError}
+              </div>
+            )}
+            {showAddStep ? (
+              <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
+                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                  {t('regulatoryUpdates.addStepName')}
+                </label>
+                <input
+                  autoFocus
+                  className="flex h-9 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                  placeholder={t('regulatoryUpdates.addStepPlaceholder')}
+                  value={newStepLabel}
+                  onChange={(e) => setNewStepLabel(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && newStepLabel.trim()) {
+                      addWorkflowStep(freshCircular.id, { label: newStepLabel.trim() }, actingUser)
+                      setNewStepLabel('')
+                      setShowAddStep(false)
+                    } else if (e.key === 'Escape') {
+                      setShowAddStep(false)
+                      setNewStepLabel('')
+                    }
+                  }}
+                />
+                <div className="flex justify-end gap-2">
+                  <Button variant="ghost" className="h-8 text-xs" onClick={() => { setShowAddStep(false); setNewStepLabel('') }}>
+                    {t('common.cancel')}
+                  </Button>
+                  <Button
+                    variant="primary"
+                    className="h-8 text-xs"
+                    disabled={!newStepLabel.trim()}
+                    onClick={() => {
+                      addWorkflowStep(freshCircular.id, { label: newStepLabel.trim() }, actingUser)
+                      setNewStepLabel('')
+                      setShowAddStep(false)
+                    }}
+                  >
+                    <Icon icon="lucide:plus" className="w-3.5 h-3.5" />
+                    {t('common.add')}
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <button
+                onClick={() => setShowAddStep(true)}
+                className="flex items-center gap-1.5 text-xs font-bold text-emerald-600 hover:text-emerald-700 px-3 py-2 rounded-lg border border-dashed border-emerald-200 hover:border-emerald-400 transition-colors w-full justify-center"
+              >
+                <Icon icon="lucide:plus" className="text-sm" />
+                {t('regulatoryUpdates.addStep')}
+              </button>
+            )}
 
             {/* CAP Documents */}
             <section>

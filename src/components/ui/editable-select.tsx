@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Icon } from '@iconify/react'
 import { cn } from '@/lib/utils'
+import { useTranslation } from '@/i18n'
 
 export interface EditableSelectItem {
   id: string
@@ -32,7 +33,7 @@ export function EditableSelect({
   value,
   onChange,
   items,
-  placeholder = 'Select...',
+  placeholder,
   onAdd,
   onEdit,
   onDelete,
@@ -42,12 +43,16 @@ export function EditableSelect({
   bilingual = true,
   size = 'md',
 }: EditableSelectProps) {
+  const { t } = useTranslation()
   const [open, setOpen] = useState(false)
   const [mode, setMode] = useState<'list' | 'add' | 'edit'>('list')
   const [editingId, setEditingId] = useState<string | null>(null)
   const [draftLabel, setDraftLabel] = useState('')
   const [draftLabelAr, setDraftLabelAr] = useState('')
   const rootRef = useRef<HTMLDivElement>(null)
+
+  // Caller may override the placeholder; otherwise use the localized default.
+  const effectivePlaceholder = placeholder ?? t('editableSelect.selectPlaceholder')
 
   useEffect(() => {
     if (!open) return
@@ -118,7 +123,7 @@ export function EditableSelect({
         )}
       >
         <span className={selectedLabel ? 'text-slate-900' : 'text-slate-400'}>
-          {selectedLabel ?? placeholder}
+          {selectedLabel ?? effectivePlaceholder}
         </span>
         <Icon icon="lucide:chevron-down" className="text-slate-400 text-sm shrink-0" />
       </button>
@@ -129,7 +134,7 @@ export function EditableSelect({
             <>
               <div className="max-h-64 overflow-y-auto">
                 {items.length === 0 && (
-                  <div className="px-3 py-3 text-xs text-slate-400 italic">No options</div>
+                  <div className="px-3 py-3 text-xs text-slate-400 italic">{t('editableSelect.noOptions')}</div>
                 )}
                 {items.map((item) => {
                   const isSelected = item.id === value
@@ -154,7 +159,7 @@ export function EditableSelect({
                           <button
                             type="button"
                             className="p-1 text-slate-400 hover:text-emerald-600"
-                            title="Edit"
+                            title={t('editableSelect.edit')}
                             onClick={(e) => {
                               e.stopPropagation()
                               startEdit(item)
@@ -167,7 +172,7 @@ export function EditableSelect({
                           <button
                             type="button"
                             className="p-1 text-slate-400 hover:text-rose-600"
-                            title="Delete"
+                            title={t('editableSelect.delete')}
                             onClick={(e) => {
                               e.stopPropagation()
                               handleDelete(item.id)
@@ -189,7 +194,7 @@ export function EditableSelect({
                     className="w-full flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-emerald-700 hover:bg-emerald-50 cursor-pointer"
                   >
                     <Icon icon="lucide:plus" className="text-sm" />
-                    Add new
+                    {t('editableSelect.addNew')}
                   </button>
                 </div>
               )}
@@ -199,7 +204,7 @@ export function EditableSelect({
           {(mode === 'add' || mode === 'edit') && (
             <div className="p-3 space-y-2">
               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                {mode === 'add' ? 'New entry' : 'Edit entry'}
+                {mode === 'add' ? t('editableSelect.newEntry') : t('editableSelect.editEntry')}
               </p>
               <input
                 autoFocus
@@ -209,7 +214,7 @@ export function EditableSelect({
                   if (e.key === 'Enter') submitDraft()
                   if (e.key === 'Escape') setMode('list')
                 }}
-                placeholder="Name"
+                placeholder={t('editableSelect.name')}
                 className="w-full px-2 py-1.5 text-xs border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
               />
               {bilingual && (
@@ -220,7 +225,7 @@ export function EditableSelect({
                     if (e.key === 'Enter') submitDraft()
                     if (e.key === 'Escape') setMode('list')
                   }}
-                  placeholder="Arabic name (optional)"
+                  placeholder={t('editableSelect.arabicNameOptional')}
                   dir="rtl"
                   className="w-full px-2 py-1.5 text-xs border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
                 />
@@ -232,14 +237,14 @@ export function EditableSelect({
                   disabled={!draftLabel.trim()}
                   className="flex-1 px-2 py-1.5 text-xs font-bold text-white bg-emerald-600 rounded-md hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
                 >
-                  {mode === 'add' ? 'Add' : 'Save'}
+                  {mode === 'add' ? t('editableSelect.add') : t('editableSelect.save')}
                 </button>
                 <button
                   type="button"
                   onClick={() => setMode('list')}
                   className="px-2 py-1.5 text-xs font-bold text-slate-600 bg-slate-100 rounded-md hover:bg-slate-200 cursor-pointer"
                 >
-                  Cancel
+                  {t('editableSelect.cancel')}
                 </button>
               </div>
             </div>

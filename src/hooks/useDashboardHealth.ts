@@ -10,7 +10,10 @@ import { useSAMALetterStore } from '@/stores/sama-letter-store'
 import { useCircularStore } from '@/stores/circular-store'
 import { useFrameworkConfigStore } from '@/stores/framework-config-store'
 import { useComplianceSettingsStore } from '@/stores/compliance-settings-store'
+import { useComplianceEvaluationStore } from '@/stores/compliance-evaluation-store'
+import { useDepartmentStore } from '@/stores/department-store'
 import { calculateDashboardHealth } from '@/lib/dashboard-health'
+import { calculateComplianceReviewScore } from '@/lib/compliance-review-score'
 import type { DashboardHealthResult } from '@/lib/dashboard-health.types'
 import type { FrameworkConfig } from '@/types'
 
@@ -26,6 +29,8 @@ export function useDashboardHealth(): DashboardHealthResult {
   const pinnedIds = useFrameworkConfigStore(s => s.pinnedIds)
   const targetScore = useComplianceSettingsStore(s => s.targetScore)
   const globalWeights = useComplianceSettingsStore(s => s.weights)
+  const departments = useDepartmentStore(s => s.departments)
+  const evaluations = useComplianceEvaluationStore(s => s.evaluations)
 
   // Only correspondence-based pinned frameworks get dashboard gauges —
   // self-assessment frameworks don't produce scoring signal.
@@ -51,9 +56,18 @@ export function useDashboardHealth(): DashboardHealthResult {
     }
   }, [pinnedFrameworks, globalWeights])
 
+  // Business-compliance score sourced from the Compliance Review tab.
+  // Lives on `result.businessComplianceScore`; the dashboard surfaces it as
+  // "Compliance Health". The 7-component `overall` continues to feed the
+  // (renamed) Team Score path.
+  const businessComplianceScore = useMemo(
+    () => calculateComplianceReviewScore({ circulars, policies, departments, evaluations }).overall,
+    [circulars, policies, departments, evaluations],
+  )
+
   return useMemo(
-    () =>
-      calculateDashboardHealth({
+    () => {
+      const base = calculateDashboardHealth({
         audits,
         observations,
         risks,
@@ -64,7 +78,9 @@ export function useDashboardHealth(): DashboardHealthResult {
         frameworkWeights: primaryWeights,
         pinnedFrameworks,
         targetScore,
-      }),
-    [audits, observations, risks, policies, trainings, letters, circulars, primaryWeights, pinnedFrameworks, targetScore]
+      })
+      return { ...base, businessComplianceScore }
+    },
+    [audits, observations, risks, policies, trainings, letters, circulars, primaryWeights, pinnedFrameworks, targetScore, businessComplianceScore]
   )
 }

@@ -58,6 +58,14 @@ interface PolicyState {
     deadline: string | undefined,
     actingUser: string,
   ) => { ok: true } | { ok: false; reason: string }
+
+  // Inline rename of a non-completed workflow step
+  renameWorkflowStep: (
+    policyId: string,
+    stepIndex: number,
+    newLabel: string,
+    actingUser: string,
+  ) => void
 }
 
 const seedPolicies: Policy[] = [
@@ -407,6 +415,34 @@ export const usePolicyStore = create<PolicyState>()(
           activityLog: [...(policy.activityLog ?? []), entry],
         })
         return { ok: true }
+      },
+
+      renameWorkflowStep: (policyId, stepIndex, newLabel, actingUser) => {
+        const policy = get().policies.find((p) => p.id === policyId)
+        if (!policy) return
+        if (stepIndex < 0 || stepIndex >= policy.workflowTimeline.length) return
+        const step = policy.workflowTimeline[stepIndex]
+        if (step.status === 'completed') return
+        const trimmed = newLabel.trim()
+        if (!trimmed || trimmed === step.step) return
+        const previous = step.step
+        const newTimeline = policy.workflowTimeline.map((s, i) =>
+          i === stepIndex ? { ...s, step: trimmed } : s,
+        )
+        const today = new Date().toISOString().split('T')[0]
+        const entry: PolicyActivityEntry = {
+          id: Date.now().toString(),
+          timestamp: new Date().toISOString(),
+          date: today,
+          type: 'step_renamed',
+          textEn: `Workflow step renamed from "${previous}" to "${trimmed}"`,
+          textAr: `تمت إعادة تسمية الخطوة من "${previous}" إلى "${trimmed}"`,
+          user: actingUser,
+        }
+        get().update(policyId, {
+          workflowTimeline: newTimeline,
+          activityLog: [...(policy.activityLog ?? []), entry],
+        })
       },
 
       checkAndUpdateStatuses: () => {

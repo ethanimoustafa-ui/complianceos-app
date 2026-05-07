@@ -15,6 +15,7 @@ import type {
   ArticleTimelineEvent,
   CircularPendingEdit,
 } from '@/types'
+import { validateChildDeadline } from '@/lib/deadline-validation'
 
 interface CircularState {
   circulars: Circular[]
@@ -50,6 +51,36 @@ interface CircularState {
 
   // Workflow actions
   advanceWorkflowStep: (circularId: string, stepId: string, notes?: string) => void
+
+  // Workflow step CRUD + reorder + deadline (parity with policies)
+  setRuleStepDeadline: (
+    circularId: string,
+    stepIndex: number,
+    deadline: string | undefined,
+    actingUser: string,
+  ) => { ok: true } | { ok: false; reason: string }
+  addWorkflowStep: (
+    circularId: string,
+    step: { label: string; labelAr?: string; phase?: 0 | 1 | 2; actionType?: CircularWorkflowStep['actionType'] },
+    actingUser: string,
+  ) => void
+  renameWorkflowStep: (
+    circularId: string,
+    stepIndex: number,
+    newLabel: string,
+    actingUser: string,
+  ) => void
+  removeWorkflowStep: (
+    circularId: string,
+    stepIndex: number,
+    actingUser: string,
+  ) => void
+  reorderWorkflowSteps: (
+    circularId: string,
+    fromIndex: number,
+    toIndex: number,
+    actingUser: string,
+  ) => void
 
   // Circular edit approval workflow
   requestCircularEdit: (circularId: string, editData: Partial<Circular>) => void
@@ -799,6 +830,268 @@ export const useCircularStore = create<CircularState>()(
               updatedAt: now,
             }
           })
+          return {
+            circulars,
+            selectedCircular: syncSelected(state.selectedCircular, circulars, circularId),
+          }
+        })
+      },
+
+      // ── Workflow step CRUD + reorder + deadline ────────────────────────────
+
+      setRuleStepDeadline: (circularId, stepIndex, deadline, actingUser) => {
+        const circular = get().circulars.find((c) => c.id === circularId)
+        if (!circular) return { ok: false, reason: 'circular-not-found' }
+        const steps = circular.workflowSteps ?? []
+        if (stepIndex < 0 || stepIndex >= steps.length) {
+          return { ok: false, reason: 'step-not-found' }
+        }
+        const step = steps[stepIndex]
+        // CAP-phase steps validate against capDeadline; other steps validate
+        // against dueDate. (Phase 0 = CAP analysis, Phase 1 = CAP receipt &
+        // approval — both strongly tied to the CAP cycle. Phase 2 =
+        // remediation, tied to overall implementation deadline.)
+        const parentDeadline = (step.phase === 0 || step.phase === 1)
+          ? (circular.capDeadline ?? circular.dueDate)
+          : circular.dueDate
+        const validation = validateChildDeadline(deadline ?? null, parentDeadline ?? null)
+        if (!validation.ok) {
+          return { ok: false, reason: validation.reason }
+        }
+        const previous = step.deadline
+        const newSteps = steps.map((s, i) =>
+          i === stepIndex ? { ...s, deadline: deadline || undefined } : s,
+        )
+        const today = new Date().toISOString().split('T')[0]
+        const action = previous && deadline ? 'phase_deadline_changed' : 'phase_deadline_set'
+        const stepLabel = step.label
+        const stepLabelAr = step.labelAr || stepLabel
+        const event: CircularTimelineEvent = {
+          id: nanoid(),
+          title: deadline
+            ? (previous
+                ? `Deadline for "${stepLabel}" changed from ${previous} to ${deadline}`
+                : `Deadline for "${stepLabel}" set to ${deadline}`)
+            : `Deadline cleared on "${stepLabel}"`,
+          titleAr: deadline
+            ? (previous
+                ? `تم تغيير الموعد النهائي لـ "${stepLabelAr}" من ${previous} إلى ${deadline}`
+                : `تم تعيين الموعد النهائي لـ "${stepLabelAr}" إلى ${deadline}`)
+            : `تم مسح الموعد النهائي لـ "${stepLabelAr}"`,
+          textEn: deadline
+            ? (previous
+                ? `Deadline for "${stepLabel}" changed from ${previous} to ${deadline}`
+                : `Deadline for "${stepLabel}" set to ${deadline}`)
+            : `Deadline cleared on "${stepLabel}"`,
+          textAr: deadline
+            ? (previous
+                ? `تم تغيير الموعد النهائي لـ "${stepLabelAr}" من ${previous} إلى ${deadline}`
+                : `تم تعيين الموعد النهائي لـ "${stepLabelAr}" إلى ${deadline}`)
+            : `تم مسح الموعد النهائي لـ "${stepLabelAr}"`,
+          date: today,
+          user: actingUser,
+          status: 'completed',
+          type: action,
+        }
+        const now = new Date().toISOString()
+        set((state) => {
+          const circulars = state.circulars.map((c) =>
+            c.id === circularId
+              ? { ...c, workflowSteps: newSteps, timeline: [...(c.timeline ?? []), event], updatedAt: now }
+              : c,
+          )
+          return {
+            circulars,
+            selectedCircular: syncSelected(state.selectedCircular, circulars, circularId),
+          }
+        })
+        return { ok: true }
+      },
+
+      addWorkflowStep: (circularId, payload, actingUser) => {
+        const circular = get().circulars.find((c) => c.id === circularId)
+        if (!circular) return
+        const existingSteps = circular.workflowSteps ?? buildInitialWorkflowSteps()
+        // Default new step to the same phase as the current step (or phase 2 if all complete)
+        const currentStep = existingSteps.find((s) => s.status === 'current')
+        const phase = (payload.phase ?? currentStep?.phase ?? 2) as 0 | 1 | 2
+        const newStep: CircularWorkflowStep = {
+          id: nanoid(),
+          phase,
+          label: payload.label.trim(),
+          labelAr: (payload.labelAr ?? payload.label).trim(),
+          status: 'pending',
+          actionLabel: 'Advance',
+          actionLabelAr: 'تقديم',
+          requiresNotes: false,
+          actionType: payload.actionType ?? 'advance',
+        }
+        const today = new Date().toISOString().split('T')[0]
+        const event: CircularTimelineEvent = {
+          id: nanoid(),
+          title: `Workflow step "${newStep.label}" added`,
+          titleAr: `تمت إضافة خطوة "${newStep.labelAr}" إلى مسار العمل`,
+          textEn: `Workflow step "${newStep.label}" added`,
+          textAr: `تمت إضافة خطوة "${newStep.labelAr}" إلى مسار العمل`,
+          date: today,
+          user: actingUser,
+          status: 'completed',
+          type: 'step_added',
+        }
+        const now = new Date().toISOString()
+        set((state) => {
+          const circulars = state.circulars.map((c) =>
+            c.id === circularId
+              ? {
+                  ...c,
+                  workflowSteps: [...existingSteps, newStep],
+                  timeline: [...(c.timeline ?? []), event],
+                  updatedAt: now,
+                }
+              : c,
+          )
+          return {
+            circulars,
+            selectedCircular: syncSelected(state.selectedCircular, circulars, circularId),
+          }
+        })
+      },
+
+      renameWorkflowStep: (circularId, stepIndex, newLabel, actingUser) => {
+        const circular = get().circulars.find((c) => c.id === circularId)
+        if (!circular) return
+        const steps = circular.workflowSteps ?? []
+        if (stepIndex < 0 || stepIndex >= steps.length) return
+        const step = steps[stepIndex]
+        if (step.status === 'completed') return
+        const trimmed = newLabel.trim()
+        if (!trimmed || trimmed === step.label) return
+        const previous = step.label
+        const newSteps = steps.map((s, i) =>
+          i === stepIndex ? { ...s, label: trimmed, labelAr: trimmed } : s,
+        )
+        const today = new Date().toISOString().split('T')[0]
+        const event: CircularTimelineEvent = {
+          id: nanoid(),
+          title: `Step renamed from "${previous}" to "${trimmed}"`,
+          titleAr: `تمت إعادة تسمية الخطوة من "${previous}" إلى "${trimmed}"`,
+          textEn: `Step renamed from "${previous}" to "${trimmed}"`,
+          textAr: `تمت إعادة تسمية الخطوة من "${previous}" إلى "${trimmed}"`,
+          date: today,
+          user: actingUser,
+          status: 'completed',
+          type: 'step_renamed',
+        }
+        const now = new Date().toISOString()
+        set((state) => {
+          const circulars = state.circulars.map((c) =>
+            c.id === circularId
+              ? {
+                  ...c,
+                  workflowSteps: newSteps,
+                  timeline: [...(c.timeline ?? []), event],
+                  updatedAt: now,
+                }
+              : c,
+          )
+          return {
+            circulars,
+            selectedCircular: syncSelected(state.selectedCircular, circulars, circularId),
+          }
+        })
+      },
+
+      removeWorkflowStep: (circularId, stepIndex, actingUser) => {
+        const circular = get().circulars.find((c) => c.id === circularId)
+        if (!circular) return
+        const steps = circular.workflowSteps ?? []
+        if (stepIndex < 0 || stepIndex >= steps.length) return
+        const step = steps[stepIndex]
+        if (step.status === 'completed') return
+        const removed = step.label
+        const filtered = steps.filter((_, i) => i !== stepIndex)
+        // Re-derive 'current' if we removed the current step
+        let foundCurrent = false
+        const restated = filtered.map((s) => {
+          if (s.status === 'completed') return s
+          if (!foundCurrent) { foundCurrent = true; return { ...s, status: 'current' as const } }
+          return { ...s, status: 'pending' as const }
+        })
+        const today = new Date().toISOString().split('T')[0]
+        const event: CircularTimelineEvent = {
+          id: nanoid(),
+          title: `Workflow step "${removed}" removed`,
+          titleAr: `تم حذف الخطوة "${removed}" من مسار العمل`,
+          textEn: `Workflow step "${removed}" removed`,
+          textAr: `تم حذف الخطوة "${removed}" من مسار العمل`,
+          date: today,
+          user: actingUser,
+          status: 'completed',
+          type: 'step_removed',
+        }
+        const now = new Date().toISOString()
+        set((state) => {
+          const circulars = state.circulars.map((c) =>
+            c.id === circularId
+              ? {
+                  ...c,
+                  workflowSteps: restated,
+                  timeline: [...(c.timeline ?? []), event],
+                  updatedAt: now,
+                }
+              : c,
+          )
+          return {
+            circulars,
+            selectedCircular: syncSelected(state.selectedCircular, circulars, circularId),
+          }
+        })
+      },
+
+      reorderWorkflowSteps: (circularId, fromIndex, toIndex, actingUser) => {
+        if (fromIndex === toIndex) return
+        const circular = get().circulars.find((c) => c.id === circularId)
+        if (!circular) return
+        const steps = circular.workflowSteps ?? []
+        if (fromIndex < 0 || fromIndex >= steps.length) return
+        if (toIndex < 0 || toIndex >= steps.length) return
+        const moved = steps[fromIndex]
+        if (moved.status === 'completed') return
+        if (steps[toIndex].status === 'completed') return
+        const next = [...steps]
+        const [item] = next.splice(fromIndex, 1)
+        next.splice(toIndex, 0, item)
+        // Re-derive 'current' across the new ordering (skip completed)
+        let foundCurrent = false
+        const restated = next.map((s) => {
+          if (s.status === 'completed') return s
+          if (!foundCurrent) { foundCurrent = true; return { ...s, status: 'current' as const } }
+          return { ...s, status: 'pending' as const }
+        })
+        const today = new Date().toISOString().split('T')[0]
+        const event: CircularTimelineEvent = {
+          id: nanoid(),
+          title: `Workflow steps reordered`,
+          titleAr: `تمت إعادة ترتيب خطوات مسار العمل`,
+          textEn: `Workflow steps reordered`,
+          textAr: `تمت إعادة ترتيب خطوات مسار العمل`,
+          date: today,
+          user: actingUser,
+          status: 'completed',
+          type: 'steps_reordered',
+        }
+        const now = new Date().toISOString()
+        set((state) => {
+          const circulars = state.circulars.map((c) =>
+            c.id === circularId
+              ? {
+                  ...c,
+                  workflowSteps: restated,
+                  timeline: [...(c.timeline ?? []), event],
+                  updatedAt: now,
+                }
+              : c,
+          )
           return {
             circulars,
             selectedCircular: syncSelected(state.selectedCircular, circulars, circularId),
