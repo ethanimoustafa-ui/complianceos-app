@@ -1145,7 +1145,16 @@ export default function SAMALettersPage() {
                       icon={template.icon}
                       color={template.color}
                       description={translatedDesc}
-                      onClick={() => handleOpenCreateModal(template.type)}
+                      onClick={() => {
+                        const defaultTemplate = templateStore.templates
+                          .filter(tmpl => tmpl.type === template.type && tmpl.status === 'Active')
+                          .sort((a, b) => b.usageCount - a.usageCount)[0]
+                        if (defaultTemplate) {
+                          handleUseTemplate(defaultTemplate)
+                        } else {
+                          handleOpenCreateModal(template.type)
+                        }
+                      }}
                     />
                   )
                 })}
