@@ -1108,3 +1108,164 @@ export function exportToPDF<T extends ExportableData>(
     subtitle: options.subtitle,
   })
 }
+
+/**
+ * Export policies to CSV with localization support.
+ * Includes the rich Policy fields: leader, business owner, dates, workflow progress.
+ */
+export function exportPoliciesLocalized(
+  policies: Array<{
+    id: string
+    name: string
+    description: string
+    status: string
+    category: string
+    version: string
+    approvalTier: string
+    owner: { name: string; department: string }
+    businessOwnerDepartmentId?: string
+    lastReviewDate: string
+    nextReviewDate: string
+    reviewCycleDays: number
+    approvedDate?: string
+    workflowTimeline?: Array<{ step: string; status: string; date: string; deadline?: string }>
+    overdueCount?: number
+    frameworkIds?: string[]
+  }>,
+  filename = 'policies',
+  t?: TranslationFunction,
+  isRTL = false,
+  resolveDeptName?: (id: string | undefined) => string,
+): void {
+  const getText = (key: string, fallback: string) => (t ? t(key) : fallback)
+  const naText = t ? t('common.notAvailable') : 'N/A'
+
+  const headers = [
+    'ID',
+    getText('export.name', 'Name'),
+    getText('export.description', 'Description'),
+    getText('export.status', 'Status'),
+    getText('export.category', 'Category'),
+    getText('policies.version', 'Version'),
+    getText('policies.approvalTier', 'Approval Tier'),
+    getText('policies.policyLeader', 'Policy Leader'),
+    getText('policies.policyOwner', 'Policy Owner (Department)'),
+    getText('policies.lastReview', 'Last Review'),
+    getText('policies.nextReview', 'Next Review'),
+    getText('policies.reviewCycleDays', 'Review Cycle (days)'),
+    getText('policies.approvedDate', 'Approved Date'),
+    getText('policies.workflowProgress', 'Workflow Progress'),
+    getText('policies.overdueCount', 'Overdue Count'),
+    getText('export.frameworks', 'Frameworks'),
+  ]
+
+  const exportData = policies.map((p) => {
+    const totalSteps = p.workflowTimeline?.length ?? 0
+    const completedSteps = p.workflowTimeline?.filter((s) => s.status === 'completed').length ?? 0
+    const workflowSummary = totalSteps > 0
+      ? `${completedSteps}/${totalSteps} steps`
+      : ''
+    const businessOwnerName = resolveDeptName
+      ? resolveDeptName(p.businessOwnerDepartmentId) || naText
+      : (p.businessOwnerDepartmentId ?? naText)
+
+    return {
+      [headers[0]]: p.id,
+      [headers[1]]: p.name,
+      [headers[2]]: p.description,
+      [headers[3]]: p.status,
+      [headers[4]]: p.category,
+      [headers[5]]: p.version,
+      [headers[6]]: p.approvalTier,
+      [headers[7]]: p.owner.name,
+      [headers[8]]: businessOwnerName,
+      [headers[9]]: formatExportDate(p.lastReviewDate, isRTL, ''),
+      [headers[10]]: formatExportDate(p.nextReviewDate, isRTL, ''),
+      [headers[11]]: p.reviewCycleDays,
+      [headers[12]]: formatExportDate(p.approvedDate ?? '', isRTL, ''),
+      [headers[13]]: workflowSummary,
+      [headers[14]]: p.overdueCount ?? 0,
+      [headers[15]]: (p.frameworkIds ?? []).join('; '),
+    }
+  })
+
+  exportToCSV(exportData, { filename, headers })
+}
+
+/**
+ * Export rules (circulars) to CSV with localization support.
+ */
+export function exportRulesLocalized(
+  rules: Array<{
+    id: string
+    reference: string
+    authority: string
+    title: string
+    priority: string
+    status: string
+    applicability: string
+    departments: string[]
+    businessOwnerDepartment?: string
+    progress: number
+    issuanceDate: string
+    dueDate: string
+    capStatus: string
+    capDueDate?: string
+    description?: string
+    referenceUrl?: string
+    articles?: Array<{ articleNumber: string; title: string; complianceStatus: string }>
+    frameworkIds?: string[]
+  }>,
+  filename = 'rules',
+  t?: TranslationFunction,
+  isRTL = false,
+): void {
+  const getText = (key: string, fallback: string) => (t ? t(key) : fallback)
+
+  const headers = [
+    'ID',
+    getText('export.reference', 'Reference'),
+    getText('regulatoryUpdates.authority', 'Authority'),
+    getText('export.title', 'Title'),
+    getText('export.priority', 'Priority'),
+    getText('export.status', 'Status'),
+    getText('regulatoryUpdates.applicability', 'Applicability'),
+    getText('regulatoryUpdates.affectedDepartments', 'Affected Departments'),
+    getText('regulatoryUpdates.businessOwnerDept', 'Business Owner Dept'),
+    getText('export.progress', 'Progress'),
+    getText('regulatoryUpdates.issuanceDate', 'Issuance Date'),
+    getText('export.dueDate', 'Due Date'),
+    getText('regulatoryUpdates.capStatus', 'CAP Status'),
+    getText('regulatoryUpdates.capDueDate', 'CAP Due Date'),
+    getText('export.description', 'Description'),
+    getText('correspondence.referenceUrl', 'Reference URL'),
+    getText('regulatoryUpdates.articles', 'Articles'),
+    getText('export.frameworks', 'Frameworks'),
+  ]
+
+  const exportData = rules.map((r) => ({
+    [headers[0]]: r.id,
+    [headers[1]]: r.reference,
+    [headers[2]]: r.authority,
+    [headers[3]]: r.title,
+    [headers[4]]: r.priority,
+    [headers[5]]: r.status,
+    [headers[6]]: r.applicability,
+    [headers[7]]: r.departments.join('; '),
+    [headers[8]]: r.businessOwnerDepartment ?? '',
+    [headers[9]]: `${r.progress}%`,
+    [headers[10]]: formatExportDate(r.issuanceDate, isRTL, ''),
+    [headers[11]]: formatExportDate(r.dueDate, isRTL, ''),
+    [headers[12]]: r.capStatus,
+    [headers[13]]: formatExportDate(r.capDueDate ?? '', isRTL, ''),
+    [headers[14]]: r.description ?? '',
+    [headers[15]]: r.referenceUrl ?? '',
+    [headers[16]]: (r.articles ?? [])
+      .map((a) => `${a.articleNumber}: ${a.title} [${a.complianceStatus}]`)
+      .join(' | '),
+    [headers[17]]: (r.frameworkIds ?? []).join('; '),
+  }))
+
+  exportToCSV(exportData, { filename, headers })
+}
+

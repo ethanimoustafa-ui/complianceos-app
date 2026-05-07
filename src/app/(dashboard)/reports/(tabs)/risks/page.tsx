@@ -13,6 +13,10 @@ import { cn } from '@/lib/utils'
 import { useTranslation } from '@/i18n'
 import { useRiskStore } from '@/stores/risk-store'
 import { useTeamStore } from '@/stores/team-store'
+import { useDepartmentStore } from '@/stores/department-store'
+import { useAuthStore } from '@/stores/auth-store'
+import { EditableSelect } from '@/components/ui/editable-select'
+import { InlineDeadlinePicker } from '@/components/ui/inline-deadline-picker'
 import { ReviewSchedulePicker } from '@/components/ui/ReviewSchedulePicker'
 import type { ReviewSchedule, RegulatoryBodyId } from '@/types'
 import { computeNextReview } from '@/lib/review-schedule'
@@ -125,6 +129,14 @@ export default function ReportsRisksPage() {
   const toggleMitigationItem = useRiskStore((s) => s.toggleMitigationItem)
   const removeMitigationItem = useRiskStore((s) => s.removeMitigationItem)
   const markReviewed = useRiskStore((s) => s.markReviewed)
+  const assignDept = useRiskStore((s) => s.assignDepartment)
+  const setMitigationDeadlineAction = useRiskStore((s) => s.setMitigationDeadline)
+  const sendToDepartment = useRiskStore((s) => s.sendToDepartment)
+  const acceptDepartmentPlan = useRiskStore((s) => s.acceptDepartmentPlan)
+  const toggleDeptPlanItem = useRiskStore((s) => s.toggleDepartmentPlanItem)
+  const { departments: deptList, addDepartment: addDept, updateDepartment: updateDept, removeDepartment: removeDept } = useDepartmentStore()
+  const authUser = useAuthStore((s) => s.user)
+  const actingUser = authUser?.name ?? 'Compliance Officer'
   const teamMembers = useTeamStore((s) => s.members)
 
   // Map store risks to RiskRegisterItem
@@ -336,8 +348,11 @@ export default function ReportsRisksPage() {
             <Link href="/reports/audits" className={cn('px-4 py-2 text-xs font-bold rounded-md transition-all cursor-pointer', pathname.startsWith('/reports/audits') ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500 hover:text-slate-900')}>
               {t('reports.auditsTab' as TranslationKey)}
             </Link>
+            <Link href="/reports/compliance-review" className={cn('px-4 py-2 text-xs font-bold rounded-md transition-all cursor-pointer', pathname.startsWith('/reports/compliance-review') ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500 hover:text-slate-900')}>
+              {t('reports.complianceReviewTab' as TranslationKey)}
+            </Link>
             <Link href="/reports/executive" className={cn('px-4 py-2 text-xs font-bold rounded-md transition-all cursor-pointer', pathname.startsWith('/reports/executive') ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500 hover:text-slate-900')}>
-              {t('reports.executiveView' as TranslationKey)}
+              {t('reports.teamPerformanceTab' as TranslationKey)}
             </Link>
             <Link href="/reports/detailed" className={cn('px-4 py-2 text-xs font-bold rounded-md transition-all cursor-pointer', pathname.startsWith('/reports/detailed') ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500 hover:text-slate-900')}>
               {t('reports.auditsLogs' as TranslationKey)}
@@ -665,6 +680,120 @@ export default function ReportsRisksPage() {
                 <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${selectedRisk.owner.avatar || selectedRisk.owner.name}`} className="w-10 h-10 rounded-full border-2 border-white" alt={selectedRisk.owner.name} />
                 <div className={isRTL ? 'text-right' : ''}><p className="text-xs font-bold text-slate-400 uppercase">{t('reports.owner' as TranslationKey)}</p><p className="text-sm font-bold text-slate-900">{selectedRisk.owner.name}</p><p className="text-xs text-slate-500">{selectedRisk.owner.department}</p></div>
               </div>
+
+              {/* Officer-driven mitigation workflow */}
+              {(() => {
+                const storeRisk = storeRisks.find((r) => r.id === selectedRisk.id)
+                if (!storeRisk) return null
+                const wfStatus = storeRisk.mitigationWorkflowStatus ?? 'pending-assignment'
+                const wfMeta: Record<string, { bg: string; text: string; label: string }> = {
+                  'pending-assignment': { bg: 'bg-slate-100', text: 'text-slate-600', label: 'Pending assignment' },
+                  'sent-to-department': { bg: 'bg-blue-100', text: 'text-blue-700', label: 'Sent to department' },
+                  'plan-proposed':      { bg: 'bg-violet-100', text: 'text-violet-700', label: 'Plan proposed' },
+                  'in-progress':        { bg: 'bg-amber-100', text: 'text-amber-700', label: 'In progress' },
+                  'mitigated':          { bg: 'bg-emerald-100', text: 'text-emerald-700', label: 'Mitigated' },
+                }
+                const meta = wfMeta[wfStatus]
+                const canSend = !!storeRisk.intendedDepartmentId && !!storeRisk.mitigationDeadline && wfStatus === 'pending-assignment'
+                return (
+                  <div className="p-4 bg-white rounded-xl border border-slate-200">
+                    <div className="flex items-center justify-between mb-3">
+                      <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Mitigation Workflow</p>
+                      <span className={cn('text-[10px] font-bold px-2.5 py-1 rounded-full', meta.bg, meta.text)}>
+                        {meta.label}
+                      </span>
+                    </div>
+                    <div className="space-y-3">
+                      <div>
+                        <p className="text-[10px] font-bold text-slate-500 uppercase mb-1">Intended department</p>
+                        <EditableSelect
+                          value={storeRisk.intendedDepartmentId ?? null}
+                          onChange={(id) => assignDept(storeRisk.id, id)}
+                          items={deptList.map((d) => ({ id: d.id, label: d.name, labelAr: d.nameAr, isDefault: d.isDefault }))}
+                          placeholder="Assign a department..."
+                          onAdd={(label, labelAr) => addDept(label, labelAr ?? label).id}
+                          onEdit={(id, label, labelAr) => updateDept(id, { name: label, nameAr: labelAr ?? label })}
+                          onDelete={(id) => removeDept(id)}
+                          isRTL={isRTL}
+                        />
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <p className="text-[10px] font-bold text-slate-500 uppercase">Mitigation deadline</p>
+                        <InlineDeadlinePicker
+                          value={storeRisk.mitigationDeadline}
+                          onChange={(next) => {
+                            setMitigationDeadlineAction(storeRisk.id, next)
+                          }}
+                          label="deadline"
+                          size="md"
+                        />
+                      </div>
+                      {wfStatus === 'pending-assignment' && (
+                        <button
+                          type="button"
+                          disabled={!canSend}
+                          onClick={() => sendToDepartment(storeRisk.id, actingUser)}
+                          className={cn(
+                            'w-full mt-1 py-2 text-xs font-bold rounded-lg transition-all',
+                            canSend
+                              ? 'bg-emerald-600 text-white hover:bg-emerald-700 cursor-pointer'
+                              : 'bg-slate-100 text-slate-400 cursor-not-allowed',
+                          )}
+                        >
+                          <Icon icon="lucide:send" className="inline-block mr-1" />
+                          Send to department
+                        </button>
+                      )}
+                      {wfStatus === 'sent-to-department' && (
+                        <p className="text-[11px] text-slate-500 italic">
+                          Awaiting mitigation plan from{' '}
+                          {deptList.find((d) => d.id === storeRisk.intendedDepartmentId)?.name ?? 'department'}.
+                        </p>
+                      )}
+                      {storeRisk.departmentProposedPlan && (
+                        <div className="mt-2 p-3 bg-slate-50 rounded-lg border border-slate-200">
+                          <p className="text-[10px] font-bold text-slate-500 uppercase mb-1">Department-proposed plan</p>
+                          <p className="text-xs text-slate-700 whitespace-pre-line">{storeRisk.departmentProposedPlan.plan}</p>
+                          <p className="text-[10px] text-slate-400 mt-1">
+                            Submitted by {storeRisk.departmentProposedPlan.submittedBy} on{' '}
+                            {new Date(storeRisk.departmentProposedPlan.submittedAt).toLocaleDateString()}
+                          </p>
+                          {wfStatus === 'plan-proposed' && (
+                            <button
+                              type="button"
+                              onClick={() => acceptDepartmentPlan(storeRisk.id, actingUser)}
+                              className="mt-2 w-full py-1.5 text-[10px] font-bold text-white bg-emerald-600 rounded-md hover:bg-emerald-700 cursor-pointer"
+                            >
+                              Accept plan and start tracking
+                            </button>
+                          )}
+                          {(wfStatus === 'in-progress' || wfStatus === 'mitigated') && (
+                            <div className="mt-2 space-y-1">
+                              <p className="text-[10px] font-bold text-slate-500 uppercase">Officer evaluation</p>
+                              {(storeRisk.mitigationChecklist ?? []).map((item) => (
+                                <label key={item.id} className="flex items-center gap-2 text-[11px] text-slate-700 cursor-pointer">
+                                  <input
+                                    type="checkbox"
+                                    checked={item.completed}
+                                    onChange={() => toggleDeptPlanItem(storeRisk.id, item.id, actingUser)}
+                                    className="rounded border-slate-300"
+                                  />
+                                  <span className={item.completed ? 'line-through text-slate-400' : ''}>
+                                    {item.text}
+                                  </span>
+                                  {item.deadline && (
+                                    <span className="ms-auto text-[10px] text-slate-400">{item.deadline}</span>
+                                  )}
+                                </label>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )
+              })()}
               <div className={isRTL ? 'text-right' : ''}>
                 {selectedRisk.mitigationPlan && <div className="mb-4"><p className="text-xs font-bold text-slate-400 uppercase mb-2">{t('reports.mitigationPlan' as TranslationKey)}</p><p className="text-sm text-slate-600">{selectedRisk.mitigationPlan}</p></div>}
                 <div className="mb-4">

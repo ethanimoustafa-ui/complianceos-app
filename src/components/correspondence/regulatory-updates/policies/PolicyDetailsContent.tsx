@@ -7,6 +7,9 @@ import { cn } from '@/lib/utils'
 import { usePolicyStore } from '@/stores/policy-store'
 import { useAuthStore } from '@/stores/auth-store'
 import { useNotificationStore } from '@/stores/notification-store'
+import { useDepartmentStore } from '@/stores/department-store'
+import { EditableSelect } from '@/components/ui/editable-select'
+import { InlineDeadlinePicker } from '@/components/ui/inline-deadline-picker'
 import type {
   Policy, PolicyStatus, PolicyApprovalTier, PolicyActivityEntry,
   PolicyAttachment, PolicyEvidence, PolicyWorkflowStep,
@@ -883,6 +886,32 @@ export function PolicyDetailsContent({
                           )}
                         </div>
 
+                        {/* Phase deadline picker (skip when completed) */}
+                        {!isCompleted && (
+                          <div onClick={(e) => e.stopPropagation()} className="shrink-0">
+                            <InlineDeadlinePicker
+                              value={step.deadline}
+                              parentDeadline={fresh.nextReviewDate}
+                              onChange={(next) => {
+                                const result = usePolicyStore.getState().setPhaseDeadline(
+                                  fresh.id,
+                                  idx,
+                                  next,
+                                  actingUser,
+                                )
+                                if (!result.ok) {
+                                  showToast(t('policies.deadlineRejected'))
+                                  return false
+                                }
+                                return true
+                              }}
+                            />
+                          </div>
+                        )}
+                        {isCompleted && step.deadline && (
+                          <span className="text-[10px] text-slate-400 shrink-0">due {step.deadline}</span>
+                        )}
+
                         {/* Status badge */}
                         <span className={cn('text-[10px] font-bold uppercase shrink-0',
                           isCompleted ? 'text-emerald-600' :
@@ -1268,9 +1297,9 @@ export function PolicyDetailsContent({
 
       {/* ── Right panel ───────────────────────────────────────────────── */}
       <div className={`w-full md:w-72 bg-slate-50 -mx-6 -mb-4 md:mx-0 md:mb-0 p-6 md:rounded-xl space-y-6`}>
-        {/* Policy owner */}
+        {/* Policy Leader (person responsible for follow-up) */}
         <div>
-          <h3 className="text-[10px] font-black text-slate-400 uppercase mb-3">{t('policies.policyOwner')}</h3>
+          <h3 className="text-[10px] font-black text-slate-400 uppercase mb-3">{t('policies.policyLeader')}</h3>
           <div className="flex items-center gap-3">
             <img
               src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${fresh.owner.avatar}`}
@@ -1283,6 +1312,10 @@ export function PolicyDetailsContent({
             </div>
           </div>
         </div>
+
+        {/* Policy Owner (Business Owner — department responsible for compliance) */}
+        <PolicyBusinessOwnerSection policy={fresh} t={t} />
+
 
         {/* Approval tier */}
         <div>
@@ -1342,6 +1375,34 @@ export function PolicyDetailsContent({
           </Button>
         </div>
       </div>
+    </div>
+  )
+}
+
+function PolicyBusinessOwnerSection({ policy, t }: { policy: Policy; t: (key: any, params?: Record<string, string>) => string }) {
+  const { departments, addDepartment, updateDepartment, removeDepartment } = useDepartmentStore()
+  const { update } = usePolicyStore()
+  const dept = departments.find((d) => d.id === policy.businessOwnerDepartmentId)
+  return (
+    <div>
+      <h3 className="text-[10px] font-black text-slate-400 uppercase mb-3">
+        {t('policies.policyOwner')}{' '}
+        <span className="text-slate-300 font-normal normal-case text-[10px]">— {t('policies.businessOwnerHint')}</span>
+      </h3>
+      <EditableSelect
+        value={policy.businessOwnerDepartmentId ?? null}
+        onChange={(id) => update(policy.id, { businessOwnerDepartmentId: id || undefined })}
+        items={departments.map((d) => ({ id: d.id, label: d.name, labelAr: d.nameAr, isDefault: d.isDefault }))}
+        placeholder={t('policies.selectBusinessOwner')}
+        onAdd={(label, labelAr) => addDepartment(label, labelAr ?? label).id}
+        onEdit={(id, label, labelAr) => updateDepartment(id, { name: label, nameAr: labelAr ?? label })}
+        onDelete={(id) => removeDepartment(id)}
+      />
+      {dept && (
+        <p className="text-[10px] text-slate-400 mt-2">
+          {t('policies.businessOwnerExplain')}
+        </p>
+      )}
     </div>
   )
 }

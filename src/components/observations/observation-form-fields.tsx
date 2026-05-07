@@ -7,6 +7,7 @@ import { ObservationSource, ObservationSeverity, sourceConfig } from './observat
 import type { TeamMember, RegulatoryBodyId } from '@/types'
 import { useDepartmentStore } from '@/stores/department-store'
 import { useFrameworkConfigStore } from '@/stores/framework-config-store'
+import { EditableSelect } from '@/components/ui/editable-select'
 
 // Department keys for translation lookup (kept for backward compatibility)
 export const departmentKeys: Record<string, string> = {
@@ -191,27 +192,28 @@ export const DepartmentField = memo(function DepartmentField({
   error?: string
   required?: boolean
 }) {
-  const { t, language } = useTranslation()
-  const { departments: allDepartments } = useDepartmentStore()
+  const { t, isRTL } = useTranslation()
+  const { departments: allDepartments, addDepartment, updateDepartment, removeDepartment } = useDepartmentStore()
 
   return (
     <div>
       <label className={`text-xs font-black uppercase text-slate-500 tracking-widest mb-2 block`}>
         {t('observations.form.departmentAssignment')} {required ? <span className="text-rose-500">*</span> : null}
       </label>
-      <select
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        onBlur={onBlur}
-        className={`w-full px-4 py-3 bg-slate-50 border ${error ? 'border-rose-300' : 'border-slate-200'} rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500`}
-      >
-        <option value="">{t('observations.form.selectDepartment')}</option>
-        {allDepartments.map((dept) => (
-          <option key={dept.id} value={dept.name}>
-            {language === 'ar' ? dept.nameAr : dept.name}
-          </option>
-        ))}
-      </select>
+      <EditableSelect
+        value={allDepartments.find((d) => d.name === value)?.id ?? null}
+        onChange={(id) => {
+          const dept = allDepartments.find((d) => d.id === id)
+          onChange(dept ? dept.name : '')
+          onBlur?.()
+        }}
+        items={allDepartments.map((d) => ({ id: d.id, label: d.name, labelAr: d.nameAr, isDefault: d.isDefault }))}
+        placeholder={t('observations.form.selectDepartment')}
+        onAdd={(label, labelAr) => addDepartment(label, labelAr ?? label).id}
+        onEdit={(id, label, labelAr) => updateDepartment(id, { name: label, nameAr: labelAr ?? label })}
+        onDelete={(id) => removeDepartment(id)}
+        isRTL={isRTL}
+      />
       {error ? <p className="text-rose-500 text-xs mt-1">{error}</p> : null}
     </div>
   )

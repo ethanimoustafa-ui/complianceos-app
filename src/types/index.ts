@@ -162,6 +162,7 @@ export interface ObservationChecklistItem {
   id: string
   text: string
   completed: boolean
+  deadline?: string                  // YYYY-MM-DD
 }
 
 export interface ObservationUpdate {
@@ -280,6 +281,7 @@ export interface MitigationChecklistItem {
   id: string
   text: string
   completed: boolean
+  deadline?: string                  // YYYY-MM-DD
 }
 
 export interface RiskHistoryEntry {
@@ -289,6 +291,24 @@ export interface RiskHistoryEntry {
   action: 'created' | 'status_changed' | 'score_updated' | 'mitigation_updated' | 'reviewed' | 'assigned' | 'note_added' | 'checklist_added' | 'checklist_toggled' | 'checklist_edited' | 'checklist_removed'
   previousValue?: string
   newValue?: string
+  notes?: string
+}
+
+// New mitigation workflow states (officer-driven). Existing `status` stays for the
+// risk register lifecycle; this complements it with the per-department workflow.
+export type RiskMitigationWorkflowStatus =
+  | 'pending-assignment'   // no department/deadline assigned yet
+  | 'sent-to-department'   // officer has sent the risk
+  | 'plan-proposed'        // department has proposed a mitigation plan
+  | 'in-progress'          // officer accepted the plan, items being marked off
+  | 'mitigated'            // all items done
+
+export interface DepartmentProposedPlan {
+  id: string
+  plan: string
+  checklist: MitigationChecklistItem[]
+  submittedAt: string
+  submittedBy: string      // department user
   notes?: string
 }
 
@@ -311,6 +331,12 @@ export interface Risk {
   reviewSchedule?: ReviewSchedule
   history: RiskHistoryEntry[]
   frameworkIds?: RegulatoryBodyId[]
+  // Officer-driven mitigation workflow
+  intendedDepartmentId?: string         // department-store id
+  mitigationDeadline?: string           // YYYY-MM-DD; hard deadline for mitigation
+  mitigationWorkflowStatus?: RiskMitigationWorkflowStatus
+  departmentProposedPlan?: DepartmentProposedPlan
+  sentToDepartmentAt?: string
   createdAt: string
   updatedAt: string
 }
@@ -375,6 +401,36 @@ export interface TimelineEntry {
 // SAMA Letter Templates
 export type TemplateStatus = 'Active' | 'Draft'
 
+// Smart placeholder system for letter templates.
+// Authors insert placeholders by token (e.g., {{candidate_name}}). Each token
+// has a typed definition that drives the compose-time picker.
+export type PlaceholderType = 'text' | 'date' | 'reference'
+export type PlaceholderRefKind = 'observation' | 'audit' | 'letter' | 'rule' | 'policy'
+
+export interface PlaceholderDef {
+  key: string                       // token name (used between {{...}} in body/subject)
+  label: string                     // shown to the composer
+  labelAr?: string
+  type: PlaceholderType
+  // For 'reference' placeholders, list which entity types are pickable. If empty
+  // or omitted, all reference kinds are allowed.
+  refKinds?: PlaceholderRefKind[]
+  // Compose-time the picker emits this shape and the renderer interpolates
+  // `[REF-ID] Title` for reference values.
+}
+
+export interface PlaceholderRefValue {
+  kind: PlaceholderRefKind
+  id: string
+  reference: string                 // human reference ID
+  title: string
+}
+
+export type PlaceholderValue =
+  | { type: 'text'; value: string }
+  | { type: 'date'; value: string }
+  | { type: 'reference'; value: PlaceholderRefValue }
+
 export interface LetterTemplate {
   id: string
   name: string
@@ -404,6 +460,8 @@ export interface LetterTemplate {
   defaultRecipientNameAr?: string
   defaultRecipientOrgAr?: string
   defaultRecipientCityAr?: string
+  // Smart placeholders configured at template-author time.
+  placeholderDefs?: PlaceholderDef[]
 }
 
 // SAMA Letters
@@ -637,8 +695,12 @@ export interface PolicyWorkflowStep {
   actionType?: string
   note?: string
   stepState?: 'pending-approval' | 'awaiting-response' | 'awaiting-manager'
+  deadline?: string                  // YYYY-MM-DD; must be ≤ parent policy nextReviewDate
 }
 export interface PolicyOwner { name: string; avatar: string; department: string }
+// Policy Leader = person responsible for following up. (Was previously `owner`.)
+// Policy Owner / Business Owner = department responsible for complying with the policy.
+// We store the dept id (department-store) so renames propagate automatically.
 
 export interface PolicyAttachment {
   id: string
@@ -664,7 +726,7 @@ export interface PolicyActivityEntry {
   id: string
   timestamp: string   // ISO string, used for ordering
   date: string        // YYYY-MM-DD, for display
-  type: 'created' | 'edited' | 'step_advanced' | 'step_reverted' | 'document_uploaded' | 'document_removed' | 'step_added' | 'workflow_approved' | 'step_denied' | 'evidence_uploaded' | 'evidence_removed'
+  type: 'created' | 'edited' | 'step_advanced' | 'step_reverted' | 'document_uploaded' | 'document_removed' | 'step_added' | 'workflow_approved' | 'step_denied' | 'evidence_uploaded' | 'evidence_removed' | 'phase_deadline_set' | 'phase_deadline_changed' | 'checklist_deadline_set'
   textEn: string
   textAr: string
   user?: string
@@ -679,7 +741,10 @@ export interface Policy {
   category: PolicyCategory
   version: string
   approvalTier: PolicyApprovalTier
+  // Person responsible for following up on the policy. Surfaced as "Policy Leader" in UI.
   owner: PolicyOwner
+  // Department that owns the policy ("Policy Owner" / "Business Owner"). Stored as dept id.
+  businessOwnerDepartmentId?: string
   lastReviewDate: string
   nextReviewDate: string
   reviewCycleDays: number
@@ -938,6 +1003,7 @@ export interface ChecklistItem {
   completedBy?: string
   completedAt?: string
   order: number
+  deadline?: string                  // YYYY-MM-DD; optional per-item due date
 }
 
 // Filter types for list views

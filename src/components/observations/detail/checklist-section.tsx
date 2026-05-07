@@ -3,11 +3,13 @@
 import { memo, useState } from 'react'
 import { Icon } from '@iconify/react'
 import { useTranslation } from '@/i18n'
+import { InlineDeadlinePicker } from '@/components/ui/inline-deadline-picker'
 
 interface ChecklistItem {
   id: string
   text: string
   completed: boolean
+  deadline?: string
 }
 
 export interface ChecklistSectionProps {
@@ -16,6 +18,9 @@ export interface ChecklistSectionProps {
   onEdit?: (itemId: string, newText: string) => void
   onRemove: (itemId: string) => void
   onToggle: (itemId: string, currentState: boolean) => void
+  // Optional — when provided, items show an inline deadline picker.
+  onSetDeadline?: (itemId: string, deadline: string | undefined) => void
+  parentDeadline?: string
   isRTL: boolean
   titleKey?: string
   completionKey?: string
@@ -29,6 +34,8 @@ export const ChecklistSection = memo(function ChecklistSection({
   onEdit,
   onRemove,
   onToggle,
+  onSetDeadline,
+  parentDeadline,
   isRTL,
   titleKey,
   completionKey,
@@ -173,6 +180,15 @@ export const ChecklistSection = memo(function ChecklistSection({
                       {item.text}
                     </span>
                   </button>
+                  {onSetDeadline ? (
+                    <InlineDeadlinePicker
+                      value={item.deadline}
+                      parentDeadline={parentDeadline}
+                      onChange={(next) => {
+                        onSetDeadline(item.id, next)
+                      }}
+                    />
+                  ) : null}
                   {onEdit ? (
                     <button
                       onClick={() => handleStartEdit(item)}

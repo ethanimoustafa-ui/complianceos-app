@@ -1,6 +1,15 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import type { Risk, RiskFilters, PaginationState, SortState, MonitoringFrequency } from '@/types'
+import type {
+  Risk,
+  RiskFilters,
+  PaginationState,
+  SortState,
+  MonitoringFrequency,
+  MitigationChecklistItem,
+  RiskMitigationWorkflowStatus,
+  DepartmentProposedPlan,
+} from '@/types'
 import { computeNextReview } from '@/lib/review-schedule'
 
 function computeNextReviewDate(from: string, frequency: MonitoringFrequency): string {
@@ -222,6 +231,19 @@ interface RiskState {
   setSort: (sort: SortState) => void
   setPage: (page: number) => void
   setPageSize: (pageSize: number) => void
+
+  // Mitigation workflow (officer-driven)
+  assignDepartment: (riskId: string, departmentId: string) => void
+  setMitigationDeadline: (riskId: string, deadline: string | undefined) => void
+  sendToDepartment: (riskId: string, actingUser: string) => void
+  submitDepartmentPlan: (
+    riskId: string,
+    plan: string,
+    checklist: Array<{ text: string; deadline?: string }>,
+    submittedBy: string,
+  ) => void
+  acceptDepartmentPlan: (riskId: string, actingUser: string) => void
+  toggleDepartmentPlanItem: (riskId: string, itemId: string, actingUser: string) => void
 }
 
 export const useRiskStore = create<RiskState>()(
@@ -537,6 +559,148 @@ export const useRiskStore = create<RiskState>()(
                 id: crypto.randomUUID(), timestamp: now, user: r.owner.name,
                 action: 'reviewed' as const, notes: 'Risk marked as reviewed',
               }],
+            }
+          }),
+        }))
+      },
+
+      assignDepartment: (riskId, departmentId) => {
+        set((state) => ({
+          risks: state.risks.map((r) =>
+            r.id === riskId
+              ? {
+                  ...r,
+                  intendedDepartmentId: departmentId,
+                  mitigationWorkflowStatus: r.mitigationWorkflowStatus ?? 'pending-assignment',
+                  updatedAt: new Date().toISOString(),
+                }
+              : r,
+          ),
+        }))
+      },
+
+      setMitigationDeadline: (riskId, deadline) => {
+        set((state) => ({
+          risks: state.risks.map((r) =>
+            r.id === riskId
+              ? { ...r, mitigationDeadline: deadline, updatedAt: new Date().toISOString() }
+              : r,
+          ),
+        }))
+      },
+
+      sendToDepartment: (riskId, actingUser) => {
+        set((state) => ({
+          risks: state.risks.map((r) => {
+            if (r.id !== riskId) return r
+            const now = new Date().toISOString()
+            return {
+              ...r,
+              mitigationWorkflowStatus: 'sent-to-department' as RiskMitigationWorkflowStatus,
+              sentToDepartmentAt: now,
+              updatedAt: now,
+              history: [
+                ...r.history,
+                {
+                  id: crypto.randomUUID(), timestamp: now, user: actingUser,
+                  action: 'note_added' as const,
+                  notes: 'Risk sent to intended department for mitigation plan',
+                },
+              ],
+            }
+          }),
+        }))
+      },
+
+      submitDepartmentPlan: (riskId, plan, checklist, submittedBy) => {
+        set((state) => ({
+          risks: state.risks.map((r) => {
+            if (r.id !== riskId) return r
+            const now = new Date().toISOString()
+            const proposedPlan: DepartmentProposedPlan = {
+              id: crypto.randomUUID(),
+              plan,
+              checklist: checklist.map((c) => ({
+                id: crypto.randomUUID(),
+                text: c.text,
+                deadline: c.deadline,
+                completed: false,
+              })),
+              submittedAt: now,
+              submittedBy,
+            }
+            return {
+              ...r,
+              departmentProposedPlan: proposedPlan,
+              mitigationWorkflowStatus: 'plan-proposed' as RiskMitigationWorkflowStatus,
+              updatedAt: now,
+              history: [
+                ...r.history,
+                {
+                  id: crypto.randomUUID(), timestamp: now, user: submittedBy,
+                  action: 'mitigation_updated' as const,
+                  notes: 'Department proposed mitigation plan',
+                },
+              ],
+            }
+          }),
+        }))
+      },
+
+      acceptDepartmentPlan: (riskId, actingUser) => {
+        set((state) => ({
+          risks: state.risks.map((r) => {
+            if (r.id !== riskId || !r.departmentProposedPlan) return r
+            const now = new Date().toISOString()
+            return {
+              ...r,
+              // Promote department-proposed checklist into the canonical mitigationChecklist
+              mitigationChecklist: r.departmentProposedPlan.checklist,
+              mitigationPlan: r.departmentProposedPlan.plan,
+              mitigationProgress: computeMitigationProgress(r.departmentProposedPlan.checklist),
+              mitigationWorkflowStatus: 'in-progress' as RiskMitigationWorkflowStatus,
+              status: 'mitigating',
+              updatedAt: now,
+              history: [
+                ...r.history,
+                {
+                  id: crypto.randomUUID(), timestamp: now, user: actingUser,
+                  action: 'mitigation_updated' as const,
+                  notes: 'Officer accepted department-proposed plan',
+                },
+              ],
+            }
+          }),
+        }))
+      },
+
+      toggleDepartmentPlanItem: (riskId, itemId, actingUser) => {
+        set((state) => ({
+          risks: state.risks.map((r) => {
+            if (r.id !== riskId) return r
+            const now = new Date().toISOString()
+            const checklist: MitigationChecklistItem[] = (r.mitigationChecklist ?? []).map((i) =>
+              i.id === itemId ? { ...i, completed: !i.completed } : i,
+            )
+            const progress = computeMitigationProgress(checklist)
+            const allDone = checklist.length > 0 && checklist.every((i) => i.completed)
+            return {
+              ...r,
+              mitigationChecklist: checklist,
+              mitigationProgress: progress,
+              mitigationWorkflowStatus: allDone
+                ? 'mitigated'
+                : (r.mitigationWorkflowStatus ?? 'in-progress'),
+              status: allDone ? 'resolved' : r.status,
+              updatedAt: now,
+              history: [
+                ...r.history,
+                {
+                  id: crypto.randomUUID(), timestamp: now, user: actingUser,
+                  action: 'checklist_toggled' as const,
+                  newValue: checklist.find((i) => i.id === itemId)?.text,
+                },
+              ],
             }
           }),
         }))

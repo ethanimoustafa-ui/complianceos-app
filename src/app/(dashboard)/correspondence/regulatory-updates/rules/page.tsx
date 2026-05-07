@@ -13,6 +13,7 @@ import { useCircularStore } from '@/stores/circular-store'
 import { RegDocCard } from '@/components/correspondence/regulatory-updates/RegDocCard'
 import { RegDocFilterBar } from '@/components/correspondence/regulatory-updates/RegDocFilterBar'
 import type { CircularAuthority } from '@/types'
+import { exportRulesLocalized } from '@/lib/export'
 
 import { StatCard } from '@/components/correspondence/regulatory-updates/rules/StatCard'
 import { RegisterCircularModal } from '@/components/correspondence/regulatory-updates/rules/RegisterCircularModal'
@@ -140,6 +141,14 @@ function RegulatoryUpdatesRulesPageContent() {
           </div>
         </div>
         <div className={`flex items-center gap-4`}>
+          <button
+            type="button"
+            className="p-2.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-all cursor-pointer"
+            title={t('regulatoryUpdates.exportRules' as any)}
+            onClick={() => exportRulesLocalized(filteredCirculars, 'rules', t, isRTL)}
+          >
+            <Icon icon="lucide:download-cloud" className="text-lg" />
+          </button>
           <Button
             variant="primary"
             className="shadow-lg shadow-emerald-100"

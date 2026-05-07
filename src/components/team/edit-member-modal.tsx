@@ -9,6 +9,8 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { cn } from '@/lib/utils'
 import { useTeamStore } from '@/stores/team-store'
+import { useDepartmentStore } from '@/stores/department-store'
+import { EditableSelect } from '@/components/ui/editable-select'
 import type { TeamMember } from '@/types'
 
 const memberSchema = z.object({
@@ -28,18 +30,9 @@ interface EditMemberModalProps {
   onSuccess?: (member: TeamMember) => void
 }
 
-const departments = [
-  'Compliance',
-  'IT & Cybersecurity',
-  'Risk Management',
-  'Legal',
-  'Finance',
-  'Operations',
-  'Human Resources',
-]
-
 export function EditMemberModal({ isOpen, onClose, member, onSuccess }: EditMemberModalProps) {
   const { update, isLoading } = useTeamStore()
+  const { departments: deptList, addDepartment, updateDepartment, removeDepartment } = useDepartmentStore()
 
   const {
     control,
@@ -191,20 +184,18 @@ export function EditMemberModal({ isOpen, onClose, member, onSuccess }: EditMemb
                   name="department"
                   control={control}
                   render={({ field }) => (
-                    <select
-                      {...field}
-                      className={cn(
-                        'w-full px-4 py-3 bg-slate-50 border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500',
-                        errors.department ? 'border-rose-300' : 'border-slate-200'
-                      )}
-                    >
-                      <option value="">Select department...</option>
-                      {departments.map((dept) => (
-                        <option key={dept} value={dept}>
-                          {dept}
-                        </option>
-                      ))}
-                    </select>
+                    <EditableSelect
+                      value={deptList.find((d) => d.name === field.value)?.id ?? null}
+                      onChange={(id) => {
+                        const dept = deptList.find((d) => d.id === id)
+                        field.onChange(dept ? dept.name : '')
+                      }}
+                      items={deptList.map((d) => ({ id: d.id, label: d.name, labelAr: d.nameAr, isDefault: d.isDefault }))}
+                      placeholder="Select department..."
+                      onAdd={(label, labelAr) => addDepartment(label, labelAr ?? label).id}
+                      onEdit={(id, label, labelAr) => updateDepartment(id, { name: label, nameAr: labelAr ?? label })}
+                      onDelete={(id) => removeDepartment(id)}
+                    />
                   )}
                 />
                 {errors.department && (

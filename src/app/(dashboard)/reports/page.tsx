@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation'
 
 export default function ReportsPage() {
-  redirect('/reports/audits')
+  redirect('/reports/compliance-review')
 }

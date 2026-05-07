@@ -22,6 +22,8 @@ import { ReviewSchedulePicker } from '@/components/ui/ReviewSchedulePicker'
 import { computeNextReview, cadenceToReviewCycleDays } from '@/lib/review-schedule'
 import { usePolicyTemplateStore } from '@/stores/policy-template-store'
 import { useTeamStore } from '@/stores/team-store'
+import { useDepartmentStore } from '@/stores/department-store'
+import { exportPoliciesLocalized } from '@/lib/export'
 
 // Toast component
 function Toast({ message, onClose }: { message: string; onClose: () => void }) {
@@ -433,6 +435,19 @@ export default function RegulatoryUpdatesPoliciesPage() {
           </div>
         </div>
         <div className={`flex items-center gap-4`}>
+          <button
+            type="button"
+            className="p-2.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-all cursor-pointer"
+            title={t('policies.exportPolicies')}
+            onClick={() => {
+              const depts = useDepartmentStore.getState().departments
+              const resolveDept = (id: string | undefined) =>
+                id ? depts.find((d) => d.id === id)?.name ?? '' : ''
+              exportPoliciesLocalized(filteredPolicies, 'policies', t, isRTL, resolveDept)
+            }}
+          >
+            <Icon icon="lucide:download-cloud" className="text-lg" />
+          </button>
           <Button
             variant="primary"
             className="shadow-lg shadow-emerald-100"

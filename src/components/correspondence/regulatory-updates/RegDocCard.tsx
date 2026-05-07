@@ -36,6 +36,14 @@ const AUTHORITY_COLORS: Record<string, { bg: string; text: string; border: strin
 }
 const AUTHORITY_FALLBACK = { bg: 'bg-slate-50', text: 'text-slate-700', border: 'border-slate-200' }
 
+function policyBusinessOwnerLabel(
+  policy: Policy,
+  depts: { id: string; name: string }[],
+): string | null {
+  if (!policy.businessOwnerDepartmentId) return null
+  return depts.find((d) => d.id === policy.businessOwnerDepartmentId)?.name ?? null
+}
+
 const PRIORITY_COLORS: Record<CircularPriority, { bg: string; text: string }> = {
   critical: { bg: 'bg-rose-100',   text: 'text-rose-700'   },
   high:     { bg: 'bg-amber-100',  text: 'text-amber-700'  },
@@ -334,7 +342,7 @@ function PolicyCardContent({ policy, t, isRTL }: { policy: Policy; t: RegDocCard
           />
           <div>
             <p className="text-xs font-bold text-slate-700">{policy.owner.name}</p>
-            <p className="text-[10px] text-slate-400">{getDeptLabel(policy.owner.department)}</p>
+            <p className="text-[10px] text-slate-400">{policyBusinessOwnerLabel(policy, useDepartmentStore.getState().departments) ?? getDeptLabel(policy.owner.department)}</p>
           </div>
         </div>
         <div className={cn('shrink-0 text-right')}>

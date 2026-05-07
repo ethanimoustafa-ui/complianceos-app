@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import type { Policy, PolicyFilters, PolicyStatus, PolicyWorkflowStep, PolicyActivityEntry } from '@/types'
 import { computeNextReview, cadenceToReviewCycleDays } from '@/lib/review-schedule'
+import { validateChildDeadline } from '@/lib/deadline-validation'
 
 function restatusTimeline(timeline: PolicyWorkflowStep[]): PolicyWorkflowStep[] {
   let firstNonCompleted = false
@@ -49,6 +50,14 @@ interface PolicyState {
 
   // Status check: called on mount to update overdue/requires-review
   checkAndUpdateStatuses: () => void
+
+  // Phase deadlines (must be ≤ policy.nextReviewDate)
+  setPhaseDeadline: (
+    policyId: string,
+    stepIndex: number,
+    deadline: string | undefined,
+    actingUser: string,
+  ) => { ok: true } | { ok: false; reason: string }
 }
 
 const seedPolicies: Policy[] = [
@@ -61,6 +70,7 @@ const seedPolicies: Policy[] = [
     version: 'v2.3',
     approvalTier: 'management',
     owner: { name: 'Sarah Connor', avatar: 'Sarah', department: 'Compliance' },
+    businessOwnerDepartmentId: 'compliance',
     lastReviewDate: '2025-08-15',
     nextReviewDate: '2026-08-15',  // ~170 days from Mar 2026
     reviewCycleDays: 365,
@@ -89,6 +99,7 @@ const seedPolicies: Policy[] = [
     version: 'v1.8',
     approvalTier: 'board',
     owner: { name: 'Felix Henderson', avatar: 'Felix', department: 'IT Security' },
+    businessOwnerDepartmentId: 'it-cybersecurity',
     lastReviewDate: '2025-01-10',
     nextReviewDate: '2026-01-10',  // overdue in Mar 2026
     reviewCycleDays: 365,
@@ -115,6 +126,7 @@ const seedPolicies: Policy[] = [
     version: 'v3.0',
     approvalTier: 'board',
     owner: { name: 'Michael Scott', avatar: 'Michael', department: 'Legal' },
+    businessOwnerDepartmentId: 'legal',
     lastReviewDate: '2025-06-20',
     nextReviewDate: '2026-06-20',  // ~110 days from Mar 2026
     reviewCycleDays: 365,
@@ -142,6 +154,7 @@ const seedPolicies: Policy[] = [
     version: 'v1.0',
     approvalTier: 'agm',
     owner: { name: 'Kelly Kapoor', avatar: 'Kelly', department: 'Operations' },
+    businessOwnerDepartmentId: 'security-operations',
     lastReviewDate: '',
     nextReviewDate: '2026-05-01',  // ~60 days from Mar 2026 - triggers alert
     reviewCycleDays: 365,
@@ -167,6 +180,7 @@ const seedPolicies: Policy[] = [
     version: 'v2.1',
     approvalTier: 'sharia',
     owner: { name: 'David Wallace', avatar: 'David', department: 'Risk Management' },
+    businessOwnerDepartmentId: 'risk-management',
     lastReviewDate: '2024-06-15',
     nextReviewDate: '2025-06-15',  // expired
     reviewCycleDays: 365,
@@ -352,6 +366,49 @@ export const usePolicyStore = create<PolicyState>()(
         })
       },
 
+      setPhaseDeadline: (policyId, stepIndex, deadline, actingUser) => {
+        const policy = get().policies.find((p) => p.id === policyId)
+        if (!policy) return { ok: false, reason: 'policy-not-found' }
+        if (stepIndex < 0 || stepIndex >= policy.workflowTimeline.length) {
+          return { ok: false, reason: 'step-not-found' }
+        }
+        const validation = validateChildDeadline(deadline ?? null, policy.nextReviewDate)
+        if (!validation.ok) {
+          return { ok: false, reason: validation.reason }
+        }
+        const previous = policy.workflowTimeline[stepIndex].deadline
+        const newTimeline = policy.workflowTimeline.map((step, i) =>
+          i === stepIndex ? { ...step, deadline: deadline || undefined } : step,
+        )
+        const today = new Date().toISOString().split('T')[0]
+        const stepLabel = policy.workflowTimeline[stepIndex].step
+        const action = previous
+          ? (deadline ? 'phase_deadline_changed' : 'phase_deadline_set')
+          : 'phase_deadline_set'
+        const entry: PolicyActivityEntry = {
+          id: Date.now().toString(),
+          timestamp: new Date().toISOString(),
+          date: today,
+          type: action,
+          textEn: deadline
+            ? (previous
+                ? `Deadline for "${stepLabel}" changed from ${previous} to ${deadline}`
+                : `Deadline for "${stepLabel}" set to ${deadline}`)
+            : `Deadline cleared on "${stepLabel}"`,
+          textAr: deadline
+            ? (previous
+                ? `تم تغيير الموعد النهائي لـ "${stepLabel}" من ${previous} إلى ${deadline}`
+                : `تم تعيين الموعد النهائي لـ "${stepLabel}" إلى ${deadline}`)
+            : `تم مسح الموعد النهائي لـ "${stepLabel}"`,
+          user: actingUser,
+        }
+        get().update(policyId, {
+          workflowTimeline: newTimeline,
+          activityLog: [...(policy.activityLog ?? []), entry],
+        })
+        return { ok: true }
+      },
+
       checkAndUpdateStatuses: () => {
         const today = new Date().toISOString().split('T')[0]
         const ninetyDaysFromNow = new Date(Date.now() + 90 * 86400000).toISOString().split('T')[0]
@@ -385,9 +442,9 @@ export const usePolicyStore = create<PolicyState>()(
     }),
     {
       name: 'policy-storage',
-      version: 3,
+      version: 4,
       migrate: (persistedState: unknown, version: number) => {
-        const state = persistedState as { policies?: Policy[] }
+        let state = persistedState as { policies?: Policy[] }
         if (version === 0) {
           if (!state.policies || state.policies.length === 0) {
             return { ...state, policies: seedPolicies }
@@ -416,7 +473,7 @@ export const usePolicyStore = create<PolicyState>()(
             'POL-002': ['nca-ecc'],
             'POL-003': ['ndmo-pdpl'],
           }
-          return {
+          state = {
             ...state,
             policies: (state.policies ?? seedPolicies).map((p: any) => ({
               ...p,
@@ -424,7 +481,36 @@ export const usePolicyStore = create<PolicyState>()(
             })),
           }
         }
-        return persistedState as PolicyState
+        if (version < 4) {
+          // Derive businessOwnerDepartmentId from the legacy owner.department string.
+          // Falls back to a slugified id so unknown depts still produce a stable handle.
+          const DEPT_NAME_TO_ID: Record<string, string> = {
+            'Compliance': 'compliance',
+            'IT & Cybersecurity': 'it-cybersecurity',
+            'IT Security': 'it-cybersecurity',
+            'Finance': 'finance',
+            'Risk Management': 'risk-management',
+            'Legal': 'legal',
+            'Security & Operations': 'security-operations',
+            'Operations': 'security-operations',
+            'Human Resources': 'hr',
+            'Sharia Compliance': 'sharia-compliance',
+            'AML/CTF': 'aml-ctf',
+            'Business Development': 'business-dev',
+          }
+          const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
+          state = {
+            ...state,
+            policies: (state.policies ?? seedPolicies).map((p: any) => ({
+              ...p,
+              businessOwnerDepartmentId:
+                p.businessOwnerDepartmentId
+                ?? DEPT_NAME_TO_ID[p.owner?.department ?? '']
+                ?? (p.owner?.department ? slug(p.owner.department) : undefined),
+            })),
+          }
+        }
+        return state as PolicyState
       },
       partialize: (state) => ({ policies: state.policies }),
     }

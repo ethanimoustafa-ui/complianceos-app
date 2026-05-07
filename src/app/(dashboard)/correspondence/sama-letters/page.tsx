@@ -6,6 +6,7 @@ import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { Icon } from '@iconify/react'
 import { Modal } from '@/components/ui/modal'
+import { cn } from '@/lib/utils'
 import { useTranslation } from '@/i18n'
 import { RoleGuard } from '@/components/auth/role-guard'
 import { useSAMALetterStore } from '@/stores/sama-letter-store'
@@ -25,6 +26,16 @@ import {
   getDepartmentEmail,
   getDefaultDepartmentId,
 } from '@/lib/letter-authority'
+import { useAuthorityDeptStore } from '@/stores/authority-department-store'
+import { EditableSelect } from '@/components/ui/editable-select'
+import { PlaceholderDefEditor } from '@/components/correspondence/sama-letters/PlaceholderDefEditor'
+import { PlaceholderPicker } from '@/components/correspondence/sama-letters/PlaceholderPicker'
+import {
+  reconcilePlaceholderDefs,
+  renderTemplate,
+  placeholderValuesComplete,
+} from '@/lib/letter-placeholders'
+import type { PlaceholderDef, PlaceholderValue } from '@/types'
 
 // Sort types
 type LetterSortCol = 'authority' | 'reference' | 'type' | 'subject' | 'status' | 'updatedAt'
@@ -2305,6 +2316,11 @@ function CreateLetterForm({
   )
   const createAttachFileRef = useRef<HTMLInputElement>(null)
   const [draftAttachments, setDraftAttachments] = useState<Attachment[]>([])
+  const [placeholderValues, setPlaceholderValues] = useState<Record<string, PlaceholderValue | undefined>>({})
+  const placeholderDefs = useMemo(
+    () => reconcilePlaceholderDefs(template?.placeholderDefs ?? [], bodyEn, subjectEn),
+    [template?.placeholderDefs, bodyEn, subjectEn],
+  )
 
   // When authority changes, reset department to that authority's first option
   useEffect(() => {
@@ -2357,16 +2373,23 @@ function CreateLetterForm({
     // Recipient defaults derived from currently selected authority + department, falling back
     // to template explicit overrides when set.
     const recipientDefaults = getRecipientDefaults(authority, samaDepartment)
+    // Substitute any {{token}} placeholders the composer filled in. Tokens
+    // without values are left as `[token]` so they're visibly missing rather
+    // than silently empty.
+    const renderedSubjectEn = subjectEn ? renderTemplate(subjectEn, placeholderValues) : subjectEn
+    const renderedSubjectAr = subjectAr ? renderTemplate(subjectAr, placeholderValues) : subjectAr
+    const renderedBodyEn    = bodyEn ? renderTemplate(bodyEn, placeholderValues) : bodyEn
+    const renderedBodyAr    = bodyAr ? renderTemplate(bodyAr, placeholderValues) : bodyAr
     return {
       reference,
       authority,
       type: selectedType,
       subCategory: subCategory as import('@/types').SAMASubCategory,
       samaDepartment: samaDepartment as import('@/types').SAMADepartment,
-      subject: subjectEn || `(Draft ${reference})`,
-      subjectAr: subjectAr || undefined,
-      body: bodyEn,
-      bodyAr: bodyAr || undefined,
+      subject: renderedSubjectEn || `(Draft ${reference})`,
+      subjectAr: renderedSubjectAr || undefined,
+      body: renderedBodyEn,
+      bodyAr: renderedBodyAr || undefined,
       status: 'draft' as const,
       priority,
       createdBy,
@@ -2478,17 +2501,12 @@ function CreateLetterForm({
             <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-2">
               {t('samaLetters.targetDepartment')}
             </label>
-            <select
+            <EditableAuthorityDeptField
+              authority={authority}
               value={samaDepartment}
-              onChange={(e) => setSamaDepartment(e.target.value)}
-              className="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-sm font-medium focus:ring-2 focus:ring-emerald-500 outline-none"
-            >
-              {getAuthorityDepartments(authority).map((d) => (
-                <option key={d.id} value={d.id}>
-                  {isRTL ? d.ar : d.en}
-                </option>
-              ))}
-            </select>
+              onChange={setSamaDepartment}
+              isRTL={isRTL}
+            />
           </div>
           <div>
             <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-2">
@@ -2521,6 +2539,48 @@ function CreateLetterForm({
           </div>
         </div>
       </div>
+
+      {/* Smart placeholders — only when the template defines any */}
+      {placeholderDefs.length > 0 && (() => {
+        const completion = placeholderValuesComplete(placeholderDefs, placeholderValues)
+        return (
+          <div className="mb-8 p-5 bg-blue-50/40 border border-blue-100 rounded-xl">
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <p className="text-xs font-bold text-slate-700 uppercase tracking-widest">
+                  Fill in placeholders
+                </p>
+                <p className="text-[11px] text-slate-500 mt-0.5">
+                  These values are substituted into the subject and body before the letter is sent.
+                </p>
+              </div>
+              <span className={cn(
+                'text-[10px] font-bold px-2 py-0.5 rounded-full',
+                completion.complete ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700',
+              )}>
+                {completion.complete ? 'All filled' : `${completion.missing.length} pending`}
+              </span>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              {placeholderDefs.map((def) => (
+                <div key={def.key}>
+                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 block">
+                    {def.label}
+                    <code className="ms-1 text-[10px] text-slate-400 font-mono">{`{{${def.key}}}`}</code>
+                  </label>
+                  <PlaceholderPicker
+                    def={def}
+                    value={placeholderValues[def.key]}
+                    onChange={(v) =>
+                      setPlaceholderValues((prev) => ({ ...prev, [def.key]: v }))
+                    }
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+        )
+      })()}
 
       {/* Bilingual Editors */}
       <div className="grid grid-cols-2 gap-8 mb-8">
@@ -2734,6 +2794,7 @@ function TemplateEditForm({
   const [defaultRecipientNameAr, setDefaultRecipientNameAr] = useState(template?.defaultRecipientNameAr || '')
   const [defaultRecipientOrgAr, setDefaultRecipientOrgAr]   = useState(template?.defaultRecipientOrgAr || '')
   const [defaultRecipientCityAr, setDefaultRecipientCityAr] = useState(template?.defaultRecipientCityAr || '')
+  const [placeholderDefs, setPlaceholderDefs] = useState<PlaceholderDef[]>(template?.placeholderDefs ?? [])
   const sigImgRef = useRef<HTMLInputElement>(null)
   const [isSaving, setIsSaving] = useState(false)
 
@@ -2805,6 +2866,7 @@ function TemplateEditForm({
         defaultRecipientNameAr: defaultRecipientNameAr || undefined,
         defaultRecipientOrgAr:  defaultRecipientOrgAr || undefined,
         defaultRecipientCityAr: defaultRecipientCityAr || undefined,
+        placeholderDefs: reconcilePlaceholderDefs(placeholderDefs, defaultBodyEn, defaultSubjectEn),
       })
       setIsSaving(false)
     }, 500)
@@ -2934,6 +2996,18 @@ function TemplateEditForm({
 
       {/* Tab 2: Default Content */}
       {activeTab === 'content' && (
+        <div className="space-y-6">
+          <div className="p-4 bg-blue-50 border border-blue-100 rounded-xl">
+            <p className="text-xs font-bold text-blue-900 mb-1">
+              <Icon icon="lucide:info" className="inline-block mr-1" />
+              Smart placeholders
+            </p>
+            <p className="text-[11px] text-blue-700">
+              Insert <code className="px-1 py-0.5 bg-white text-blue-900 rounded text-[10px]">{'{{token}}'}</code>{' '}
+              tokens (e.g. <code className="px-1 py-0.5 bg-white text-blue-900 rounded text-[10px]">{'{{candidate_name}}'}</code>) into the subject or body. Each token surfaces below — pick its type so composers see the right input (free text, date, or a picker linked to a document).
+            </p>
+          </div>
+
         <div className="grid grid-cols-2 gap-6">
           {/* English column */}
           <div className="space-y-4">
@@ -2992,6 +3066,19 @@ function TemplateEditForm({
                 style={{ fontFamily: "'Amiri', serif" }}
               />
             </div>
+          </div>
+        </div>
+
+          <div>
+            <h3 className="text-xs font-black uppercase text-slate-400 tracking-widest mb-3">
+              Placeholder definitions
+            </h3>
+            <PlaceholderDefEditor
+              defs={placeholderDefs}
+              bodyEn={defaultBodyEn}
+              subjectEn={defaultSubjectEn}
+              onChange={setPlaceholderDefs}
+            />
           </div>
         </div>
       )}
@@ -3127,17 +3214,12 @@ function TemplateEditForm({
               <label className={`text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-2`}>
                 {t('samaLetters.targetDepartment')}
               </label>
-              <select
+              <EditableAuthorityDeptField
+                authority={defaultAuthority}
                 value={defaultSamaDepartment}
-                onChange={(e) => handleDeptChange(e.target.value)}
-                className={`w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-sm font-medium focus:ring-2 focus:ring-emerald-500 outline-none`}
-              >
-                {getAuthorityDepartments(defaultAuthority).map((d) => (
-                  <option key={d.id} value={d.id}>
-                    {isRTL ? d.ar : d.en}
-                  </option>
-                ))}
-              </select>
+                onChange={handleDeptChange}
+                isRTL={isRTL}
+              />
             </div>
           </div>
           <div className="grid grid-cols-2 gap-4">
@@ -3251,6 +3333,67 @@ function TemplateEditForm({
           )}
         </button>
       </div>
+    </div>
+  )
+}
+
+// Editable per-authority department field — wraps EditableSelect against
+// useAuthorityDeptStore. Also exposes an inline email-memory editor: typing an
+// email here is persisted against the dept and surfaces as a suggestion next
+// time anyone composes a letter to that department.
+function EditableAuthorityDeptField({
+  authority,
+  value,
+  onChange,
+  isRTL,
+}: {
+  authority: CircularAuthority
+  value: string
+  onChange: (id: string) => void
+  isRTL: boolean
+}) {
+  const { getDepartments, addDepartment, updateDepartment, removeDepartment, setDepartmentEmail } =
+    useAuthorityDeptStore()
+  const depts = getDepartments(authority)
+  const selected = depts.find((d) => d.id === value)
+  const [emailDraft, setEmailDraft] = useState(selected?.email ?? '')
+
+  useEffect(() => {
+    setEmailDraft(selected?.email ?? '')
+  }, [selected?.id, selected?.email])
+
+  return (
+    <div className="space-y-2">
+      <EditableSelect
+        value={value || null}
+        onChange={(id) => onChange(id)}
+        items={depts.map((d) => ({ id: d.id, label: d.en, labelAr: d.ar }))}
+        placeholder="Select department..."
+        onAdd={(label, labelAr) => addDepartment(authority, label, labelAr ?? label).id}
+        onEdit={(id, label, labelAr) =>
+          updateDepartment(authority, id, { en: label, ar: labelAr ?? label })
+        }
+        onDelete={(id) => removeDepartment(authority, id)}
+        isRTL={isRTL}
+        size="md"
+      />
+      {selected && (
+        <div className="flex items-center gap-2">
+          <Icon icon="lucide:mail" className="text-slate-400 text-sm" />
+          <input
+            type="email"
+            value={emailDraft}
+            onChange={(e) => setEmailDraft(e.target.value)}
+            onBlur={() => {
+              if (emailDraft !== (selected.email ?? '')) {
+                setDepartmentEmail(authority, selected.id, emailDraft)
+              }
+            }}
+            placeholder="recipient@authority.gov.sa"
+            className="flex-1 px-2 py-1.5 text-xs border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
+          />
+        </div>
+      )}
     </div>
   )
 }
