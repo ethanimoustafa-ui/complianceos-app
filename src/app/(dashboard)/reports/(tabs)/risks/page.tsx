@@ -16,7 +16,6 @@ import { useTeamStore } from '@/stores/team-store'
 import { useDepartmentStore } from '@/stores/department-store'
 import { useAuthStore } from '@/stores/auth-store'
 import { useRiskCategoryStore } from '@/stores/risk-category-store'
-import { useScaleLabelsStore } from '@/stores/scale-labels-store'
 import { EditableSelect } from '@/components/ui/editable-select'
 import { getCategoryConfig, fallbackColor } from '@/lib/category-config'
 import { InlineDeadlinePicker } from '@/components/ui/inline-deadline-picker'
@@ -154,18 +153,15 @@ export default function ReportsRisksPage() {
   const editRiskCategory = useRiskCategoryStore((s) => s.update)
   const removeRiskCategory = useRiskCategoryStore((s) => s.remove)
 
-  // Bucket-D label overrides — likelihood/impact integers stay 1..5; only the
-  // displayed labels can be customized (and reset). `getLabel` returns
-  // undefined when no override exists, so the default i18n label wins.
-  const scaleLabels = useScaleLabelsStore()
+  // Likelihood/Impact labels are calculation-bound (1..5 drive the risk score)
+  // and must not be user-editable. Render directly from the canonical i18n
+  // dictionary — see SPRINT-FOLLOWUP-PLAN §2.1.
   const likelihoodDefaultKey = (n: 1 | 2 | 3 | 4 | 5): TranslationKey =>
     (['riskRegister.rare', 'riskRegister.unlikely', 'riskRegister.possible', 'riskRegister.likely', 'riskRegister.almostCertain'][n - 1]) as TranslationKey
   const impactDefaultKey = (n: 1 | 2 | 3 | 4 | 5): TranslationKey =>
     (['riskRegister.negligible', 'riskRegister.minor', 'riskRegister.moderate', 'riskRegister.major', 'riskRegister.catastrophic'][n - 1]) as TranslationKey
-  const renderLikelihoodLabel = (n: 1 | 2 | 3 | 4 | 5): string =>
-    scaleLabels.getLabel('riskLikelihood', n, isRTL ? 'ar' : 'en') ?? t(likelihoodDefaultKey(n))
-  const renderImpactLabel = (n: 1 | 2 | 3 | 4 | 5): string =>
-    scaleLabels.getLabel('riskImpact', n, isRTL ? 'ar' : 'en') ?? t(impactDefaultKey(n))
+  const renderLikelihoodLabel = (n: 1 | 2 | 3 | 4 | 5): string => t(likelihoodDefaultKey(n))
+  const renderImpactLabel = (n: 1 | 2 | 3 | 4 | 5): string => t(impactDefaultKey(n))
 
   // Map store risks to RiskRegisterItem
   const risks: RiskRegisterItem[] = useMemo(() => {

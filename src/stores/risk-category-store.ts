@@ -54,7 +54,8 @@ export const useRiskCategoryStore = create<RiskCategoryState>()(
 
       remove: (id) =>
         set((s) => ({
-          categories: s.categories.filter((c) => c.isDefault || c.id !== id),
+          // Seeds are deletable — see SPRINT-FOLLOWUP-PLAN §2.3.
+          categories: s.categories.filter((c) => c.id !== id),
         })),
 
       resetToDefaults: () => set({ categories: seeds }),

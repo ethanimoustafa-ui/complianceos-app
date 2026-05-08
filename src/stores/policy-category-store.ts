@@ -58,8 +58,10 @@ export const usePolicyCategoryStore = create<PolicyCategoryState>()(
 
       remove: (id) =>
         set((s) => ({
-          // Default seeds cannot be deleted — would orphan persisted policies.
-          categories: s.categories.filter((c) => c.isDefault || c.id !== id),
+          // Seeds are deletable — see SPRINT-FOLLOWUP-PLAN §2.3. Orphan-confirm
+          // modal in ListsAndCategoriesSection warns when records reference the
+          // category; persisted policies retain the raw label string.
+          categories: s.categories.filter((c) => c.id !== id),
         })),
 
       resetToDefaults: () => set({ categories: seeds }),

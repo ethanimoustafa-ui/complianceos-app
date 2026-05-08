@@ -3250,19 +3250,20 @@
     "allowedReferenceTypes": "أنواع المراجع المسموح بها",
     "emptyHintPrefix": "أدرج عناصر نائبة",
     "emptyHintSuffix": "في الموضوع أو النص. سيظهر كل عنصر هنا حتى تتمكن من ضبط نوعه.",
-    "kindText": "نص حر",
     "kindDate": "تاريخ",
     "kindReference": "مرجع",
     "refKindObservation": "ملاحظة",
     "refKindAudit": "تدقيق",
     "refKindLetter": "خطاب",
     "refKindRule": "قاعدة / تعميم",
-    "refKindPolicy": "سياسة"
+    "refKindPolicy": "سياسة",
+    "clear": "مسح",
+    "done": "تم"
   },
   "letterChips": {
     "typeHint": "اكتب {{token}} في أي مكان في النص أو الموضوع لإضافة عنصر نائب.",
     "configurePlaceholders": "تكوين العناصر النائبة",
-    "configureHint": "حرّر نوع كل عنصر نائب (نص أو تاريخ أو مرجع). انقر على أي شريحة في المحرر لتعبئتها.",
+    "configureHint": "حرّر نوع كل عنصر نائب (تاريخ أو مرجع). انقر على أي شريحة في المحرر لتعبئتها.",
     "noPlaceholders": "لا توجد عناصر نائبة بعد. اكتب {{token}} في النص لإضافة واحد.",
     "saveDraft": "حفظ المسودة",
     "savedToast": "تم حفظ المسودة.",
@@ -3302,6 +3303,10 @@
     "sectionAuditCategory": "فئة التدقيق",
     "sectionAuditCategoryDesc": "فئات تستخدم عند جدولة عمليات التدقيق.",
     "sectionRiskCategory": "فئة المخاطر",
-    "sectionRiskCategoryDesc": "فئات تستخدم عند تسجيل المخاطر."
+    "sectionRiskCategoryDesc": "فئات تستخدم عند تسجيل المخاطر.",
+    "deleteTitle": "حذف الإدخال؟",
+    "deleteConfirmSimple": "هل أنت متأكد من حذف \"{{label}}\"؟",
+    "deleteConfirmOrphan": "{{count}} سجل يشير إلى هذا الإدخال. هل تريد الحذف على أي حال؟ ستحتفظ السجلات بالتسمية كنص فقط.",
+    "deleteConfirmAction": "حذف"
   }
 }

@@ -3250,19 +3250,20 @@
     "allowedReferenceTypes": "Allowed reference types",
     "emptyHintPrefix": "Insert",
     "emptyHintSuffix": "placeholders into the subject or body. Each one will appear here so you can configure its type.",
-    "kindText": "Free text",
     "kindDate": "Date",
     "kindReference": "Reference",
     "refKindObservation": "Observation",
     "refKindAudit": "Audit",
     "refKindLetter": "Letter",
     "refKindRule": "Rule / Circular",
-    "refKindPolicy": "Policy"
+    "refKindPolicy": "Policy",
+    "clear": "Clear",
+    "done": "Done"
   },
   "letterChips": {
     "typeHint": "Type {{token}} anywhere in the body or subject to add a placeholder chip.",
     "configurePlaceholders": "Configure Placeholders",
-    "configureHint": "Edit each placeholder's type (text, date, or reference). Click a chip in the editor to fill it in.",
+    "configureHint": "Edit each placeholder's type (date or reference). Click a chip in the editor to fill it in.",
     "noPlaceholders": "No placeholders yet. Type {{token}} in the body to add one.",
     "saveDraft": "Save Draft",
     "savedToast": "Draft saved.",
@@ -3302,6 +3303,10 @@
     "sectionAuditCategory": "Audit Category",
     "sectionAuditCategoryDesc": "Category buckets used when scheduling audits.",
     "sectionRiskCategory": "Risk Category",
-    "sectionRiskCategoryDesc": "Category buckets used when registering risks."
+    "sectionRiskCategoryDesc": "Category buckets used when registering risks.",
+    "deleteTitle": "Delete entry?",
+    "deleteConfirmSimple": "Are you sure you want to delete \"{{label}}\"?",
+    "deleteConfirmOrphan": "{{count}} record(s) reference this entry. Delete it anyway? Records will retain the label as text-only.",
+    "deleteConfirmAction": "Delete"
   }
 }

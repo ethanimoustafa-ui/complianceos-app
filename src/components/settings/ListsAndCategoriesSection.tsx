@@ -2,12 +2,18 @@
 
 // "Lists & Categories" — bulk management surface for every editable dropdown
 // store the app exposes. Each section is a table with EN/AR labels, default
-// badge, usage count, and edit/delete/reset affordances. New rows can be added
+// badge, usage count, and edit/delete affordances. New rows can be added
 // inline. Sections silently hide if their store import fails (defensive coding
 // per §2.6) so this file is forward-compatible with stores that haven't
 // shipped yet.
+//
+// Round 3 §2.2/§2.3:
+// - Onboarding (industry/region/headcount) sections removed from the UI.
+// - Seed deletion no longer disabled — the trash button now opens an
+//   orphan-confirm modal that warns when records reference the entry.
+//   `isDefault` survives as a display-only "SEED" badge.
 
-import { useMemo, useState, useCallback } from 'react'
+import { useState, useCallback } from 'react'
 import { Icon } from '@iconify/react'
 import { useTranslation } from '@/i18n'
 import type { TranslationKey } from '@/i18n'
@@ -36,33 +42,12 @@ import { useRiskCategoryStore } from '@/stores/risk-category-store'
 // ── Defensive imports for Agent D's stores (may not exist yet) ───────────────
 // We import lazily via require-style guards so a missing store hides its section
 // without breaking the page.
-type LazyStore<T> = (() => T) & { getState: () => T }
-
-function tryStore<T>(loader: () => unknown): LazyStore<T> | null {
-  try {
-    const mod = loader() as { default?: unknown } | null
-    return (mod ?? null) as LazyStore<T> | null
-  } catch {
-    return null
-  }
-}
-
-// Direct optional imports — if Agent D's stores ship, these resolve. If not,
-// the dynamic require throws at module load and the section hides.
 let useBusinessUnitStore: any = null
 let useCalendarEventTypeStore: any = null
 let useCorrespondenceTypeStore: any = null
-let useOnboardingIndustryStore: any = null
-let useOnboardingRegionStore: any = null
-let useOnboardingHeadcountStore: any = null
-let useScaleLabelsStore: any = null
 try { useBusinessUnitStore = require('@/stores/business-unit-store').useBusinessUnitStore } catch {}
 try { useCalendarEventTypeStore = require('@/stores/calendar-event-type-store').useCalendarEventTypeStore } catch {}
 try { useCorrespondenceTypeStore = require('@/stores/correspondence-type-store').useCorrespondenceTypeStore } catch {}
-try { useOnboardingIndustryStore = require('@/stores/onboarding-industry-store').useOnboardingIndustryStore } catch {}
-try { useOnboardingRegionStore = require('@/stores/onboarding-region-store').useOnboardingRegionStore } catch {}
-try { useOnboardingHeadcountStore = require('@/stores/onboarding-headcount-store').useOnboardingHeadcountStore } catch {}
-try { useScaleLabelsStore = require('@/stores/scale-labels-store').useScaleLabelsStore } catch {}
 
 // ── Generic shape every editable-list section consumes ───────────────────────
 
@@ -78,6 +63,12 @@ interface ListSectionProps {
   description?: string
   items: ListItem[]
   countUsage: (id: string) => number
+  /**
+   * Reference count used by the orphan-confirm modal. Defaults to `countUsage`
+   * if omitted; pass a separate counter when the in-table "In Use" number is
+   * cheaper to compute than the full cross-store reference scan.
+   */
+  getReferenceCount?: (id: string) => number
   onAdd: (label: string, labelAr?: string) => string | void
   onEdit: (id: string, label: string, labelAr?: string) => void
   onDelete: (id: string) => void
@@ -87,7 +78,7 @@ interface ListSectionProps {
 }
 
 function ListSection({
-  title, description, items, countUsage,
+  title, description, items, countUsage, getReferenceCount,
   onAdd, onEdit, onDelete, onResetSection, isRTL, t,
 }: ListSectionProps) {
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -95,6 +86,7 @@ function ListSection({
   const [draftLabelAr, setDraftLabelAr] = useState('')
   const [adding, setAdding] = useState(false)
   const [confirmReset, setConfirmReset] = useState(false)
+  const [pendingDelete, setPendingDelete] = useState<{ id: string; label: string; refs: number } | null>(null)
 
   const startEdit = (item: ListItem) => {
     setEditingId(item.id)
@@ -121,6 +113,18 @@ function ListSection({
     if (editingId) onEdit(editingId, label, labelAr)
     else if (adding) onAdd(label, labelAr)
     cancel()
+  }
+
+  const requestDelete = (item: ListItem) => {
+    const counter = getReferenceCount ?? countUsage
+    let refs = 0
+    try { refs = counter(item.id) } catch { refs = 0 }
+    setPendingDelete({ id: item.id, label: item.label, refs })
+  }
+
+  const confirmDelete = () => {
+    if (pendingDelete) onDelete(pendingDelete.id)
+    setPendingDelete(null)
   }
 
   return (
@@ -177,7 +181,14 @@ function ListSection({
                     {isEditing ? (
                       <Input value={draftLabel} onChange={(e) => setDraftLabel(e.target.value)} autoFocus />
                     ) : (
-                      <span className="text-xs font-bold text-slate-800">{item.label}</span>
+                      <span className="text-xs font-bold text-slate-800 inline-flex items-center gap-2">
+                        {item.label}
+                        {item.isDefault && (
+                          <span className="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-600 tracking-wide">
+                            {t('listsAndCategories.seedBadge')}
+                          </span>
+                        )}
+                      </span>
                     )}
                   </td>
                   <td className="px-6 py-3">
@@ -220,10 +231,9 @@ function ListSection({
                             <Icon icon="lucide:pencil" className="text-sm" />
                           </button>
                           <button
-                            disabled={item.isDefault}
-                            onClick={() => onDelete(item.id)}
-                            className={`p-1.5 rounded-md cursor-pointer ${item.isDefault ? 'text-slate-200 cursor-not-allowed' : 'text-slate-400 hover:text-rose-600 hover:bg-rose-50'}`}
-                            title={item.isDefault ? t('listsAndCategories.cannotDeleteSeed') : t('editableSelect.delete')}
+                            onClick={() => requestDelete(item)}
+                            className="p-1.5 rounded-md cursor-pointer text-slate-400 hover:text-rose-600 hover:bg-rose-50"
+                            title={t('editableSelect.delete')}
                           >
                             <Icon icon="lucide:trash-2" className="text-sm" />
                           </button>
@@ -268,6 +278,33 @@ function ListSection({
           </div>
         </div>
       </Modal>
+
+      <Modal
+        isOpen={pendingDelete !== null}
+        onClose={() => setPendingDelete(null)}
+        title={t('listsAndCategories.deleteTitle')}
+        size="sm"
+      >
+        <div className="space-y-4">
+          {pendingDelete && pendingDelete.refs > 0 ? (
+            <p className="text-sm text-amber-700 bg-amber-50 px-3 py-2 rounded-lg">
+              {t('listsAndCategories.deleteConfirmOrphan', { count: String(pendingDelete.refs) })}
+            </p>
+          ) : (
+            <p className="text-sm text-slate-600">
+              {pendingDelete
+                ? t('listsAndCategories.deleteConfirmSimple', { label: pendingDelete.label })
+                : ''}
+            </p>
+          )}
+          <div className="flex gap-3 justify-end">
+            <Button variant="outline" onClick={() => setPendingDelete(null)}>{t('common.cancel')}</Button>
+            <Button variant="danger" onClick={confirmDelete}>
+              {t('listsAndCategories.deleteConfirmAction')}
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </section>
   )
 }
@@ -300,9 +337,6 @@ export function ListsAndCategoriesSection() {
   const businessUnits = useBusinessUnitStore ? useBusinessUnitStore() : null
   const calendarEventType = useCalendarEventTypeStore ? useCalendarEventTypeStore() : null
   const correspondenceType = useCorrespondenceTypeStore ? useCorrespondenceTypeStore() : null
-  const onboardingIndustry = useOnboardingIndustryStore ? useOnboardingIndustryStore() : null
-  const onboardingRegion = useOnboardingRegionStore ? useOnboardingRegionStore() : null
-  const onboardingHeadcount = useOnboardingHeadcountStore ? useOnboardingHeadcountStore() : null
 
   // ── Counters ─────────────────────────────────────────────────────────────
   const countLetterType = useCallback((id: string) =>
@@ -323,7 +357,6 @@ export function ListsAndCategoriesSection() {
     audits.filter((a) => a.category === id).length, [audits])
   const countRiskCategory = useCallback((id: string) =>
     risks.filter((r) => r.category === id).length, [risks])
-  const zeroUsage = useCallback(() => 0, [])
 
   return (
     <section className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
@@ -405,43 +438,8 @@ export function ListsAndCategoriesSection() {
           />
         )}
 
-        {/* Onboarding industry / region / headcount (Agent D) */}
-        {onboardingIndustry && (
-          <ListSection
-            title={t('listsAndCategories.sectionOnboardingIndustry')}
-            items={onboardingIndustry.industries}
-            countUsage={zeroUsage}
-            onAdd={onboardingIndustry.add}
-            onEdit={(id, label, labelAr) => onboardingIndustry.update(id, { label, labelAr })}
-            onDelete={onboardingIndustry.remove}
-            isRTL={isRTL}
-            t={t}
-          />
-        )}
-        {onboardingRegion && (
-          <ListSection
-            title={t('listsAndCategories.sectionOnboardingRegion')}
-            items={onboardingRegion.regions}
-            countUsage={zeroUsage}
-            onAdd={onboardingRegion.add}
-            onEdit={(id, label, labelAr) => onboardingRegion.update(id, { label, labelAr })}
-            onDelete={onboardingRegion.remove}
-            isRTL={isRTL}
-            t={t}
-          />
-        )}
-        {onboardingHeadcount && (
-          <ListSection
-            title={t('listsAndCategories.sectionOnboardingHeadcount')}
-            items={onboardingHeadcount.buckets}
-            countUsage={zeroUsage}
-            onAdd={onboardingHeadcount.add}
-            onEdit={(id, label, labelAr) => onboardingHeadcount.update(id, { label, labelAr })}
-            onDelete={onboardingHeadcount.remove}
-            isRTL={isRTL}
-            t={t}
-          />
-        )}
+        {/* Onboarding industry/region/headcount sections removed per Round 3 §2.2.
+            Their stores remain on disk for future RBAC work. */}
 
         {/* Policy / Training / Audit / Risk categories (mine) */}
         <ListSection

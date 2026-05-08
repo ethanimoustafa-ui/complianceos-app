@@ -39,8 +39,11 @@ export const useDepartmentStore = create<DepartmentState>()(
 
       removeDepartment: (id) => {
         // TODO: Replace with actual API call
+        // Seeds are deletable — see SPRINT-FOLLOWUP-PLAN §2.3. Orphan-confirm
+        // modal lives in ListsAndCategoriesSection; the `isDefault` flag is
+        // retained for display-only "SEED" badging.
         set((s) => ({
-          departments: s.departments.filter((d) => d.isDefault || d.id !== id),
+          departments: s.departments.filter((d) => d.id !== id),
         }))
       },
 

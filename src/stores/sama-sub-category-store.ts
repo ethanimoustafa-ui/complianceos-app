@@ -62,8 +62,9 @@ export const useSAMASubCategoryStore = create<SAMASubCategoryState>()(
 
       remove: (id) =>
         set((s) => ({
-          // Default seeds cannot be deleted to avoid orphaning persisted letters.
-          subCategories: s.subCategories.filter((sc) => sc.isDefault || sc.id !== id),
+          // Seeds are deletable — see SPRINT-FOLLOWUP-PLAN §2.3. Persisted
+          // letters retain the raw sub-category id as text-only.
+          subCategories: s.subCategories.filter((sc) => sc.id !== id),
         })),
     }),
     {

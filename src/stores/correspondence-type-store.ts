@@ -55,7 +55,8 @@ export const useCorrespondenceTypeStore = create<CorrespondenceTypeState>()(
 
       remove: (id) =>
         set((s) => ({
-          types: s.types.filter((t) => t.isDefault || t.id !== id),
+          // Seeds are deletable — see SPRINT-FOLLOWUP-PLAN §2.3.
+          types: s.types.filter((t) => t.id !== id),
         })),
     }),
     {

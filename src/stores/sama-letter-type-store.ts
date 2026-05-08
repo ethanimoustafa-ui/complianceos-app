@@ -58,8 +58,10 @@ export const useSAMALetterTypeStore = create<SAMALetterTypeState>()(
 
       remove: (id) =>
         set((s) => ({
-          // Default seeds cannot be deleted to avoid orphaning persisted letters and templates.
-          types: s.types.filter((t) => t.isDefault || t.id !== id),
+          // Seeds are deletable — see SPRINT-FOLLOWUP-PLAN §2.3. Persisted
+          // letters and templates retain their stored type id as text-only;
+          // the orphan-confirm modal in ListsAndCategoriesSection warns first.
+          types: s.types.filter((t) => t.id !== id),
         })),
     }),
     {

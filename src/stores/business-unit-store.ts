@@ -54,7 +54,8 @@ export const useBusinessUnitStore = create<BusinessUnitState>()(
 
       remove: (id) =>
         set((s) => ({
-          units: s.units.filter((u) => u.isDefault || u.id !== id),
+          // Seeds are deletable — see SPRINT-FOLLOWUP-PLAN §2.3.
+          units: s.units.filter((u) => u.id !== id),
         })),
     }),
     {
