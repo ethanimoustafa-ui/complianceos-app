@@ -2,7 +2,7 @@
 
 import { ReactNode } from 'react'
 import { useAuthStore } from '@/stores/auth-store'
-import { hasPermission, hasRole, isAdmin, canEdit, canDelete } from '@/lib/permissions'
+import { hasPermission, hasRole, isAdmin, canEdit, canDelete, useEffectivePermissions } from '@/lib/permissions'
 import type { User } from '@/types'
 
 interface RoleGuardProps {
@@ -28,17 +28,15 @@ interface RoleGuardProps {
 }
 
 /**
- * RoleGuard component - conditionally renders children based on user permissions
+ * RoleGuard component - conditionally renders children based on user permissions.
+ *
+ * Round 4 Phase 2: this component is the legacy entry point. New code should
+ * prefer `<Gate>` from `@/components/auth/gate` (cleaner Permission-typed API).
+ * RoleGuard's internals subscribe to the new effective-permissions hook so
+ * that runtime permission edits in the member detail drawer take effect
+ * immediately.
  *
  * Role hierarchy: officer < manager < admin
- *
- * Usage examples:
- * <RoleGuard adminOnly>Admin content</RoleGuard>
- * <RoleGuard requiredRole="manager">Manager content</RoleGuard>
- * <RoleGuard requiredPermission="audit:create">Create audit button</RoleGuard>
- * <RoleGuard anyPermission={['edit', 'create']}>Edit or create</RoleGuard>
- * <RoleGuard editOnly hidden>Edit button (hidden for officers)</RoleGuard>
- * <RoleGuard deleteOnly hidden>Delete button (admin only)</RoleGuard>
  */
 export function RoleGuard({
   children,
@@ -53,8 +51,11 @@ export function RoleGuard({
   hidden = false,
 }: RoleGuardProps) {
   const user = useAuthStore((state) => state.user)
+  // Subscribe to effective permissions so toggle changes re-render gated UI.
+  // The hook return value is unused directly; the helpers consult the same
+  // store internally via `useTeamStore.getState()`.
+  void useEffectivePermissions()
 
-  // Check various conditions
   let hasAccess = true
 
   if (adminOnly && !isAdmin(user)) {
@@ -96,10 +97,12 @@ export function RoleGuard({
 }
 
 /**
- * Hook version for more complex conditional logic
+ * Hook version for more complex conditional logic.
  */
 export function useRoleGuard() {
   const user = useAuthStore((state) => state.user)
+  // Subscribe so consumers re-render on permission changes.
+  void useEffectivePermissions()
 
   return {
     user,

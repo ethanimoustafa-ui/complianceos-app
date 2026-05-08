@@ -3322,5 +3322,15 @@
     "configureSubCategoriesFor": "Configure {{framework}} Sub-Categories",
     "subCategoryModalTitle": "{{framework}} Sub-Categories",
     "noEnabledFrameworks": "No frameworks enabled. Enable a framework first."
+  },
+  "rbac": {
+    "forbiddenTitle": "Permission required",
+    "forbiddenBody": "You don't have permission to view this section. Ask an admin to enable it for you.",
+    "deniedTooltip": "You don't have permission to do this",
+    "deniedToast": "Permission denied: this action requires a higher-tier role.",
+    "actingAs": "Acting as: {{name}} ({{role}})",
+    "demoBanner": "Demo mode: acting as {{name}}",
+    "resetActingAs": "Reset to my account",
+    "switchUser": "Switch user"
   }
 }

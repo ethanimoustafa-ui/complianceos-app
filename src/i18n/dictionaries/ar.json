@@ -3322,5 +3322,15 @@
     "configureSubCategoriesFor": "تكوين التصنيفات الفرعية لـ {{framework}}",
     "subCategoryModalTitle": "التصنيفات الفرعية لـ {{framework}}",
     "noEnabledFrameworks": "لا توجد أطر مفعّلة. قم بتفعيل إطار أولاً."
+  },
+  "rbac": {
+    "forbiddenTitle": "تتطلب صلاحية",
+    "forbiddenBody": "ليس لديك صلاحية لعرض هذا القسم. اطلب من المسؤول تفعيله لك.",
+    "deniedTooltip": "ليس لديك صلاحية للقيام بهذا الإجراء",
+    "deniedToast": "تم رفض الصلاحية: يتطلب هذا الإجراء دوراً أعلى.",
+    "actingAs": "بصفة: {{name}} ({{role}})",
+    "demoBanner": "وضع تجريبي: بصفة {{name}}",
+    "resetActingAs": "العودة إلى حسابي",
+    "switchUser": "تبديل المستخدم"
   }
 }
