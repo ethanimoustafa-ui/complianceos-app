@@ -471,27 +471,35 @@ export default function CorrespondenceFeedPage() {
                       {t('correspondence.correspondenceFeed')}
                     </h3>
                     <div className={`flex items-center gap-2`}>
-                      <select
-                        value={correspondenceFilter}
-                        onChange={(e) => setCorrespondenceFilter(e.target.value as 'active' | 'archived' | 'all')}
-                        className="text-[10px] font-bold text-slate-600 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                      >
-                        <option value="active">{t('correspondence.filterActive')}</option>
-                        <option value="archived">{t('correspondence.filterArchived')}</option>
-                        <option value="all">{t('correspondence.filterAll')}</option>
-                      </select>
-                      <select
-                        value={typeFilter}
-                        onChange={(e) => setTypeFilter(e.target.value as Correspondence['type'] | 'all')}
-                        className="text-[10px] font-bold text-slate-600 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                      >
-                        <option value="all">{t('correspondence.allTypes' as TranslationKey)}</option>
-                        {correspondenceTypes.map((tt) => (
-                          <option key={tt.id} value={tt.id}>
-                            {isRTL && tt.labelAr ? tt.labelAr : tt.label}
-                          </option>
-                        ))}
-                      </select>
+                      <div className="min-w-[110px]">
+                        <EditableSelect
+                          locked
+                          value={correspondenceFilter}
+                          onChange={(id) => setCorrespondenceFilter(id as 'active' | 'archived' | 'all')}
+                          items={[
+                            { id: 'active', label: t('correspondence.filterActive') },
+                            { id: 'archived', label: t('correspondence.filterArchived') },
+                            { id: 'all', label: t('correspondence.filterAll') },
+                          ]}
+                          size="sm"
+                          isRTL={isRTL}
+                        />
+                      </div>
+                      <div className="min-w-[140px]">
+                        <EditableSelect
+                          value={typeFilter}
+                          onChange={(id) => setTypeFilter(id as Correspondence['type'] | 'all')}
+                          items={[
+                            { id: 'all', label: t('correspondence.allTypes' as TranslationKey) },
+                            ...correspondenceTypes.map((tt) => ({ id: tt.id, label: tt.label, labelAr: tt.labelAr, isDefault: tt.isDefault })),
+                          ]}
+                          onAdd={(label, labelAr) => addCorrespondenceType(label, labelAr)}
+                          onEdit={(id, label, labelAr) => updateCorrespondenceType(id, { label, labelAr })}
+                          onDelete={(id) => removeCorrespondenceType(id)}
+                          size="sm"
+                          isRTL={isRTL}
+                        />
+                      </div>
                       {correspondenceStore.correspondence.length > 0 && (
                         <button
                           onClick={() => {
@@ -789,16 +797,13 @@ export default function CorrespondenceFeedPage() {
             <label className={`text-xs font-bold text-slate-700 uppercase mb-2 block`}>
               {t('correspondence.assignedTo')}
             </label>
-            <select
-              value={newCorrespondenceAssignee}
-              onChange={(e) => setNewCorrespondenceAssignee(e.target.value)}
-              className={`w-full px-4 py-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500`}
-            >
-              <option value="">{t('common.unassigned' as TranslationKey)}</option>
-              {teamStore.members.map((m) => (
-                <option key={m.id} value={m.name}>{m.name} — {m.role}</option>
-              ))}
-            </select>
+            <EditableSelect
+              value={newCorrespondenceAssignee || null}
+              onChange={(id) => setNewCorrespondenceAssignee(id)}
+              items={teamStore.members.map((m) => ({ id: m.name, label: `${m.name} — ${m.role}` }))}
+              placeholder={t('common.unassigned' as TranslationKey)}
+              isRTL={isRTL}
+            />
           </div>
           <div>
             <label className={`text-xs font-bold text-slate-700 uppercase mb-2 block`}>{t('correspondence.message')}</label>
@@ -1097,27 +1102,35 @@ export default function CorrespondenceFeedPage() {
                   {filtered.length} {t('correspondence.items' as TranslationKey)}
                 </span>
                 <div className="flex gap-2">
-                  <select
-                    value={correspondenceFilter}
-                    onChange={(e) => setCorrespondenceFilter(e.target.value as 'active' | 'archived' | 'all')}
-                    className="text-[10px] font-bold text-slate-600 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                  >
-                    <option value="active">{t('correspondence.filterActive')}</option>
-                    <option value="archived">{t('correspondence.filterArchived')}</option>
-                    <option value="all">{t('correspondence.filterAll')}</option>
-                  </select>
-                  <select
-                    value={typeFilter}
-                    onChange={(e) => setTypeFilter(e.target.value as Correspondence['type'] | 'all')}
-                    className="text-[10px] font-bold text-slate-600 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                  >
-                    <option value="all">{t('correspondence.allTypes' as TranslationKey)}</option>
-                    {correspondenceTypes.map((tt) => (
-                      <option key={tt.id} value={tt.id}>
-                        {isRTL && tt.labelAr ? tt.labelAr : tt.label}
-                      </option>
-                    ))}
-                  </select>
+                  <div className="min-w-[110px]">
+                    <EditableSelect
+                      locked
+                      value={correspondenceFilter}
+                      onChange={(id) => setCorrespondenceFilter(id as 'active' | 'archived' | 'all')}
+                      items={[
+                        { id: 'active', label: t('correspondence.filterActive') },
+                        { id: 'archived', label: t('correspondence.filterArchived') },
+                        { id: 'all', label: t('correspondence.filterAll') },
+                      ]}
+                      size="sm"
+                      isRTL={isRTL}
+                    />
+                  </div>
+                  <div className="min-w-[140px]">
+                    <EditableSelect
+                      value={typeFilter}
+                      onChange={(id) => setTypeFilter(id as Correspondence['type'] | 'all')}
+                      items={[
+                        { id: 'all', label: t('correspondence.allTypes' as TranslationKey) },
+                        ...correspondenceTypes.map((tt) => ({ id: tt.id, label: tt.label, labelAr: tt.labelAr, isDefault: tt.isDefault })),
+                      ]}
+                      onAdd={(label, labelAr) => addCorrespondenceType(label, labelAr)}
+                      onEdit={(id, label, labelAr) => updateCorrespondenceType(id, { label, labelAr })}
+                      onDelete={(id) => removeCorrespondenceType(id)}
+                      size="sm"
+                      isRTL={isRTL}
+                    />
+                  </div>
                   {filtered.length > 0 && (
                     <button
                       onClick={() => {

@@ -10,6 +10,7 @@ import { useCircularStore } from '@/stores/circular-store'
 import type { CircularArticle, ArticleRiskLevel, ArticleComplianceStatus } from '@/types'
 import { useDepartmentStore } from '@/stores/department-store'
 import { useTeamStore } from '@/stores/team-store'
+import { EditableSelect } from '@/components/ui/editable-select'
 
 type ArticleTab = 'details' | 'versions' | 'activity'
 
@@ -24,7 +25,7 @@ type Props = {
 
 export function ArticleDetailModal({ circularId, article, mode, onClose, t, isRTL }: Props) {
   const { addArticle, updateArticle, deleteArticle, toggleChecklistItem, addChecklistItem, deleteChecklistItem } = useCircularStore()
-  const { departments: allDepartments } = useDepartmentStore()
+  const { departments: allDepartments, addDepartment, updateDepartment, removeDepartment } = useDepartmentStore()
   const teamMembers = useTeamStore(s => s.members)
 
   const [currentMode, setCurrentMode] = useState(mode)
@@ -142,10 +143,27 @@ export function ArticleDetailModal({ circularId, article, mode, onClose, t, isRT
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('regulatoryUpdates.responsibleDepartment')}</label>
                 {isEditable ? (
-                  <select className="flex h-11 w-full rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm" value={artDept} onChange={(e) => setArtDept(e.target.value)}>
-                    <option value="">{t('regulatoryUpdates.selectDepartment')}</option>
-                    {allDepartments.map((dept) => <option key={dept.id} value={dept.name}>{isRTL ? dept.nameAr : dept.name}</option>)}
-                  </select>
+                  <EditableSelect
+                    value={artDept || null}
+                    onChange={(id) => setArtDept(id)}
+                    items={allDepartments.map((dept) => ({
+                      id: dept.name,
+                      label: dept.name,
+                      labelAr: dept.nameAr,
+                      isDefault: dept.isDefault,
+                    }))}
+                    onAdd={(label, labelAr) => addDepartment(label, labelAr ?? label).name}
+                    onEdit={(id, label, labelAr) => {
+                      const dept = allDepartments.find((d) => d.name === id)
+                      if (dept) updateDepartment(dept.id, { name: label, nameAr: labelAr ?? label })
+                    }}
+                    onDelete={(id) => {
+                      const dept = allDepartments.find((d) => d.name === id)
+                      if (dept) removeDepartment(dept.id)
+                    }}
+                    placeholder={t('regulatoryUpdates.selectDepartment')}
+                    isRTL={isRTL}
+                  />
                 ) : (
                   <p className="text-sm text-slate-700">{artDept || '—'}</p>
                 )}
@@ -155,12 +173,16 @@ export function ArticleDetailModal({ circularId, article, mode, onClose, t, isRT
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('calendar.assignedTo')}</label>
               {isEditable ? (
-                <select className="flex h-11 w-full rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm" value={artAssignedTo} onChange={(e) => setArtAssignedTo(e.target.value)}>
-                  <option value="">{t('common.select' as any)}</option>
-                  {teamMembers.filter(m => m.status === 'active').map(m => (
-                    <option key={m.id} value={m.name}>{m.name} — {m.department}</option>
-                  ))}
-                </select>
+                <EditableSelect
+                  value={artAssignedTo || null}
+                  onChange={(id) => setArtAssignedTo(id)}
+                  items={teamMembers.filter((m) => m.status === 'active').map((m) => ({
+                    id: m.name,
+                    label: `${m.name} — ${m.department}`,
+                  }))}
+                  placeholder={t('common.select' as any)}
+                  isRTL={isRTL}
+                />
               ) : (
                 <p className="text-sm text-slate-700">{artAssignedTo || '—'}</p>
               )}
@@ -192,12 +214,18 @@ export function ArticleDetailModal({ circularId, article, mode, onClose, t, isRT
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('regulatoryUpdates.riskLevel')}</label>
                 {isEditable ? (
-                  <select className="flex h-11 w-full rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm" value={artRiskLevel} onChange={(e) => setArtRiskLevel(e.target.value as ArticleRiskLevel)}>
-                    <option value="critical">{t('regulatoryUpdates.critical')}</option>
-                    <option value="high">{t('regulatoryUpdates.high')}</option>
-                    <option value="medium">{t('regulatoryUpdates.medium')}</option>
-                    <option value="low">{t('regulatoryUpdates.low')}</option>
-                  </select>
+                  <EditableSelect
+                    locked
+                    value={artRiskLevel}
+                    onChange={(id) => setArtRiskLevel(id as ArticleRiskLevel)}
+                    items={[
+                      { id: 'critical', label: t('regulatoryUpdates.critical') },
+                      { id: 'high', label: t('regulatoryUpdates.high') },
+                      { id: 'medium', label: t('regulatoryUpdates.medium') },
+                      { id: 'low', label: t('regulatoryUpdates.low') },
+                    ]}
+                    isRTL={isRTL}
+                  />
                 ) : (
                   <span className={cn('px-2 py-0.5 rounded-full text-xs font-bold', riskColors[artRiskLevel])}>{artRiskLevel}</span>
                 )}
@@ -205,12 +233,18 @@ export function ArticleDetailModal({ circularId, article, mode, onClose, t, isRT
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('regulatoryUpdates.complianceStatus')}</label>
                 {isEditable ? (
-                  <select className="flex h-11 w-full rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm" value={artComplianceStatus} onChange={(e) => setArtComplianceStatus(e.target.value as ArticleComplianceStatus)}>
-                    <option value="compliant">{t('regulatoryUpdates.compliant')}</option>
-                    <option value="in-progress">{t('regulatoryUpdates.inProgress')}</option>
-                    <option value="non-compliant">{t('regulatoryUpdates.nonCompliant')}</option>
-                    <option value="not-started">{t('regulatoryUpdates.notStarted')}</option>
-                  </select>
+                  <EditableSelect
+                    locked
+                    value={artComplianceStatus}
+                    onChange={(id) => setArtComplianceStatus(id as ArticleComplianceStatus)}
+                    items={[
+                      { id: 'compliant', label: t('regulatoryUpdates.compliant') },
+                      { id: 'in-progress', label: t('regulatoryUpdates.inProgress') },
+                      { id: 'non-compliant', label: t('regulatoryUpdates.nonCompliant') },
+                      { id: 'not-started', label: t('regulatoryUpdates.notStarted') },
+                    ]}
+                    isRTL={isRTL}
+                  />
                 ) : (
                   <span className={cn('px-2 py-0.5 rounded-full text-xs font-bold', complianceColors[artComplianceStatus])}>{artComplianceStatus}</span>
                 )}

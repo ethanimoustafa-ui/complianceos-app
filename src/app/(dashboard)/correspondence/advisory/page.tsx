@@ -278,48 +278,55 @@ export default function AdvisoryPage() {
                 <label className={`text-xs font-bold text-slate-700 uppercase mb-2 block ${isRTL ? 'text-right' : ''}`}>
                   {t('common.status')}
                 </label>
-                <select
-                  value={advisoryStatusFilter}
-                  onChange={(e) => setAdvisoryStatusFilter(e.target.value as AdvisoryStatus | '')}
-                  className={`w-full px-4 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 ${isRTL ? 'text-right' : ''}`}
-                >
-                  <option value="">{t('correspondence.allStatuses')}</option>
-                  <option value="pending">{t('common.pending')}</option>
-                  <option value="in_progress">{t('advisory.inProgress')}</option>
-                  <option value="completed">{t('common.completed')}</option>
-                </select>
+                <EditableSelect
+                  locked
+                  value={advisoryStatusFilter || null}
+                  onChange={(id) => setAdvisoryStatusFilter(id as AdvisoryStatus | '')}
+                  items={[
+                    { id: '', label: t('correspondence.allStatuses') },
+                    { id: 'pending', label: t('common.pending') },
+                    { id: 'in_progress', label: t('advisory.inProgress') },
+                    { id: 'completed', label: t('common.completed') },
+                  ]}
+                  placeholder={t('correspondence.allStatuses')}
+                  isRTL={isRTL}
+                />
               </div>
               <div>
                 <label className={`text-xs font-bold text-slate-700 uppercase mb-2 block ${isRTL ? 'text-right' : ''}`}>
                   {t('advisory.priority')}
                 </label>
-                <select
-                  value={advisoryPriorityFilter}
-                  onChange={(e) => setAdvisoryPriorityFilter(e.target.value as AdvisoryPriority | '')}
-                  className={`w-full px-4 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 ${isRTL ? 'text-right' : ''}`}
-                >
-                  <option value="">{t('advisory.allPriorities')}</option>
-                  <option value="low">{t('advisory.low')}</option>
-                  <option value="medium">{t('advisory.medium')}</option>
-                  <option value="high">{t('advisory.high')}</option>
-                </select>
+                <EditableSelect
+                  locked
+                  value={advisoryPriorityFilter || null}
+                  onChange={(id) => setAdvisoryPriorityFilter(id as AdvisoryPriority | '')}
+                  items={[
+                    { id: '', label: t('advisory.allPriorities') },
+                    { id: 'low', label: t('advisory.low') },
+                    { id: 'medium', label: t('advisory.medium') },
+                    { id: 'high', label: t('advisory.high') },
+                  ]}
+                  placeholder={t('advisory.allPriorities')}
+                  isRTL={isRTL}
+                />
               </div>
               <div>
                 <label className={`text-xs font-bold text-slate-700 uppercase mb-2 block ${isRTL ? 'text-right' : ''}`}>
                   {t('advisory.businessUnit')}
                 </label>
-                <select
-                  value={advisoryBusinessUnitFilter}
-                  onChange={(e) => setAdvisoryBusinessUnitFilter(e.target.value as BusinessUnit | '')}
-                  className={`w-full px-4 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 ${isRTL ? 'text-right' : ''}`}
-                >
-                  <option value="">{t('advisory.allUnits')}</option>
-                  {businessUnits.map((u) => (
-                    <option key={u.id} value={u.id}>
-                      {isRTL && u.labelAr ? u.labelAr : u.label}
-                    </option>
-                  ))}
-                </select>
+                <EditableSelect
+                  value={advisoryBusinessUnitFilter || null}
+                  onChange={(id) => setAdvisoryBusinessUnitFilter(id as BusinessUnit | '')}
+                  items={[
+                    { id: '', label: t('advisory.allUnits') },
+                    ...businessUnits.map((u) => ({ id: u.id, label: u.label, labelAr: u.labelAr, isDefault: u.isDefault })),
+                  ]}
+                  onAdd={(label, labelAr) => addBusinessUnit(label, labelAr)}
+                  onEdit={(id, label, labelAr) => updateBusinessUnit(id, { label, labelAr })}
+                  onDelete={(id) => removeBusinessUnit(id)}
+                  placeholder={t('advisory.allUnits')}
+                  isRTL={isRTL}
+                />
               </div>
             </div>
             {/* Second row for timeframe filter */}
@@ -328,19 +335,22 @@ export default function AdvisoryPage() {
                 <label className={`text-xs font-bold text-slate-700 uppercase mb-2 block ${isRTL ? 'text-right' : ''}`}>
                   {t('advisory.timeframe')}
                 </label>
-                <select
-                  value={advisoryFrequencyFilter}
-                  onChange={(e) => setAdvisoryFrequencyFilter(e.target.value as TimeFrequency | '')}
-                  className={`w-full px-4 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 ${isRTL ? 'text-right' : ''}`}
-                >
-                  <option value="">{t('advisory.allTimeframes')}</option>
-                  <option value="week">{t('advisory.thisWeek')}</option>
-                  <option value="month">{t('advisory.thisMonth')}</option>
-                  <option value="quarter">{t('advisory.thisQuarter')}</option>
-                  <option value="semi_annual">{t('advisory.lastSixMonths')}</option>
-                  <option value="annual">{t('advisory.thisYear')}</option>
-                  <option value="fiscal">{t('advisory.fiscalYear')}</option>
-                </select>
+                <EditableSelect
+                  locked
+                  value={advisoryFrequencyFilter || null}
+                  onChange={(id) => setAdvisoryFrequencyFilter(id as TimeFrequency | '')}
+                  items={[
+                    { id: '', label: t('advisory.allTimeframes') },
+                    { id: 'week', label: t('advisory.thisWeek') },
+                    { id: 'month', label: t('advisory.thisMonth') },
+                    { id: 'quarter', label: t('advisory.thisQuarter') },
+                    { id: 'semi_annual', label: t('advisory.lastSixMonths') },
+                    { id: 'annual', label: t('advisory.thisYear') },
+                    { id: 'fiscal', label: t('advisory.fiscalYear') },
+                  ]}
+                  placeholder={t('advisory.allTimeframes')}
+                  isRTL={isRTL}
+                />
               </div>
             </div>
             {(advisorySearchTerm || advisoryStatusFilter || advisoryPriorityFilter || advisoryBusinessUnitFilter || advisoryFrequencyFilter) && (
@@ -514,16 +524,18 @@ export default function AdvisoryPage() {
               <label className={`text-xs font-bold text-slate-700 uppercase mb-2 block ${isRTL ? 'text-right' : ''}`}>
                 {t('advisory.priority')} *
               </label>
-              <select
-                value={newAdvPriority}
-                onChange={(e) => setNewAdvPriority(e.target.value as AdvisoryPriority | '')}
-                className={`w-full px-4 py-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 ${isRTL ? 'text-right' : ''}`}
-              >
-                <option value="">{t('advisory.selectPriority')}</option>
-                <option value="low">{t('advisory.low')}</option>
-                <option value="medium">{t('advisory.medium')}</option>
-                <option value="high">{t('advisory.high')}</option>
-              </select>
+              <EditableSelect
+                locked
+                value={newAdvPriority || null}
+                onChange={(id) => setNewAdvPriority(id as AdvisoryPriority | '')}
+                items={[
+                  { id: 'low', label: t('advisory.low') },
+                  { id: 'medium', label: t('advisory.medium') },
+                  { id: 'high', label: t('advisory.high') },
+                ]}
+                placeholder={t('advisory.selectPriority')}
+                isRTL={isRTL}
+              />
             </div>
           </div>
           <div className="grid grid-cols-2 gap-4">
@@ -542,16 +554,13 @@ export default function AdvisoryPage() {
               <label className={`text-xs font-bold text-slate-700 uppercase mb-2 block ${isRTL ? 'text-right' : ''}`}>
                 {t('advisory.assignedTo' as TranslationKey)}
               </label>
-              <select
-                value={newAdvAssignedTo}
-                onChange={(e) => setNewAdvAssignedTo(e.target.value)}
-                className={`w-full px-4 py-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 ${isRTL ? 'text-right' : ''}`}
-              >
-                <option value="">—</option>
-                {teamStore.members.map(m => (
-                  <option key={m.id} value={m.name}>{m.name}</option>
-                ))}
-              </select>
+              <EditableSelect
+                value={newAdvAssignedTo || null}
+                onChange={(id) => setNewAdvAssignedTo(id)}
+                items={teamStore.members.map((m) => ({ id: m.name, label: m.name }))}
+                placeholder="—"
+                isRTL={isRTL}
+              />
             </div>
           </div>
           <div>
@@ -723,11 +732,10 @@ export default function AdvisoryPage() {
                     <Icon icon="lucide:check-circle" className="text-lg" />
                     {t('advisory.markComplete')}
                   </button>
-                  <div className={`flex items-center gap-2`}>
-                    <select
-                      value={reassignTarget}
-                      onChange={(e) => {
-                        const assignee = e.target.value
+                  <div className={`flex items-center gap-2 min-w-[200px]`}>
+                    <EditableSelect
+                      value={reassignTarget || null}
+                      onChange={(assignee) => {
                         if (assignee) {
                           setReassignTarget('')
                           advisoryStore.reassign(selectedAdvisory.id, assignee)
@@ -735,13 +743,10 @@ export default function AdvisoryPage() {
                           showToast(t('advisory.assignmentUpdated'))
                         }
                       }}
-                      className={`px-3 bg-blue-50 text-blue-700 py-3 rounded-lg font-bold border border-blue-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 ${isRTL ? 'text-right' : ''}`}
-                    >
-                      <option value="">{t('advisory.selectAssignee')}</option>
-                      {teamStore.members.filter(m => m.status === 'active').map(m => (
-                        <option key={m.id} value={m.name}>{m.name}</option>
-                      ))}
-                    </select>
+                      items={teamStore.members.filter((m) => m.status === 'active').map((m) => ({ id: m.name, label: m.name }))}
+                      placeholder={t('advisory.selectAssignee')}
+                      isRTL={isRTL}
+                    />
                   </div>
                 </>
               )}

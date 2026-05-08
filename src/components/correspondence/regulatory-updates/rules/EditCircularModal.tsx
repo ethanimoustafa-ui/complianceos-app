@@ -12,6 +12,7 @@ import { useFrameworkConfigStore } from '@/stores/framework-config-store'
 import { normalizeUrl } from './utils'
 import { FrameworkTagSelector } from '@/components/ui/framework-tag-selector'
 import type { RegulatoryBodyId } from '@/types'
+import { EditableSelect } from '@/components/ui/editable-select'
 
 
 type Props = {
@@ -25,7 +26,7 @@ type Props = {
 
 export function EditCircularModal({ circular, isOpen, onClose, onSaved, t, isRTL }: Props) {
   const { requestCircularEdit } = useCircularStore()
-  const { departments: allDepartments } = useDepartmentStore()
+  const { departments: allDepartments, addDepartment, updateDepartment, removeDepartment } = useDepartmentStore()
   const { members: teamMembers } = useTeamStore()
 
   const [formTitle, setFormTitle] = useState(circular.title)
@@ -92,15 +93,13 @@ export function EditCircularModal({ circular, isOpen, onClose, onSaved, t, isRTL
           <div className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('regulatoryUpdates.authority')}</label>
-              <select
-                className="flex h-11 w-full rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm"
+              <EditableSelect
+                locked
                 value={formAuthority}
-                onChange={(e) => setFormAuthority(e.target.value as CircularAuthority)}
-              >
-                {authorityOptions.map((opt) => (
-                  <option key={opt.value} value={opt.value}>{opt.label}</option>
-                ))}
-              </select>
+                onChange={(id) => setFormAuthority(id as CircularAuthority)}
+                items={authorityOptions.map((opt) => ({ id: opt.value, label: opt.label }))}
+                isRTL={isRTL}
+              />
             </div>
 
             <Input
@@ -112,27 +111,42 @@ export function EditCircularModal({ circular, isOpen, onClose, onSaved, t, isRTL
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('regulatoryUpdates.priorityLevel')}</label>
-                <select
-                  className="flex h-11 w-full rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm"
+                <EditableSelect
+                  locked
                   value={formPriority}
-                  onChange={(e) => setFormPriority(e.target.value as CircularPriority)}
-                >
-                  <option value="critical">{t('regulatoryUpdates.critical')}</option>
-                  <option value="high">{t('regulatoryUpdates.high')}</option>
-                  <option value="medium">{t('regulatoryUpdates.medium')}</option>
-                  <option value="low">{t('regulatoryUpdates.low')}</option>
-                </select>
+                  onChange={(id) => setFormPriority(id as CircularPriority)}
+                  items={[
+                    { id: 'critical', label: t('regulatoryUpdates.critical') },
+                    { id: 'high', label: t('regulatoryUpdates.high') },
+                    { id: 'medium', label: t('regulatoryUpdates.medium') },
+                    { id: 'low', label: t('regulatoryUpdates.low') },
+                  ]}
+                  isRTL={isRTL}
+                />
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('regulatoryUpdates.businessOwnerDept')}</label>
-                <select
-                  className="flex h-11 w-full rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm"
-                  value={formBODept}
-                  onChange={(e) => setFormBODept(e.target.value)}
-                >
-                  <option value="">{t('regulatoryUpdates.selectDepartment')}</option>
-                  {allDepartments.map((dept) => <option key={dept.id} value={dept.name}>{isRTL ? dept.nameAr : dept.name}</option>)}
-                </select>
+                <EditableSelect
+                  value={formBODept || null}
+                  onChange={(id) => setFormBODept(id)}
+                  items={allDepartments.map((dept) => ({
+                    id: dept.name,
+                    label: dept.name,
+                    labelAr: dept.nameAr,
+                    isDefault: dept.isDefault,
+                  }))}
+                  onAdd={(label, labelAr) => addDepartment(label, labelAr ?? label).name}
+                  onEdit={(id, label, labelAr) => {
+                    const dept = allDepartments.find((d) => d.name === id)
+                    if (dept) updateDepartment(dept.id, { name: label, nameAr: labelAr ?? label })
+                  }}
+                  onDelete={(id) => {
+                    const dept = allDepartments.find((d) => d.name === id)
+                    if (dept) removeDepartment(dept.id)
+                  }}
+                  placeholder={t('regulatoryUpdates.selectDepartment')}
+                  isRTL={isRTL}
+                />
               </div>
             </div>
 
@@ -140,16 +154,16 @@ export function EditCircularModal({ circular, isOpen, onClose, onSaved, t, isRTL
               <label className="block text-sm font-medium text-slate-700 mb-1.5">
                 {t('regulatoryUpdates.assignedCircularFollowUp')}
               </label>
-              <select
-                className="flex h-11 w-full rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm"
-                value={formAssignedTo}
-                onChange={(e) => setFormAssignedTo(e.target.value)}
-              >
-                <option value="">{t('regulatoryUpdates.selectOfficer')}</option>
-                {teamMembers.filter(m => m.status === 'active').map((m) => (
-                  <option key={m.id} value={m.name}>{m.name} - {m.department}</option>
-                ))}
-              </select>
+              <EditableSelect
+                value={formAssignedTo || null}
+                onChange={(id) => setFormAssignedTo(id)}
+                items={teamMembers.filter((m) => m.status === 'active').map((m) => ({
+                  id: m.name,
+                  label: `${m.name} - ${m.department}`,
+                }))}
+                placeholder={t('regulatoryUpdates.selectOfficer')}
+                isRTL={isRTL}
+              />
             </div>
 
             <div className="grid grid-cols-2 gap-4">

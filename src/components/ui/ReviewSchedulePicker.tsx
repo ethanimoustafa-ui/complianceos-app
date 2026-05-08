@@ -2,6 +2,7 @@
 
 import { cn } from '@/lib/utils'
 import type { ReviewCadence, ReviewSchedule } from '@/types'
+import { EditableSelect } from '@/components/ui/editable-select'
 
 const DAYS = Array.from({ length: 28 }, (_, i) => i + 1)
 const CADENCES: ReviewCadence[] = ['monthly', 'quarterly', 'semi-annual', 'yearly', 'adhoc']
@@ -49,18 +50,13 @@ export function ReviewSchedulePicker({ value, onChange, t, isRTL }: Props) {
         <label className="block text-sm font-medium text-slate-700 mb-1.5">
           {t('reviewSchedule.cadence')}
         </label>
-        <select
+        <EditableSelect
+          locked
           value={cadence}
-          onChange={(e) => setCadence(e.target.value as ReviewCadence)}
-          className="flex h-11 w-full rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
-          dir={isRTL ? 'rtl' : 'ltr'}
-        >
-          {CADENCES.map((c) => (
-            <option key={c} value={c}>
-              {t(cadenceLabelKeys[c])}
-            </option>
-          ))}
-        </select>
+          onChange={(id) => setCadence(id as ReviewCadence)}
+          items={CADENCES.map((c) => ({ id: c, label: t(cadenceLabelKeys[c]) }))}
+          isRTL={!!isRTL}
+        />
       </div>
 
       {/* Day-of-month grid */}

@@ -772,6 +772,9 @@ export interface Policy {
   owner: PolicyOwner
   // Department that owns the policy ("Policy Owner" / "Business Owner"). Stored as dept id.
   businessOwnerDepartmentId?: string
+  // Departments impacted by the policy (round-3 §4 propagation). Stored as
+  // department ids referencing useDepartmentStore.
+  affectedDepartments?: string[]
   lastReviewDate: string
   nextReviewDate: string
   reviewCycleDays: number

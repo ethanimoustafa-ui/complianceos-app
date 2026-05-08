@@ -11,6 +11,7 @@ import { z } from 'zod'
 import { cn } from '@/lib/utils'
 import { useCorrespondenceStore } from '@/stores/correspondence-store'
 import type { Correspondence } from '@/types'
+import { EditableSelect } from '@/components/ui/editable-select'
 
 const correspondenceSchema = z.object({
   subject: z.string().min(3, 'Subject must be at least 3 characters'),
@@ -236,14 +237,16 @@ export function AddCorrespondenceModal({ isOpen, onClose, onSuccess }: AddCorres
                   name="status"
                   control={control}
                   render={({ field }) => (
-                    <select
-                      {...field}
-                      className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                    >
-                      <option value="draft">Draft</option>
-                      <option value="sent">Sent</option>
-                      <option value="received">Received</option>
-                    </select>
+                    <EditableSelect
+                      locked
+                      value={field.value}
+                      onChange={(id) => field.onChange(id)}
+                      items={[
+                        { id: 'draft', label: 'Draft' },
+                        { id: 'sent', label: 'Sent' },
+                        { id: 'received', label: 'Received' },
+                      ]}
+                    />
                   )}
                 />
               </div>

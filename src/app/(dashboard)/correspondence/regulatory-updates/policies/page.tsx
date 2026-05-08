@@ -131,6 +131,12 @@ export default function RegulatoryUpdatesPoliciesPage() {
   const addPolicyCategory = usePolicyCategoryStore((s) => s.add)
   const editPolicyCategory = usePolicyCategoryStore((s) => s.update)
   const removePolicyCategory = usePolicyCategoryStore((s) => s.remove)
+  // Department store — for affected departments + business-owner department
+  // pickers (round-3 §4 propagation).
+  const departments = useDepartmentStore((s) => s.departments)
+  const addDepartment = useDepartmentStore((s) => s.addDepartment)
+  const updateDepartment = useDepartmentStore((s) => s.updateDepartment)
+  const removeDepartment = useDepartmentStore((s) => s.removeDepartment)
 
   // Derive owners from team store — active members with name, avatar, department
   const OWNERS = useMemo(() =>
@@ -193,6 +199,11 @@ export default function RegulatoryUpdatesPoliciesPage() {
   const [formDescription, setFormDescription] = useState('')
   const [formDocFile, setFormDocFile] = useState<File | null>(null)
   const formDocFileRef = useRef<HTMLInputElement>(null)
+  // §4 — Affected Departments multi-select + Business Owner Department single
+  // select. Both bind to useDepartmentStore so adding/removing in Settings
+  // immediately reflects here. Stored as department ids on the Policy.
+  const [formAffectedDepartments, setFormAffectedDepartments] = useState<string[]>([])
+  const [formBusinessOwnerDepartmentId, setFormBusinessOwnerDepartmentId] = useState<string>('')
 
   // ── Edit form state ──────────────────────────────────────────────────
   const [formEditName, setFormEditName] = useState('')
@@ -204,6 +215,8 @@ export default function RegulatoryUpdatesPoliciesPage() {
   const [formEditDescription, setFormEditDescription] = useState('')
   const [formEditDocFile, setFormEditDocFile] = useState<File | null>(null)
   const formEditDocFileRef = useRef<HTMLInputElement>(null)
+  const [formEditAffectedDepartments, setFormEditAffectedDepartments] = useState<string[]>([])
+  const [formEditBusinessOwnerDepartmentId, setFormEditBusinessOwnerDepartmentId] = useState<string>('')
 
   const showToast = useCallback((message: string) => {
     setToastMessage(message)
@@ -226,6 +239,8 @@ export default function RegulatoryUpdatesPoliciesPage() {
       setFormEditOwnerIdx(ownerIdx >= 0 ? ownerIdx : 0)
       setFormEditDescription(selectedPolicy.description)
       setFormEditDocFile(null)
+      setFormEditAffectedDepartments(selectedPolicy.affectedDepartments ?? [])
+      setFormEditBusinessOwnerDepartmentId(selectedPolicy.businessOwnerDepartmentId ?? '')
     }
   }, [isEditModalOpen])
 
@@ -291,6 +306,8 @@ export default function RegulatoryUpdatesPoliciesPage() {
     setFormDescription('')
     setFormDocFile(null)
     setSelectedPolicyTemplateId('')
+    setFormAffectedDepartments([])
+    setFormBusinessOwnerDepartmentId('')
   }
 
   function handleCreate() {
@@ -325,6 +342,8 @@ export default function RegulatoryUpdatesPoliciesPage() {
       version: formVersion || 'v1.0',
       approvalTier: formTier as PolicyApprovalTier,
       owner,
+      affectedDepartments: formAffectedDepartments,
+      businessOwnerDepartmentId: formBusinessOwnerDepartmentId || undefined,
       lastReviewDate: '',
       nextReviewDate: computeNextReview(formReviewSchedule),
       reviewCycleDays: cadenceToReviewCycleDays(formReviewSchedule.cadence),
@@ -385,6 +404,8 @@ export default function RegulatoryUpdatesPoliciesPage() {
       version: newVersion,
       approvalTier: formEditTier as PolicyApprovalTier,
       owner,
+      affectedDepartments: formEditAffectedDepartments,
+      businessOwnerDepartmentId: formEditBusinessOwnerDepartmentId || undefined,
       nextReviewDate: computeNextReview(formEditReviewSchedule),
       reviewCycleDays: cadenceToReviewCycleDays(formEditReviewSchedule.cadence),
       reviewSchedule: formEditReviewSchedule,
@@ -668,17 +689,19 @@ export default function RegulatoryUpdatesPoliciesPage() {
 
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('policies.approvalTier')} *</label>
-                <select
-                  className="flex h-11 w-full rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm"
-                  value={formEditTier}
-                  onChange={(e) => setFormEditTier(e.target.value as PolicyApprovalTier | '')}
-                >
-                  <option value="">{t('policies.selectApprovalTier')}</option>
-                  <option value="board">{t('policies.approvalTierBoard')}</option>
-                  <option value="management">{t('policies.approvalTierManagement')}</option>
-                  <option value="sharia">{t('policies.approvalTierSharia')}</option>
-                  <option value="agm">{t('policies.approvalTierAGM')}</option>
-                </select>
+                <EditableSelect
+                  locked
+                  value={formEditTier || null}
+                  onChange={(id) => setFormEditTier(id as PolicyApprovalTier | '')}
+                  items={[
+                    { id: 'board', label: t('policies.approvalTierBoard') },
+                    { id: 'management', label: t('policies.approvalTierManagement') },
+                    { id: 'sharia', label: t('policies.approvalTierSharia') },
+                    { id: 'agm', label: t('policies.approvalTierAGM') },
+                  ]}
+                  placeholder={t('policies.selectApprovalTier')}
+                  isRTL={isRTL}
+                />
               </div>
 
               <Input
@@ -700,15 +723,43 @@ export default function RegulatoryUpdatesPoliciesPage() {
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('policies.selectOwner')}</label>
-                <select
-                  className="flex h-11 w-full rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm"
-                  value={formEditOwnerIdx}
-                  onChange={(e) => setFormEditOwnerIdx(Number(e.target.value))}
-                >
-                  {OWNERS.map((o, idx) => (
-                    <option key={idx} value={idx}>{o.name} — {o.department}</option>
+                <EditableSelect
+                  value={String(formEditOwnerIdx)}
+                  onChange={(id) => setFormEditOwnerIdx(Number(id))}
+                  items={OWNERS.map((o, idx) => ({ id: String(idx), label: `${o.name} — ${o.department}` }))}
+                  isRTL={isRTL}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('regulatoryUpdates.businessOwnerDept' as any)}</label>
+                <EditableSelect
+                  value={formEditBusinessOwnerDepartmentId || null}
+                  onChange={(id) => setFormEditBusinessOwnerDepartmentId(id)}
+                  items={departments.map((d) => ({ id: d.id, label: d.name, labelAr: d.nameAr, isDefault: d.isDefault }))}
+                  onAdd={(label, labelAr) => addDepartment(label, labelAr ?? label).id}
+                  onEdit={(id, label, labelAr) => updateDepartment(id, { name: label, nameAr: labelAr ?? label })}
+                  onDelete={(id) => removeDepartment(id)}
+                  placeholder={t('regulatoryUpdates.selectDepartment' as any)}
+                  isRTL={isRTL}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('regulatoryUpdates.affectedDepartments' as any)}</label>
+                <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2 max-h-40 overflow-y-auto">
+                  {departments.map((dept) => (
+                    <label key={dept.id} className="flex items-center gap-3 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        className="rounded text-emerald-600 focus:ring-emerald-500"
+                        checked={formEditAffectedDepartments.includes(dept.id)}
+                        onChange={() => setFormEditAffectedDepartments((prev) =>
+                          prev.includes(dept.id) ? prev.filter((d) => d !== dept.id) : [...prev, dept.id]
+                        )}
+                      />
+                      <span className="text-sm">{isRTL ? dept.nameAr : dept.name}</span>
+                    </label>
                   ))}
-                </select>
+                </div>
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('policies.description')} *</label>
@@ -755,19 +806,21 @@ export default function RegulatoryUpdatesPoliciesPage() {
         <div className="space-y-6">
           <p className="text-sm text-slate-500 -mt-2">{t('policies.createPolicySubtitle')}</p>
 
-          {/* Template picker */}
+          {/* Template picker — locked because templates are managed in Settings,
+              not inline. */}
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('settings.selectTemplate')}</label>
-            <select
-              value={selectedPolicyTemplateId}
-              onChange={(e) => handlePolicyTemplateSelect(e.target.value)}
-              className="flex h-11 w-full rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-            >
-              <option value="">{t('settings.noTemplate')}</option>
-              {policyTemplates.map((tmpl) => (
-                <option key={tmpl.id} value={tmpl.id}>{tmpl.name}</option>
-              ))}
-            </select>
+            <EditableSelect
+              locked
+              value={selectedPolicyTemplateId || null}
+              onChange={(id) => handlePolicyTemplateSelect(id)}
+              items={[
+                { id: '', label: t('settings.noTemplate') },
+                ...policyTemplates.map((tmpl) => ({ id: tmpl.id, label: tmpl.name })),
+              ]}
+              placeholder={t('settings.noTemplate')}
+              isRTL={isRTL}
+            />
           </div>
 
           <div className="grid grid-cols-2 gap-6">
@@ -796,17 +849,19 @@ export default function RegulatoryUpdatesPoliciesPage() {
 
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('policies.approvalTier')} *</label>
-                <select
-                  className="flex h-11 w-full rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm"
-                  value={formTier}
-                  onChange={(e) => setFormTier(e.target.value as PolicyApprovalTier | '')}
-                >
-                  <option value="">{t('policies.selectApprovalTier')}</option>
-                  <option value="board">{t('policies.approvalTierBoard')}</option>
-                  <option value="management">{t('policies.approvalTierManagement')}</option>
-                  <option value="sharia">{t('policies.approvalTierSharia')}</option>
-                  <option value="agm">{t('policies.approvalTierAGM')}</option>
-                </select>
+                <EditableSelect
+                  locked
+                  value={formTier || null}
+                  onChange={(id) => setFormTier(id as PolicyApprovalTier | '')}
+                  items={[
+                    { id: 'board', label: t('policies.approvalTierBoard') },
+                    { id: 'management', label: t('policies.approvalTierManagement') },
+                    { id: 'sharia', label: t('policies.approvalTierSharia') },
+                    { id: 'agm', label: t('policies.approvalTierAGM') },
+                  ]}
+                  placeholder={t('policies.selectApprovalTier')}
+                  isRTL={isRTL}
+                />
               </div>
 
               <Input
@@ -828,15 +883,45 @@ export default function RegulatoryUpdatesPoliciesPage() {
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('policies.selectOwner')}</label>
-                <select
-                  className="flex h-11 w-full rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm"
-                  value={formOwnerIdx}
-                  onChange={(e) => setFormOwnerIdx(Number(e.target.value))}
-                >
-                  {OWNERS.map((o, idx) => (
-                    <option key={idx} value={idx}>{o.name} — {o.department}</option>
+                <EditableSelect
+                  value={String(formOwnerIdx)}
+                  onChange={(id) => setFormOwnerIdx(Number(id))}
+                  items={OWNERS.map((o, idx) => ({ id: String(idx), label: `${o.name} — ${o.department}` }))}
+                  isRTL={isRTL}
+                />
+              </div>
+              {/* §4 — Business Owner Department (decoupled from team-member owner) */}
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('regulatoryUpdates.businessOwnerDept' as any)}</label>
+                <EditableSelect
+                  value={formBusinessOwnerDepartmentId || null}
+                  onChange={(id) => setFormBusinessOwnerDepartmentId(id)}
+                  items={departments.map((d) => ({ id: d.id, label: d.name, labelAr: d.nameAr, isDefault: d.isDefault }))}
+                  onAdd={(label, labelAr) => addDepartment(label, labelAr ?? label).id}
+                  onEdit={(id, label, labelAr) => updateDepartment(id, { name: label, nameAr: labelAr ?? label })}
+                  onDelete={(id) => removeDepartment(id)}
+                  placeholder={t('regulatoryUpdates.selectDepartment' as any)}
+                  isRTL={isRTL}
+                />
+              </div>
+              {/* §4 — Affected Departments multi-select */}
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('regulatoryUpdates.affectedDepartments' as any)}</label>
+                <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2 max-h-40 overflow-y-auto">
+                  {departments.map((dept) => (
+                    <label key={dept.id} className="flex items-center gap-3 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        className="rounded text-emerald-600 focus:ring-emerald-500"
+                        checked={formAffectedDepartments.includes(dept.id)}
+                        onChange={() => setFormAffectedDepartments((prev) =>
+                          prev.includes(dept.id) ? prev.filter((d) => d !== dept.id) : [...prev, dept.id]
+                        )}
+                      />
+                      <span className="text-sm">{isRTL ? dept.nameAr : dept.name}</span>
+                    </label>
                   ))}
-                </select>
+                </div>
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('policies.description')} *</label>

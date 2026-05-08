@@ -6,6 +6,7 @@ import type { TranslationKey } from '@/i18n'
 import { useDepartmentStore } from '@/stores/department-store'
 import { useFrameworkConfigStore } from '@/stores/framework-config-store'
 import { usePolicyCategoryStore } from '@/stores/policy-category-store'
+import { EditableSelect } from '@/components/ui/editable-select'
 
 interface RegDocFilterBarProps {
   variant: 'circular' | 'policy'
@@ -46,13 +47,15 @@ export function RegDocFilterBar({
   t,
   isRTL,
 }: RegDocFilterBarProps) {
-  const { departments: allDepartments } = useDepartmentStore()
+  const { departments: allDepartments, addDepartment, updateDepartment, removeDepartment } = useDepartmentStore()
   const allFrameworks = useFrameworkConfigStore((s) => s.frameworks)
   // Authority filter only surfaces correspondence-based frameworks — these are
   // the authorities that actually issue circulars/rules.
   const authorityFrameworks = allFrameworks.filter((f) => f.correspondenceBased)
   const policyCategoryItems = usePolicyCategoryStore((s) => s.categories)
-  const selectClass = `px-4 py-2 bg-white border border-slate-200 rounded-lg text-sm text-slate-600 focus:ring-2 focus:ring-emerald-500/20 focus:outline-none`
+  const addPolicyCategory = usePolicyCategoryStore((s) => s.add)
+  const editPolicyCategory = usePolicyCategoryStore((s) => s.update)
+  const removePolicyCategory = usePolicyCategoryStore((s) => s.remove)
 
   return (
     <div className={`flex items-center justify-between mb-6`}>
@@ -75,59 +78,80 @@ export function RegDocFilterBar({
         {/* Circular-specific dropdowns */}
         {variant === 'circular' && (
           <>
-            <select
-              className={selectClass}
-              value={authorityFilter}
-              onChange={(e) => onAuthorityChange?.(e.target.value as CircularAuthority | 'all')}
-            >
-              <option value="all">{t('regulatoryUpdates.allAuthorities')}</option>
-              {authorityFrameworks.map((f) => (
-                <option key={f.id} value={f.id}>
-                  {isRTL ? f.nameAr : f.name}
-                </option>
-              ))}
-            </select>
-            <select
-              className={selectClass}
-              value={departmentFilter}
-              onChange={(e) => onDepartmentChange?.(e.target.value)}
-            >
-              <option value="all">{t('regulatoryUpdates.allDepartments')}</option>
-              {allDepartments.map((dept) => (
-                <option key={dept.id} value={dept.name}>
-                  {isRTL ? dept.nameAr : dept.name}
-                </option>
-              ))}
-            </select>
+            <div className="min-w-[180px]">
+              <EditableSelect
+                locked
+                value={authorityFilter}
+                onChange={(id) => onAuthorityChange?.(id as CircularAuthority | 'all')}
+                items={[
+                  { id: 'all', label: t('regulatoryUpdates.allAuthorities') },
+                  ...authorityFrameworks.map((f) => ({ id: f.id, label: isRTL ? f.nameAr : f.name })),
+                ]}
+                isRTL={isRTL}
+              />
+            </div>
+            <div className="min-w-[180px]">
+              <EditableSelect
+                value={departmentFilter}
+                onChange={(id) => onDepartmentChange?.(id)}
+                items={[
+                  { id: 'all', label: t('regulatoryUpdates.allDepartments') },
+                  ...allDepartments.map((dept) => ({
+                    id: dept.name,
+                    label: dept.name,
+                    labelAr: dept.nameAr,
+                    isDefault: dept.isDefault,
+                  })),
+                ]}
+                onAdd={(label, labelAr) => addDepartment(label, labelAr ?? label).id}
+                onEdit={(id, label, labelAr) => {
+                  const dept = allDepartments.find((d) => d.name === id)
+                  if (dept) updateDepartment(dept.id, { name: label, nameAr: labelAr ?? label })
+                }}
+                onDelete={(id) => {
+                  const dept = allDepartments.find((d) => d.name === id)
+                  if (dept) removeDepartment(dept.id)
+                }}
+                isRTL={isRTL}
+              />
+            </div>
           </>
         )}
 
         {/* Policy-specific dropdowns */}
         {variant === 'policy' && (
           <>
-            <select
-              className={selectClass}
-              value={categoryFilter}
-              onChange={(e) => onCategoryChange?.(e.target.value as PolicyCategory | 'all')}
-            >
-              <option value="all">{t('policies.allCategories')}</option>
-              {policyCategoryItems.map((c) => (
-                <option key={c.id} value={c.id}>{isRTL && c.labelAr ? c.labelAr : c.label}</option>
-              ))}
-            </select>
-            <select
-              className={selectClass}
-              value={statusFilter}
-              onChange={(e) => onStatusChange?.(e.target.value as PolicyStatus | 'all')}
-            >
-              <option value="all">{t('policies.allStatuses')}</option>
-              <option value="draft">{t('policies.statusDraft')}</option>
-              <option value="under-review">{t('policies.statusUnderReview')}</option>
-              <option value="approved">{t('policies.statusApproved')}</option>
-              <option value="expired">{t('policies.statusExpired')}</option>
-              <option value="overdue">{t('policies.statusOverdue')}</option>
-              <option value="requires-review">{t('policies.statusRequiresReview')}</option>
-            </select>
+            <div className="min-w-[180px]">
+              <EditableSelect
+                value={categoryFilter}
+                onChange={(id) => onCategoryChange?.(id as PolicyCategory | 'all')}
+                items={[
+                  { id: 'all', label: t('policies.allCategories') },
+                  ...policyCategoryItems.map((c) => ({ id: c.id, label: c.label, labelAr: c.labelAr, isDefault: c.isDefault })),
+                ]}
+                onAdd={(label, labelAr) => addPolicyCategory(label, labelAr)}
+                onEdit={(id, label, labelAr) => editPolicyCategory(id, { label, labelAr })}
+                onDelete={(id) => removePolicyCategory(id)}
+                isRTL={isRTL}
+              />
+            </div>
+            <div className="min-w-[180px]">
+              <EditableSelect
+                locked
+                value={statusFilter}
+                onChange={(id) => onStatusChange?.(id as PolicyStatus | 'all')}
+                items={[
+                  { id: 'all', label: t('policies.allStatuses') },
+                  { id: 'draft', label: t('policies.statusDraft') },
+                  { id: 'under-review', label: t('policies.statusUnderReview') },
+                  { id: 'approved', label: t('policies.statusApproved') },
+                  { id: 'expired', label: t('policies.statusExpired') },
+                  { id: 'overdue', label: t('policies.statusOverdue') },
+                  { id: 'requires-review', label: t('policies.statusRequiresReview') },
+                ]}
+                isRTL={isRTL}
+              />
+            </div>
           </>
         )}
       </div>

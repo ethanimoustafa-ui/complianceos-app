@@ -787,17 +787,20 @@ export function PolicyDetailsContent({
                     <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">
                       {t('policies.workflowActionType')}
                     </label>
-                    <select
-                      className="flex h-9 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
+                    <EditableSelect
+                      locked
                       value={newStepAction}
-                      onChange={(e) => setNewStepAction(e.target.value)}
-                    >
-                      <option value="move-to-next">{t('policies.actionMoveToNext')}</option>
-                      <option value="send-email">{t('policies.actionSendEmail')}</option>
-                      <option value="notify-manager">{t('policies.actionNotifyManager')}</option>
-                      <option value="request-approval">{t('policies.actionRequestApproval')}</option>
-                      <option value="send-for-review">{t('policies.actionSendForReview')}</option>
-                    </select>
+                      onChange={(id) => setNewStepAction(id)}
+                      items={[
+                        { id: 'move-to-next', label: t('policies.actionMoveToNext') },
+                        { id: 'send-email', label: t('policies.actionSendEmail') },
+                        { id: 'notify-manager', label: t('policies.actionNotifyManager') },
+                        { id: 'request-approval', label: t('policies.actionRequestApproval') },
+                        { id: 'send-for-review', label: t('policies.actionSendForReview') },
+                      ]}
+                      size="sm"
+                      isRTL={isRTL}
+                    />
                   </div>
                   <div className="flex justify-end gap-2 pt-1">
                     <Button variant="ghost" className="h-8 text-xs" onClick={() => { setShowAddStep(false); setNewStepName(''); setNewStepDesc('') }}>
@@ -1200,18 +1203,21 @@ export function PolicyDetailsContent({
                   {evidenceCycles.size > 0 && (
                     <div className="flex items-center gap-1">
                       <Icon icon="lucide:filter" className="text-slate-400 text-xs shrink-0" />
-                      <select
-                        className="text-xs border border-slate-200 rounded-lg px-2 py-1 bg-white"
-                        value={evidenceFilter}
-                        onChange={(e) => setEvidenceFilter(e.target.value)}
-                      >
-                        <option value="current">{fresh.currentReviewCycleId ? evidenceCycles.get(fresh.currentReviewCycleId) : t('policies.currentReview')}</option>
-                        {Array.from(evidenceCycles.entries()).map(([id, label]) => (
-                          id !== fresh.currentReviewCycleId ? (
-                            <option key={id} value={id}>{label}</option>
-                          ) : null
-                        ))}
-                      </select>
+                      <div className="min-w-[140px]">
+                        <EditableSelect
+                          locked
+                          value={evidenceFilter}
+                          onChange={(id) => setEvidenceFilter(id)}
+                          items={[
+                            { id: 'current', label: (fresh.currentReviewCycleId ? evidenceCycles.get(fresh.currentReviewCycleId) : t('policies.currentReview')) ?? t('policies.currentReview') },
+                            ...Array.from(evidenceCycles.entries())
+                              .filter(([id]) => id !== fresh.currentReviewCycleId)
+                              .map(([id, label]) => ({ id, label })),
+                          ]}
+                          size="sm"
+                          isRTL={isRTL}
+                        />
+                      </div>
                     </div>
                   )}
                   <button

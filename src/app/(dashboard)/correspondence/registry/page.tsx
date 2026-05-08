@@ -9,6 +9,7 @@ import type { TranslationKey } from '@/i18n'
 import { useCircularStore } from '@/stores/circular-store'
 import { usePolicyStore } from '@/stores/policy-store'
 import type { Circular, Policy } from '@/types'
+import { EditableSelect } from '@/components/ui/editable-select'
 
 type RegistryRow = {
   id: string
@@ -200,32 +201,38 @@ export default function RegistryPage() {
                 </div>
               </div>
               <div>
-                <select
-                  value={statusFilter}
-                  onChange={(e) => setStatusFilter(e.target.value)}
-                  className="w-full px-4 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                >
-                  <option value="">{t('correspondence.allStatuses')}</option>
-                  <option value="pending">{t('common.pending')}</option>
-                  <option value="in-progress">{t('policies.inProgress' as TranslationKey)}</option>
-                  <option value="completed">{t('common.completed')}</option>
-                  <option value="overdue">{t('common.overdue')}</option>
-                  <option value="draft">{t('common.draft')}</option>
-                  <option value="under-review">{t('policies.underReview' as TranslationKey)}</option>
-                  <option value="approved">{t('policies.approved' as TranslationKey)}</option>
-                  <option value="expired">{t('policies.expired' as TranslationKey)}</option>
-                </select>
+                <EditableSelect
+                  locked
+                  value={statusFilter || null}
+                  onChange={(id) => setStatusFilter(id)}
+                  items={[
+                    { id: '', label: t('correspondence.allStatuses') },
+                    { id: 'pending', label: t('common.pending') },
+                    { id: 'in-progress', label: t('policies.inProgress' as TranslationKey) },
+                    { id: 'completed', label: t('common.completed') },
+                    { id: 'overdue', label: t('common.overdue') },
+                    { id: 'draft', label: t('common.draft') },
+                    { id: 'under-review', label: t('policies.underReview' as TranslationKey) },
+                    { id: 'approved', label: t('policies.approved' as TranslationKey) },
+                    { id: 'expired', label: t('policies.expired' as TranslationKey) },
+                  ]}
+                  placeholder={t('correspondence.allStatuses')}
+                  isRTL={isRTL}
+                />
               </div>
               <div>
-                <select
-                  value={kindFilter}
-                  onChange={(e) => setKindFilter(e.target.value)}
-                  className="w-full px-4 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                >
-                  <option value="">{t('correspondence.allTypes')}</option>
-                  <option value="rule">{t('correspondence.ruleCircular' as TranslationKey)}</option>
-                  <option value="policy">{t('correspondence.policyProcedure' as TranslationKey)}</option>
-                </select>
+                <EditableSelect
+                  locked
+                  value={kindFilter || null}
+                  onChange={(id) => setKindFilter(id)}
+                  items={[
+                    { id: '', label: t('correspondence.allTypes') },
+                    { id: 'rule', label: t('correspondence.ruleCircular' as TranslationKey) },
+                    { id: 'policy', label: t('correspondence.policyProcedure' as TranslationKey) },
+                  ]}
+                  placeholder={t('correspondence.allTypes')}
+                  isRTL={isRTL}
+                />
               </div>
             </div>
           </div>
