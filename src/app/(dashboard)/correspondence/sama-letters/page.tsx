@@ -28,13 +28,16 @@ import {
 } from '@/lib/letter-authority'
 import { useAuthorityDeptStore } from '@/stores/authority-department-store'
 import { useSAMASubCategoryStore } from '@/stores/sama-sub-category-store'
+import { useSAMALetterTypeStore } from '@/stores/sama-letter-type-store'
 import { EditableSelect } from '@/components/ui/editable-select'
 import { PlaceholderDefEditor } from '@/components/correspondence/sama-letters/PlaceholderDefEditor'
 import { PlaceholderChip } from '@/components/correspondence/sama-letters/PlaceholderChip'
+import { InlineChipEditor } from '@/components/correspondence/sama-letters/InlineChipEditor'
 import {
   reconcilePlaceholderDefs,
   renderTemplate,
   placeholderValuesComplete,
+  autoPromoteTypedTokens,
 } from '@/lib/letter-placeholders'
 import type { PlaceholderDef, PlaceholderValue } from '@/types'
 
@@ -42,12 +45,17 @@ import type { PlaceholderDef, PlaceholderValue } from '@/types'
 type LetterSortCol = 'authority' | 'reference' | 'type' | 'subject' | 'status' | 'updatedAt'
 type LetterSortState = { col: LetterSortCol; dir: 'asc' | 'desc' } | null
 
-// Email subject templates per letter type and language (authority-agnostic)
-const LETTER_EMAIL_SUBJECTS: Record<SAMALetterType, { en: string; ar: string }> = {
+// Email subject templates per letter type and language (authority-agnostic).
+// Falls back to the generic 'notification' entry for custom types added via
+// useSAMALetterTypeStore.
+const LETTER_EMAIL_SUBJECTS: Record<string, { en: string; ar: string }> = {
   'non-objection': { en: 'Non-Objection Request',    ar: 'طلب عدم ممانعة' },
   'inquiry':       { en: 'Regulatory Inquiry',        ar: 'استفسار تنظيمي' },
   'submission':    { en: 'Regulatory Submission',     ar: 'تقديم تنظيمي' },
   'notification':  { en: 'Regulatory Notification',  ar: 'إخطار تنظيمي' },
+}
+const getEmailSubjectFor = (type: SAMALetterType, lang: 'en' | 'ar'): string => {
+  return (LETTER_EMAIL_SUBJECTS[type] ?? LETTER_EMAIL_SUBJECTS['notification'])[lang]
 }
 
 // Authority <select> that lists every enabled correspondence-based framework
@@ -97,21 +105,21 @@ function DynamicAuthoritySelect({
 
 function buildLetterEmailBody(type: SAMALetterType, lang: 'en' | 'ar', reference: string, subject: string): string {
   if (lang === 'ar') {
-    const intros: Record<SAMALetterType, string> = {
+    const intros: Record<string, string> = {
       'non-objection': `السادة الكرام،\n\nأتقدم بموجب هذا الخطاب بطلب عدم ممانعة بالرجوع إلى المرجع ${reference} بشأن: ${subject}. نرفق طيه الوثائق الداعمة للدراسة والاعتماد. ونبقى رهن الإشارة لتزويدكم بأي معلومات إضافية.`,
       'inquiry':       `السادة الكرام،\n\nيسعدنا التواصل معكم بخصوص استفسارنا التنظيمي تحت مرجع ${reference} المتعلق بـ: ${subject}. نأمل تزويدنا بتوضيحاتكم في هذا الشأن. شاكرين تعاونكم المعتاد.`,
       'submission':    `السادة الكرام،\n\nنتشرف بتقديم المستندات المطلوبة وفق المرجع ${reference} المتعلقة بـ: ${subject}. تجدون مرفقاً الملف المعدّ وفق المتطلبات التنظيمية المعمول بها. نحن بانتظار تأكيد استلامكم.`,
       'notification':  `السادة الكرام،\n\nنودّ إحاطتكم بموجب هذا الإخطار تحت مرجع ${reference} بشأن: ${subject}. نتيح لكم كافة التفاصيل والوثائق الداعمة لاتخاذ الإجراءات اللازمة. نحن في انتظار توجيهاتكم.`,
     }
-    return intros[type]
+    return intros[type] ?? intros['notification']
   }
-  const intros: Record<SAMALetterType, string> = {
+  const intros: Record<string, string> = {
     'non-objection': `Dear Sir/Madam,\n\nWe are writing to formally request a non-objection under reference ${reference} regarding: ${subject}. Please find attached the supporting documentation for your review and approval. We remain at your disposal for any further information required.`,
     'inquiry':       `Dear Sir/Madam,\n\nWe respectfully submit our regulatory inquiry under reference ${reference} concerning: ${subject}. We kindly request your guidance and clarification on this matter. Thank you for your continued support.`,
     'submission':    `Dear Sir/Madam,\n\nPlease find enclosed our regulatory submission under reference ${reference} pertaining to: ${subject}. All required documentation has been prepared in accordance with applicable regulatory requirements. We look forward to your confirmation of receipt.`,
     'notification':  `Dear Sir/Madam,\n\nWe are providing formal notification under reference ${reference} regarding: ${subject}. Full details and supporting documentation are attached for your records. Please advise if any further action is required on our part.`,
   }
-  return intros[type]
+  return intros[type] ?? intros['notification']
 }
 
 // Recipient defaults derived from authority + department (see src/lib/letter-authority.ts).
@@ -253,6 +261,7 @@ export default function SAMALettersPage() {
   const searchParams = useSearchParams()
   const store = useSAMALetterStore()
   const templateStore = useSAMATemplateStore()
+  const letterTypeStore = useSAMALetterTypeStore()
   const { user } = useAuthStore()
   const currentUser = user?.name || 'Current User'
   const teamMembers = useTeamStore(s => s.members)
@@ -443,6 +452,10 @@ export default function SAMALettersPage() {
   const [editRecipientNameAr, setEditRecipientNameAr] = useState('')
   const [editRecipientOrgAr, setEditRecipientOrgAr]   = useState('')
   const [editRecipientCityAr, setEditRecipientCityAr] = useState('')
+  // Placeholder defs + values for draft-edit mode. The InlineChipEditor reads
+  // both; on field-level save we persist defs back to the SAMALetter.
+  const [editPlaceholderDefs, setEditPlaceholderDefs] = useState<PlaceholderDef[]>([])
+  const [editPlaceholderValues, setEditPlaceholderValues] = useState<Record<string, PlaceholderValue | undefined>>({})
 
   useEffect(() => {
     if (selectedLetter) {
@@ -465,6 +478,16 @@ export default function SAMALettersPage() {
       setEditRecipientNameAr(selectedLetter.recipientNameAr ?? recipientDefaults.ar.name)
       setEditRecipientOrgAr(selectedLetter.recipientOrgAr ?? recipientDefaults.ar.org)
       setEditRecipientCityAr(selectedLetter.recipientCityAr ?? recipientDefaults.ar.city)
+      // Reconcile defs against the letter's body+subject (EN+AR) so user-typed
+      // {{tokens}} are auto-promoted to defs even if the letter wasn't saved
+      // through CreateLetterForm. Existing defs win on key match.
+      const merged = autoPromoteTypedTokens(
+        `${selectedLetter.body ?? ''}\n${selectedLetter.bodyAr ?? ''}`,
+        `${selectedLetter.subject ?? ''}\n${selectedLetter.subjectAr ?? ''}`,
+        selectedLetter.placeholderDefs,
+      )
+      setEditPlaceholderDefs(merged)
+      setEditPlaceholderValues(selectedLetter.placeholderValues ?? {})
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedLetter?.id])
@@ -479,6 +502,33 @@ export default function SAMALettersPage() {
   const isDraft = selectedLetter?.status === 'draft'
   const saveField = (patch: Partial<SAMALetter>) => {
     if (selectedLetter) store.update(selectedLetter.id, patch)
+  }
+
+  // Body/subject save path used by InlineChipEditor — also runs the
+  // auto-promote pass so any newly-typed `{{token}}` becomes a real
+  // placeholder def stored on the letter.
+  const saveDraftBody = (patch: Partial<Pick<SAMALetter, 'subject' | 'subjectAr' | 'body' | 'bodyAr'>>) => {
+    if (!selectedLetter) return
+    const merged = {
+      subject:   patch.subject   ?? editSubject,
+      subjectAr: patch.subjectAr ?? editSubjectAr,
+      body:      patch.body      ?? editBody,
+      bodyAr:    patch.bodyAr    ?? editBodyAr,
+    }
+    const nextDefs = autoPromoteTypedTokens(
+      `${merged.body}\n${merged.bodyAr}`,
+      `${merged.subject}\n${merged.subjectAr}`,
+      editPlaceholderDefs,
+    )
+    setEditPlaceholderDefs(nextDefs)
+    store.update(selectedLetter.id, { ...patch, placeholderDefs: nextDefs })
+  }
+
+  const updateDraftPlaceholderValue = (key: string, v: PlaceholderValue | undefined) => {
+    if (!selectedLetter) return
+    const next = { ...editPlaceholderValues, [key]: v }
+    setEditPlaceholderValues(next)
+    store.update(selectedLetter.id, { placeholderValues: next })
   }
 
   // Attachment upload
@@ -549,10 +599,10 @@ export default function SAMALettersPage() {
   }
 
   const handleSaveTemplate = (templateData: Partial<LetterTemplate>) => {
-    const typeColors: Record<SAMALetterType, string> = {
+    const typeColors: Record<string, string> = {
       'non-objection': 'emerald', inquiry: 'blue', submission: 'amber', notification: 'rose',
     }
-    const typeIcons: Record<SAMALetterType, string> = {
+    const typeIcons: Record<string, string> = {
       'non-objection': 'lucide:user-check', inquiry: 'lucide:help-circle', submission: 'lucide:file-up', notification: 'lucide:alert-triangle',
     }
     if (selectedTemplate) {
@@ -563,8 +613,8 @@ export default function SAMALettersPage() {
       templateStore.create({
         name: templateData.name || 'Untitled Template',
         type: resolvedType,
-        icon: typeIcons[resolvedType],
-        color: typeColors[resolvedType],
+        icon: typeIcons[resolvedType] ?? 'lucide:mail',
+        color: typeColors[resolvedType] ?? 'slate',
         description: templateData.description || '',
         status: templateData.status || 'Draft',
         ...templateData,
@@ -703,7 +753,7 @@ export default function SAMALettersPage() {
   // (e.g. from the summary table where the letter content DOM is not rendered).
   const openAuthorityMail = useCallback((letter: SAMALetter, lang: 'en' | 'ar') => {
     const toEmail = getDepartmentEmail(letter.authority, letter.samaDepartment) ?? ''
-    const subjectText = LETTER_EMAIL_SUBJECTS[letter.type][lang]
+    const subjectText = getEmailSubjectFor(letter.type, lang)
     const letterSubj = lang === 'ar'
       ? (letter.subjectAr || letter.subject)
       : letter.subject
@@ -751,15 +801,21 @@ export default function SAMALettersPage() {
       case 'inquiry': return t('samaLetters.inquiry')
       case 'submission': return t('samaLetters.submission')
       case 'notification': return t('samaLetters.notification')
+      default: {
+        // Custom letter type — pull label from the editable type store.
+        const item = letterTypeStore.types.find((tt) => tt.id === type)
+        return item ? (isRTL && item.labelAr ? item.labelAr : item.label) : type
+      }
     }
   }
 
-  const getTypeBadgeColor = (type: SAMALetterType) => {
+  const getTypeBadgeColor = (type: SAMALetterType): string => {
     switch (type) {
       case 'non-objection': return 'bg-emerald-50 text-emerald-700'
       case 'inquiry': return 'bg-blue-50 text-blue-700'
       case 'submission': return 'bg-amber-50 text-amber-700'
       case 'notification': return 'bg-rose-50 text-rose-700'
+      default: return 'bg-slate-100 text-slate-700'
     }
   }
 
@@ -1499,13 +1555,22 @@ export default function SAMALettersPage() {
 
                       <div className="py-4">
                         {isDraft ? (
-                          <input
-                            value={editSubject}
-                            onChange={e => setEditSubject(e.target.value)}
-                            onBlur={() => saveField({ subject: editSubject })}
-                            className="font-black text-lg text-slate-900 bg-transparent w-full border-0 border-b border-dashed border-slate-300 focus:border-emerald-400 focus:outline-none py-1"
-                            placeholder="Enter subject…"
-                          />
+                          <div className="font-black text-lg text-slate-900 border-b border-dashed border-slate-300 focus-within:border-emerald-400 py-1">
+                            <InlineChipEditor
+                              value={editSubject}
+                              onChange={(v) => {
+                                setEditSubject(v)
+                                saveDraftBody({ subject: v })
+                              }}
+                              placeholderDefs={editPlaceholderDefs}
+                              placeholderValues={editPlaceholderValues}
+                              onPlaceholderChange={updateDraftPlaceholderValue}
+                              dir="ltr"
+                              multiline={false}
+                              textSize="text-lg"
+                              placeholder="Enter subject…"
+                            />
+                          </div>
                         ) : (
                           <h4 className="font-black text-lg text-slate-900">Subject: {selectedLetter?.subject}</h4>
                         )}
@@ -1514,14 +1579,21 @@ export default function SAMALettersPage() {
                       <div className="text-slate-700 text-sm leading-relaxed space-y-4">
                         <p>Dear Sir/Madam,</p>
                         {isDraft ? (
-                          <textarea
-                            value={editBody}
-                            onChange={e => setEditBody(e.target.value)}
-                            onBlur={() => saveField({ body: editBody })}
-                            rows={10}
-                            className="w-full text-sm text-slate-700 leading-relaxed bg-transparent border border-dashed border-slate-200 focus:border-emerald-300 focus:outline-none resize-none p-2 rounded"
-                            placeholder="Type your message here…"
-                          />
+                          <div className="border border-dashed border-slate-200 focus-within:border-emerald-300 rounded p-2 min-h-[10rem]">
+                            <InlineChipEditor
+                              value={editBody}
+                              onChange={(v) => {
+                                setEditBody(v)
+                                saveDraftBody({ body: v })
+                              }}
+                              placeholderDefs={editPlaceholderDefs}
+                              placeholderValues={editPlaceholderValues}
+                              onPlaceholderChange={updateDraftPlaceholderValue}
+                              dir="ltr"
+                              textSize="text-sm"
+                              placeholder="Type your message here… (use {{token}} for placeholders)"
+                            />
+                          </div>
                         ) : selectedLetter?.body ? (
                           selectedLetter.body.split('\n\n').map((para, i) => (
                             <p key={i}>{para}</p>
@@ -1615,13 +1687,23 @@ export default function SAMALettersPage() {
 
                       <div className="py-4">
                         {isDraft ? (
-                          <input
-                            value={editSubjectAr}
-                            onChange={e => setEditSubjectAr(e.target.value)}
-                            onBlur={() => saveField({ subjectAr: editSubjectAr })}
-                            className="font-bold text-2xl text-slate-900 bg-transparent w-full border-0 border-b border-dashed border-slate-300 focus:border-emerald-400 focus:outline-none py-1"
-                            placeholder="أدخل الموضوع…"
-                          />
+                          <div className="font-bold text-2xl text-slate-900 border-b border-dashed border-slate-300 focus-within:border-emerald-400 py-1">
+                            <InlineChipEditor
+                              value={editSubjectAr}
+                              onChange={(v) => {
+                                setEditSubjectAr(v)
+                                saveDraftBody({ subjectAr: v })
+                              }}
+                              placeholderDefs={editPlaceholderDefs}
+                              placeholderValues={editPlaceholderValues}
+                              onPlaceholderChange={updateDraftPlaceholderValue}
+                              dir="rtl"
+                              fontFamily="'Amiri', serif"
+                              multiline={false}
+                              textSize="text-2xl"
+                              placeholder="أدخل الموضوع…"
+                            />
+                          </div>
                         ) : (
                           <h4 className="font-bold text-2xl text-slate-900">
                             الموضوع: {selectedLetter?.subjectAr || selectedLetter?.subject}
@@ -1632,14 +1714,22 @@ export default function SAMALettersPage() {
                       <div className="text-slate-700 text-lg leading-relaxed space-y-4">
                         <p>السادة الكرام،</p>
                         {isDraft ? (
-                          <textarea
-                            value={editBodyAr}
-                            onChange={e => setEditBodyAr(e.target.value)}
-                            onBlur={() => saveField({ bodyAr: editBodyAr })}
-                            rows={10}
-                            className="w-full text-lg text-slate-700 leading-relaxed bg-transparent border border-dashed border-slate-200 focus:border-emerald-300 focus:outline-none resize-none p-2 rounded"
-                            placeholder="اكتب رسالتك هنا…"
-                          />
+                          <div className="border border-dashed border-slate-200 focus-within:border-emerald-300 rounded p-2 min-h-[10rem]">
+                            <InlineChipEditor
+                              value={editBodyAr}
+                              onChange={(v) => {
+                                setEditBodyAr(v)
+                                saveDraftBody({ bodyAr: v })
+                              }}
+                              placeholderDefs={editPlaceholderDefs}
+                              placeholderValues={editPlaceholderValues}
+                              onPlaceholderChange={updateDraftPlaceholderValue}
+                              dir="rtl"
+                              fontFamily="'Amiri', serif"
+                              textSize="text-lg"
+                              placeholder="اكتب رسالتك هنا… (استخدم {{token}} لإضافة عناصر نائبة)"
+                            />
+                          </div>
                         ) : selectedLetter?.bodyAr ? (
                           selectedLetter.bodyAr.split('\n\n').map((para, i) => (
                             <p key={i}>{para}</p>
@@ -1855,6 +1945,54 @@ export default function SAMALettersPage() {
                         })
                       })()}
                     </div>
+                  </section>
+                )}
+
+                {/* Placeholders — only on drafts */}
+                {isDraft && selectedLetter && (
+                  <section className="glass-card p-6 rounded-2xl">
+                    <h4 className="text-xs font-black text-slate-500 uppercase tracking-widest mb-2">
+                      {t('letterChips.configurePlaceholders')}
+                    </h4>
+                    <p className="text-[10px] text-slate-400 mb-3">
+                      {t('letterChips.configureHint')}
+                    </p>
+                    {(() => {
+                      const completion = placeholderValuesComplete(editPlaceholderDefs, editPlaceholderValues)
+                      if (editPlaceholderDefs.length === 0) {
+                        return (
+                          <p className="text-[11px] italic text-slate-400 px-2 py-3">
+                            {t('letterChips.noPlaceholders')}
+                          </p>
+                        )
+                      }
+                      return (
+                        <>
+                          <div className={cn(
+                            'mb-3 px-3 py-2 rounded-lg border flex items-center gap-2 text-[11px] font-medium',
+                            completion.complete
+                              ? 'bg-emerald-50/60 border-emerald-200 text-emerald-800'
+                              : 'bg-amber-50/60 border-amber-200 text-amber-800',
+                          )}>
+                            <Icon icon={completion.complete ? 'lucide:check-circle-2' : 'lucide:alert-circle'} />
+                            <span>
+                              {completion.complete
+                                ? t('samaLetters.placeholdersAllFilled')
+                                : t('samaLetters.placeholdersPending').replace('{count}', String(completion.missing.length))}
+                            </span>
+                          </div>
+                          <PlaceholderDefEditor
+                            defs={editPlaceholderDefs}
+                            bodyEn={`${editBody}\n${editBodyAr}`}
+                            subjectEn={`${editSubject}\n${editSubjectAr}`}
+                            onChange={(next) => {
+                              setEditPlaceholderDefs(next)
+                              if (selectedLetter) store.update(selectedLetter.id, { placeholderDefs: next })
+                            }}
+                          />
+                        </>
+                      )
+                    })()}
                   </section>
                 )}
 
@@ -2532,9 +2670,28 @@ function CreateLetterForm({
   const { t, isRTL } = useTranslation()
   const store = useSAMALetterStore()
   const templateStore = useSAMATemplateStore()
+  const letterTypeStore = useSAMALetterTypeStore()
   const { user } = useAuthStore()
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [priority, setPriority] = useState<'standard' | 'urgent'>('standard')
+
+  // Resolve a letter type id to a label, falling back to legacy seed translations
+  // when the id is one of the four built-ins.
+  const getLetterTypeLabel = useCallback((id: string, lang: 'en' | 'ar'): string => {
+    const item = letterTypeStore.types.find((tt) => tt.id === id)
+    if (lang === 'ar') {
+      if (id === 'non-objection') return t('samaLetters.nonObjection')
+      if (id === 'inquiry')       return t('samaLetters.inquiry')
+      if (id === 'submission')    return t('samaLetters.submission')
+      if (id === 'notification')  return t('samaLetters.notification')
+      return item?.labelAr || item?.label || id
+    }
+    if (id === 'non-objection') return t('samaLetters.nonObjection')
+    if (id === 'inquiry')       return t('samaLetters.inquiry')
+    if (id === 'submission')    return t('samaLetters.submission')
+    if (id === 'notification')  return t('samaLetters.notification')
+    return item?.label || id
+  }, [letterTypeStore.types, t])
   const [subjectEn, setSubjectEn] = useState('')
   const [subjectAr, setSubjectAr] = useState('')
   const [bodyEn, setBodyEn] = useState('')
@@ -2574,9 +2731,19 @@ function CreateLetterForm({
   }, [])
 
   // Templates filtered by the currently-selected letter type so picking
-  // "Inquiry" only surfaces inquiry-type templates.
+  // "Inquiry" only surfaces inquiry-type templates. Sourced live from
+  // useSAMATemplateStore so user-created templates appear here as well.
+  // Sorted by lastModified desc to match Template Registry ordering.
   const filteredTemplates = useMemo(
-    () => allTemplates.filter((t) => t.type === selectedType && t.status === 'Active'),
+    () =>
+      allTemplates
+        .filter((t) => t.type === selectedType && t.status === 'Active')
+        .slice()
+        .sort((a, b) => {
+          const da = new Date(a.lastModified).getTime()
+          const db = new Date(b.lastModified).getTime()
+          return (isNaN(db) ? 0 : db) - (isNaN(da) ? 0 : da)
+        }),
     [allTemplates, selectedType],
   )
 
@@ -2638,23 +2805,19 @@ function CreateLetterForm({
     // Recipient defaults derived from currently selected authority + department, falling back
     // to template explicit overrides when set.
     const recipientDefaults = getRecipientDefaults(authority, samaDepartment)
-    // Substitute any {{token}} placeholders the composer filled in. Tokens
-    // without values are left as `[token]` so they're visibly missing rather
-    // than silently empty.
-    const renderedSubjectEn = subjectEn ? renderTemplate(subjectEn, placeholderValues) : subjectEn
-    const renderedSubjectAr = subjectAr ? renderTemplate(subjectAr, placeholderValues) : subjectAr
-    const renderedBodyEn    = bodyEn ? renderTemplate(bodyEn, placeholderValues) : bodyEn
-    const renderedBodyAr    = bodyAr ? renderTemplate(bodyAr, placeholderValues) : bodyAr
+    // Drafts keep raw `{{token}}` markers so that reopening the letter for
+    // editing renders inline chips. The flat `renderTemplate(...)` substitution
+    // happens later when the letter status transitions to `sent`.
     return {
       reference,
       authority,
       type: selectedType,
       subCategory: subCategory as import('@/types').SAMASubCategory,
       samaDepartment: samaDepartment as import('@/types').SAMADepartment,
-      subject: renderedSubjectEn || `(Draft ${reference})`,
-      subjectAr: renderedSubjectAr || undefined,
-      body: renderedBodyEn,
-      bodyAr: renderedBodyAr || undefined,
+      subject: subjectEn || `(Draft ${reference})`,
+      subjectAr: subjectAr || undefined,
+      body: bodyEn,
+      bodyAr: bodyAr || undefined,
       status: 'draft' as const,
       priority,
       createdBy,
@@ -2673,6 +2836,14 @@ function CreateLetterForm({
       timeline: [buildTimelineEvent(t('samaLetters.letterCreatedDraft'))],
       attachments: draftAttachments,
       relatedObservations: [] as string[],
+      // Carry the placeholder defs + values forward so the draft editor
+      // surface can offer chips and a defs editor on reopen.
+      placeholderDefs: autoPromoteTypedTokens(
+        `${bodyEn}\n${bodyAr}`,
+        `${subjectEn}\n${subjectAr}`,
+        placeholderDefs,
+      ),
+      placeholderValues,
     }
   }
 
@@ -2729,16 +2900,23 @@ function CreateLetterForm({
             <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-2">
               {t('samaLetters.letterType')}
             </label>
-            <select
-              value={selectedType}
-              onChange={(e) => onTypeChange(e.target.value as SAMALetterType)}
-              className="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-sm font-medium focus:ring-2 focus:ring-emerald-500 outline-none"
-            >
-              <option value="non-objection">{t('samaLetters.nonObjection')}</option>
-              <option value="inquiry">{t('samaLetters.inquiry')}</option>
-              <option value="submission">{t('samaLetters.submission')}</option>
-              <option value="notification">{t('samaLetters.notification')}</option>
-            </select>
+            <EditableSelect
+              value={selectedType || null}
+              onChange={(id) => onTypeChange(id)}
+              items={letterTypeStore.types.map((tt) => ({
+                id: tt.id,
+                label: getLetterTypeLabel(tt.id, 'en'),
+                labelAr: getLetterTypeLabel(tt.id, 'ar'),
+                isDefault: tt.isDefault,
+              }))}
+              placeholder={t('samaLetters.letterType')}
+              onAdd={(label, labelAr) => letterTypeStore.add(label, labelAr)}
+              onEdit={(id, label, labelAr) =>
+                letterTypeStore.update(id, { label, labelAr: labelAr ?? label })
+              }
+              onDelete={(id) => letterTypeStore.remove(id)}
+              isRTL={isRTL}
+            />
           </div>
           <div>
             <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-2">

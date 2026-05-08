@@ -345,6 +345,13 @@ export const useSAMALetterStore = create<SAMALetterState>()(
       send: (id) => {
         // TODO: Replace with actual API call
         const now = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+        // Lazy-import the renderer to avoid a circular import; this collapses
+        // any remaining `{{token}}` markers into their values (or `[token]` when
+        // unfilled) so the body is stored as flat text on send.
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const { renderTemplate } = require('@/lib/letter-placeholders') as {
+          renderTemplate: (text: string, values: Record<string, unknown>) => string
+        }
         set((state) => {
           const updater = (l: SAMALetter): SAMALetter => {
             if (l.id !== id) return l
@@ -353,8 +360,16 @@ export const useSAMALetterStore = create<SAMALetterState>()(
             const deadlineDate = new Date(sentAt)
             deadlineDate.setDate(deadlineDate.getDate() + deadlineDays)
             const deadlineFormatted = deadlineDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+            const values = (l.placeholderValues ?? {}) as Record<string, unknown>
             return {
               ...l,
+              // Flatten body+subject through renderTemplate so the sent letter
+              // is stored as plain text — the contenteditable chip view stops
+              // applying once status is no longer 'draft'.
+              subject:    l.subject   ? renderTemplate(l.subject,   values) : l.subject,
+              subjectAr:  l.subjectAr ? renderTemplate(l.subjectAr, values) : l.subjectAr,
+              body:       l.body      ? renderTemplate(l.body,      values) : l.body,
+              bodyAr:     l.bodyAr    ? renderTemplate(l.bodyAr,    values) : l.bodyAr,
               status: 'sent',
               sentDate: sentAt.toISOString(),
               responseDeadline: deadlineDate.toISOString(),

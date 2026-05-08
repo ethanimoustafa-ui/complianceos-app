@@ -308,5 +308,6 @@ export function calculateDashboardHealth(input: DashboardHealthInput): Dashboard
     // Defaulted to 0 here so direct callers (tests, non-hook consumers) can
     // still receive a complete shape.
     businessComplianceScore: 0,
+    businessComplianceEvaluated: 0,
   }
 }

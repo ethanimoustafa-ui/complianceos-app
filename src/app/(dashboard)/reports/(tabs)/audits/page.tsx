@@ -22,7 +22,7 @@ import { useComplianceScore } from '@/hooks/useComplianceScore'
 // Audit type definitions
 type AuditSource = 'sama_inspection' | 'internal_audit' | 'sharia_audit'
 type AuditFrequency = 'annual' | 'semi_annual' | 'quarterly' | 'monthly' | 'ad_hoc'
-type AuditCategory = 'security_compliance' | 'financial_compliance' | 'regulatory_compliance' | 'operational_compliance' | 'hr_compliance' | 'sharia_compliance'
+type AuditCategory = string  // widened — see useAuditCategoryStore
 type AuditStatus = 'in_progress' | 'pending' | 'in_review' | 'completed' | 'overdue'
 type AuditPriority = 'critical' | 'high' | 'medium' | 'low'
 

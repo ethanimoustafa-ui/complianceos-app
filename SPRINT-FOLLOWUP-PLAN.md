@@ -1,5 +1,7 @@
 # Sprint Follow-Up Plan — May 2026
 
+> **Status (May 8 2026):** Rounds 1 + 2 landed and Playwright-validated. Round-2 reworks (§1.A–H) and the universal editable-dropdown migration (§2) shipped under commit following `031df1e`. The §3 RBAC matrix remains deferred to a future session per the original sequencing. See `PRODUCT-BACKLOG.md` summary dashboard for the closure list.
+
 **Source:** Live demo review (May 7 2026) of the work shipped under "Editable Dropdowns + Compliance Review + Policy Owner Rename + Phase Deadlines + Risk Workflow + Exports + Permission Strip + SAMA Templates" sprint.
 
 **Purpose:** This document captures every item raised during the review in one place, so the next session can pick it up clean. Each entry is a brief — not a full spec — with enough scope, file pointers, and gotchas that an implementer can hit the ground running. Backlog rows (`📋`) for every item below were appended to `PRODUCT-BACKLOG.md` in the same pass.

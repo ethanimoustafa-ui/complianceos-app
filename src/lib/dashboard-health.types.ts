@@ -71,4 +71,8 @@ export interface DashboardHealthResult {
   // dashboard's "Compliance Health" hero card; the existing `overall` is
   // re-labelled "Team Score" in the UI.
   businessComplianceScore: number
+  // Number of items (across every dept × rule|policy) that have a
+  // compliant or non-compliant verdict. Lets the dashboard render a
+  // "—" pending state when nothing has been evaluated yet (§1.A).
+  businessComplianceEvaluated: number
 }

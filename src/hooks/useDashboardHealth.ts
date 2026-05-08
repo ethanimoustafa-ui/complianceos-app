@@ -60,10 +60,17 @@ export function useDashboardHealth(): DashboardHealthResult {
   // Lives on `result.businessComplianceScore`; the dashboard surfaces it as
   // "Compliance Health". The 7-component `overall` continues to feed the
   // (renamed) Team Score path.
-  const businessComplianceScore = useMemo(
-    () => calculateComplianceReviewScore({ circulars, policies, departments, evaluations }).overall,
+  //
+  // Use `overallByRecords` as the canonical aggregate so this number is
+  // identical to the Compliance Review page's "Overall Business Compliance"
+  // KPI (§1.B). `evaluatedItems` lets callers render the §1.A "—" pending
+  // state when company-wide nothing has been evaluated yet.
+  const reviewScore = useMemo(
+    () => calculateComplianceReviewScore({ circulars, policies, departments, evaluations }),
     [circulars, policies, departments, evaluations],
   )
+  const businessComplianceScore = reviewScore.overallByRecords
+  const businessComplianceEvaluated = reviewScore.totalEvaluatedItems
 
   return useMemo(
     () => {
@@ -79,8 +86,8 @@ export function useDashboardHealth(): DashboardHealthResult {
         pinnedFrameworks,
         targetScore,
       })
-      return { ...base, businessComplianceScore }
+      return { ...base, businessComplianceScore, businessComplianceEvaluated }
     },
-    [audits, observations, risks, policies, trainings, letters, circulars, primaryWeights, pinnedFrameworks, targetScore, businessComplianceScore]
+    [audits, observations, risks, policies, trainings, letters, circulars, primaryWeights, pinnedFrameworks, targetScore, businessComplianceScore, businessComplianceEvaluated]
   )
 }

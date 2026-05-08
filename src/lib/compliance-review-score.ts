@@ -1,17 +1,30 @@
 // Pure-function score derivation for the dashboard's "Compliance Health"
-// hero card. Mirrors the per-department checklist on
-// /reports/compliance-review:
-//   department score = compliant / (compliant + non-compliant)
-//   overall          = arithmetic mean of department scores (skip
-//                      departments with zero compliant+non-compliant denom)
+// hero card and the Compliance Review page. Both surfaces source from
+// `calculateComplianceReviewScore` so they can never drift again.
 //
-// The eval store has been migrated from `${ruleId}::${deptId}` →
-// `${kind}:${itemId}::${deptId}`. We tolerate both formats so this works
-// regardless of which migration agent finishes first.
+// Per-department score = compliant / (compliant + non-compliant).
+// Two overall variants exposed:
+//   - `overallByRecords`     = sum(compliant) / sum(compliant+non-compliant)
+//                              across every dept × item — i.e., a record-level
+//                              mean. Canonical for the dashboard hero AND the
+//                              Compliance Review "Overall Business Compliance"
+//                              KPI per §1.B.
+//   - `overallByDepartment`  = arithmetic mean of contributing per-dept
+//                              scores (skipping fully-pending depts). Kept for
+//                              callers who want a department-fairness metric.
+//
+// Verdicts are derived from explicit `evaluations[key]?.verdict` if present,
+// otherwise auto-derived from a fully-completed workflow on the underlying
+// rule/policy when its business owner department matches (§1.C). Manual entry
+// always wins.
+//
+// The eval store key shape is `${kind}:${itemId}::${deptId}`. Legacy
+// `${ruleId}::${deptId}` is also tolerated for in-flight migrations.
 
-import type { Circular, Department, Policy } from '@/types'
+import type { Circular, CircularWorkflowStep, Department, Policy, PolicyWorkflowStep } from '@/types'
 import type {
   ComplianceEvaluation,
+  ComplianceItemKind,
   ComplianceVerdict,
 } from '@/stores/compliance-evaluation-store'
 
@@ -23,42 +36,124 @@ export interface ComplianceReviewDepartmentBreakdown {
   nonCompliantCount: number
   naCount: number
   pendingCount: number
+  evaluatedItems: number     // compliant + non-compliant; lets callers render a "—" pending state
   total: number
 }
 
 export interface ComplianceReviewScoreResult {
-  overall: number            // 0-100, integer; mean of contributing departments
+  /**
+   * Canonical aggregate: record-level mean across every department × item.
+   * `compliant / (compliant + non-compliant)` rounded to integer percent.
+   * Both the dashboard hero and the Compliance Review overall KPI render this.
+   */
+  overallByRecords: number
+  /**
+   * Department-level mean (skips depts with denom 0). Retained for callers
+   * that want a per-dept-fairness metric.
+   */
+  overallByDepartment: number
+  /**
+   * Backward-compat alias for `overallByDepartment` (was the only field
+   * before the §1.B refactor). New call sites should use the explicit names.
+   * @deprecated prefer `overallByRecords` or `overallByDepartment`.
+   */
+  overall: number
   byDepartment: ComplianceReviewDepartmentBreakdown[]
   totalCompliant: number
   totalNonCompliant: number
+  totalEvaluatedItems: number
+  totalPending: number
 }
 
 interface CalculateInput {
-  circulars: Pick<Circular, 'id' | 'businessOwnerDepartment'>[]
-  policies: Pick<Policy, 'id' | 'businessOwnerDepartmentId'>[]
+  circulars: Circular[]
+  policies: Policy[]
   departments: Department[]
   evaluations: Record<string, ComplianceEvaluation>
 }
 
-function lookupVerdict(
+/**
+ * Returns true when every workflow step on the given circular is in the
+ * `completed` status. CircularWorkflowStep uses
+ * `status: 'pending' | 'current' | 'completed'` (not a boolean).
+ */
+function isCircularWorkflowComplete(steps: CircularWorkflowStep[] | undefined): boolean {
+  if (!steps || steps.length === 0) return false
+  return steps.every((s) => s.status === 'completed')
+}
+
+/**
+ * Returns true when every workflow timeline step on the given policy is
+ * `completed`. PolicyWorkflowStep uses
+ * `status: 'completed' | 'current' | 'pending'`.
+ */
+function isPolicyWorkflowComplete(steps: PolicyWorkflowStep[] | undefined): boolean {
+  if (!steps || steps.length === 0) return false
+  return steps.every((s) => s.status === 'completed')
+}
+
+function explicitVerdict(
   evaluations: Record<string, ComplianceEvaluation>,
-  kind: 'rule' | 'policy',
+  kind: ComplianceItemKind,
   itemId: string,
   departmentId: string,
-): ComplianceVerdict {
-  // Preferred (post-migration) shape.
+): ComplianceVerdict | null {
   const newKey = `${kind}:${itemId}::${departmentId}`
   const newHit = evaluations[newKey]
   if (newHit) return newHit.verdict
-
-  // Legacy shape, only ever held rules; fall back so we don't lose data
-  // mid-migration.
+  // Legacy shape only ever held rules.
   if (kind === 'rule') {
     const oldKey = `${itemId}::${departmentId}`
     const oldHit = evaluations[oldKey]
     if (oldHit) return oldHit.verdict
   }
-  return 'unknown'
+  return null
+}
+
+export interface DerivedVerdictDetail {
+  verdict: ComplianceVerdict
+  source: 'explicit' | 'derived-workflow' | 'unevaluated'
+}
+
+/**
+ * Resolve a verdict for a single (kind, itemId, deptId) tuple. Manual
+ * `evaluations` entry wins; otherwise derives `'compliant'` when the
+ * underlying item's full workflow has completed AND the item's business
+ * owner matches the department. Falls back to `'unknown'`.
+ */
+export function resolveVerdict(args: {
+  kind: ComplianceItemKind
+  itemId: string
+  departmentId: string
+  departmentName: string
+  evaluations: Record<string, ComplianceEvaluation>
+  circulars: Circular[]
+  policies: Policy[]
+}): DerivedVerdictDetail {
+  const { kind, itemId, departmentId, departmentName, evaluations, circulars, policies } = args
+  const explicit = explicitVerdict(evaluations, kind, itemId, departmentId)
+  if (explicit) return { verdict: explicit, source: 'explicit' }
+
+  if (kind === 'rule') {
+    const c = circulars.find((x) => x.id === itemId)
+    if (
+      c &&
+      c.businessOwnerDepartment === departmentName &&
+      isCircularWorkflowComplete(c.workflowSteps)
+    ) {
+      return { verdict: 'compliant', source: 'derived-workflow' }
+    }
+  } else {
+    const p = policies.find((x) => x.id === itemId)
+    if (
+      p &&
+      p.businessOwnerDepartmentId === departmentId &&
+      isPolicyWorkflowComplete(p.workflowTimeline)
+    ) {
+      return { verdict: 'compliant', source: 'derived-workflow' }
+    }
+  }
+  return { verdict: 'unknown', source: 'unevaluated' }
 }
 
 export function calculateComplianceReviewScore(
@@ -80,23 +175,39 @@ export function calculateComplianceReviewScore(
     let pendingCount = 0
 
     for (const c of deptCirculars) {
-      const v = lookupVerdict(evaluations, 'rule', c.id, dept.id)
-      if (v === 'compliant') compliantCount++
-      else if (v === 'non-compliant') nonCompliantCount++
-      else if (v === 'na') naCount++
+      const { verdict } = resolveVerdict({
+        kind: 'rule',
+        itemId: c.id,
+        departmentId: dept.id,
+        departmentName: dept.name,
+        evaluations,
+        circulars,
+        policies,
+      })
+      if (verdict === 'compliant') compliantCount++
+      else if (verdict === 'non-compliant') nonCompliantCount++
+      else if (verdict === 'na') naCount++
       else pendingCount++
     }
 
     for (const p of deptPolicies) {
-      const v = lookupVerdict(evaluations, 'policy', p.id, dept.id)
-      if (v === 'compliant') compliantCount++
-      else if (v === 'non-compliant') nonCompliantCount++
-      else if (v === 'na') naCount++
+      const { verdict } = resolveVerdict({
+        kind: 'policy',
+        itemId: p.id,
+        departmentId: dept.id,
+        departmentName: dept.name,
+        evaluations,
+        circulars,
+        policies,
+      })
+      if (verdict === 'compliant') compliantCount++
+      else if (verdict === 'non-compliant') nonCompliantCount++
+      else if (verdict === 'na') naCount++
       else pendingCount++
     }
 
-    const denom = compliantCount + nonCompliantCount
-    const score = denom === 0 ? 0 : Math.round((compliantCount / denom) * 100)
+    const evaluatedItems = compliantCount + nonCompliantCount
+    const score = evaluatedItems === 0 ? 0 : Math.round((compliantCount / evaluatedItems) * 100)
 
     return {
       departmentId: dept.id,
@@ -106,30 +217,37 @@ export function calculateComplianceReviewScore(
       nonCompliantCount,
       naCount,
       pendingCount,
+      evaluatedItems,
       total: deptCirculars.length + deptPolicies.length,
     }
   })
 
-  // Overall = arithmetic mean of contributing departments only.
-  // A department contributes if it has at least one compliant or non-compliant
-  // evaluation. Pure-pending or pure-na departments are skipped so their 0%
-  // doesn't drag the mean down spuriously.
-  const contributing = byDepartment.filter(
-    (d) => d.compliantCount + d.nonCompliantCount > 0,
-  )
-  const overall = contributing.length === 0
+  const totalCompliant = byDepartment.reduce((s, d) => s + d.compliantCount, 0)
+  const totalNonCompliant = byDepartment.reduce((s, d) => s + d.nonCompliantCount, 0)
+  const totalEvaluatedItems = totalCompliant + totalNonCompliant
+  const totalPending = byDepartment.reduce((s, d) => s + d.pendingCount, 0)
+
+  // Canonical record-level mean.
+  const overallByRecords = totalEvaluatedItems === 0
+    ? 0
+    : Math.round((totalCompliant / totalEvaluatedItems) * 100)
+
+  // Department-level mean (legacy shape).
+  const contributing = byDepartment.filter((d) => d.evaluatedItems > 0)
+  const overallByDepartment = contributing.length === 0
     ? 0
     : Math.round(
         contributing.reduce((sum, d) => sum + d.score, 0) / contributing.length,
       )
 
-  const totalCompliant = byDepartment.reduce((s, d) => s + d.compliantCount, 0)
-  const totalNonCompliant = byDepartment.reduce((s, d) => s + d.nonCompliantCount, 0)
-
   return {
-    overall,
+    overallByRecords,
+    overallByDepartment,
+    overall: overallByDepartment,
     byDepartment,
     totalCompliant,
     totalNonCompliant,
+    totalEvaluatedItems,
+    totalPending,
   }
 }

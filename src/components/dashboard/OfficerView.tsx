@@ -32,7 +32,9 @@ export function OfficerView({ metrics }: OfficerViewProps) {
   // (per-department compliant/non-compliant from /reports/compliance-review).
   // The 7-component team-execution score lives elsewhere as Team Score.
   const healthScore = Math.round(metrics.health.businessComplianceScore)
-  const isAtRisk = healthScore < targetScore
+  const healthEvaluated = metrics.health.businessComplianceEvaluated
+  const isPending = healthEvaluated === 0
+  const isAtRisk = !isPending && healthScore < targetScore
   const policiesOk = metrics.policies.approved
   const policiesOverdue = metrics.policies.overdue + metrics.policies.requiresReview
 
@@ -144,9 +146,16 @@ export function OfficerView({ metrics }: OfficerViewProps) {
             {/* Left: status + threshold + personal action counts */}
             <div className="relative z-10 space-y-4 flex-1 min-w-0">
               <div className="flex items-center gap-3">
-                <Badge variant={isAtRisk ? 'danger' : 'success'} className="gap-2">
-                  <Icon icon={isAtRisk ? 'lucide:alert-triangle' : 'lucide:check-circle'} className="w-3 h-3" />
-                  {isAtRisk ? t('dashboard.statusAtRisk') : t('dashboard.statusOptimal')}
+                <Badge variant={isPending ? 'warning' : isAtRisk ? 'danger' : 'success'} className="gap-2">
+                  <Icon
+                    icon={isPending ? 'lucide:circle-help' : isAtRisk ? 'lucide:alert-triangle' : 'lucide:check-circle'}
+                    className="w-3 h-3"
+                  />
+                  {isPending
+                    ? t('complianceReview.pendingScoreLabel')
+                    : isAtRisk
+                      ? t('dashboard.statusAtRisk')
+                      : t('dashboard.statusOptimal')}
                 </Badge>
                 <span className="text-xs font-bold text-slate-400">{t('dashboard.thresholdLabel')}: {targetScore}%</span>
               </div>
@@ -155,23 +164,32 @@ export function OfficerView({ metrics }: OfficerViewProps) {
               </h2>
 
               {/* Threshold progress bar */}
-              <div className="space-y-1.5">
-                <div className="h-3 w-full bg-slate-100 rounded-full relative overflow-hidden">
-                  <div
-                    className={`h-full rounded-full transition-all ${healthScore >= targetScore ? 'bg-emerald-500' : healthScore >= targetScore * 0.8 ? 'bg-amber-500' : 'bg-rose-500'}`}
-                    style={{ width: `${Math.min(healthScore, 100)}%` }}
-                  />
-                  <div
-                    className="absolute top-0 h-full w-0.5 bg-slate-900"
-                    style={{ insetInlineStart: `${targetScore}%` }}
-                  />
+              {isPending ? (
+                <div className="space-y-1.5">
+                  <div className="h-3 w-full bg-slate-100 rounded-full relative overflow-hidden border border-dashed border-amber-300" />
+                  <div className="flex justify-between text-[10px] font-bold text-amber-700">
+                    <span>{t('complianceReview.notYetEvaluated')}</span>
+                  </div>
                 </div>
-                <div className="flex justify-between text-[10px] font-bold text-slate-400">
-                  <span>0%</span>
-                  <span>{healthScore}% / {targetScore}%</span>
-                  <span>100%</span>
+              ) : (
+                <div className="space-y-1.5">
+                  <div className="h-3 w-full bg-slate-100 rounded-full relative overflow-hidden">
+                    <div
+                      className={`h-full rounded-full transition-all ${healthScore >= targetScore ? 'bg-emerald-500' : healthScore >= targetScore * 0.8 ? 'bg-amber-500' : 'bg-rose-500'}`}
+                      style={{ width: `${Math.min(healthScore, 100)}%` }}
+                    />
+                    <div
+                      className="absolute top-0 h-full w-0.5 bg-slate-900"
+                      style={{ insetInlineStart: `${targetScore}%` }}
+                    />
+                  </div>
+                  <div className="flex justify-between text-[10px] font-bold text-slate-400">
+                    <span>0%</span>
+                    <span>{healthScore}% / {targetScore}%</span>
+                    <span>100%</span>
+                  </div>
                 </div>
-              </div>
+              )}
 
               {/* Personal action summary */}
               <div className="pt-1">
@@ -192,9 +210,18 @@ export function OfficerView({ metrics }: OfficerViewProps) {
               </div>
             </div>
 
-            {/* Right: ring */}
+            {/* Right: ring (or pending placeholder) */}
             <div className="relative flex-shrink-0 flex justify-center">
-              <CircularProgressRing value={healthScore} size={152} label={t('dashboard.health')} />
+              {isPending ? (
+                <div className="flex flex-col items-center justify-center w-[152px] h-[152px] rounded-full border-2 border-dashed border-amber-300 bg-amber-50/40">
+                  <p className="text-3xl font-bold text-amber-600">—</p>
+                  <p className="text-[10px] font-bold text-amber-700 uppercase tracking-widest mt-1">
+                    {t('complianceReview.pendingScoreLabel')}
+                  </p>
+                </div>
+              ) : (
+                <CircularProgressRing value={healthScore} size={152} label={t('dashboard.health')} />
+              )}
             </div>
           </div>
 

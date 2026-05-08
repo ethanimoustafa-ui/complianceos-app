@@ -23,6 +23,8 @@ import { computeNextReview, cadenceToReviewCycleDays } from '@/lib/review-schedu
 import { usePolicyTemplateStore } from '@/stores/policy-template-store'
 import { useTeamStore } from '@/stores/team-store'
 import { useDepartmentStore } from '@/stores/department-store'
+import { usePolicyCategoryStore } from '@/stores/policy-category-store'
+import { EditableSelect } from '@/components/ui/editable-select'
 import { exportPoliciesLocalized } from '@/lib/export'
 
 // Toast component
@@ -124,6 +126,11 @@ export default function RegulatoryUpdatesPoliciesPage() {
   } = usePolicyStore()
   const { user: currentUser } = useAuthStore()
   const teamMembers = useTeamStore(s => s.members)
+  // Editable policy categories
+  const policyCategoryItems = usePolicyCategoryStore((s) => s.categories)
+  const addPolicyCategory = usePolicyCategoryStore((s) => s.add)
+  const editPolicyCategory = usePolicyCategoryStore((s) => s.update)
+  const removePolicyCategory = usePolicyCategoryStore((s) => s.remove)
 
   // Derive owners from team store — active members with name, avatar, department
   const OWNERS = useMemo(() =>
@@ -647,19 +654,16 @@ export default function RegulatoryUpdatesPoliciesPage() {
 
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('policies.selectCategory')} *</label>
-                <select
-                  className="flex h-11 w-full rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm"
-                  value={formEditCategory}
-                  onChange={(e) => setFormEditCategory(e.target.value as PolicyCategory | '')}
-                >
-                  <option value="">{t('policies.selectCategory')}</option>
-                  <option value="compliance">{t('policies.categoryCompliance')}</option>
-                  <option value="it">{t('policies.categoryIT')}</option>
-                  <option value="operations">{t('policies.categoryOperations')}</option>
-                  <option value="risk">{t('policies.categoryRisk')}</option>
-                  <option value="hr">{t('policies.categoryHR')}</option>
-                  <option value="finance">{t('policies.categoryFinance')}</option>
-                </select>
+                <EditableSelect
+                  value={formEditCategory || null}
+                  onChange={(id) => setFormEditCategory(id as PolicyCategory | '')}
+                  items={policyCategoryItems}
+                  placeholder={t('policies.selectCategory')}
+                  onAdd={(label, labelAr) => addPolicyCategory(label, labelAr)}
+                  onEdit={(id, label, labelAr) => editPolicyCategory(id, { label, labelAr })}
+                  onDelete={(id) => removePolicyCategory(id)}
+                  isRTL={isRTL}
+                />
               </div>
 
               <div>
@@ -778,19 +782,16 @@ export default function RegulatoryUpdatesPoliciesPage() {
 
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('policies.selectCategory')} *</label>
-                <select
-                  className="flex h-11 w-full rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm"
-                  value={formCategory}
-                  onChange={(e) => setFormCategory(e.target.value as PolicyCategory | '')}
-                >
-                  <option value="">{t('policies.selectCategory')}</option>
-                  <option value="compliance">{t('policies.categoryCompliance')}</option>
-                  <option value="it">{t('policies.categoryIT')}</option>
-                  <option value="operations">{t('policies.categoryOperations')}</option>
-                  <option value="risk">{t('policies.categoryRisk')}</option>
-                  <option value="hr">{t('policies.categoryHR')}</option>
-                  <option value="finance">{t('policies.categoryFinance')}</option>
-                </select>
+                <EditableSelect
+                  value={formCategory || null}
+                  onChange={(id) => setFormCategory(id as PolicyCategory | '')}
+                  items={policyCategoryItems}
+                  placeholder={t('policies.selectCategory')}
+                  onAdd={(label, labelAr) => addPolicyCategory(label, labelAr)}
+                  onEdit={(id, label, labelAr) => editPolicyCategory(id, { label, labelAr })}
+                  onDelete={(id) => removePolicyCategory(id)}
+                  isRTL={isRTL}
+                />
               </div>
 
               <div>

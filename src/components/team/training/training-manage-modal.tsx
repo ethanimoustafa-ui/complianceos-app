@@ -8,22 +8,9 @@ import { Input } from '@/components/ui/input'
 import { useTranslation } from '@/i18n'
 import type { TranslationKey } from '@/i18n'
 import type { TrainingCourse, TrainingCategory } from '@/types'
-
-const categoryColors: Record<TrainingCategory, { bg: string; text: string }> = {
-  compliance: { bg: 'bg-blue-100', text: 'text-blue-700' },
-  aml: { bg: 'bg-emerald-100', text: 'text-emerald-700' },
-  cybersecurity: { bg: 'bg-purple-100', text: 'text-purple-700' },
-  sharia: { bg: 'bg-amber-100', text: 'text-amber-700' },
-  risk: { bg: 'bg-rose-100', text: 'text-rose-700' },
-  'data-privacy': { bg: 'bg-cyan-100', text: 'text-cyan-700' },
-  ethics: { bg: 'bg-indigo-100', text: 'text-indigo-700' },
-  'fraud-prevention': { bg: 'bg-orange-100', text: 'text-orange-700' },
-  governance: { bg: 'bg-teal-100', text: 'text-teal-700' },
-  'operational-risk': { bg: 'bg-red-100', text: 'text-red-700' },
-  'business-continuity': { bg: 'bg-lime-100', text: 'text-lime-700' },
-  sanctions: { bg: 'bg-pink-100', text: 'text-pink-700' },
-  'internal-audit': { bg: 'bg-violet-100', text: 'text-violet-700' },
-}
+import { useTrainingCategoryStore } from '@/stores/training-category-store'
+import { EditableSelect } from '@/components/ui/editable-select'
+import { getCategoryConfig } from '@/lib/category-config'
 
 interface TrainingManageModalProps {
   isOpen: boolean
@@ -39,11 +26,16 @@ interface TrainingManageModalProps {
 export function TrainingManageModal({
   isOpen, onClose, courses, onAddCourse, onRemoveCourse, onUpdateDeadline, onAssignToEmployees, onToast,
 }: TrainingManageModalProps) {
-  const { t } = useTranslation()
+  const { t, isRTL } = useTranslation()
   const [isAddFormOpen, setIsAddFormOpen] = useState(false)
   const [courseToDelete, setCourseToDelete] = useState<string | null>(null)
   const [editingDeadline, setEditingDeadline] = useState<string | null>(null)
   const [newCourse, setNewCourse] = useState({ name: '', category: '' as TrainingCategory | '', dueDate: '', description: '' })
+  // Editable training categories
+  const trainingCategoryItems = useTrainingCategoryStore((s) => s.categories)
+  const addTrainingCategory = useTrainingCategoryStore((s) => s.add)
+  const editTrainingCategory = useTrainingCategoryStore((s) => s.update)
+  const removeTrainingCategory = useTrainingCategoryStore((s) => s.remove)
 
   const stats = {
     totalCourses: courses.length,
@@ -132,26 +124,16 @@ export function TrainingManageModal({
                     <label className="block text-sm font-medium text-slate-700 mb-1.5">
                       {t('common.category')}
                     </label>
-                    <select
-                      value={newCourse.category}
-                      onChange={(e) => setNewCourse({ ...newCourse, category: e.target.value as TrainingCategory })}
-                      className="w-full h-11 px-4 py-2 border border-slate-200 rounded-xl text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent bg-white"
-                    >
-                      <option value="">{t('training.selectCategory' as TranslationKey)}</option>
-                      <option value="compliance">{t('training.category.compliance' as TranslationKey)}</option>
-                      <option value="aml">{t('training.category.aml' as TranslationKey)}</option>
-                      <option value="cybersecurity">{t('training.category.cybersecurity' as TranslationKey)}</option>
-                      <option value="sharia">{t('training.category.sharia' as TranslationKey)}</option>
-                      <option value="risk">{t('training.category.risk' as TranslationKey)}</option>
-                      <option value="data-privacy">{t('training.category.data-privacy' as TranslationKey)}</option>
-                      <option value="ethics">{t('training.category.ethics' as TranslationKey)}</option>
-                      <option value="fraud-prevention">{t('training.category.fraud-prevention' as TranslationKey)}</option>
-                      <option value="governance">{t('training.category.governance' as TranslationKey)}</option>
-                      <option value="operational-risk">{t('training.category.operational-risk' as TranslationKey)}</option>
-                      <option value="business-continuity">{t('training.category.business-continuity' as TranslationKey)}</option>
-                      <option value="sanctions">{t('training.category.sanctions' as TranslationKey)}</option>
-                      <option value="internal-audit">{t('training.category.internal-audit' as TranslationKey)}</option>
-                    </select>
+                    <EditableSelect
+                      value={newCourse.category || null}
+                      onChange={(id) => setNewCourse({ ...newCourse, category: id as TrainingCategory })}
+                      items={trainingCategoryItems}
+                      placeholder={t('training.selectCategory' as TranslationKey)}
+                      onAdd={(label, labelAr) => addTrainingCategory(label, labelAr)}
+                      onEdit={(id, label, labelAr) => editTrainingCategory(id, { label, labelAr })}
+                      onDelete={(id) => removeTrainingCategory(id)}
+                      isRTL={isRTL}
+                    />
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
@@ -206,9 +188,18 @@ export function TrainingManageModal({
                     <div className="flex-1">
                       <div className="flex items-center gap-2">
                         <h5 className="text-sm font-bold text-slate-900">{course.name}</h5>
-                        <span className={`px-2 py-0.5 text-[10px] font-bold rounded-full ${categoryColors[course.category].bg} ${categoryColors[course.category].text}`}>
-                          {t(`training.category.${course.category}` as TranslationKey)}
-                        </span>
+                        {(() => {
+                          const conf = getCategoryConfig('training', course.category)
+                          const item = trainingCategoryItems.find((c) => c.id === course.category)
+                          const seedKeyExists = ['compliance','aml','cybersecurity','sharia','risk','data-privacy','ethics','fraud-prevention','governance','operational-risk','business-continuity','sanctions','internal-audit'].includes(course.category)
+                          return (
+                            <span className={`px-2 py-0.5 text-[10px] font-bold rounded-full ${conf.bg} ${conf.text}`}>
+                              {seedKeyExists
+                                ? t(`training.category.${course.category}` as TranslationKey)
+                                : (isRTL && item?.labelAr ? item.labelAr : (item?.label ?? conf.label))}
+                            </span>
+                          )
+                        })()}
                       </div>
                       <div className="flex items-center gap-4 mt-2 text-xs text-slate-500">
                         <span className="flex items-center gap-1">

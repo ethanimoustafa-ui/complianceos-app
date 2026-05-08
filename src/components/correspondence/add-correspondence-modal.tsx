@@ -14,7 +14,8 @@ import type { Correspondence } from '@/types'
 
 const correspondenceSchema = z.object({
   subject: z.string().min(3, 'Subject must be at least 3 characters'),
-  type: z.enum(['sama', 'cma', 'internal', 'external_auditor', 'sharia_board', 'vendor', 'other']),
+  // Correspondence types managed via useCorrespondenceTypeStore; widened.
+  type: z.string().min(1, 'Type is required'),
   status: z.enum(['draft', 'sent', 'received']),
   from: z.string().min(1, 'From is required'),
   to: z.string().min(1, 'At least one recipient is required'),

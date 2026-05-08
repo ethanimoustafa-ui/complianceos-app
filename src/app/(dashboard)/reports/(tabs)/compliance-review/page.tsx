@@ -13,9 +13,9 @@ import {
   useComplianceEvaluationStore,
   type ComplianceVerdict,
   type ComplianceItemKind,
-  type ComplianceItemRef,
 } from '@/stores/compliance-evaluation-store'
 import { useAuthStore } from '@/stores/auth-store'
+import { calculateComplianceReviewScore } from '@/lib/compliance-review-score'
 
 // Color/icon channels are static; the user-visible label comes from i18n
 // (`verdictLabelKeys`). Keeping these split avoids a per-render translate
@@ -50,7 +50,7 @@ export default function ComplianceReviewPage() {
   const { circulars } = useCircularStore()
   const { policies } = usePolicyStore()
   const { departments } = useDepartmentStore()
-  const { evaluations, setVerdict, getDepartmentScoreFromItems } = useComplianceEvaluationStore()
+  const { evaluations, setVerdict } = useComplianceEvaluationStore()
   const user = useAuthStore((s) => s.user)
   const evaluatorName = user?.name ?? t('complianceReview.evaluatorFallback')
 
@@ -73,30 +73,25 @@ export default function ComplianceReviewPage() {
     return map
   }, [departments, circulars, policies])
 
-  const departmentScores = useMemo(() => {
-    return departments.map((d) => {
-      const items = itemsByDept[d.id] ?? []
-      const refs: ComplianceItemRef[] = items.map((it) => ({ kind: it.kind, id: it.id }))
-      return {
-        dept: d,
-        items,
-        ...getDepartmentScoreFromItems(d.id, refs),
-      }
-    })
-  }, [departments, itemsByDept, evaluations, getDepartmentScoreFromItems])
+  // Single source of truth: the same lib function the dashboard hero uses.
+  // Guarantees the "Overall Business Compliance" KPI here equals the
+  // "Compliance Health" hero ring on the dashboard (§1.B).
+  const reviewScore = useMemo(
+    () => calculateComplianceReviewScore({ circulars, policies, departments, evaluations }),
+    [circulars, policies, departments, evaluations],
+  )
 
-  const overallScore = useMemo(() => {
-    const totals = departmentScores.reduce(
-      (acc, s) => {
-        acc.compliant += s.compliantCount
-        acc.nonCompliant += s.nonCompliantCount
-        return acc
-      },
-      { compliant: 0, nonCompliant: 0 },
-    )
-    const denom = totals.compliant + totals.nonCompliant
-    return denom === 0 ? 0 : Math.round((totals.compliant / denom) * 100)
-  }, [departmentScores])
+  const departmentScores = useMemo(() => {
+    return reviewScore.byDepartment.map((breakdown) => {
+      const dept = departments.find((d) => d.id === breakdown.departmentId)!
+      const items = itemsByDept[dept.id] ?? []
+      return { dept, items, ...breakdown }
+    })
+  }, [reviewScore, departments, itemsByDept])
+
+  const overallScore = reviewScore.overallByRecords
+  const overallEvaluated = reviewScore.totalEvaluatedItems
+  const overallPending = reviewScore.totalPending
 
   const totalItems = circulars.length + policies.length
 
@@ -167,8 +162,31 @@ export default function ComplianceReviewPage() {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">{t('complianceReview.overallBusinessCompliance')}</p>
-            <p className="text-2xl font-bold text-emerald-600">{overallScore}%</p>
-            <p className="text-[10px] text-slate-400 mt-1">{t('complianceReview.overallSubLabel')}</p>
+            {overallEvaluated === 0 ? (
+              <div className="flex items-center gap-2">
+                <p className="text-2xl font-bold text-slate-400">—</p>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-700">
+                  {t('complianceReview.pendingScoreLabel')}
+                </span>
+              </div>
+            ) : (
+              <>
+                <p className={cn(
+                  'text-2xl font-bold',
+                  overallScore >= 80 ? 'text-emerald-600' : overallScore >= 50 ? 'text-amber-600' : 'text-rose-600',
+                )}>{overallScore}%</p>
+                {overallPending > 0 && (
+                  <p className="text-[10px] font-bold text-amber-600 mt-1">
+                    {t('complianceReview.pendingCaption', { count: String(overallPending) })}
+                  </p>
+                )}
+              </>
+            )}
+            <p className="text-[10px] text-slate-400 mt-1">
+              {overallEvaluated === 0
+                ? t('complianceReview.notYetEvaluated')
+                : t('complianceReview.overallSubLabel')}
+            </p>
           </div>
           <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">{t('complianceReview.activeRules')}</p>
@@ -200,6 +218,7 @@ export default function ComplianceReviewPage() {
             {departmentScores.map((d) => {
               const isActive = d.dept.id === activeDeptId
               const scoreColor = d.score >= 80 ? 'text-emerald-600' : d.score >= 50 ? 'text-amber-600' : 'text-rose-600'
+              const isFullyPending = d.evaluatedItems === 0
               return (
                 <button
                   key={d.dept.id}
@@ -216,8 +235,19 @@ export default function ComplianceReviewPage() {
                     <p className="text-sm font-bold text-slate-900">
                       {isRTL ? d.dept.nameAr : d.dept.name}
                     </p>
-                    <p className={cn('text-2xl font-bold', scoreColor)}>{d.score}%</p>
+                    {isFullyPending ? (
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-700">
+                        {t('complianceReview.pendingScoreLabel')}
+                      </span>
+                    ) : (
+                      <p className={cn('text-2xl font-bold', scoreColor)}>{d.score}%</p>
+                    )}
                   </div>
+                  {!isFullyPending && d.pendingCount > 0 && (
+                    <p className="text-[10px] font-bold text-amber-600 mb-2">
+                      {t('complianceReview.pendingCaption', { count: String(d.pendingCount) })}
+                    </p>
+                  )}
                   <div className="flex items-center gap-3 text-[10px] text-slate-500">
                     <span className="flex items-center gap-1">
                       <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
@@ -278,7 +308,41 @@ export default function ComplianceReviewPage() {
                 pagedItems.map((item) => {
                   const key = `${item.kind}:${item.id}::${activeDept.id}`
                   const evaluation = evaluations[key]
-                  const verdict: ComplianceVerdict = evaluation?.verdict ?? 'unknown'
+                  // Resolve derived verdict only when no manual eval exists.
+                  // A fully-completed workflow on the underlying rule/policy
+                  // (whose business owner matches the active dept) auto-marks
+                  // the row "compliant" with an AUTO badge (§1.C). Clicking
+                  // any verdict button still creates a manual entry that
+                  // wins thereafter.
+                  let verdict: ComplianceVerdict = 'unknown'
+                  let isDerived = false
+                  if (evaluation) {
+                    verdict = evaluation.verdict
+                  } else if (item.kind === 'rule') {
+                    const c = circulars.find((x) => x.id === item.id)
+                    if (
+                      c &&
+                      c.businessOwnerDepartment === activeDept.name &&
+                      c.workflowSteps &&
+                      c.workflowSteps.length > 0 &&
+                      c.workflowSteps.every((s) => s.status === 'completed')
+                    ) {
+                      verdict = 'compliant'
+                      isDerived = true
+                    }
+                  } else {
+                    const p = policies.find((x) => x.id === item.id)
+                    if (
+                      p &&
+                      p.businessOwnerDepartmentId === activeDept.id &&
+                      p.workflowTimeline &&
+                      p.workflowTimeline.length > 0 &&
+                      p.workflowTimeline.every((s) => s.status === 'completed')
+                    ) {
+                      verdict = 'compliant'
+                      isDerived = true
+                    }
+                  }
                   const kindBadge = item.kind === 'rule'
                     ? { label: t('complianceReview.kindRule'), bg: 'bg-blue-50', text: 'text-blue-700' }
                     : { label: t('complianceReview.kindPolicy'), bg: 'bg-violet-50', text: 'text-violet-700' }
@@ -300,18 +364,27 @@ export default function ComplianceReviewPage() {
                             <span className={cn('text-[10px] font-bold px-2 py-0.5 rounded-full', verdictStyle[verdict].bg, verdictStyle[verdict].text)}>
                               {t(verdictLabelKey[verdict])}
                             </span>
+                            {isDerived && (
+                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700">
+                                {t('complianceReview.autoBadge')}
+                              </span>
+                            )}
                           </div>
                           <p className="text-sm font-bold text-slate-900 truncate group-hover:text-emerald-600 transition-colors">
                             {item.title}
                           </p>
-                          {evaluation?.evaluatedAt && (
+                          {evaluation?.evaluatedAt ? (
                             <p className="text-[10px] text-slate-400 mt-1">
                               {t('complianceReview.lastMarkedBy', {
                                 name: evaluation.evaluatedBy ?? t('inlineDeadlinePicker.unknown'),
                                 date: new Date(evaluation.evaluatedAt).toLocaleDateString(),
                               })}
                             </p>
-                          )}
+                          ) : isDerived ? (
+                            <p className="text-[10px] text-blue-600 mt-1 font-medium">
+                              {t('complianceReview.autoFromWorkflow')}
+                            </p>
+                          ) : null}
                         </button>
                         <div className="flex items-center gap-1 shrink-0">
                           {(['compliant', 'non-compliant', 'na', 'unknown'] as ComplianceVerdict[]).map((v) => {

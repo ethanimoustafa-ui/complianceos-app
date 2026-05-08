@@ -5,6 +5,7 @@ import type { CircularAuthority, PolicyCategory, PolicyStatus } from '@/types'
 import type { TranslationKey } from '@/i18n'
 import { useDepartmentStore } from '@/stores/department-store'
 import { useFrameworkConfigStore } from '@/stores/framework-config-store'
+import { usePolicyCategoryStore } from '@/stores/policy-category-store'
 
 interface RegDocFilterBarProps {
   variant: 'circular' | 'policy'
@@ -50,6 +51,7 @@ export function RegDocFilterBar({
   // Authority filter only surfaces correspondence-based frameworks — these are
   // the authorities that actually issue circulars/rules.
   const authorityFrameworks = allFrameworks.filter((f) => f.correspondenceBased)
+  const policyCategoryItems = usePolicyCategoryStore((s) => s.categories)
   const selectClass = `px-4 py-2 bg-white border border-slate-200 rounded-lg text-sm text-slate-600 focus:ring-2 focus:ring-emerald-500/20 focus:outline-none`
 
   return (
@@ -109,12 +111,9 @@ export function RegDocFilterBar({
               onChange={(e) => onCategoryChange?.(e.target.value as PolicyCategory | 'all')}
             >
               <option value="all">{t('policies.allCategories')}</option>
-              <option value="compliance">{t('policies.categoryCompliance')}</option>
-              <option value="it">{t('policies.categoryIT')}</option>
-              <option value="operations">{t('policies.categoryOperations')}</option>
-              <option value="risk">{t('policies.categoryRisk')}</option>
-              <option value="hr">{t('policies.categoryHR')}</option>
-              <option value="finance">{t('policies.categoryFinance')}</option>
+              {policyCategoryItems.map((c) => (
+                <option key={c.id} value={c.id}>{isRTL && c.labelAr ? c.labelAr : c.label}</option>
+              ))}
             </select>
             <select
               className={selectClass}

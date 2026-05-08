@@ -90,7 +90,9 @@ const POLICY_STATUS_COLORS: Record<PolicyStatus, { bg: string; text: string }> =
   'requires-review':  { bg: 'bg-orange-100',  text: 'text-orange-700'  },
 }
 
-const CATEGORY_ICONS: Record<PolicyCategory, string> = {
+// `PolicyCategory` is now a widened opaque string, so we render via the central
+// helper which falls back to a neutral tag icon for user-added categories.
+const CATEGORY_ICONS: Record<string, string> = {
   compliance:  'lucide:shield',
   it:          'lucide:server',
   operations:  'lucide:settings',
@@ -284,7 +286,7 @@ function PolicyCardContent({ policy, t, isRTL }: { policy: Policy; t: RegDocCard
   const { isRTL: rtl } = useTranslation()
   const departments = useDepartmentStore(s => s.departments)
   const statusStyle = POLICY_STATUS_COLORS[policy.status]
-  const categoryIcon = CATEGORY_ICONS[policy.category]
+  const categoryIcon = CATEGORY_ICONS[policy.category] ?? 'lucide:tag'
   const tierStyle = TIER_COLORS[policy.approvalTier] ?? TIER_COLORS.management
   const urgency = getReviewUrgency(policy.nextReviewDate, policy.status)
 

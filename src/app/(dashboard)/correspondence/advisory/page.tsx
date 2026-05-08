@@ -14,6 +14,8 @@ import { useTeamStore } from '@/stores/team-store'
 import { useAuthStore } from '@/stores/auth-store'
 import { exportAdvisoryLocalized } from '@/lib/export'
 import type { AdvisoryRequest, AdvisoryStatus, AdvisoryPriority, BusinessUnit } from '@/types'
+import { useBusinessUnitStore } from '@/stores/business-unit-store'
+import { EditableSelect } from '@/components/ui/editable-select'
 
 type TimeFrequency = 'week' | 'month' | 'quarter' | 'semi_annual' | 'annual' | 'fiscal'
 
@@ -41,6 +43,12 @@ export default function AdvisoryPage() {
   const advisoryStore = useAdvisoryStore()
   const teamStore = useTeamStore()
   const authStore = useAuthStore()
+  // Business unit store — seeds match the legacy BusinessUnit literal union;
+  // user can extend via the EditableSelect picker below.
+  const businessUnits = useBusinessUnitStore((s) => s.units)
+  const addBusinessUnit = useBusinessUnitStore((s) => s.add)
+  const updateBusinessUnit = useBusinessUnitStore((s) => s.update)
+  const removeBusinessUnit = useBusinessUnitStore((s) => s.remove)
 
   const [toastMessage, setToastMessage] = useState<string | null>(null)
 
@@ -161,8 +169,10 @@ export default function AdvisoryPage() {
     high: { bg: 'bg-rose-100', text: 'text-rose-700', labelKey: 'advisory.high' },
   }
 
-  // Business unit labels
-  const businessUnitLabels: Record<BusinessUnit, string> = {
+  // Business unit display label — checks the editable store first, falls back
+  // to the legacy i18n keys for the seed ids, and finally to the raw id so
+  // user-added units stay readable even before they get a translation.
+  const legacyBusinessUnitKeys: Record<string, string> = {
     corporate_banking: 'advisory.corporateBanking',
     compliance: 'advisory.compliance',
     it: 'advisory.it',
@@ -170,6 +180,13 @@ export default function AdvisoryPage() {
     finance: 'advisory.finance',
     operations: 'advisory.operations',
     hr: 'advisory.hr',
+  }
+  const renderBusinessUnit = (id: string): string => {
+    const fromStore = businessUnits.find((u) => u.id === id)
+    if (fromStore) return isRTL && fromStore.labelAr ? fromStore.labelAr : fromStore.label
+    const legacyKey = legacyBusinessUnitKeys[id]
+    if (legacyKey) return t(legacyKey as TranslationKey)
+    return id
   }
 
   const handleViewAdvisory = (advisory: AdvisoryRequest) => {
@@ -297,13 +314,11 @@ export default function AdvisoryPage() {
                   className={`w-full px-4 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 ${isRTL ? 'text-right' : ''}`}
                 >
                   <option value="">{t('advisory.allUnits')}</option>
-                  <option value="corporate_banking">{t('advisory.corporateBanking')}</option>
-                  <option value="compliance">{t('advisory.compliance')}</option>
-                  <option value="it">{t('advisory.it')}</option>
-                  <option value="risk_management">{t('advisory.riskManagement')}</option>
-                  <option value="finance">{t('advisory.finance')}</option>
-                  <option value="operations">{t('advisory.operations')}</option>
-                  <option value="hr">{t('advisory.hr')}</option>
+                  {businessUnits.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {isRTL && u.labelAr ? u.labelAr : u.label}
+                    </option>
+                  ))}
                 </select>
               </div>
             </div>
@@ -374,7 +389,7 @@ export default function AdvisoryPage() {
                       <div className={`flex items-center gap-4 mt-3`}>
                         <span className={`text-xs text-slate-500 flex items-center gap-1`}>
                           <Icon icon="lucide:building-2" className="text-slate-400" />
-                          {t(businessUnitLabels[advisory.businessUnit] as TranslationKey)}
+                          {renderBusinessUnit(advisory.businessUnit)}
                         </span>
                         <span className={`text-xs text-slate-500 flex items-center gap-1`}>
                           <Icon icon="lucide:user" className="text-slate-400" />
@@ -484,20 +499,16 @@ export default function AdvisoryPage() {
               <label className={`text-xs font-bold text-slate-700 uppercase mb-2 block ${isRTL ? 'text-right' : ''}`}>
                 {t('advisory.businessUnit')} *
               </label>
-              <select
-                value={newAdvBusinessUnit}
-                onChange={(e) => setNewAdvBusinessUnit(e.target.value as BusinessUnit | '')}
-                className={`w-full px-4 py-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 ${isRTL ? 'text-right' : ''}`}
-              >
-                <option value="">{t('advisory.selectUnit')}</option>
-                <option value="corporate_banking">{t('advisory.corporateBanking')}</option>
-                <option value="compliance">{t('advisory.compliance')}</option>
-                <option value="it">{t('advisory.it')}</option>
-                <option value="risk_management">{t('advisory.riskManagement')}</option>
-                <option value="finance">{t('advisory.finance')}</option>
-                <option value="operations">{t('advisory.operations')}</option>
-                <option value="hr">{t('advisory.hr')}</option>
-              </select>
+              <EditableSelect
+                value={newAdvBusinessUnit || null}
+                onChange={(id) => setNewAdvBusinessUnit(id as BusinessUnit)}
+                items={businessUnits.map((u) => ({ id: u.id, label: u.label, labelAr: u.labelAr, isDefault: u.isDefault }))}
+                onAdd={(label, labelAr) => addBusinessUnit(label, labelAr)}
+                onEdit={(id, label, labelAr) => updateBusinessUnit(id, { label, labelAr })}
+                onDelete={(id) => removeBusinessUnit(id)}
+                placeholder={t('advisory.selectUnit')}
+                isRTL={isRTL}
+              />
             </div>
             <div>
               <label className={`text-xs font-bold text-slate-700 uppercase mb-2 block ${isRTL ? 'text-right' : ''}`}>
@@ -620,7 +631,7 @@ export default function AdvisoryPage() {
             <div className="grid grid-cols-2 gap-4">
               <div className={`bg-slate-50 p-4 rounded-lg ${isRTL ? 'text-right' : ''}`}>
                 <p className="text-xs font-bold text-slate-500 uppercase mb-1">{t('advisory.businessUnit')}</p>
-                <p className="text-sm font-bold text-slate-900">{t(businessUnitLabels[selectedAdvisory.businessUnit] as TranslationKey)}</p>
+                <p className="text-sm font-bold text-slate-900">{renderBusinessUnit(selectedAdvisory.businessUnit)}</p>
               </div>
               <div className={`bg-slate-50 p-4 rounded-lg ${isRTL ? 'text-right' : ''}`}>
                 <p className="text-xs font-bold text-slate-500 uppercase mb-1">{t('advisory.requestedBy')}</p>

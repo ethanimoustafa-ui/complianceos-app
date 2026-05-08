@@ -21,12 +21,22 @@ interface EditableSelectProps {
   onAdd?: (label: string, labelAr?: string) => string | void
   onEdit?: (id: string, label: string, labelAr?: string) => void
   onDelete?: (id: string) => void
+  // Per-row reset-to-default affordance. Used by Bucket-D label-override
+  // surfaces (`mode="labels-only"`) where the canonical key never changes
+  // but the label can be customized, then reset.
+  onReset?: (id: string) => void
+  // Predicate to decide whether to render the reset button for a row
+  // (e.g. only show it when the row currently has an override).
+  isReset?: (id: string) => boolean
   isRTL?: boolean
   className?: string
   disabled?: boolean
   // Whether to show the Arabic field in the add/edit popover. If false, only English label is collected.
   bilingual?: boolean
   size?: 'sm' | 'md'
+  // Behaviour preset. `'labels-only'` hides Add and Delete affordances even
+  // if the corresponding callbacks are provided; only Edit + Reset are shown.
+  mode?: 'default' | 'labels-only'
 }
 
 export function EditableSelect({
@@ -37,15 +47,21 @@ export function EditableSelect({
   onAdd,
   onEdit,
   onDelete,
+  onReset,
+  isReset,
   isRTL = false,
   className,
   disabled = false,
   bilingual = true,
   size = 'md',
+  mode = 'default',
 }: EditableSelectProps) {
+  const labelsOnly = mode === 'labels-only'
+  const effectiveOnAdd = labelsOnly ? undefined : onAdd
+  const effectiveOnDelete = labelsOnly ? undefined : onDelete
   const { t } = useTranslation()
   const [open, setOpen] = useState(false)
-  const [mode, setMode] = useState<'list' | 'add' | 'edit'>('list')
+  const [view, setView] = useState<'list' | 'add' | 'edit'>('list')
   const [editingId, setEditingId] = useState<string | null>(null)
   const [draftLabel, setDraftLabel] = useState('')
   const [draftLabelAr, setDraftLabelAr] = useState('')
@@ -59,7 +75,7 @@ export function EditableSelect({
     const handler = (e: MouseEvent) => {
       if (rootRef.current && !rootRef.current.contains(e.target as Node)) {
         setOpen(false)
-        setMode('list')
+        setView('list')
       }
     }
     document.addEventListener('mousedown', handler)
@@ -70,14 +86,14 @@ export function EditableSelect({
   const selectedLabel = selected ? (isRTL && selected.labelAr ? selected.labelAr : selected.label) : null
 
   const startAdd = () => {
-    setMode('add')
+    setView('add')
     setEditingId(null)
     setDraftLabel('')
     setDraftLabelAr('')
   }
 
   const startEdit = (item: EditableSelectItem) => {
-    setMode('edit')
+    setView('edit')
     setEditingId(item.id)
     setDraftLabel(item.label)
     setDraftLabelAr(item.labelAr ?? '')
@@ -87,21 +103,21 @@ export function EditableSelect({
     const label = draftLabel.trim()
     if (!label) return
     const labelAr = draftLabelAr.trim() || undefined
-    if (mode === 'add' && onAdd) {
-      const newId = onAdd(label, labelAr)
+    if (view === 'add' && effectiveOnAdd) {
+      const newId = effectiveOnAdd(label, labelAr)
       if (typeof newId === 'string') onChange(newId)
-    } else if (mode === 'edit' && editingId && onEdit) {
+    } else if (view === 'edit' && editingId && onEdit) {
       onEdit(editingId, label, labelAr)
     }
-    setMode('list')
+    setView('list')
     setEditingId(null)
     setDraftLabel('')
     setDraftLabelAr('')
   }
 
   const handleDelete = (id: string) => {
-    if (!onDelete) return
-    onDelete(id)
+    if (!effectiveOnDelete) return
+    effectiveOnDelete(id)
     if (value === id) onChange('')
   }
 
@@ -130,7 +146,7 @@ export function EditableSelect({
 
       {open && (
         <div className="absolute z-50 mt-1 w-full min-w-[14rem] bg-white border border-slate-200 rounded-lg shadow-xl overflow-hidden">
-          {mode === 'list' && (
+          {view === 'list' && (
             <>
               <div className="max-h-64 overflow-y-auto">
                 {items.length === 0 && (
@@ -168,7 +184,7 @@ export function EditableSelect({
                             <Icon icon="lucide:pencil" className="text-[11px]" />
                           </button>
                         )}
-                        {onDelete && !item.isDefault && (
+                        {effectiveOnDelete && !item.isDefault && (
                           <button
                             type="button"
                             className="p-1 text-slate-400 hover:text-rose-600"
@@ -181,12 +197,25 @@ export function EditableSelect({
                             <Icon icon="lucide:trash-2" className="text-[11px]" />
                           </button>
                         )}
+                        {onReset && (!isReset || isReset(item.id)) && (
+                          <button
+                            type="button"
+                            className="p-1 text-slate-400 hover:text-amber-600"
+                            title={t('editableSelect.reset')}
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              onReset(item.id)
+                            }}
+                          >
+                            <Icon icon="lucide:rotate-ccw" className="text-[11px]" />
+                          </button>
+                        )}
                       </div>
                     </div>
                   )
                 })}
               </div>
-              {onAdd && (
+              {effectiveOnAdd && (
                 <div className="border-t border-slate-100">
                   <button
                     type="button"
@@ -201,10 +230,10 @@ export function EditableSelect({
             </>
           )}
 
-          {(mode === 'add' || mode === 'edit') && (
+          {(view === 'add' || view === 'edit') && (
             <div className="p-3 space-y-2">
               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                {mode === 'add' ? t('editableSelect.newEntry') : t('editableSelect.editEntry')}
+                {view === 'add' ? t('editableSelect.newEntry') : t('editableSelect.editEntry')}
               </p>
               <input
                 autoFocus
@@ -212,7 +241,7 @@ export function EditableSelect({
                 onChange={(e) => setDraftLabel(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') submitDraft()
-                  if (e.key === 'Escape') setMode('list')
+                  if (e.key === 'Escape') setView('list')
                 }}
                 placeholder={t('editableSelect.name')}
                 className="w-full px-2 py-1.5 text-xs border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
@@ -223,7 +252,7 @@ export function EditableSelect({
                   onChange={(e) => setDraftLabelAr(e.target.value)}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') submitDraft()
-                    if (e.key === 'Escape') setMode('list')
+                    if (e.key === 'Escape') setView('list')
                   }}
                   placeholder={t('editableSelect.arabicNameOptional')}
                   dir="rtl"
@@ -237,11 +266,11 @@ export function EditableSelect({
                   disabled={!draftLabel.trim()}
                   className="flex-1 px-2 py-1.5 text-xs font-bold text-white bg-emerald-600 rounded-md hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
                 >
-                  {mode === 'add' ? t('editableSelect.add') : t('editableSelect.save')}
+                  {view === 'add' ? t('editableSelect.add') : t('editableSelect.save')}
                 </button>
                 <button
                   type="button"
-                  onClick={() => setMode('list')}
+                  onClick={() => setView('list')}
                   className="px-2 py-1.5 text-xs font-bold text-slate-600 bg-slate-100 rounded-md hover:bg-slate-200 cursor-pointer"
                 >
                   {t('editableSelect.cancel')}

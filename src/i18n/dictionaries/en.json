@@ -209,7 +209,7 @@
     "overloaded": "Overloaded",
 
     "viewSwitcher": "Dashboard View",
-    "viewExecutive": "Team Score",
+    "viewExecutive": "Executive",
     "viewManagerial": "Managerial",
     "viewOfficer": "Officer",
     "titleManagerial": "Operations Dashboard",
@@ -2020,7 +2020,7 @@
     "integrationsComingSoonNote": "Integration marketplace is under development.",
     "managerialView": "Managerial",
     "officerView": "Officer",
-    "executiveView": "Team Score",
+    "executiveView": "Executive",
     "selectTemplate": "Select Template",
     "noTemplate": "None (Blank)",
     "policyTemplates": "Policy Templates",
@@ -3200,7 +3200,12 @@
     "emptyNoSearchMatch": "No items match your search.",
     "lastMarkedBy": "Last marked by {{name}} on {{date}}",
     "showingRange": "Showing {{from}}–{{to}} of {{total}}",
-    "evaluatorFallback": "Compliance Officer"
+    "evaluatorFallback": "Compliance Officer",
+    "pendingScoreLabel": "Pending",
+    "notYetEvaluated": "No items evaluated yet",
+    "pendingCaption": "+{{count}} pending",
+    "autoFromWorkflow": "Auto-derived from completed workflow",
+    "autoBadge": "AUTO"
   },
   "editableSelect": {
     "selectPlaceholder": "Select...",
@@ -3214,7 +3219,16 @@
     "save": "Save",
     "cancel": "Cancel",
     "edit": "Edit",
-    "delete": "Delete"
+    "delete": "Delete",
+    "reset": "Reset to default"
+  },
+  "lists": {
+    "industryAddPrompt": "Industry",
+    "regionAddPrompt": "Region",
+    "headcountAddPrompt": "Employee count",
+    "calendarTypeAddPrompt": "Event type",
+    "correspondenceTypeAddPrompt": "Correspondence type",
+    "businessUnitAddPrompt": "Business unit"
   },
   "inlineDeadlinePicker": {
     "deadline": "Deadline",
@@ -3226,5 +3240,68 @@
     "errorAfterParent": "Cannot be after parent deadline ({{parent}})",
     "errorInvalidDate": "Invalid date",
     "unknown": "unknown"
+  },
+  "placeholderPicker": {
+    "enterValue": "Enter {{label}}",
+    "pickReference": "Pick a reference...",
+    "searchKind": "Search {{kind}}...",
+    "noMatches": "No matches",
+    "labelPlaceholder": "Label shown in compose",
+    "allowedReferenceTypes": "Allowed reference types",
+    "emptyHintPrefix": "Insert",
+    "emptyHintSuffix": "placeholders into the subject or body. Each one will appear here so you can configure its type.",
+    "kindText": "Free text",
+    "kindDate": "Date",
+    "kindReference": "Reference",
+    "refKindObservation": "Observation",
+    "refKindAudit": "Audit",
+    "refKindLetter": "Letter",
+    "refKindRule": "Rule / Circular",
+    "refKindPolicy": "Policy"
+  },
+  "letterChips": {
+    "typeHint": "Type {{token}} anywhere in the body or subject to add a placeholder chip.",
+    "configurePlaceholders": "Configure Placeholders",
+    "configureHint": "Edit each placeholder's type (text, date, or reference). Click a chip in the editor to fill it in.",
+    "noPlaceholders": "No placeholders yet. Type {{token}} in the body to add one.",
+    "saveDraft": "Save Draft",
+    "savedToast": "Draft saved.",
+    "lockedHint": "This letter has been sent — its content is now read-only."
+  },
+  "listsAndCategories": {
+    "title": "Lists & Categories",
+    "subtitle": "Manage every editable dropdown in one place. Add, rename, or remove options used across the app.",
+    "addEntry": "Add Entry",
+    "labelEn": "Label (EN)",
+    "labelAr": "Label (AR)",
+    "flag": "Type",
+    "usage": "In Use",
+    "actions": "Actions",
+    "seedBadge": "Seed",
+    "customBadge": "Custom",
+    "cannotDeleteSeed": "Default seeds cannot be deleted",
+    "empty": "No entries yet — click Add Entry to create one.",
+    "resetToDefaults": "Reset to defaults",
+    "resetTitle": "Reset section to defaults?",
+    "resetConfirm": "This restores the original seed entries for this list and removes any custom additions.",
+    "resetWarning": "Records that referenced custom entries will keep their stored value, but the entry will no longer appear in pickers.",
+    "sectionLetterType": "Letter Type",
+    "sectionLetterTypeDesc": "Type buckets used by SAMA letters and templates.",
+    "sectionSamaSubCategory": "SAMA Sub-Category",
+    "sectionSamaSubCategoryDesc": "Optional sub-classification for SAMA letters.",
+    "sectionCorrespondenceType": "Correspondence Type",
+    "sectionCalendarEventType": "Calendar Event Type",
+    "sectionBusinessUnit": "Advisory Business Unit",
+    "sectionOnboardingIndustry": "Onboarding · Industry",
+    "sectionOnboardingRegion": "Onboarding · Region",
+    "sectionOnboardingHeadcount": "Onboarding · Headcount Bucket",
+    "sectionPolicyCategory": "Policy Category",
+    "sectionPolicyCategoryDesc": "Category buckets used when creating policies.",
+    "sectionTrainingCategory": "Training Category",
+    "sectionTrainingCategoryDesc": "Category buckets used for training courses.",
+    "sectionAuditCategory": "Audit Category",
+    "sectionAuditCategoryDesc": "Category buckets used when scheduling audits.",
+    "sectionRiskCategory": "Risk Category",
+    "sectionRiskCategoryDesc": "Category buckets used when registering risks."
   }
 }

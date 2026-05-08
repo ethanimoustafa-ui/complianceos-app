@@ -68,7 +68,13 @@ export function ExecutiveView({ metrics }: ExecutiveViewProps) {
       })
     }
 
-    if (metrics.health.businessComplianceScore < targetScore) {
+    // Only surface the threshold alert when at least one item has been
+    // evaluated company-wide. A fully-pending org should not be flagged
+    // "at risk" — that's just the §1.A neutral pending state.
+    if (
+      metrics.health.businessComplianceEvaluated > 0 &&
+      metrics.health.businessComplianceScore < targetScore
+    ) {
       list.push({
         type: 'warning',
         title: t('dashboard.trendAlert'),
@@ -107,9 +113,13 @@ export function ExecutiveView({ metrics }: ExecutiveViewProps) {
 
   // Hero ring + at-risk flag are driven by the new business-compliance score
   // (sourced from /reports/compliance-review). The 7-component `overall`
-  // continues to power the renamed Team Score paths elsewhere.
+  // continues to power the renamed Team Score paths elsewhere. When nothing
+  // has been evaluated yet (§1.A), render a neutral "Pending" state instead
+  // of a misleading 0% / red "at risk" pill.
   const complianceScore = Math.round(metrics.health.businessComplianceScore)
-  const isAtRisk = complianceScore < targetScore
+  const complianceEvaluated = metrics.health.businessComplianceEvaluated
+  const isPending = complianceEvaluated === 0
+  const isAtRisk = !isPending && complianceScore < targetScore
 
   // Policy counts
   const policiesOk = metrics.policies.approved
@@ -167,9 +177,16 @@ export function ExecutiveView({ metrics }: ExecutiveViewProps) {
         {/* Compliance Health Card */}
         <div className="lg:col-span-8 bg-white border border-slate-200 rounded-[2rem] p-8 health-gradient flex flex-col md:flex-row items-center gap-10 relative overflow-hidden">
           <div className="relative z-10 space-y-4 max-w-md">
-            <Badge variant={isAtRisk ? 'danger' : 'success'} className="gap-2">
-              <Icon icon={isAtRisk ? 'lucide:alert-triangle' : 'lucide:check-circle'} className="w-3 h-3" />
-              {isAtRisk ? t('dashboard.statusAtRisk') : t('dashboard.statusOptimal')}
+            <Badge variant={isPending ? 'warning' : isAtRisk ? 'danger' : 'success'} className="gap-2">
+              <Icon
+                icon={isPending ? 'lucide:circle-help' : isAtRisk ? 'lucide:alert-triangle' : 'lucide:check-circle'}
+                className="w-3 h-3"
+              />
+              {isPending
+                ? t('complianceReview.pendingScoreLabel')
+                : isAtRisk
+                  ? t('dashboard.statusAtRisk')
+                  : t('dashboard.statusOptimal')}
             </Badge>
             <h2 className="text-3xl font-bold font-display text-slate-900 leading-tight">
               {t('dashboard.complianceHealth')}
@@ -183,8 +200,20 @@ export function ExecutiveView({ metrics }: ExecutiveViewProps) {
               <Button variant="outline" onClick={() => router.push('/correspondence/regulatory-updates/policies')}>{t('dashboard.policyLibrary')}</Button>
             </div>
           </div>
-          <div className="relative flex-1 flex justify-center">
-            <CircularProgressRing value={complianceScore} size={176} label={t('dashboard.health')} />
+          <div className="relative flex-1 flex flex-col items-center justify-center gap-2">
+            {isPending ? (
+              <div className="flex flex-col items-center justify-center w-44 h-44 rounded-full border-2 border-dashed border-amber-300 bg-amber-50/40">
+                <p className="text-4xl font-bold text-amber-600">—</p>
+                <p className="text-[11px] font-bold text-amber-700 uppercase tracking-widest mt-1">
+                  {t('complianceReview.pendingScoreLabel')}
+                </p>
+                <p className="text-[10px] text-slate-500 mt-1 px-3 text-center">
+                  {t('complianceReview.notYetEvaluated')}
+                </p>
+              </div>
+            ) : (
+              <CircularProgressRing value={complianceScore} size={176} label={t('dashboard.health')} />
+            )}
           </div>
         </div>
 

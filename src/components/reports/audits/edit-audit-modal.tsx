@@ -17,6 +17,8 @@ import { ReviewSchedulePicker } from '@/components/ui/ReviewSchedulePicker'
 import { computeNextReview } from '@/lib/review-schedule'
 import { useFrameworkConfigStore, frameworkIconTextClass } from '@/stores/framework-config-store'
 import { FrameworkTagSelector } from '@/components/ui/framework-tag-selector'
+import { useAuditCategoryStore } from '@/stores/audit-category-store'
+import { EditableSelect } from '@/components/ui/editable-select'
 
 const auditSchema = z.object({
   title: z.string().min(3, 'Title must be at least 3 characters'),
@@ -25,7 +27,8 @@ const auditSchema = z.object({
   dueDate: z.string().min(1, 'Due date is required'),
   assigneeId: z.string().min(1, 'Lead author is required'),
   description: z.string().optional(),
-  category: z.enum(['security_compliance', 'financial_compliance', 'regulatory_compliance', 'operational_compliance', 'hr_compliance', 'sharia_compliance']).optional(),
+  // AuditCategory widened to string — accept any opaque id (default seed or user-added).
+  category: z.string().optional(),
   frequency: z.enum(['annual', 'semi_annual', 'quarterly', 'monthly', 'ad_hoc']).optional(),
   priority: z.enum(['critical', 'high', 'medium', 'low']).optional(),
 })
@@ -53,6 +56,11 @@ export function EditAuditModal({ isOpen, onClose, audit, onSuccess, calculatedPr
     () => frameworks.filter((f) => f.enabled && f.correspondenceBased),
     [frameworks]
   )
+  // Editable audit categories
+  const auditCategoryItems = useAuditCategoryStore((s) => s.categories)
+  const addAuditCategory = useAuditCategoryStore((s) => s.add)
+  const updateAuditCategory = useAuditCategoryStore((s) => s.update)
+  const removeAuditCategory = useAuditCategoryStore((s) => s.remove)
 
   // Always include the authority of the audit being edited, even if it was
   // since disabled — users shouldn't lose their selection mid-edit.
@@ -285,20 +293,16 @@ export function EditAuditModal({ isOpen, onClose, audit, onSuccess, calculatedPr
                   name="category"
                   control={control}
                   render={({ field }) => (
-                    <select
-                      {...field}
-                      value={field.value || ''}
-                      onChange={(e) => field.onChange(e.target.value || undefined)}
-                      className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                    >
-                      <option value="">{t('auditDetail.selectCategory')}</option>
-                      <option value="security_compliance">{t('auditDetail.categorySecurityCompliance')}</option>
-                      <option value="financial_compliance">{t('auditDetail.categoryFinancialCompliance')}</option>
-                      <option value="regulatory_compliance">{t('auditDetail.categoryRegulatoryCompliance')}</option>
-                      <option value="operational_compliance">{t('auditDetail.categoryOperationalCompliance')}</option>
-                      <option value="hr_compliance">{t('auditDetail.categoryHrCompliance')}</option>
-                      <option value="sharia_compliance">{t('auditDetail.categoryShariahCompliance')}</option>
-                    </select>
+                    <EditableSelect
+                      value={field.value || null}
+                      onChange={(id) => field.onChange(id || undefined)}
+                      items={auditCategoryItems}
+                      placeholder={t('auditDetail.selectCategory')}
+                      onAdd={(label, labelAr) => addAuditCategory(label, labelAr)}
+                      onEdit={(id, label, labelAr) => updateAuditCategory(id, { label, labelAr })}
+                      onDelete={(id) => removeAuditCategory(id)}
+                      isRTL={isRTL}
+                    />
                   )}
                 />
               </div>

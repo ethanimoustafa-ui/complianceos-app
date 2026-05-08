@@ -15,7 +15,10 @@ import { useRiskStore } from '@/stores/risk-store'
 import { useTeamStore } from '@/stores/team-store'
 import { useDepartmentStore } from '@/stores/department-store'
 import { useAuthStore } from '@/stores/auth-store'
+import { useRiskCategoryStore } from '@/stores/risk-category-store'
+import { useScaleLabelsStore } from '@/stores/scale-labels-store'
 import { EditableSelect } from '@/components/ui/editable-select'
+import { getCategoryConfig, fallbackColor } from '@/lib/category-config'
 import { InlineDeadlinePicker } from '@/components/ui/inline-deadline-picker'
 import { ReviewSchedulePicker } from '@/components/ui/ReviewSchedulePicker'
 import type { ReviewSchedule, RegulatoryBodyId } from '@/types'
@@ -27,7 +30,10 @@ import { useFormattedDate } from '@/hooks/useFormattedDate'
 import { ChecklistSection } from '@/components/observations/detail/checklist-section'
 
 // Types
-type RiskCategory = 'operational' | 'financial' | 'compliance' | 'strategic' | 'reputational'
+// RiskCategory is now an opaque string (managed via useRiskCategoryStore).
+// Default seed ids (operational | financial | compliance | strategic | reputational)
+// remain valid; new user-added ids fall through to the neutral fallbackColor.
+type RiskCategory = string
 type RiskStatus = 'open' | 'mitigating' | 'accepted' | 'closed'
 type MonitoringFrequency = 'weekly' | 'monthly' | 'quarterly' | 'semi_annual' | 'annual'
 type HistoryAction = 'created' | 'status_changed' | 'score_updated' | 'mitigation_updated' | 'reviewed' | 'assigned' | 'note_added' | 'checklist_added' | 'checklist_toggled' | 'checklist_edited' | 'checklist_removed'
@@ -63,13 +69,16 @@ interface RiskRegisterItem {
   updatedAt: Date
 }
 
-// Configs
-const riskCategoryConfig: Record<RiskCategory, { label: string; icon: string; color: string }> = {
-  operational: { label: 'Operational', icon: 'lucide:settings', color: 'bg-blue-100 text-blue-700' },
-  financial: { label: 'Financial', icon: 'lucide:dollar-sign', color: 'bg-emerald-100 text-emerald-700' },
-  compliance: { label: 'Compliance', icon: 'lucide:shield', color: 'bg-purple-100 text-purple-700' },
-  strategic: { label: 'Strategic', icon: 'lucide:target', color: 'bg-amber-100 text-amber-700' },
-  reputational: { label: 'Reputational', icon: 'lucide:users', color: 'bg-rose-100 text-rose-700' },
+// Thin wrapper around the central category-config helper. Always returns a
+// renderable shape — if the id is a user-added category not in the seed
+// palette, we fall back to neutral slate via getCategoryConfig.
+function getRiskCatConfig(id: string | undefined | null): { label: string; icon: string; color: string } {
+  const conf = getCategoryConfig('risk', id)
+  return {
+    label: conf.label,
+    icon: conf.icon ?? 'lucide:tag',
+    color: conf.pill ?? `${conf.bg} ${conf.text}`,
+  }
 }
 
 const riskStatusConfig: Record<RiskStatus, { label: string; color: string }> = {
@@ -79,7 +88,7 @@ const riskStatusConfig: Record<RiskStatus, { label: string; color: string }> = {
   closed: { label: 'Closed', color: 'bg-emerald-100 text-emerald-700' },
 }
 
-const riskCategoryLabelKeys: Record<RiskCategory, string> = {
+const riskCategoryLabelKeys: Record<string, string> = {
   operational: 'reports.operational', financial: 'reports.financial', compliance: 'reports.compliance',
   strategic: 'reports.strategic', reputational: 'reports.reputational',
 }
@@ -139,6 +148,24 @@ export default function ReportsRisksPage() {
   const authUser = useAuthStore((s) => s.user)
   const actingUser = authUser?.name ?? 'Compliance Officer'
   const teamMembers = useTeamStore((s) => s.members)
+  // Editable risk categories — opaque string ids (default seeds + user-added).
+  const riskCategoryItems = useRiskCategoryStore((s) => s.categories)
+  const addRiskCategory = useRiskCategoryStore((s) => s.add)
+  const editRiskCategory = useRiskCategoryStore((s) => s.update)
+  const removeRiskCategory = useRiskCategoryStore((s) => s.remove)
+
+  // Bucket-D label overrides — likelihood/impact integers stay 1..5; only the
+  // displayed labels can be customized (and reset). `getLabel` returns
+  // undefined when no override exists, so the default i18n label wins.
+  const scaleLabels = useScaleLabelsStore()
+  const likelihoodDefaultKey = (n: 1 | 2 | 3 | 4 | 5): TranslationKey =>
+    (['riskRegister.rare', 'riskRegister.unlikely', 'riskRegister.possible', 'riskRegister.likely', 'riskRegister.almostCertain'][n - 1]) as TranslationKey
+  const impactDefaultKey = (n: 1 | 2 | 3 | 4 | 5): TranslationKey =>
+    (['riskRegister.negligible', 'riskRegister.minor', 'riskRegister.moderate', 'riskRegister.major', 'riskRegister.catastrophic'][n - 1]) as TranslationKey
+  const renderLikelihoodLabel = (n: 1 | 2 | 3 | 4 | 5): string =>
+    scaleLabels.getLabel('riskLikelihood', n, isRTL ? 'ar' : 'en') ?? t(likelihoodDefaultKey(n))
+  const renderImpactLabel = (n: 1 | 2 | 3 | 4 | 5): string =>
+    scaleLabels.getLabel('riskImpact', n, isRTL ? 'ar' : 'en') ?? t(impactDefaultKey(n))
 
   // Map store risks to RiskRegisterItem
   const risks: RiskRegisterItem[] = useMemo(() => {
@@ -524,10 +551,19 @@ export default function ReportsRisksPage() {
               </div>
             </CardHeader>
             <div className="space-y-4">
-              {(['operational', 'financial', 'compliance', 'strategic', 'reputational'] as RiskCategory[]).map(category => {
+              {(() => {
+                // Render every category that's either a seed (in the store) or
+                // referenced by at least one persisted risk. This keeps the legacy
+                // five-category bar visible AND surfaces any user-added categories.
+                const idsFromStore = riskCategoryItems.map((c) => c.id)
+                const idsFromRisks = Array.from(new Set(filteredByMonitoringFrequency.map((r) => r.category)))
+                const allIds = Array.from(new Set([...idsFromStore, ...idsFromRisks]))
+                return allIds
+              })().map(category => {
                 const count = filteredByMonitoringFrequency.filter(r => r.category === category).length
                 if (count === 0) return null
-                const config = riskCategoryConfig[category]
+                const config = getRiskCatConfig(category)
+                const categoryItem = riskCategoryItems.find((c) => c.id === category)
                 const dueCount = getDueCountForCategory(category)
                 const nextReview = getNextReviewForCategory(category)
                 const avgProgress = getAvgProgressForCategory(category)
@@ -537,7 +573,11 @@ export default function ReportsRisksPage() {
                       <div className="flex items-center gap-2">
                         <div className={cn('w-8 h-8 rounded-lg flex items-center justify-center', config.color)}><Icon icon={config.icon} className="text-sm" /></div>
                         <div className={isRTL ? 'text-right' : ''}>
-                          <span className="text-sm font-bold text-slate-700">{t(riskCategoryLabelKeys[category] as TranslationKey)}</span>
+                          <span className="text-sm font-bold text-slate-700">{
+                            riskCategoryLabelKeys[category]
+                              ? t(riskCategoryLabelKeys[category] as TranslationKey)
+                              : (isRTL && categoryItem?.labelAr ? categoryItem.labelAr : (categoryItem?.label ?? config.label))
+                          }</span>
                           <span className="text-xs text-slate-400 ml-2">{count} {t('reports.risk' as TranslationKey)}{count !== 1 ? 's' : ''}</span>
                         </div>
                       </div>
@@ -585,11 +625,9 @@ export default function ReportsRisksPage() {
               </div>
               <select value={riskCategoryFilter} onChange={(e) => setRiskCategoryFilter(e.target.value as RiskCategory | '')} className="px-3 py-1.5 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500">
                 <option value="">{t('reports.allCategories' as TranslationKey)}</option>
-                <option value="operational">{t('reports.operational' as TranslationKey)}</option>
-                <option value="financial">{t('reports.financial' as TranslationKey)}</option>
-                <option value="compliance">{t('reports.compliance' as TranslationKey)}</option>
-                <option value="strategic">{t('reports.strategic' as TranslationKey)}</option>
-                <option value="reputational">{t('reports.reputational' as TranslationKey)}</option>
+                {riskCategoryItems.map((c) => (
+                  <option key={c.id} value={c.id}>{isRTL && c.labelAr ? c.labelAr : c.label}</option>
+                ))}
               </select>
               <select value={riskStatusFilter} onChange={(e) => setRiskStatusFilter(e.target.value as RiskStatus | '')} className="px-3 py-1.5 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500">
                 <option value="">{t('reports.allStatuses' as TranslationKey)}</option>
@@ -617,7 +655,8 @@ export default function ReportsRisksPage() {
                   {paginatedRisks.map(risk => {
                     const score = getRiskScore(risk.likelihood, risk.impact)
                     const level = getRiskLevel(score)
-                    const categoryConfig = riskCategoryConfig[risk.category]
+                    const categoryConfig = getRiskCatConfig(risk.category)
+                    const riskCatItem = riskCategoryItems.find((c) => c.id === risk.category)
                     const statusConf = riskStatusConfig[risk.status]
                     return (
                       <tr
@@ -630,7 +669,11 @@ export default function ReportsRisksPage() {
                         </td>
                         <td className="px-6 py-4">
                           <span className={cn('text-xs font-bold px-2.5 py-1 rounded-full flex items-center gap-1 w-fit', categoryConfig.color)}>
-                            <Icon icon={categoryConfig.icon} className="text-xs" />{t(riskCategoryLabelKeys[risk.category] as TranslationKey)}
+                            <Icon icon={categoryConfig.icon} className="text-xs" />{
+                              riskCategoryLabelKeys[risk.category]
+                                ? t(riskCategoryLabelKeys[risk.category] as TranslationKey)
+                                : (isRTL && riskCatItem?.labelAr ? riskCatItem.labelAr : (riskCatItem?.label ?? categoryConfig.label))
+                            }
                           </span>
                         </td>
                         <td className="px-6 py-4">
@@ -678,7 +721,8 @@ export default function ReportsRisksPage() {
         {selectedRisk && (() => {
           const score = getRiskScore(selectedRisk.likelihood, selectedRisk.impact)
           const level = getRiskLevel(score)
-          const categoryConfig = riskCategoryConfig[selectedRisk.category]
+          const categoryConfig = getRiskCatConfig(selectedRisk.category)
+          const selectedCatItem = riskCategoryItems.find((c) => c.id === selectedRisk.category)
           const statusConf = riskStatusConfig[selectedRisk.status]
           return (
             <div className="space-y-6">
@@ -694,10 +738,14 @@ export default function ReportsRisksPage() {
                   <option value="closed">{t('reports.closed' as TranslationKey)}</option>
                 </select>
               </div>
-              <div className="p-4 bg-slate-50 rounded-xl"><p className="text-xs font-bold text-slate-400 uppercase mb-2">{t('reports.category' as TranslationKey)}</p><span className={cn('text-xs font-bold px-3 py-1.5 rounded-full inline-flex items-center gap-1', categoryConfig.color)}><Icon icon={categoryConfig.icon} />{t(riskCategoryLabelKeys[selectedRisk.category] as TranslationKey)}</span></div>
+              <div className="p-4 bg-slate-50 rounded-xl"><p className="text-xs font-bold text-slate-400 uppercase mb-2">{t('reports.category' as TranslationKey)}</p><span className={cn('text-xs font-bold px-3 py-1.5 rounded-full inline-flex items-center gap-1', categoryConfig.color)}><Icon icon={categoryConfig.icon} />{
+                  riskCategoryLabelKeys[selectedRisk.category]
+                    ? t(riskCategoryLabelKeys[selectedRisk.category] as TranslationKey)
+                    : (isRTL && selectedCatItem?.labelAr ? selectedCatItem.labelAr : (selectedCatItem?.label ?? categoryConfig.label))
+                }</span></div>
               <div className="grid grid-cols-2 gap-4">
-                <div className="p-4 bg-slate-50 rounded-xl"><p className="text-xs font-bold text-slate-400 uppercase mb-1">{t('reports.likelihood' as TranslationKey)}</p><p className="text-lg font-bold text-slate-900">{selectedRisk.likelihood}/5</p></div>
-                <div className="p-4 bg-slate-50 rounded-xl"><p className="text-xs font-bold text-slate-400 uppercase mb-1">{t('reports.impact' as TranslationKey)}</p><p className="text-lg font-bold text-slate-900">{selectedRisk.impact}/5</p></div>
+                <div className="p-4 bg-slate-50 rounded-xl"><p className="text-xs font-bold text-slate-400 uppercase mb-1">{t('reports.likelihood' as TranslationKey)}</p><p className="text-lg font-bold text-slate-900">{selectedRisk.likelihood}/5</p><p className="text-xs text-slate-500 mt-0.5">{renderLikelihoodLabel(selectedRisk.likelihood)}</p></div>
+                <div className="p-4 bg-slate-50 rounded-xl"><p className="text-xs font-bold text-slate-400 uppercase mb-1">{t('reports.impact' as TranslationKey)}</p><p className="text-lg font-bold text-slate-900">{selectedRisk.impact}/5</p><p className="text-xs text-slate-500 mt-0.5">{renderImpactLabel(selectedRisk.impact)}</p></div>
               </div>
               <div className={isRTL ? 'text-right' : ''}><p className="text-xs font-bold text-slate-400 uppercase mb-2">{t('reports.description' as TranslationKey)}</p><p className="text-sm text-slate-600">{selectedRisk.description}</p></div>
               <div className="p-4 bg-slate-50 rounded-xl flex items-center gap-3">
@@ -1019,12 +1067,24 @@ export default function ReportsRisksPage() {
         <div className="space-y-4">
           <div><label className="text-xs font-bold text-slate-700 uppercase mb-2 block">{t('reports.riskName' as TranslationKey)} *</label><input type="text" value={newRiskName} onChange={(e) => setNewRiskName(e.target.value)} placeholder={t('reports.enterRiskName' as TranslationKey)} className="w-full px-4 py-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500" /></div>
           <div className="grid grid-cols-2 gap-4">
-            <div><label className="text-xs font-bold text-slate-700 uppercase mb-2 block">{t('reports.category' as TranslationKey)} *</label><select value={newRiskCategory} onChange={(e) => setNewRiskCategory(e.target.value as RiskCategory | '')} className="w-full px-4 py-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"><option value="">{t('reports.selectCategory' as TranslationKey)}</option><option value="operational">{t('reports.operational' as TranslationKey)}</option><option value="financial">{t('reports.financial' as TranslationKey)}</option><option value="compliance">{t('reports.compliance' as TranslationKey)}</option><option value="strategic">{t('reports.strategic' as TranslationKey)}</option><option value="reputational">{t('reports.reputational' as TranslationKey)}</option></select></div>
+            <div>
+              <label className="text-xs font-bold text-slate-700 uppercase mb-2 block">{t('reports.category' as TranslationKey)} *</label>
+              <EditableSelect
+                value={newRiskCategory || null}
+                onChange={(id) => setNewRiskCategory(id as RiskCategory | '')}
+                items={riskCategoryItems}
+                placeholder={t('reports.selectCategory' as TranslationKey)}
+                onAdd={(label, labelAr) => addRiskCategory(label, labelAr)}
+                onEdit={(id, label, labelAr) => editRiskCategory(id, { label, labelAr })}
+                onDelete={(id) => removeRiskCategory(id)}
+                isRTL={isRTL}
+              />
+            </div>
             <div><label className="text-xs font-bold text-slate-700 uppercase mb-2 block">{t('reports.owner' as TranslationKey)} *</label><select value={newRiskOwnerId} onChange={(e) => setNewRiskOwnerId(e.target.value)} className="w-full px-4 py-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"><option value="">{t('reports.selectOwner' as TranslationKey)}</option>{teamMembers.filter(m => m.status === 'active').map((member) => (<option key={member.id} value={member.id}>{member.name} - {member.department}</option>))}</select></div>
           </div>
           <div className="grid grid-cols-2 gap-4">
-            <div><label className="text-xs font-bold text-slate-700 uppercase mb-2 block">{t('reports.likelihood' as TranslationKey)} *</label><select value={newRiskLikelihood} onChange={(e) => setNewRiskLikelihood(Number(e.target.value) as 1 | 2 | 3 | 4 | 5)} className="w-full px-4 py-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"><option value="1">1 - {t('riskRegister.rare' as TranslationKey)}</option><option value="2">2 - {t('riskRegister.unlikely' as TranslationKey)}</option><option value="3">3 - {t('riskRegister.possible' as TranslationKey)}</option><option value="4">4 - {t('riskRegister.likely' as TranslationKey)}</option><option value="5">5 - {t('riskRegister.almostCertain' as TranslationKey)}</option></select></div>
-            <div><label className="text-xs font-bold text-slate-700 uppercase mb-2 block">{t('reports.impact' as TranslationKey)} *</label><select value={newRiskImpact} onChange={(e) => setNewRiskImpact(Number(e.target.value) as 1 | 2 | 3 | 4 | 5)} className="w-full px-4 py-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"><option value="1">1 - {t('riskRegister.negligible' as TranslationKey)}</option><option value="2">2 - {t('riskRegister.minor' as TranslationKey)}</option><option value="3">3 - {t('riskRegister.moderate' as TranslationKey)}</option><option value="4">4 - {t('riskRegister.major' as TranslationKey)}</option><option value="5">5 - {t('riskRegister.catastrophic' as TranslationKey)}</option></select></div>
+            <div><label className="text-xs font-bold text-slate-700 uppercase mb-2 block">{t('reports.likelihood' as TranslationKey)} *</label><select value={newRiskLikelihood} onChange={(e) => setNewRiskLikelihood(Number(e.target.value) as 1 | 2 | 3 | 4 | 5)} className="w-full px-4 py-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500">{[1, 2, 3, 4, 5].map((n) => (<option key={n} value={n}>{n} - {renderLikelihoodLabel(n as 1 | 2 | 3 | 4 | 5)}</option>))}</select></div>
+            <div><label className="text-xs font-bold text-slate-700 uppercase mb-2 block">{t('reports.impact' as TranslationKey)} *</label><select value={newRiskImpact} onChange={(e) => setNewRiskImpact(Number(e.target.value) as 1 | 2 | 3 | 4 | 5)} className="w-full px-4 py-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500">{[1, 2, 3, 4, 5].map((n) => (<option key={n} value={n}>{n} - {renderImpactLabel(n as 1 | 2 | 3 | 4 | 5)}</option>))}</select></div>
           </div>
           <div><label className="text-xs font-bold text-slate-700 uppercase mb-2 block">{t('reports.description' as TranslationKey)} *</label><textarea rows={3} value={newRiskDescription} onChange={(e) => setNewRiskDescription(e.target.value)} placeholder={t('reports.enterRiskDescription' as TranslationKey)} className="w-full px-4 py-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500" /></div>
           <div><label className="text-xs font-bold text-slate-700 uppercase mb-2 block">{t('reports.mitigationPlan' as TranslationKey)}</label><textarea rows={2} value={newRiskMitigation} onChange={(e) => setNewRiskMitigation(e.target.value)} placeholder={t('reports.enterMitigationPlan' as TranslationKey)} className="w-full px-4 py-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500" /></div>

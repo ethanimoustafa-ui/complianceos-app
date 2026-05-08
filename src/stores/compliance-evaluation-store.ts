@@ -1,8 +1,22 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
+import type { Circular, Policy } from '@/types'
 
 export type ComplianceVerdict = 'compliant' | 'non-compliant' | 'na' | 'unknown'
 export type ComplianceItemKind = 'rule' | 'policy'
+export type ComplianceVerdictSource = 'explicit' | 'derived-workflow' | 'unevaluated'
+
+export interface DerivedVerdict {
+  verdict: ComplianceVerdict
+  source: ComplianceVerdictSource
+}
+
+interface DerivedVerdictItems {
+  circulars: Circular[]
+  policies: Policy[]
+  /** Department display name; required for rule lookups since circulars store the department by name. */
+  departmentName: string
+}
 
 export interface ComplianceEvaluation {
   id: string                // `${kind}:${itemId}::${departmentId}`
@@ -33,6 +47,19 @@ interface ComplianceEvaluationState {
     notes?: string,
   ) => void
   getVerdict: (kind: ComplianceItemKind, itemId: string, departmentId: string) => ComplianceVerdict
+  /**
+   * §1.C — derived-on-read verdict resolution. Returns the explicit manual
+   * verdict if present; otherwise auto-derives `'compliant'` when the
+   * underlying rule/policy's full workflow has completed AND the item's
+   * business owner matches the department. Does NOT persist — manual
+   * `setVerdict` always wins thereafter.
+   */
+  getDerivedVerdict: (
+    kind: ComplianceItemKind,
+    itemId: string,
+    departmentId: string,
+    items: DerivedVerdictItems,
+  ) => DerivedVerdict
   getDepartmentScoreFromItems: (departmentId: string, items: ComplianceItemRef[]) => {
     score: number
     compliantCount: number
@@ -73,6 +100,36 @@ export const useComplianceEvaluationStore = create<ComplianceEvaluationState>()(
 
       getVerdict: (kind, itemId, departmentId) =>
         get().evaluations[evalKey(kind, itemId, departmentId)]?.verdict ?? 'unknown',
+
+      getDerivedVerdict: (kind, itemId, departmentId, items) => {
+        const explicit = get().evaluations[evalKey(kind, itemId, departmentId)]?.verdict
+        if (explicit) return { verdict: explicit, source: 'explicit' }
+
+        if (kind === 'rule') {
+          const c = items.circulars.find((x) => x.id === itemId)
+          if (
+            c &&
+            c.businessOwnerDepartment === items.departmentName &&
+            c.workflowSteps &&
+            c.workflowSteps.length > 0 &&
+            c.workflowSteps.every((s) => s.status === 'completed')
+          ) {
+            return { verdict: 'compliant', source: 'derived-workflow' }
+          }
+        } else {
+          const p = items.policies.find((x) => x.id === itemId)
+          if (
+            p &&
+            p.businessOwnerDepartmentId === departmentId &&
+            p.workflowTimeline &&
+            p.workflowTimeline.length > 0 &&
+            p.workflowTimeline.every((s) => s.status === 'completed')
+          ) {
+            return { verdict: 'compliant', source: 'derived-workflow' }
+          }
+        }
+        return { verdict: 'unknown', source: 'unevaluated' }
+      },
 
       getDepartmentScoreFromItems: (departmentId, items) => {
         let compliantCount = 0

@@ -26,6 +26,8 @@ import { useUserPreferencesStore } from '@/stores/user-preferences-store'
 import { useTeamWorkloads } from '@/hooks/useWorkload'
 import { useFrameworkConfigStore } from '@/stores/framework-config-store'
 import { resolveAuthorityCode } from '@/lib/authority-display'
+import { useCorrespondenceTypeStore } from '@/stores/correspondence-type-store'
+import { EditableSelect } from '@/components/ui/editable-select'
 
 // Risk type for heatmap display (mapped from risk-store)
 interface HeatmapRisk {
@@ -79,6 +81,13 @@ export default function CorrespondenceFeedPage() {
   const trainingStore = useTrainingStore()
   const authStore = useAuthStore()
   const teamWorkloads = useTeamWorkloads(teamStore.members)
+
+  // Correspondence type store — seeded with the legacy literal union, but
+  // user-added types persist and round-trip via the widened Correspondence.type.
+  const correspondenceTypes = useCorrespondenceTypeStore((s) => s.types)
+  const addCorrespondenceType = useCorrespondenceTypeStore((s) => s.add)
+  const updateCorrespondenceType = useCorrespondenceTypeStore((s) => s.update)
+  const removeCorrespondenceType = useCorrespondenceTypeStore((s) => s.remove)
 
   // Modal states
   const [isNewCorrespondenceOpen, setIsNewCorrespondenceOpen] = useState(false)
@@ -477,13 +486,11 @@ export default function CorrespondenceFeedPage() {
                         className="text-[10px] font-bold text-slate-600 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 focus:outline-none focus:ring-1 focus:ring-emerald-500"
                       >
                         <option value="all">{t('correspondence.allTypes' as TranslationKey)}</option>
-                        <option value="sama">{t('correspondence.typeSama' as TranslationKey)}</option>
-                        <option value="cma">{t('correspondence.typeCma' as TranslationKey)}</option>
-                        <option value="internal">{t('correspondence.typeInternal' as TranslationKey)}</option>
-                        <option value="external_auditor">{t('correspondence.typeExternalAuditor' as TranslationKey)}</option>
-                        <option value="sharia_board">{t('correspondence.typeShariaBoard' as TranslationKey)}</option>
-                        <option value="vendor">{t('correspondence.typeVendor' as TranslationKey)}</option>
-                        <option value="other">{t('correspondence.typeOther' as TranslationKey)}</option>
+                        {correspondenceTypes.map((tt) => (
+                          <option key={tt.id} value={tt.id}>
+                            {isRTL && tt.labelAr ? tt.labelAr : tt.label}
+                          </option>
+                        ))}
                       </select>
                       {correspondenceStore.correspondence.length > 0 && (
                         <button
@@ -748,19 +755,15 @@ export default function CorrespondenceFeedPage() {
             <label className={`text-xs font-bold text-slate-700 uppercase mb-2 block`}>
               {t('correspondence.typeLabel' as TranslationKey)}
             </label>
-            <select
+            <EditableSelect
               value={newCorrespondenceType}
-              onChange={(e) => setNewCorrespondenceType(e.target.value as Correspondence['type'])}
-              className={`w-full px-4 py-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500`}
-            >
-              <option value="sama">{t('correspondence.typeSama' as TranslationKey)}</option>
-              <option value="cma">{t('correspondence.typeCma' as TranslationKey)}</option>
-              <option value="internal">{t('correspondence.typeInternal' as TranslationKey)}</option>
-              <option value="external_auditor">{t('correspondence.typeExternalAuditor' as TranslationKey)}</option>
-              <option value="sharia_board">{t('correspondence.typeShariaBoard' as TranslationKey)}</option>
-              <option value="vendor">{t('correspondence.typeVendor' as TranslationKey)}</option>
-              <option value="other">{t('correspondence.typeOther' as TranslationKey)}</option>
-            </select>
+              onChange={(id) => setNewCorrespondenceType(id)}
+              items={correspondenceTypes.map((tt) => ({ id: tt.id, label: tt.label, labelAr: tt.labelAr, isDefault: tt.isDefault }))}
+              onAdd={(label, labelAr) => addCorrespondenceType(label, labelAr)}
+              onEdit={(id, label, labelAr) => updateCorrespondenceType(id, { label, labelAr })}
+              onDelete={(id) => removeCorrespondenceType(id)}
+              isRTL={isRTL}
+            />
           </div>
           <div>
             <label className={`text-xs font-bold text-slate-700 uppercase mb-2 block`}>{t('correspondence.to')}</label>
@@ -1109,13 +1112,11 @@ export default function CorrespondenceFeedPage() {
                     className="text-[10px] font-bold text-slate-600 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 focus:outline-none focus:ring-1 focus:ring-emerald-500"
                   >
                     <option value="all">{t('correspondence.allTypes' as TranslationKey)}</option>
-                    <option value="sama">{t('correspondence.typeSama' as TranslationKey)}</option>
-                    <option value="cma">{t('correspondence.typeCma' as TranslationKey)}</option>
-                    <option value="internal">{t('correspondence.typeInternal' as TranslationKey)}</option>
-                    <option value="external_auditor">{t('correspondence.typeExternalAuditor' as TranslationKey)}</option>
-                    <option value="sharia_board">{t('correspondence.typeShariaBoard' as TranslationKey)}</option>
-                    <option value="vendor">{t('correspondence.typeVendor' as TranslationKey)}</option>
-                    <option value="other">{t('correspondence.typeOther' as TranslationKey)}</option>
+                    {correspondenceTypes.map((tt) => (
+                      <option key={tt.id} value={tt.id}>
+                        {isRTL && tt.labelAr ? tt.labelAr : tt.label}
+                      </option>
+                    ))}
                   </select>
                   {filtered.length > 0 && (
                     <button

@@ -209,7 +209,7 @@
     "overloaded": "محمّل زيادة",
 
     "viewSwitcher": "عرض لوحة التحكم",
-    "viewExecutive": "نتيجة الفريق",
+    "viewExecutive": "تنفيذي",
     "viewManagerial": "إداري",
     "viewOfficer": "موظف",
     "titleManagerial": "لوحة العمليات",
@@ -2020,7 +2020,7 @@
     "integrationsComingSoonNote": "سوق التكاملات قيد التطوير.",
     "managerialView": "إداري",
     "officerView": "مسؤول",
-    "executiveView": "نتيجة الفريق",
+    "executiveView": "تنفيذي",
     "selectTemplate": "اختر قالب",
     "noTemplate": "بدون (فارغ)",
     "policyTemplates": "قوالب السياسات",
@@ -3200,7 +3200,12 @@
     "emptyNoSearchMatch": "لا توجد عناصر تطابق بحثك.",
     "lastMarkedBy": "آخر تحديث بواسطة {{name}} في {{date}}",
     "showingRange": "عرض {{from}}–{{to}} من {{total}}",
-    "evaluatorFallback": "مسؤول الامتثال"
+    "evaluatorFallback": "مسؤول الامتثال",
+    "pendingScoreLabel": "قيد الانتظار",
+    "notYetEvaluated": "لم يتم تقييم أي عناصر بعد",
+    "pendingCaption": "+{{count}} قيد الانتظار",
+    "autoFromWorkflow": "مشتق تلقائيًا من سير العمل المكتمل",
+    "autoBadge": "تلقائي"
   },
   "editableSelect": {
     "selectPlaceholder": "اختر...",
@@ -3214,7 +3219,16 @@
     "save": "حفظ",
     "cancel": "إلغاء",
     "edit": "تعديل",
-    "delete": "حذف"
+    "delete": "حذف",
+    "reset": "إعادة تعيين الافتراضي"
+  },
+  "lists": {
+    "industryAddPrompt": "القطاع",
+    "regionAddPrompt": "المنطقة",
+    "headcountAddPrompt": "عدد الموظفين",
+    "calendarTypeAddPrompt": "نوع الحدث",
+    "correspondenceTypeAddPrompt": "نوع المراسلة",
+    "businessUnitAddPrompt": "الوحدة"
   },
   "inlineDeadlinePicker": {
     "deadline": "الموعد النهائي",
@@ -3226,5 +3240,68 @@
     "errorAfterParent": "لا يمكن أن يكون بعد الموعد النهائي للأصل ({{parent}})",
     "errorInvalidDate": "تاريخ غير صالح",
     "unknown": "غير معروف"
+  },
+  "placeholderPicker": {
+    "enterValue": "أدخل {{label}}",
+    "pickReference": "اختر مرجعاً...",
+    "searchKind": "ابحث في {{kind}}...",
+    "noMatches": "لا توجد نتائج",
+    "labelPlaceholder": "التسمية المعروضة في الإنشاء",
+    "allowedReferenceTypes": "أنواع المراجع المسموح بها",
+    "emptyHintPrefix": "أدرج عناصر نائبة",
+    "emptyHintSuffix": "في الموضوع أو النص. سيظهر كل عنصر هنا حتى تتمكن من ضبط نوعه.",
+    "kindText": "نص حر",
+    "kindDate": "تاريخ",
+    "kindReference": "مرجع",
+    "refKindObservation": "ملاحظة",
+    "refKindAudit": "تدقيق",
+    "refKindLetter": "خطاب",
+    "refKindRule": "قاعدة / تعميم",
+    "refKindPolicy": "سياسة"
+  },
+  "letterChips": {
+    "typeHint": "اكتب {{token}} في أي مكان في النص أو الموضوع لإضافة عنصر نائب.",
+    "configurePlaceholders": "تكوين العناصر النائبة",
+    "configureHint": "حرّر نوع كل عنصر نائب (نص أو تاريخ أو مرجع). انقر على أي شريحة في المحرر لتعبئتها.",
+    "noPlaceholders": "لا توجد عناصر نائبة بعد. اكتب {{token}} في النص لإضافة واحد.",
+    "saveDraft": "حفظ المسودة",
+    "savedToast": "تم حفظ المسودة.",
+    "lockedHint": "تم إرسال هذا الخطاب — أصبح محتواه للقراءة فقط."
+  },
+  "listsAndCategories": {
+    "title": "القوائم والفئات",
+    "subtitle": "إدارة كل القوائم المنسدلة القابلة للتعديل في مكان واحد.",
+    "addEntry": "إضافة إدخال",
+    "labelEn": "التسمية (إنجليزي)",
+    "labelAr": "التسمية (عربي)",
+    "flag": "النوع",
+    "usage": "قيد الاستخدام",
+    "actions": "إجراءات",
+    "seedBadge": "افتراضي",
+    "customBadge": "مخصص",
+    "cannotDeleteSeed": "لا يمكن حذف الإدخالات الافتراضية",
+    "empty": "لا توجد إدخالات بعد — انقر على إضافة إدخال لإنشاء واحد.",
+    "resetToDefaults": "إعادة التعيين للقيم الافتراضية",
+    "resetTitle": "إعادة تعيين القسم؟",
+    "resetConfirm": "سيتم استعادة الإدخالات الافتراضية الأصلية لهذه القائمة وإزالة أي إضافات مخصصة.",
+    "resetWarning": "ستحتفظ السجلات التي تشير إلى إدخالات مخصصة بقيمها، لكن لن يظهر الإدخال في القوائم بعد ذلك.",
+    "sectionLetterType": "نوع الخطاب",
+    "sectionLetterTypeDesc": "أنواع الخطابات المستخدمة في البنك المركزي.",
+    "sectionSamaSubCategory": "تصنيف فرعي للبنك المركزي",
+    "sectionSamaSubCategoryDesc": "تصنيف اختياري إضافي لخطابات البنك المركزي.",
+    "sectionCorrespondenceType": "نوع المراسلة",
+    "sectionCalendarEventType": "نوع حدث التقويم",
+    "sectionBusinessUnit": "وحدة الأعمال للاستشارة",
+    "sectionOnboardingIndustry": "التهيئة · الصناعة",
+    "sectionOnboardingRegion": "التهيئة · المنطقة",
+    "sectionOnboardingHeadcount": "التهيئة · حجم الموظفين",
+    "sectionPolicyCategory": "فئة السياسة",
+    "sectionPolicyCategoryDesc": "فئات تستخدم عند إنشاء السياسات.",
+    "sectionTrainingCategory": "فئة التدريب",
+    "sectionTrainingCategoryDesc": "فئات تستخدم لدورات التدريب.",
+    "sectionAuditCategory": "فئة التدقيق",
+    "sectionAuditCategoryDesc": "فئات تستخدم عند جدولة عمليات التدقيق.",
+    "sectionRiskCategory": "فئة المخاطر",
+    "sectionRiskCategoryDesc": "فئات تستخدم عند تسجيل المخاطر."
   }
 }

@@ -107,7 +107,12 @@ export interface AuditComment {
 }
 
 export type AuditFrequency = 'annual' | 'semi_annual' | 'quarterly' | 'monthly' | 'ad_hoc'
-export type AuditCategory = 'security_compliance' | 'financial_compliance' | 'regulatory_compliance' | 'operational_compliance' | 'hr_compliance' | 'sharia_compliance'
+// AuditCategory is now an opaque string. Default seeds (security_compliance,
+// financial_compliance, regulatory_compliance, operational_compliance,
+// hr_compliance, sharia_compliance) live in useAuditCategoryStore; existing
+// audits with those values keep matching. Users can add custom categories via
+// the EditableSelect on the audit picker.
+export type AuditCategory = string
 export type AuditPriority = 'critical' | 'high' | 'medium' | 'low'
 
 // Audit authority type. 'internal' is always available; the rest are driven at
@@ -273,7 +278,10 @@ export interface Observation {
 }
 
 // Risk types
-export type RiskCategory = 'operational' | 'financial' | 'compliance' | 'strategic' | 'reputational'
+// RiskCategory is now an opaque string. Default seeds (operational, financial,
+// compliance, strategic, reputational) live in useRiskCategoryStore so existing
+// risks keep matching. New custom categories may be added via the EditableSelect.
+export type RiskCategory = string
 export type RiskStatus = 'identified' | 'mitigating' | 'accepted' | 'resolved'
 export type MonitoringFrequency = 'weekly' | 'monthly' | 'quarterly' | 'semi_annual' | 'annual'
 
@@ -473,7 +481,11 @@ export type SAMALetterStatus =
   | 'response-received'
   | 'overdue'
 
-export type SAMALetterType = 'non-objection' | 'inquiry' | 'submission' | 'notification'
+// Widened to opaque string id so users can add custom letter types via
+// useSAMALetterTypeStore. Default seeds match the legacy union values
+// ('non-objection' | 'inquiry' | 'submission' | 'notification') so existing
+// letters and templates remain valid.
+export type SAMALetterType = string
 // Department id is now an opaque string scoped per authority (see src/lib/letter-authority.ts).
 // Existing SAMA dept IDs (banking-supervision, payment-systems, compliance-aml) remain valid.
 export type SAMADepartment = string
@@ -533,6 +545,12 @@ export interface SAMALetter {
   signatureImageUrl?: string   // base64, stamped from template at letter creation
   attachments: Attachment[]
   relatedObservations: string[]
+  // Smart placeholder definitions for {{token}} chips embedded in body/subject.
+  // When the letter ships post-draft, body/subject are flattened via renderTemplate
+  // and these defs become a historical record.
+  placeholderDefs?: PlaceholderDef[]
+  // Per-token compose-time values keyed by token name.
+  placeholderValues?: Record<string, PlaceholderValue | undefined>
   createdAt: string
   updatedAt: string
 }
@@ -541,7 +559,10 @@ export interface SAMALetter {
 export interface CalendarEvent {
   id: string
   title: string
-  type: 'deadline' | 'meeting' | 'submission' | 'review'
+  // Type id — seeded with 'deadline' | 'meeting' | 'submission' | 'review',
+  // user can add new ids via useCalendarEventTypeStore. Render layer uses a
+  // fallback config so unknown ids stay readable.
+  type: string
   date: string
   startTime?: string
   endTime?: string
@@ -567,7 +588,10 @@ export interface Correspondence {
   from: string
   to: string[]
   date: string
-  type: 'sama' | 'cma' | 'internal' | 'external_auditor' | 'sharia_board' | 'vendor' | 'other'
+  // Type id — seeded with the original literal union, but user can extend via
+  // useCorrespondenceTypeStore. Type widened to string; consumers fall back to
+  // a neutral color/label config when the id is unknown.
+  type: string
   status: 'draft' | 'sent' | 'received'
   body: string
   attachments: Attachment[]
@@ -582,7 +606,9 @@ export interface Correspondence {
 // Advisory types
 export type AdvisoryStatus = 'pending' | 'in_progress' | 'completed'
 export type AdvisoryPriority = 'low' | 'medium' | 'high'
-export type BusinessUnit = 'corporate_banking' | 'compliance' | 'it' | 'risk_management' | 'finance' | 'operations' | 'hr'
+// BusinessUnit ids — seeded by useBusinessUnitStore with the legacy literal
+// union; widened to `string` so user-added ids round-trip safely.
+export type BusinessUnit = string
 
 export interface AdvisoryNote {
   id: string
@@ -681,7 +707,10 @@ export interface ReviewSchedule {
 
 // Policy
 export type PolicyStatus = 'draft' | 'under-review' | 'approved' | 'expired' | 'overdue' | 'requires-review'
-export type PolicyCategory = 'compliance' | 'it' | 'operations' | 'risk' | 'hr' | 'finance'
+// PolicyCategory is now an opaque string. Default seeds (compliance, it,
+// operations, risk, hr, finance) live in usePolicyCategoryStore. Existing
+// policies keep matching; users can add custom categories.
+export type PolicyCategory = string
 export type PolicyApprovalTier = 'board' | 'management' | 'sharia' | 'agm'
 
 export interface PolicyVersionEntry { version: string; date: string; author: string; changes: string }
@@ -1084,7 +1113,11 @@ export interface PolicyFilters {
 
 // Training page types
 export type TrainingStatus = 'completed' | 'in_progress' | 'not_started' | 'overdue'
-export type TrainingCategory = 'compliance' | 'aml' | 'cybersecurity' | 'sharia' | 'risk' | 'data-privacy' | 'ethics' | 'fraud-prevention' | 'governance' | 'operational-risk' | 'business-continuity' | 'sanctions' | 'internal-audit'
+// TrainingCategory is now an opaque string. Default seeds match the legacy
+// extended set (compliance, aml, cybersecurity, sharia, risk, data-privacy,
+// ethics, fraud-prevention, governance, operational-risk, business-continuity,
+// sanctions, internal-audit) and live in useTrainingCategoryStore.
+export type TrainingCategory = string
 export type FileUploadCategory = 'saudization' | 'training-list' | 'employee-details'
 
 export interface CourseProgress {

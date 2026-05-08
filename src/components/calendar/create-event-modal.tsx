@@ -1,10 +1,11 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { Icon } from '@iconify/react'
-import { cn } from '@/lib/utils'
 import { useTranslation } from '@/i18n'
 import { useCalendarStore } from '@/stores/calendar-store'
+import { useCalendarEventTypeStore } from '@/stores/calendar-event-type-store'
+import { EditableSelect } from '@/components/ui/editable-select'
 
 interface CreateEventModalProps {
   isOpen: boolean
@@ -16,10 +17,17 @@ export function CreateEventModal({ isOpen, onClose, onSuccess }: CreateEventModa
   const { t, isRTL } = useTranslation()
   const createEvent = useCalendarStore((s) => s.createEvent)
 
+  // Event type ids come from useCalendarEventTypeStore (seeded with the four
+  // legacy literals). The widened CalendarEvent.type accepts any string id.
+  const eventTypes = useCalendarEventTypeStore((s) => s.types)
+  const addEventType = useCalendarEventTypeStore((s) => s.add)
+  const updateEventType = useCalendarEventTypeStore((s) => s.update)
+  const removeEventType = useCalendarEventTypeStore((s) => s.remove)
+
   const [form, setForm] = useState({
     title: '',
     date: '',
-    type: 'meeting' as 'deadline' | 'meeting' | 'submission' | 'review',
+    type: 'meeting' as string,
     description: '',
     startTime: '',
     endTime: '',
@@ -89,16 +97,15 @@ export function CreateEventModal({ isOpen, onClose, onSuccess }: CreateEventModa
               <label className={`block text-xs font-bold text-slate-500 uppercase mb-1.5 ${isRTL ? 'text-right' : ''}`}>
                 {t('common.type')}
               </label>
-              <select
+              <EditableSelect
                 value={form.type}
-                onChange={(e) => setForm(prev => ({ ...prev, type: e.target.value as typeof form.type }))}
-                className={`w-full px-4 py-2.5 rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 ${isRTL ? 'text-right' : ''}`}
-              >
-                <option value="meeting">{t('calendar.typeMeeting')}</option>
-                <option value="deadline">{t('calendar.typeDeadline')}</option>
-                <option value="submission">{t('calendar.typeSubmission')}</option>
-                <option value="review">{t('calendar.typeReview')}</option>
-              </select>
+                onChange={(id) => setForm(prev => ({ ...prev, type: id }))}
+                items={eventTypes.map((tt) => ({ id: tt.id, label: tt.label, labelAr: tt.labelAr, isDefault: tt.isDefault }))}
+                onAdd={(label, labelAr) => addEventType(label, labelAr)}
+                onEdit={(id, label, labelAr) => updateEventType(id, { label, labelAr })}
+                onDelete={(id) => removeEventType(id)}
+                isRTL={isRTL}
+              />
             </div>
           </div>
           <div className="grid grid-cols-2 gap-4">

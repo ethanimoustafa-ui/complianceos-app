@@ -88,6 +88,19 @@ export function placeholderValuesComplete(
   return { complete: missing.length === 0, missing }
 }
 
+// Auto-promote any {{token}} typed by the user inside body/subject into the
+// placeholderDefs array. Keeps existing defs (so user-edited types are
+// preserved); appends a default `text` def for any newly-found token.
+// Use this on save inside the draft-edit surface after the user may have
+// typed `{{my_ref}}` directly into the editor.
+export function autoPromoteTypedTokens(
+  body: string | undefined,
+  subject: string | undefined,
+  currentDefs: PlaceholderDef[] | undefined,
+): PlaceholderDef[] {
+  return reconcilePlaceholderDefs(currentDefs, body, subject)
+}
+
 export const REF_KIND_LABELS: Record<PlaceholderRefKind, string> = {
   observation: 'Observation',
   audit:       'Audit',

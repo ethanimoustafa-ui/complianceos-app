@@ -13,11 +13,17 @@ import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { useFrameworkConfigStore } from '@/stores/framework-config-store'
+import { useOnboardingIndustryStore } from '@/stores/onboarding-industry-store'
+import { useOnboardingRegionStore } from '@/stores/onboarding-region-store'
+import { useOnboardingHeadcountStore } from '@/stores/onboarding-headcount-store'
+import { EditableSelect } from '@/components/ui/editable-select'
 
-// Types
-type OrgSize = '1-20' | '21-100' | '101-500' | '500+'
-type Industry = 'government' | 'banking' | 'energy' | 'healthcare' | 'technology'
-type Region = 'riyadh' | 'makkah' | 'eastern' | 'other'
+// Types — these now widen to `string` because the picker is editable; the
+// stores `useOnboardingIndustryStore` / `useOnboardingRegionStore` /
+// `useOnboardingHeadcountStore` provide the seeds + user-added options.
+type OrgSize = string
+type Industry = string
+type Region = string
 
 const iconColorMap: Record<string, { bg: string; text: string }> = {
   blue: { bg: 'bg-blue-100', text: 'text-blue-600' },
@@ -52,9 +58,11 @@ const step2Schema = z.object({
     .string()
     .min(2, 'Company name must be at least 2 characters')
     .max(100, 'Company name must be less than 100 characters'),
-  orgSize: z.enum(['1-20', '21-100', '101-500', '500+']),
-  industry: z.enum(['government', 'banking', 'energy', 'healthcare', 'technology']),
-  region: z.enum(['riyadh', 'makkah', 'eastern', 'other']),
+  // Widened from enum literals so user-added options round-trip safely; the
+  // EditableSelect ensures the value always matches a known store id.
+  orgSize: z.string().min(1, 'Please select an organization size'),
+  industry: z.string().min(1, 'Please select an industry'),
+  region: z.string().min(1, 'Please select a region'),
 })
 
 // Combined schema for the entire form
@@ -77,6 +85,23 @@ export default function OnboardingPage() {
 
   const allFrameworks = useFrameworkConfigStore((s) => s.frameworks)
   const topFrameworks = allFrameworks.slice(0, 6)
+
+  // Onboarding option stores — every picker is editable so users can extend
+  // the seeded options without code changes.
+  const industries = useOnboardingIndustryStore((s) => s.industries)
+  const addIndustry = useOnboardingIndustryStore((s) => s.add)
+  const updateIndustry = useOnboardingIndustryStore((s) => s.update)
+  const removeIndustry = useOnboardingIndustryStore((s) => s.remove)
+
+  const regions = useOnboardingRegionStore((s) => s.regions)
+  const addRegion = useOnboardingRegionStore((s) => s.add)
+  const updateRegion = useOnboardingRegionStore((s) => s.update)
+  const removeRegion = useOnboardingRegionStore((s) => s.remove)
+
+  const headcountBuckets = useOnboardingHeadcountStore((s) => s.buckets)
+  const addHeadcount = useOnboardingHeadcountStore((s) => s.add)
+  const updateHeadcount = useOnboardingHeadcountStore((s) => s.update)
+  const removeHeadcount = useOnboardingHeadcountStore((s) => s.remove)
 
   // React Hook Form setup
   const {
@@ -429,15 +454,15 @@ export default function OnboardingPage() {
                         name="orgSize"
                         control={control}
                         render={({ field }) => (
-                          <select
-                            {...field}
-                            className="w-full px-4 py-3.5 bg-white border border-slate-300 rounded-lg text-slate-900 focus:outline-none focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600 transition-all"
-                          >
-                            <option value="1-20">{t('onboarding.employees1_20')}</option>
-                            <option value="21-100">{t('onboarding.employees21_100')}</option>
-                            <option value="101-500">{t('onboarding.employees101_500')}</option>
-                            <option value="500+">{t('onboarding.employees500plus')}</option>
-                          </select>
+                          <EditableSelect
+                            value={field.value || null}
+                            onChange={(id) => field.onChange(id)}
+                            items={headcountBuckets.map((b) => ({ id: b.id, label: b.label, labelAr: b.labelAr, isDefault: b.isDefault }))}
+                            onAdd={(label, labelAr) => addHeadcount(label, labelAr)}
+                            onEdit={(id, label, labelAr) => updateHeadcount(id, { label, labelAr })}
+                            onDelete={(id) => removeHeadcount(id)}
+                            isRTL={isRTL}
+                          />
                         )}
                       />
                     </div>
@@ -449,16 +474,15 @@ export default function OnboardingPage() {
                         name="industry"
                         control={control}
                         render={({ field }) => (
-                          <select
-                            {...field}
-                            className="w-full px-4 py-3.5 bg-white border border-slate-300 rounded-lg text-slate-900 focus:outline-none focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600 transition-all"
-                          >
-                            <option value="government">{t('onboarding.governmentAgency')}</option>
-                            <option value="banking">{t('onboarding.bankingFinance')}</option>
-                            <option value="energy">{t('onboarding.energyUtilities')}</option>
-                            <option value="healthcare">{t('onboarding.healthcareSeha')}</option>
-                            <option value="technology">{t('onboarding.technologySaas')}</option>
-                          </select>
+                          <EditableSelect
+                            value={field.value || null}
+                            onChange={(id) => field.onChange(id)}
+                            items={industries.map((i) => ({ id: i.id, label: i.label, labelAr: i.labelAr, isDefault: i.isDefault }))}
+                            onAdd={(label, labelAr) => addIndustry(label, labelAr)}
+                            onEdit={(id, label, labelAr) => updateIndustry(id, { label, labelAr })}
+                            onDelete={(id) => removeIndustry(id)}
+                            isRTL={isRTL}
+                          />
                         )}
                       />
                     </div>
@@ -472,15 +496,15 @@ export default function OnboardingPage() {
                       name="region"
                       control={control}
                       render={({ field }) => (
-                        <select
-                          {...field}
-                          className="w-full px-4 py-3.5 bg-white border border-slate-300 rounded-lg text-slate-900 focus:outline-none focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600 transition-all"
-                        >
-                          <option value="riyadh">{t('onboarding.riyadhRegion')}</option>
-                          <option value="makkah">{t('onboarding.makkahJeddah')}</option>
-                          <option value="eastern">{t('onboarding.easternProvince')}</option>
-                          <option value="other">{t('onboarding.otherKsa')}</option>
-                        </select>
+                        <EditableSelect
+                          value={field.value || null}
+                          onChange={(id) => field.onChange(id)}
+                          items={regions.map((r) => ({ id: r.id, label: r.label, labelAr: r.labelAr, isDefault: r.isDefault }))}
+                          onAdd={(label, labelAr) => addRegion(label, labelAr)}
+                          onEdit={(id, label, labelAr) => updateRegion(id, { label, labelAr })}
+                          onDelete={(id) => removeRegion(id)}
+                          isRTL={isRTL}
+                        />
                       )}
                     />
                   </div>

@@ -13,7 +13,8 @@ import type { CalendarEvent } from '@/types'
 
 const eventSchema = z.object({
   title: z.string().min(3, 'Title must be at least 3 characters'),
-  type: z.enum(['deadline', 'meeting', 'submission', 'review']),
+  // Type ids are managed via useCalendarEventTypeStore; widened to plain string.
+  type: z.string().min(1, 'Type is required'),
   date: z.string().min(1, 'Date is required'),
   startTime: z.string().optional(),
   endTime: z.string().optional(),

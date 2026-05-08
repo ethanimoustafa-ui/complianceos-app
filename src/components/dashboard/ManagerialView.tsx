@@ -73,7 +73,12 @@ export function ManagerialView({ metrics }: ManagerialViewProps) {
     if (metrics.samaLetters.overdueCount > 0) {
       list.push({ type: 'critical', title: t('dashboard.criticalActionRequired'), message: t('dashboard.alertSamaOverdue', { count: String(metrics.samaLetters.overdueCount) }), route: '/correspondence' })
     }
-    if (metrics.health.businessComplianceScore < targetScore) {
+    // Suppress the trend alert when nothing has been evaluated yet (§1.A);
+    // a fully-pending org is "neutral pending", not "at risk".
+    if (
+      metrics.health.businessComplianceEvaluated > 0 &&
+      metrics.health.businessComplianceScore < targetScore
+    ) {
       list.push({ type: 'warning', title: t('dashboard.trendAlert'), message: t('dashboard.alertComplianceLow', { score: String(Math.round(metrics.health.businessComplianceScore)), target: String(targetScore) }), route: '/reports/compliance-review' })
     }
     return list.slice(0, 2)
@@ -98,7 +103,9 @@ export function ManagerialView({ metrics }: ManagerialViewProps) {
   // Compliance Review tab); the 7-component score is shown separately below
   // labelled as Team Score.
   const healthScore = Math.round(metrics.health.businessComplianceScore)
-  const isAtRisk = healthScore < targetScore
+  const healthEvaluated = metrics.health.businessComplianceEvaluated
+  const isPending = healthEvaluated === 0
+  const isAtRisk = !isPending && healthScore < targetScore
 
   // Observations by source
   const obsTotal = metrics.observations.total || 1
@@ -154,9 +161,16 @@ export function ManagerialView({ metrics }: ManagerialViewProps) {
             {/* Left: status + threshold + issues */}
             <div className="relative z-10 space-y-4 flex-1 min-w-0">
               <div className="flex items-center gap-3">
-                <Badge variant={isAtRisk ? 'danger' : 'success'} className="gap-2">
-                  <Icon icon={isAtRisk ? 'lucide:alert-triangle' : 'lucide:check-circle'} className="w-3 h-3" />
-                  {isAtRisk ? t('dashboard.statusAtRisk') : t('dashboard.statusOptimal')}
+                <Badge variant={isPending ? 'warning' : isAtRisk ? 'danger' : 'success'} className="gap-2">
+                  <Icon
+                    icon={isPending ? 'lucide:circle-help' : isAtRisk ? 'lucide:alert-triangle' : 'lucide:check-circle'}
+                    className="w-3 h-3"
+                  />
+                  {isPending
+                    ? t('complianceReview.pendingScoreLabel')
+                    : isAtRisk
+                      ? t('dashboard.statusAtRisk')
+                      : t('dashboard.statusOptimal')}
                 </Badge>
                 <span className="text-xs font-bold text-slate-400">{t('dashboard.thresholdLabel')}: {targetScore}%</span>
               </div>
@@ -165,24 +179,33 @@ export function ManagerialView({ metrics }: ManagerialViewProps) {
               </h2>
 
               {/* Threshold progress bar */}
-              <div className="space-y-1.5">
-                <div className="h-3 w-full bg-slate-100 rounded-full relative overflow-hidden">
-                  <div
-                    className={`h-full rounded-full transition-all ${healthScore >= targetScore ? 'bg-emerald-500' : healthScore >= targetScore * 0.8 ? 'bg-amber-500' : 'bg-rose-500'}`}
-                    style={{ width: `${Math.min(healthScore, 100)}%` }}
-                  />
-                  {/* Threshold marker */}
-                  <div
-                    className="absolute top-0 h-full w-0.5 bg-slate-900"
-                    style={{ insetInlineStart: `${targetScore}%` }}
-                  />
+              {isPending ? (
+                <div className="space-y-1.5">
+                  <div className="h-3 w-full bg-slate-100 rounded-full relative overflow-hidden border border-dashed border-amber-300" />
+                  <div className="flex justify-between text-[10px] font-bold text-amber-700">
+                    <span>{t('complianceReview.notYetEvaluated')}</span>
+                  </div>
                 </div>
-                <div className="flex justify-between text-[10px] font-bold text-slate-400">
-                  <span>0%</span>
-                  <span>{healthScore}% / {targetScore}%</span>
-                  <span>100%</span>
+              ) : (
+                <div className="space-y-1.5">
+                  <div className="h-3 w-full bg-slate-100 rounded-full relative overflow-hidden">
+                    <div
+                      className={`h-full rounded-full transition-all ${healthScore >= targetScore ? 'bg-emerald-500' : healthScore >= targetScore * 0.8 ? 'bg-amber-500' : 'bg-rose-500'}`}
+                      style={{ width: `${Math.min(healthScore, 100)}%` }}
+                    />
+                    {/* Threshold marker */}
+                    <div
+                      className="absolute top-0 h-full w-0.5 bg-slate-900"
+                      style={{ insetInlineStart: `${targetScore}%` }}
+                    />
+                  </div>
+                  <div className="flex justify-between text-[10px] font-bold text-slate-400">
+                    <span>0%</span>
+                    <span>{healthScore}% / {targetScore}%</span>
+                    <span>100%</span>
+                  </div>
                 </div>
-              </div>
+              )}
 
               {/* Top issues inline */}
               {topDeductions.length > 0 && (
@@ -200,9 +223,18 @@ export function ManagerialView({ metrics }: ManagerialViewProps) {
               )}
             </div>
 
-            {/* Right: ring */}
+            {/* Right: ring (or pending placeholder) */}
             <div className="relative flex-shrink-0 flex justify-center">
-              <CircularProgressRing value={healthScore} size={152} label={t('dashboard.health')} />
+              {isPending ? (
+                <div className="flex flex-col items-center justify-center w-[152px] h-[152px] rounded-full border-2 border-dashed border-amber-300 bg-amber-50/40">
+                  <p className="text-3xl font-bold text-amber-600">—</p>
+                  <p className="text-[10px] font-bold text-amber-700 uppercase tracking-widest mt-1">
+                    {t('complianceReview.pendingScoreLabel')}
+                  </p>
+                </div>
+              ) : (
+                <CircularProgressRing value={healthScore} size={152} label={t('dashboard.health')} />
+              )}
             </div>
           </div>
 

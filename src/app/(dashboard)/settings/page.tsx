@@ -9,6 +9,7 @@ import { ConnectedAppsSection } from '@/components/settings/ConnectedAppsSection
 import { UserPreferencesSection } from '@/components/settings/UserPreferencesSection'
 import { AuditTemplatesSection } from '@/components/settings/AuditTemplatesSection'
 import { PolicyTemplatesSection } from '@/components/settings/PolicyTemplatesSection'
+import { ListsAndCategoriesSection } from '@/components/settings/ListsAndCategoriesSection'
 
 export default function SettingsPage() {
   const { t } = useTranslation()
@@ -49,6 +50,7 @@ export default function SettingsPage() {
           <UserPreferencesSection />
           <AuditTemplatesSection />
           <PolicyTemplatesSection />
+          <ListsAndCategoriesSection />
         </div>
       </div>
     </>

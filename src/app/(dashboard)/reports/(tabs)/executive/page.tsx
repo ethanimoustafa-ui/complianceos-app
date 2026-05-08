@@ -22,7 +22,7 @@ import type { TranslationKey } from '@/i18n'
 // Types
 type Severity = 'critical' | 'high' | 'medium' | 'low'
 type FindingStatus = 'remediation' | 'resolved' | 'verified' | 'open'
-type RiskCategory = 'operational' | 'financial' | 'compliance' | 'strategic' | 'reputational'
+type RiskCategory = string  // widened — see useRiskCategoryStore
 
 interface AuditFinding {
   id: string
@@ -57,7 +57,7 @@ const statusConfig: Record<FindingStatus, { label: string; dotColor: string }> =
   open: { label: 'Open', dotColor: 'bg-rose-500' },
 }
 
-const riskCategoryBarColors: Record<RiskCategory, string> = {
+const riskCategoryBarColors: Record<string, string> = {
   operational: 'bg-blue-500',
   financial: 'bg-emerald-500',
   compliance: 'bg-purple-500',
