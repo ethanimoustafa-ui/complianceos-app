@@ -58,9 +58,10 @@ const getEmailSubjectFor = (type: SAMALetterType, lang: 'en' | 'ar'): string => 
   return (LETTER_EMAIL_SUBJECTS[type] ?? LETTER_EMAIL_SUBJECTS['notification'])[lang]
 }
 
-// Authority <select> that lists every enabled correspondence-based framework
+// Authority dropdown that lists every enabled correspondence-based framework
 // plus any hardcoded LETTER_AUTHORITIES the user's data already references.
-// Used by both the draft-letter modal and the template editor.
+// Used by both the draft-letter modal and the template editor. Authority is
+// calc-bound (drives the entire framework path) → `locked` per round-3 §3.
 function DynamicAuthoritySelect({
   value,
   onChange,
@@ -71,35 +72,35 @@ function DynamicAuthoritySelect({
   isRTL: boolean
 }) {
   const frameworks = useFrameworkConfigStore((s) => s.frameworks)
-  const options = useMemo(() => {
-    const seedOpts = frameworks
+  const items = useMemo(() => {
+    const seedOpts: { id: string; label: string; labelAr?: string }[] = frameworks
       .filter((f) => f.enabled && f.correspondenceBased)
       .map((f) => ({
-        value: f.id as CircularAuthority,
-        label: `${f.name} — ${isRTL ? f.nameAr : f.name}`,
+        id: f.id as string,
+        label: f.name,
+        labelAr: f.nameAr,
       }))
     // Ensure the current value is selectable even if its framework was
     // later disabled or still uses a legacy uppercase id.
-    if (value && !seedOpts.some((o) => o.value === value)) {
+    if (value && !seedOpts.some((o) => o.id === value)) {
       const match = frameworks.find((f) => f.id.toLowerCase() === String(value).toLowerCase())
       seedOpts.push({
-        value,
-        label: match ? (isRTL ? match.nameAr : match.name) : String(value),
+        id: String(value),
+        label: match ? match.name : String(value),
+        labelAr: match ? match.nameAr : String(value),
       })
     }
     return seedOpts
-  }, [frameworks, value, isRTL])
+  }, [frameworks, value])
 
   return (
-    <select
+    <EditableSelect
+      locked
+      items={items}
       value={value}
-      onChange={(e) => onChange(e.target.value as CircularAuthority)}
-      className="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-sm font-medium focus:ring-2 focus:ring-emerald-500 outline-none"
-    >
-      {options.map((opt) => (
-        <option key={opt.value} value={opt.value}>{opt.label}</option>
-      ))}
-    </select>
+      onChange={(id) => onChange(id as CircularAuthority)}
+      isRTL={isRTL}
+    />
   )
 }
 
@@ -1009,15 +1010,19 @@ export default function SAMALettersPage() {
                 {/* Status Filter */}
                 <div className={`flex items-center gap-2`}>
                   <label className="text-xs font-bold text-slate-500 uppercase tracking-wide">{t('common.status')}:</label>
-                  <select
-                    value={templateStatusFilter}
-                    onChange={(e) => setTemplateStatusFilter(e.target.value as TemplateStatus | 'All')}
-                    className="px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm font-medium focus:ring-2 focus:ring-emerald-500 outline-none min-w-[130px]"
-                  >
-                    <option value="All">{t('samaLetters.allStatus')}</option>
-                    <option value="Active">{t('common.active')}</option>
-                    <option value="Draft">{t('common.draft')}</option>
-                  </select>
+                  <div className="min-w-[130px]">
+                    <EditableSelect
+                      locked
+                      items={[
+                        { id: 'All', label: t('samaLetters.allStatus') },
+                        { id: 'Active', label: t('common.active') },
+                        { id: 'Draft', label: t('common.draft') },
+                      ]}
+                      value={templateStatusFilter}
+                      onChange={(id) => setTemplateStatusFilter(id as TemplateStatus | 'All')}
+                      isRTL={isRTL}
+                    />
+                  </div>
                 </div>
 
                 {/* Results Count */}
@@ -1824,24 +1829,24 @@ export default function SAMALettersPage() {
                     <div className={`flex justify-between items-center`}>
                       <span className="text-xs text-slate-500">{t('samaLetters.recipientDept')}</span>
                       {editingMeta === 'samaDepartment' && selectedLetter ? (
-                        <select
-                          // eslint-disable-next-line jsx-a11y/no-autofocus
-                          autoFocus
-                          value={editDepartment}
-                          onChange={e => {
-                            setEditDepartment(e.target.value)
-                            saveField({ samaDepartment: e.target.value as import('@/types').SAMADepartment })
-                            setEditingMeta(null)
-                          }}
-                          onBlur={() => setEditingMeta(null)}
-                          className="text-xs font-bold text-slate-900 bg-transparent border-b border-dashed border-slate-400 focus:outline-none cursor-pointer"
-                        >
-                          {getAuthorityDepartments(selectedLetter.authority).map((d) => (
-                            <option key={d.id} value={d.id}>
-                              {isRTL ? d.ar : d.en}
-                            </option>
-                          ))}
-                        </select>
+                        <div className="min-w-[180px]">
+                          <EditableSelect
+                            locked
+                            items={getAuthorityDepartments(selectedLetter.authority).map((d) => ({
+                              id: d.id,
+                              label: d.en,
+                              labelAr: d.ar,
+                            }))}
+                            value={editDepartment}
+                            onChange={(id) => {
+                              setEditDepartment(id)
+                              saveField({ samaDepartment: id as import('@/types').SAMADepartment })
+                              setEditingMeta(null)
+                            }}
+                            isRTL={isRTL}
+                            size="sm"
+                          />
+                        </div>
                       ) : (
                         <span
                           onClick={() => setEditingMeta('samaDepartment')}
@@ -1871,19 +1876,26 @@ export default function SAMALettersPage() {
                     <div className={`flex justify-between items-center`}>
                       <span className="text-xs text-slate-500">{t('calendar.assignedTo')}</span>
                       {editingMeta === 'assignedTo' ? (
-                        <select
-                          // eslint-disable-next-line jsx-a11y/no-autofocus
-                          autoFocus
-                          value={editAssignedTo}
-                          onChange={e => { setEditAssignedTo(e.target.value); saveField({ assignedTo: e.target.value }); setEditingMeta(null) }}
-                          onBlur={() => { saveField({ assignedTo: editAssignedTo }); setEditingMeta(null) }}
-                          className="text-xs font-bold text-emerald-600 bg-transparent border-b border-dashed border-emerald-300 focus:outline-none cursor-pointer"
-                        >
-                          <option value="">{t('common.select')}</option>
-                          {teamMembers.filter(m => m.status === 'active').map(m => (
-                            <option key={m.id} value={m.name}>{m.name} — {m.department}</option>
-                          ))}
-                        </select>
+                        <div className="min-w-[200px]">
+                          <EditableSelect
+                            locked
+                            items={teamMembers
+                              .filter((m) => m.status === 'active')
+                              .map((m) => ({
+                                id: m.name,
+                                label: `${m.name} — ${m.department}`,
+                              }))}
+                            value={editAssignedTo}
+                            onChange={(id) => {
+                              setEditAssignedTo(id)
+                              saveField({ assignedTo: id })
+                              setEditingMeta(null)
+                            }}
+                            placeholder={t('common.select')}
+                            isRTL={isRTL}
+                            size="sm"
+                          />
+                        </div>
                       ) : (
                         <span
                           onClick={() => setEditingMeta('assignedTo')}
@@ -2954,25 +2966,27 @@ function CreateLetterForm({
             <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-2">
               {t('samaLetters.chooseTemplate')}
             </label>
-            <select
+            <EditableSelect
+              locked
+              items={[
+                { id: '', label: t('samaLetters.noTemplateBlank') },
+                ...filteredTemplates.map((tpl) => ({
+                  id: tpl.id,
+                  label: tpl.name,
+                })),
+              ]}
               value={selectedTemplateId}
-              onChange={(e) => {
-                const id = e.target.value
+              onChange={(id) => {
                 setSelectedTemplateId(id)
                 if (id) {
                   const tpl = allTemplates.find((tt) => tt.id === id)
                   applyTemplate(tpl)
                 }
               }}
-              className="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-sm font-medium focus:ring-2 focus:ring-emerald-500 outline-none"
-            >
-              <option value="">{t('samaLetters.noTemplateBlank')}</option>
-              {filteredTemplates.map((tpl) => (
-                <option key={tpl.id} value={tpl.id}>
-                  {tpl.name}
-                </option>
-              ))}
-            </select>
+              placeholder={t('samaLetters.noTemplateBlank')}
+              isRTL={isRTL}
+            />
+
             {filteredTemplates.length === 0 && (
               <p className="text-[10px] text-slate-400 mt-1">
                 {t('samaLetters.noTemplatesForType')}
