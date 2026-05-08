@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import type { FrameworkConfig, RegulatoryBodyId, ComplianceThreshold, FrameworkWeights } from '@/types'
+import { requirePermission } from '@/lib/rbac-store-gate'
 
 // Per-framework weights must sum to 100. Kept in the 4-surface shape
 // (audits / observations / letters / circulars) aligned with FrameworkWeights.
@@ -364,21 +365,26 @@ export const useFrameworkConfigStore = create<FrameworkConfigState>()(
       frameworks: seedFrameworks,
       pinnedIds: [...DEFAULT_PINNED],
 
-      toggleEnabled: (id) =>
+      toggleEnabled: (id) => {
+        requirePermission('Configure Frameworks', { storeName: 'frameworkConfig', actionName: 'toggleEnabled', id })
         set((s) => ({
           frameworks: s.frameworks.map((f) =>
             f.id === id ? { ...f, enabled: !f.enabled } : f
           ),
-        })),
+        }))
+      },
 
-      updateConfig: (id, data) =>
+      updateConfig: (id, data) => {
+        requirePermission('Configure Frameworks', { storeName: 'frameworkConfig', actionName: 'updateConfig', id })
         set((s) => ({
           frameworks: s.frameworks.map((f) =>
             f.id === id ? { ...f, ...data } : f
           ),
-        })),
+        }))
+      },
 
       addFramework: (framework) => {
+        requirePermission('Configure Frameworks', { storeName: 'frameworkConfig', actionName: 'addFramework', id: framework.id })
         const existing = get().frameworks.find((f) => f.id === framework.id)
         if (existing) return null
         const complete: FrameworkConfig = {
@@ -389,7 +395,10 @@ export const useFrameworkConfigStore = create<FrameworkConfigState>()(
         return complete
       },
 
-      resetToDefaults: () => set({ frameworks: seedFrameworks, pinnedIds: [...DEFAULT_PINNED] }),
+      resetToDefaults: () => {
+        requirePermission('Configure Frameworks', { storeName: 'frameworkConfig', actionName: 'resetToDefaults' })
+        set({ frameworks: seedFrameworks, pinnedIds: [...DEFAULT_PINNED] })
+      },
 
       getEnabled: () => get().frameworks.filter((f) => f.enabled),
 
@@ -398,7 +407,8 @@ export const useFrameworkConfigStore = create<FrameworkConfigState>()(
 
       getById: (id) => get().frameworks.find((f) => f.id === id),
 
-      pinFramework: (id) =>
+      pinFramework: (id) => {
+        requirePermission('Configure Frameworks', { storeName: 'frameworkConfig', actionName: 'pinFramework', id })
         set((s) => {
           // Self-assessment frameworks cannot be pinned — pinning drives the
           // scored Frameworks dashboard, which is correspondence-only.
@@ -406,19 +416,24 @@ export const useFrameworkConfigStore = create<FrameworkConfigState>()(
           if (!fw?.correspondenceBased) return s
           if (s.pinnedIds.length >= 3 || s.pinnedIds.includes(id)) return s
           return { pinnedIds: [...s.pinnedIds, id] }
-        }),
+        })
+      },
 
-      unpinFramework: (id) =>
-        set((s) => ({ pinnedIds: s.pinnedIds.filter((p) => p !== id) })),
+      unpinFramework: (id) => {
+        requirePermission('Configure Frameworks', { storeName: 'frameworkConfig', actionName: 'unpinFramework', id })
+        set((s) => ({ pinnedIds: s.pinnedIds.filter((p) => p !== id) }))
+      },
 
-      replacePinned: (oldId, newId) =>
+      replacePinned: (oldId, newId) => {
+        requirePermission('Configure Frameworks', { storeName: 'frameworkConfig', actionName: `replacePinned:${oldId}:${newId}` })
         set((s) => {
           const fw = s.frameworks.find((f) => f.id === newId)
           if (!fw?.correspondenceBased) return s
           return {
             pinnedIds: s.pinnedIds.map((p) => (p === oldId ? newId : p)),
           }
-        }),
+        })
+      },
     }),
     {
       name: 'framework-config-storage',

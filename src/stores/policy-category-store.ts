@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
+import { requirePermission } from '@/lib/rbac-store-gate'
 
 // PolicyCategory — opaque string id keyed against the (now widened) `PolicyCategory`
 // type in `src/types`. Default seeds match the legacy union literals so existing
@@ -40,6 +41,7 @@ export const usePolicyCategoryStore = create<PolicyCategoryState>()(
       categories: seeds,
 
       add: (label, labelAr) => {
+        requirePermission('Configure Lists & Categories', { storeName: 'policyCategory', actionName: 'add' })
         const baseId = slugify(label) || `cat-${Date.now()}`
         const existingIds = new Set(get().categories.map((c) => c.id))
         let id = baseId
@@ -51,20 +53,24 @@ export const usePolicyCategoryStore = create<PolicyCategoryState>()(
         return id
       },
 
-      update: (id, patch) =>
+      update: (id, patch) => {
+        requirePermission('Configure Lists & Categories', { storeName: 'policyCategory', actionName: 'update', id })
         set((s) => ({
           categories: s.categories.map((c) => (c.id === id ? { ...c, ...patch } : c)),
-        })),
+        }))
+      },
 
-      remove: (id) =>
+      remove: (id) => {
+        requirePermission('Configure Lists & Categories', { storeName: 'policyCategory', actionName: 'remove', id })
         set((s) => ({
-          // Seeds are deletable — see SPRINT-FOLLOWUP-PLAN §2.3. Orphan-confirm
-          // modal in ListsAndCategoriesSection warns when records reference the
-          // category; persisted policies retain the raw label string.
           categories: s.categories.filter((c) => c.id !== id),
-        })),
+        }))
+      },
 
-      resetToDefaults: () => set({ categories: seeds }),
+      resetToDefaults: () => {
+        requirePermission('Configure Lists & Categories', { storeName: 'policyCategory', actionName: 'resetToDefaults' })
+        set({ categories: seeds })
+      },
     }),
     {
       name: 'policy-category-storage',

@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
+import { requirePermission } from '@/lib/rbac-store-gate'
 
 // Calendar event type — id is opaque string. The four seeds match the legacy
 // `CalendarEvent.type` literal union; widening that type to `string` is done
@@ -34,6 +35,7 @@ export const useCalendarEventTypeStore = create<CalendarEventTypeState>()(
       types: seeds,
 
       add: (label, labelAr) => {
+        requirePermission('Configure Lists & Categories', { storeName: 'calendarEventType', actionName: 'add' })
         const baseId = slugify(label) || `event-type-${Date.now()}`
         const existingIds = new Set(get().types.map((t) => t.id))
         let id = baseId
@@ -45,16 +47,20 @@ export const useCalendarEventTypeStore = create<CalendarEventTypeState>()(
         return id
       },
 
-      update: (id, patch) =>
+      update: (id, patch) => {
+        requirePermission('Configure Lists & Categories', { storeName: 'calendarEventType', actionName: 'update', id })
         set((s) => ({
           types: s.types.map((t) => (t.id === id ? { ...t, ...patch } : t)),
-        })),
+        }))
+      },
 
-      remove: (id) =>
+      remove: (id) => {
+        requirePermission('Configure Lists & Categories', { storeName: 'calendarEventType', actionName: 'remove', id })
         set((s) => ({
           // Seeds are deletable — see SPRINT-FOLLOWUP-PLAN §2.3.
           types: s.types.filter((t) => t.id !== id),
-        })),
+        }))
+      },
     }),
     {
       name: 'calendar-event-type-storage',

@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { Icon } from '@iconify/react'
 import { Sidebar } from '@/components/layout/sidebar'
 import { useAuthStore } from '@/stores/auth-store'
+import { RBACToastHost } from '@/components/auth/rbac-toast'
 
 export default function DashboardLayout({
   children,
@@ -43,6 +44,7 @@ export default function DashboardLayout({
       <main className="flex-1 flex flex-col overflow-hidden hide-scrollbar">
         {children}
       </main>
+      <RBACToastHost />
     </div>
   )
 }

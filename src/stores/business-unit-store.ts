@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
+import { requirePermission } from '@/lib/rbac-store-gate'
 
 // Advisory business unit — id is opaque string. Seeds match the historical
 // `BusinessUnit` union literal; widened to `string` in `src/types/index.ts`.
@@ -36,6 +37,7 @@ export const useBusinessUnitStore = create<BusinessUnitState>()(
       units: seeds,
 
       add: (label, labelAr) => {
+        requirePermission('Configure Lists & Categories', { storeName: 'businessUnit', actionName: 'add' })
         const baseId = slugify(label) || `bu-${Date.now()}`
         const existingIds = new Set(get().units.map((u) => u.id))
         let id = baseId
@@ -47,16 +49,20 @@ export const useBusinessUnitStore = create<BusinessUnitState>()(
         return id
       },
 
-      update: (id, patch) =>
+      update: (id, patch) => {
+        requirePermission('Configure Lists & Categories', { storeName: 'businessUnit', actionName: 'update', id })
         set((s) => ({
           units: s.units.map((u) => (u.id === id ? { ...u, ...patch } : u)),
-        })),
+        }))
+      },
 
-      remove: (id) =>
+      remove: (id) => {
+        requirePermission('Configure Lists & Categories', { storeName: 'businessUnit', actionName: 'remove', id })
         set((s) => ({
           // Seeds are deletable — see SPRINT-FOLLOWUP-PLAN §2.3.
           units: s.units.filter((u) => u.id !== id),
-        })),
+        }))
+      },
     }),
     {
       name: 'business-unit-storage',

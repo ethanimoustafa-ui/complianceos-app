@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
+import { requirePermission } from '@/lib/rbac-store-gate'
 
 // TrainingCategory — opaque string id. Default seeds match the union literal
 // values from `src/types/index.ts` (Team Pages Sprint expanded set):
@@ -47,6 +48,7 @@ export const useTrainingCategoryStore = create<TrainingCategoryState>()(
       categories: seeds,
 
       add: (label, labelAr) => {
+        requirePermission('Configure Lists & Categories', { storeName: 'trainingCategory', actionName: 'add' })
         const baseId = slugify(label) || `cat-${Date.now()}`
         const existingIds = new Set(get().categories.map((c) => c.id))
         let id = baseId
@@ -58,18 +60,24 @@ export const useTrainingCategoryStore = create<TrainingCategoryState>()(
         return id
       },
 
-      update: (id, patch) =>
+      update: (id, patch) => {
+        requirePermission('Configure Lists & Categories', { storeName: 'trainingCategory', actionName: 'update', id })
         set((s) => ({
           categories: s.categories.map((c) => (c.id === id ? { ...c, ...patch } : c)),
-        })),
+        }))
+      },
 
-      remove: (id) =>
+      remove: (id) => {
+        requirePermission('Configure Lists & Categories', { storeName: 'trainingCategory', actionName: 'remove', id })
         set((s) => ({
-          // Seeds are deletable — see SPRINT-FOLLOWUP-PLAN §2.3.
           categories: s.categories.filter((c) => c.id !== id),
-        })),
+        }))
+      },
 
-      resetToDefaults: () => set({ categories: seeds }),
+      resetToDefaults: () => {
+        requirePermission('Configure Lists & Categories', { storeName: 'trainingCategory', actionName: 'resetToDefaults' })
+        set({ categories: seeds })
+      },
     }),
     {
       name: 'training-category-storage',

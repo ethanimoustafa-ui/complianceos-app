@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import type { TeamMember, PaginationState, SortState } from '@/types'
 import { STANDARD_PERMISSIONS } from '@/lib/permissions-registry'
+import { requirePermission } from '@/lib/rbac-store-gate'
 
 // Re-exported for any direct callers (kept for backwards compat).
 export { STANDARD_PERMISSIONS }
@@ -149,6 +150,7 @@ export const useTeamStore = create<TeamState>()(
       },
 
       invite: async (data) => {
+        requirePermission('Manage Team & Permissions', { storeName: 'team', actionName: 'invite' })
         set({ isLoading: true, error: null })
         try {
           // TODO: Replace with actual API call
@@ -181,6 +183,7 @@ export const useTeamStore = create<TeamState>()(
       },
 
       update: async (id: string, data: Partial<TeamMember>) => {
+        requirePermission('Manage Team & Permissions', { storeName: 'team', actionName: 'update', id })
         set({ isLoading: true, error: null })
         try {
           // TODO: Replace with actual API call
@@ -218,6 +221,7 @@ export const useTeamStore = create<TeamState>()(
       },
 
       updateRole: (memberId: string, newRole: TeamMember['role']) => {
+        requirePermission('Manage Team & Permissions', { storeName: 'team', actionName: `updateRole:${newRole}`, id: memberId })
         set((state) => ({
           members: state.members.map((m) =>
             m.id === memberId ? { ...m, role: newRole } : m
@@ -230,6 +234,7 @@ export const useTeamStore = create<TeamState>()(
       },
 
       remove: async (id: string) => {
+        requirePermission('Manage Team & Permissions', { storeName: 'team', actionName: 'remove', id })
         set({ isLoading: true, error: null })
         try {
           // TODO: Replace with actual API call
@@ -278,16 +283,19 @@ export const useTeamStore = create<TeamState>()(
           },
         })),
 
-      unassignTask: (memberId, assignmentTitle) =>
+      unassignTask: (memberId, assignmentTitle) => {
+        requirePermission('Manage Team & Permissions', { storeName: 'team', actionName: 'unassignTask', id: memberId })
         set((state) => ({
           members: state.members.map((m) =>
             m.id === memberId
               ? { ...m, assignments: (m.assignments || []).filter((a) => a.title !== assignmentTitle) }
               : m
           ),
-        })),
+        }))
+      },
 
-      reassignTask: (fromId, toId, assignmentTitle) =>
+      reassignTask: (fromId, toId, assignmentTitle) => {
+        requirePermission('Manage Team & Permissions', { storeName: 'team', actionName: `reassignTask:${fromId}->${toId}` })
         set((state) => {
           const fromMember = state.members.find((m) => m.id === fromId)
           const assignment = fromMember?.assignments?.find((a) => a.title === assignmentTitle)
@@ -299,7 +307,8 @@ export const useTeamStore = create<TeamState>()(
               return m
             }),
           }
-        }),
+        })
+      },
 
       updateBurnoutTimestamps: () =>
         set((state) => ({

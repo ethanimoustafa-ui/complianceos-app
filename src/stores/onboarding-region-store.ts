@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
+import { requirePermission } from '@/lib/rbac-store-gate'
 
 export interface OnboardingRegion {
   id: string
@@ -31,6 +32,7 @@ export const useOnboardingRegionStore = create<OnboardingRegionState>()(
       regions: seeds,
 
       add: (label, labelAr) => {
+        requirePermission('Configure Lists & Categories', { storeName: 'onboardingRegion', actionName: 'add' })
         const baseId = slugify(label) || `region-${Date.now()}`
         const existingIds = new Set(get().regions.map((r) => r.id))
         let id = baseId
@@ -42,15 +44,19 @@ export const useOnboardingRegionStore = create<OnboardingRegionState>()(
         return id
       },
 
-      update: (id, patch) =>
+      update: (id, patch) => {
+        requirePermission('Configure Lists & Categories', { storeName: 'onboardingRegion', actionName: 'update', id })
         set((s) => ({
           regions: s.regions.map((r) => (r.id === id ? { ...r, ...patch } : r)),
-        })),
+        }))
+      },
 
-      remove: (id) =>
+      remove: (id) => {
+        requirePermission('Configure Lists & Categories', { storeName: 'onboardingRegion', actionName: 'remove', id })
         set((s) => ({
           regions: s.regions.filter((r) => r.isDefault || r.id !== id),
-        })),
+        }))
+      },
     }),
     {
       name: 'onboarding-region-storage',

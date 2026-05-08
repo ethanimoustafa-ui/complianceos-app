@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import type { Department } from '@/types'
+import { requirePermission } from '@/lib/rbac-store-gate'
 
 const seedDepartments: Department[] = [
   { id: 'compliance', name: 'Compliance', nameAr: 'الامتثال', isDefault: true },
@@ -30,6 +31,7 @@ export const useDepartmentStore = create<DepartmentState>()(
       departments: seedDepartments,
 
       addDepartment: (name, nameAr) => {
+        requirePermission('Configure Lists & Categories', { storeName: 'department', actionName: 'addDepartment' })
         // TODO: Replace with actual API call
         const id = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
         const dept: Department = { id, name, nameAr, isDefault: false }
@@ -38,16 +40,15 @@ export const useDepartmentStore = create<DepartmentState>()(
       },
 
       removeDepartment: (id) => {
+        requirePermission('Configure Lists & Categories', { storeName: 'department', actionName: 'removeDepartment', id })
         // TODO: Replace with actual API call
-        // Seeds are deletable — see SPRINT-FOLLOWUP-PLAN §2.3. Orphan-confirm
-        // modal lives in ListsAndCategoriesSection; the `isDefault` flag is
-        // retained for display-only "SEED" badging.
         set((s) => ({
           departments: s.departments.filter((d) => d.id !== id),
         }))
       },
 
       updateDepartment: (id, data) => {
+        requirePermission('Configure Lists & Categories', { storeName: 'department', actionName: 'updateDepartment', id })
         // TODO: Replace with actual API call
         set((s) => ({
           departments: s.departments.map((d) =>

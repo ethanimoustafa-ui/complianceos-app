@@ -4,6 +4,7 @@ import type { Audit, AuditFilters, PaginationState, SortState, AuditDocument, Au
 import { computeNextReview } from '@/lib/review-schedule'
 import { useAuditLogStore } from './audit-log-store'
 import { useAuthStore } from './auth-store'
+import { requirePermission } from '@/lib/rbac-store-gate'
 
 interface AuditState {
   audits: Audit[]
@@ -283,6 +284,7 @@ export const useAuditStore = create<AuditState>()(
       },
 
       create: async (data) => {
+        requirePermission('Manage Audit Findings', { storeName: 'audit', actionName: 'create' })
         set({ isLoading: true, error: null })
         try {
           // TODO: Replace with actual API call
@@ -328,6 +330,7 @@ export const useAuditStore = create<AuditState>()(
       },
 
       update: async (id: string, data: Partial<Audit>) => {
+        requirePermission('Manage Audit Findings', { storeName: 'audit', actionName: 'update', id })
         set({ isLoading: true, error: null })
         try {
           // TODO: Replace with actual API call
@@ -385,6 +388,7 @@ export const useAuditStore = create<AuditState>()(
       },
 
       delete: async (id: string) => {
+        requirePermission('Manage Audit Findings', { storeName: 'audit', actionName: 'delete', id })
         set({ isLoading: true, error: null })
         try {
           // Get the audit before deleting for logging
@@ -711,8 +715,9 @@ export const useAuditStore = create<AuditState>()(
         })
       },
 
-      // Status management
+      // Status management — gated as Phase 6's `closeFinding` analogue.
       updateStatus: async (auditId: string, newStatus: Audit['status'], user: { name: string }) => {
+        requirePermission('Manage Audit Findings', { storeName: 'audit', actionName: `updateStatus:${newStatus}`, id: auditId })
         const audit = get().audits.find((a) => a.id === auditId)
         const oldStatus = audit?.status
 

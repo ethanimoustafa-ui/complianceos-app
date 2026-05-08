@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
+import { requirePermission } from '@/lib/rbac-store-gate'
 
 // Bucket-D label-only override store. Canonical record values (likelihood
 // integers, frequency keys, etc.) are NEVER changed by this store — it only
@@ -43,6 +44,7 @@ export const useScaleLabelsStore = create<ScaleLabelsState>()(
       reviewCadence: emptyMap(),
 
       setLabel: (scale, key, lang, value) => {
+        requirePermission('Configure Lists & Categories', { storeName: 'scaleLabels', actionName: `setLabel:${scale}:${key}:${lang}` })
         set((s) => {
           const current = s[scale] as Record<string, ScaleLabelOverride>
           const k = String(key)
@@ -52,6 +54,7 @@ export const useScaleLabelsStore = create<ScaleLabelsState>()(
       },
 
       resetLabel: (scale, key) => {
+        requirePermission('Configure Lists & Categories', { storeName: 'scaleLabels', actionName: `resetLabel:${scale}:${key}` })
         set((s) => {
           const current = s[scale] as Record<string, ScaleLabelOverride>
           const k = String(key)

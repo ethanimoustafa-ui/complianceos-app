@@ -113,13 +113,16 @@ export function PendingApprovalsCard() {
   const handleApprove = (item: ApprovalItem) => {
     const name = currentUser?.name || 'Manager'
     if (item.type === 'policy') {
-      policyApprove(item.id, notes || undefined, name)
+      // Round 4 Phase 6: store derives approver from auth user.
+      policyApprove(item.id, notes || undefined)
     } else if (item.type === 'sama-letter') {
       const letter = letters.find(l => l.id === item.id)
       if (letter) {
         const pendingStep = letter.approvalChain?.find(s => s.status === 'pending')
         if (pendingStep) {
-          approveLetterStep(item.id, pendingStep.step, name, notes || undefined)
+          // Round 4 Phase 6: store derives approver from auth user.
+          void name
+          approveLetterStep(item.id, pendingStep.step, notes || undefined)
         }
       }
     }
@@ -155,7 +158,7 @@ export function PendingApprovalsCard() {
       if (letter) {
         const pendingStep = letter.approvalChain?.find(s => s.status === 'pending')
         if (pendingStep) {
-          rejectLetterStep(item.id, pendingStep.step, name, notes || 'Rejected via directory')
+          rejectLetterStep(item.id, pendingStep.step, notes || 'Rejected via directory')
         }
       }
     }

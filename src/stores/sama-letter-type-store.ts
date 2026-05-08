@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
+import { requirePermission } from '@/lib/rbac-store-gate'
 
 // SAMA letter type — opaque string id keyed against the (now widened)
 // `SAMALetterType` type. Default seeds match the legacy union values so
@@ -35,6 +36,7 @@ export const useSAMALetterTypeStore = create<SAMALetterTypeState>()(
       types: seeds,
 
       add: (label, labelAr) => {
+        requirePermission('Configure Lists & Categories', { storeName: 'samaLetterType', actionName: 'add' })
         const baseId = slugify(label) || `type-${Date.now()}`
         const existingIds = new Set(get().types.map((t) => t.id))
         let id = baseId
@@ -49,20 +51,24 @@ export const useSAMALetterTypeStore = create<SAMALetterTypeState>()(
         return id
       },
 
-      update: (id, patch) =>
+      update: (id, patch) => {
+        requirePermission('Configure Lists & Categories', { storeName: 'samaLetterType', actionName: 'update', id })
         set((s) => ({
           types: s.types.map((t) =>
             t.id === id ? { ...t, ...patch } : t
           ),
-        })),
+        }))
+      },
 
-      remove: (id) =>
+      remove: (id) => {
+        requirePermission('Configure Lists & Categories', { storeName: 'samaLetterType', actionName: 'remove', id })
         set((s) => ({
           // Seeds are deletable — see SPRINT-FOLLOWUP-PLAN §2.3. Persisted
           // letters and templates retain their stored type id as text-only;
           // the orphan-confirm modal in ListsAndCategoriesSection warns first.
           types: s.types.filter((t) => t.id !== id),
-        })),
+        }))
+      },
     }),
     {
       name: 'sama-letter-type-storage',

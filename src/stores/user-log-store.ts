@@ -1,22 +1,57 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 
+// Round 4 Phase 6 expands the action union with `auth.permission_denied`. The
+// remaining `auth.*` and `team.*` events are reserved for Phase 7. The existing
+// underscore-cased tokens stay for backwards compatibility with the seed logs.
+export type UserLogAction =
+  | 'sign_in'
+  | 'sign_out'
+  | 'session_timeout'
+  | 'password_change'
+  | 'profile_update'
+  | 'permission_change'
+  | 'mfa_enabled'
+  | 'failed_login'
+  | 'auth.permission_denied'
+  | 'auth.login'
+  | 'auth.logout'
+  | 'auth.switch_user'
+  | 'team.permissions_changed'
+
 export interface UserLog {
   id: number
   timestamp: string
   user: string
-  action: 'sign_in' | 'sign_out' | 'session_timeout' | 'password_change' | 'profile_update' | 'permission_change' | 'mfa_enabled' | 'failed_login'
+  action: UserLogAction
   detailsKey: string
   ipAddress: string
   device: string
   location: string
   status: 'success' | 'warning' | 'failed' | 'info'
   userId?: string
+  // Optional free-form target for RBAC-denied entries. Phase 6 records this
+  // as `${storeName}:${id}:${actionName}` so logs can be filtered later.
+  target?: string
+}
+
+// Compact shape used by store-action gate failures (Phase 6 §8.1). The store
+// `log()` action below normalises this into a full `UserLog` entry.
+export interface RBACDeniedLogEntry {
+  userId: string
+  action: UserLogAction
+  target?: string
 }
 
 interface UserLogState {
   logs: UserLog[]
   addLog: (log: Omit<UserLog, 'id'>) => void
+  /**
+   * Compact logger used by Phase 6 store-action gates. Fills in `timestamp`,
+   * default `status`, and a generic `detailsKey` so call sites can stay
+   * one-liners.
+   */
+  log: (entry: RBACDeniedLogEntry) => void
   getLogsByUserId: (userId: string) => UserLog[]
   clearLogs: () => void
 }
@@ -48,6 +83,30 @@ export const useUserLogStore = create<UserLogState>()(
         set((state) => ({
           logs: [{ ...log, id: Math.max(0, ...state.logs.map(l => l.id)) + 1 }, ...state.logs],
         })),
+
+      log: (entry) =>
+        set((state) => {
+          const detailsKey =
+            entry.action === 'auth.permission_denied'
+              ? 'team.permissionDenied'
+              : `team.${entry.action.replace(/\./g, '_')}`
+          const status: UserLog['status'] =
+            entry.action === 'auth.permission_denied' ? 'warning' : 'info'
+          const next: UserLog = {
+            id: Math.max(0, ...state.logs.map(l => l.id)) + 1,
+            timestamp: new Date().toISOString(),
+            user: entry.userId,
+            action: entry.action,
+            detailsKey,
+            ipAddress: 'demo',
+            device: 'demo',
+            location: 'demo',
+            status,
+            userId: entry.userId,
+            target: entry.target,
+          }
+          return { logs: [next, ...state.logs] }
+        }),
 
       getLogsByUserId: (userId) => get().logs.filter((l) => l.userId === userId),
 

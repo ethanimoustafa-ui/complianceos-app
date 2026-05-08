@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import type { AuditTemplate, AuditTemplateCategory, AuditPriority, AuditFrequency, FrequencySchedule } from '@/types'
+import { requirePermission } from '@/lib/rbac-store-gate'
 
 const seedTemplates: AuditTemplate[] = [
   {
@@ -176,6 +177,7 @@ export const useAuditTemplateStore = create<AuditTemplateState>()(
       templates: seedTemplates,
 
       create: (data) => {
+        requirePermission('Manage Audit Templates', { storeName: 'auditTemplate', actionName: 'create' })
         const now = new Date().toISOString().split('T')[0]
         const newTemplate: AuditTemplate = {
           ...data,
@@ -189,6 +191,7 @@ export const useAuditTemplateStore = create<AuditTemplateState>()(
       },
 
       update: (id, data) => {
+        requirePermission('Manage Audit Templates', { storeName: 'auditTemplate', actionName: 'update', id })
         const now = new Date().toISOString().split('T')[0]
         set((s) => ({
           templates: s.templates.map((t) =>
@@ -197,7 +200,10 @@ export const useAuditTemplateStore = create<AuditTemplateState>()(
         }))
       },
 
-      delete: (id) => set((s) => ({ templates: s.templates.filter((t) => t.id !== id) })),
+      delete: (id) => {
+        requirePermission('Manage Audit Templates', { storeName: 'auditTemplate', actionName: 'delete', id })
+        set((s) => ({ templates: s.templates.filter((t) => t.id !== id) }))
+      },
 
       incrementUsage: (id) =>
         set((s) => ({

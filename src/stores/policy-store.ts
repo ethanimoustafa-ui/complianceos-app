@@ -3,6 +3,7 @@ import { persist } from 'zustand/middleware'
 import type { Policy, PolicyFilters, PolicyStatus, PolicyWorkflowStep, PolicyActivityEntry } from '@/types'
 import { computeNextReview, cadenceToReviewCycleDays } from '@/lib/review-schedule'
 import { validateChildDeadline } from '@/lib/deadline-validation'
+import { requirePermission } from '@/lib/rbac-store-gate'
 
 function restatusTimeline(timeline: PolicyWorkflowStep[]): PolicyWorkflowStep[] {
   let firstNonCompleted = false
@@ -42,7 +43,9 @@ interface PolicyState {
 
   // Status transitions
   submitForReview: (id: string) => void
-  approve: (id: string, notes?: string, approvedBy?: string) => void
+  // Round 4 Phase 6: `approvedBy` is gone — store reads `auth.user.name`
+  // itself after the gate passes.
+  approve: (id: string, notes?: string) => void
   initiateReview: (id: string) => void
 
   // Review alerts: policies with nextReviewDate ≤ 90 days from now OR status 'expired'
@@ -284,6 +287,7 @@ export const usePolicyStore = create<PolicyState>()(
       clearFilters: () => set({ filters: {} }),
 
       submitForReview: (id) => {
+        requirePermission('Approve Policy Reviews', { storeName: 'policy', actionName: 'submitForReview', id })
         // TODO: Replace with actual API call
         const policy = get().policies.find((p) => p.id === id)
         if (!policy) return
@@ -296,7 +300,8 @@ export const usePolicyStore = create<PolicyState>()(
         })
       },
 
-      approve: (id, notes?, approvedBy?) => {
+      approve: (id, notes?) => {
+        const user = requirePermission('Approve Policy Reviews', { storeName: 'policy', actionName: 'approve', id })
         // TODO: Replace with actual API call
         const policy = get().policies.find((p) => p.id === id)
         if (!policy) return
@@ -317,7 +322,7 @@ export const usePolicyStore = create<PolicyState>()(
           type: 'workflow_approved',
           textEn: notes ? `Policy approved — ${notes}` : 'Policy approved',
           textAr: notes ? `تمت الموافقة على السياسة — ${notes}` : 'تمت الموافقة على السياسة',
-          user: approvedBy ?? 'System',
+          user: user.name,
         }
         get().update(id, {
           status: 'approved' as PolicyStatus,
@@ -328,6 +333,7 @@ export const usePolicyStore = create<PolicyState>()(
       },
 
       initiateReview: (id) => {
+        requirePermission('Approve Policy Reviews', { storeName: 'policy', actionName: 'initiateReview', id })
         // TODO: Replace with actual API call
         const policy = get().policies.find((p) => p.id === id)
         if (!policy) return

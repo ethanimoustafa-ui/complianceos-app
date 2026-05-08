@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import type { PolicyTemplate, PolicyCategory, PolicyApprovalTier, AuditFrequency, FrequencySchedule } from '@/types'
+import { requirePermission } from '@/lib/rbac-store-gate'
 
 const seedTemplates: PolicyTemplate[] = [
   {
@@ -153,6 +154,7 @@ export const usePolicyTemplateStore = create<PolicyTemplateState>()(
       templates: seedTemplates,
 
       create: (data) => {
+        requirePermission('Manage Policy Templates', { storeName: 'policyTemplate', actionName: 'create' })
         const now = new Date().toISOString().split('T')[0]
         const newTemplate: PolicyTemplate = {
           ...data,
@@ -166,6 +168,7 @@ export const usePolicyTemplateStore = create<PolicyTemplateState>()(
       },
 
       update: (id, data) => {
+        requirePermission('Manage Policy Templates', { storeName: 'policyTemplate', actionName: 'update', id })
         const now = new Date().toISOString().split('T')[0]
         set((s) => ({
           templates: s.templates.map((t) =>
@@ -174,7 +177,10 @@ export const usePolicyTemplateStore = create<PolicyTemplateState>()(
         }))
       },
 
-      delete: (id) => set((s) => ({ templates: s.templates.filter((t) => t.id !== id) })),
+      delete: (id) => {
+        requirePermission('Manage Policy Templates', { storeName: 'policyTemplate', actionName: 'delete', id })
+        set((s) => ({ templates: s.templates.filter((t) => t.id !== id) }))
+      },
 
       incrementUsage: (id) =>
         set((s) => ({

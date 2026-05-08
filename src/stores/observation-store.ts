@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import type { Observation, ObservationFilters, PaginationState, SortState, Comment, User, ObservationTimelineEntry, RemediationPlan, ClosureRequest, ClosureReview } from '@/types'
+import { requirePermission } from '@/lib/rbac-store-gate'
 
 interface ChecklistItem {
   id: string
@@ -198,6 +199,7 @@ export const useObservationStore = create<ObservationState>()(
   },
 
   create: async (data, creator) => {
+    requirePermission('Manage Audit Findings', { storeName: 'observation', actionName: 'create' })
     set({ isLoading: true, error: null })
     try {
       // TODO: Replace with actual API call
@@ -251,6 +253,7 @@ export const useObservationStore = create<ObservationState>()(
   },
 
   update: async (id: string, data: Partial<Observation>, editor?: User) => {
+    requirePermission('Manage Audit Findings', { storeName: 'observation', actionName: 'update', id })
     set({ isLoading: true, error: null })
     try {
       // TODO: Replace with actual API call
@@ -445,6 +448,7 @@ export const useObservationStore = create<ObservationState>()(
   },
 
   delete: async (id: string) => {
+    requirePermission('Manage Audit Findings', { storeName: 'observation', actionName: 'delete', id })
     set({ isLoading: true, error: null })
     try {
       // TODO: Replace with actual API call
@@ -814,6 +818,8 @@ export const useObservationStore = create<ObservationState>()(
   },
 
   transferLeadership: async (observationId: string, newLeaderId: string, newLeaderName: string, currentUser: User) => {
+    // Phase 6 §8.2: `reassign` is gated as `Manage Audit Findings`.
+    requirePermission('Manage Audit Findings', { storeName: 'observation', actionName: 'transferLeadership', id: observationId })
     try {
       await new Promise((resolve) => setTimeout(resolve, 300))
 
@@ -1075,6 +1081,8 @@ export const useObservationStore = create<ObservationState>()(
   },
 
   reviewClosure: async (observationId: string, approved: boolean, reviewer: User, notes?: string) => {
+    // Phase 6 §8.2: `close` is gated as `Manage Audit Findings`.
+    requirePermission('Manage Audit Findings', { storeName: 'observation', actionName: `reviewClosure:${approved ? 'approved' : 'rejected'}`, id: observationId })
     try {
       await new Promise((resolve) => setTimeout(resolve, 300))
 

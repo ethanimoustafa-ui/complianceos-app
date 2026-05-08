@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
+import { requirePermission } from '@/lib/rbac-store-gate'
 
 // Onboarding industry picker — opaque string id seeded with the original
 // hard-coded options. New entries added by the user persist here so any
@@ -35,6 +36,7 @@ export const useOnboardingIndustryStore = create<OnboardingIndustryState>()(
       industries: seeds,
 
       add: (label, labelAr) => {
+        requirePermission('Configure Lists & Categories', { storeName: 'onboardingIndustry', actionName: 'add' })
         const baseId = slugify(label) || `industry-${Date.now()}`
         const existingIds = new Set(get().industries.map((i) => i.id))
         let id = baseId
@@ -49,15 +51,19 @@ export const useOnboardingIndustryStore = create<OnboardingIndustryState>()(
         return id
       },
 
-      update: (id, patch) =>
+      update: (id, patch) => {
+        requirePermission('Configure Lists & Categories', { storeName: 'onboardingIndustry', actionName: 'update', id })
         set((s) => ({
           industries: s.industries.map((i) => (i.id === id ? { ...i, ...patch } : i)),
-        })),
+        }))
+      },
 
-      remove: (id) =>
+      remove: (id) => {
+        requirePermission('Configure Lists & Categories', { storeName: 'onboardingIndustry', actionName: 'remove', id })
         set((s) => ({
           industries: s.industries.filter((i) => i.isDefault || i.id !== id),
-        })),
+        }))
+      },
     }),
     {
       name: 'onboarding-industry-storage',

@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import type { LetterTemplate, SAMALetterType } from '@/types'
+import { requirePermission } from '@/lib/rbac-store-gate'
 
 const typeColors: Record<SAMALetterType, string> = {
   'non-objection': 'emerald',
@@ -177,6 +178,7 @@ export const useSAMATemplateStore = create<SAMATemplateState>()(
       templates: seedTemplates,
 
       create: (data) => {
+        requirePermission('Manage Letter Templates', { storeName: 'samaTemplate', actionName: 'create' })
         const now = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
         const newTemplate: LetterTemplate = {
           ...data,
@@ -192,6 +194,7 @@ export const useSAMATemplateStore = create<SAMATemplateState>()(
       },
 
       update: (id, data) => {
+        requirePermission('Manage Letter Templates', { storeName: 'samaTemplate', actionName: 'update', id })
         const now = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
         set((s) => ({
           templates: s.templates.map((t) =>
@@ -200,7 +203,10 @@ export const useSAMATemplateStore = create<SAMATemplateState>()(
         }))
       },
 
-      delete: (id) => set((s) => ({ templates: s.templates.filter((t) => t.id !== id) })),
+      delete: (id) => {
+        requirePermission('Manage Letter Templates', { storeName: 'samaTemplate', actionName: 'delete', id })
+        set((s) => ({ templates: s.templates.filter((t) => t.id !== id) }))
+      },
 
       incrementUsage: (id) =>
         set((s) => ({

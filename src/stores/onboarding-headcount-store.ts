@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
+import { requirePermission } from '@/lib/rbac-store-gate'
 
 export interface OnboardingHeadcount {
   id: string
@@ -31,6 +32,7 @@ export const useOnboardingHeadcountStore = create<OnboardingHeadcountState>()(
       buckets: seeds,
 
       add: (label, labelAr) => {
+        requirePermission('Configure Lists & Categories', { storeName: 'onboardingHeadcount', actionName: 'add' })
         const baseId = slugify(label) || `headcount-${Date.now()}`
         const existingIds = new Set(get().buckets.map((b) => b.id))
         let id = baseId
@@ -42,15 +44,19 @@ export const useOnboardingHeadcountStore = create<OnboardingHeadcountState>()(
         return id
       },
 
-      update: (id, patch) =>
+      update: (id, patch) => {
+        requirePermission('Configure Lists & Categories', { storeName: 'onboardingHeadcount', actionName: 'update', id })
         set((s) => ({
           buckets: s.buckets.map((b) => (b.id === id ? { ...b, ...patch } : b)),
-        })),
+        }))
+      },
 
-      remove: (id) =>
+      remove: (id) => {
+        requirePermission('Configure Lists & Categories', { storeName: 'onboardingHeadcount', actionName: 'remove', id })
         set((s) => ({
           buckets: s.buckets.filter((b) => b.isDefault || b.id !== id),
-        })),
+        }))
+      },
     }),
     {
       name: 'onboarding-headcount-storage',

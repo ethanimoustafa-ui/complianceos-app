@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
+import { requirePermission } from '@/lib/rbac-store-gate'
 
 // Correspondence type — id is opaque string. Seeds match the historical
 // `Correspondence.type` literal union; type widened to `string` in
@@ -37,6 +38,7 @@ export const useCorrespondenceTypeStore = create<CorrespondenceTypeState>()(
       types: seeds,
 
       add: (label, labelAr) => {
+        requirePermission('Configure Lists & Categories', { storeName: 'correspondenceType', actionName: 'add' })
         const baseId = slugify(label) || `cor-type-${Date.now()}`
         const existingIds = new Set(get().types.map((t) => t.id))
         let id = baseId
@@ -48,16 +50,20 @@ export const useCorrespondenceTypeStore = create<CorrespondenceTypeState>()(
         return id
       },
 
-      update: (id, patch) =>
+      update: (id, patch) => {
+        requirePermission('Configure Lists & Categories', { storeName: 'correspondenceType', actionName: 'update', id })
         set((s) => ({
           types: s.types.map((t) => (t.id === id ? { ...t, ...patch } : t)),
-        })),
+        }))
+      },
 
-      remove: (id) =>
+      remove: (id) => {
+        requirePermission('Configure Lists & Categories', { storeName: 'correspondenceType', actionName: 'remove', id })
         set((s) => ({
           // Seeds are deletable — see SPRINT-FOLLOWUP-PLAN §2.3.
           types: s.types.filter((t) => t.id !== id),
-        })),
+        }))
+      },
     }),
     {
       name: 'correspondence-type-storage',

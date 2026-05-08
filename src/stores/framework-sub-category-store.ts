@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
+import { requirePermission } from '@/lib/rbac-store-gate'
 
 // Per-framework sub-category. Each entry is scoped by `frameworkId` so that
 // every regulatory framework (SAMA, CMA, ZATCA, CITC, …) can carry its own
@@ -51,6 +52,7 @@ export const useFrameworkSubCategoryStore = create<FrameworkSubCategoryState>()(
         get().subCategories.filter((sc) => sc.frameworkId === frameworkId),
 
       add: (frameworkId, label, labelAr) => {
+        requirePermission('Configure Lists & Categories', { storeName: 'frameworkSubCategory', actionName: 'add', id: frameworkId })
         const baseId = slugify(label) || `sub-${Date.now()}`
         const existingIds = new Set(get().subCategories.map((sc) => sc.id))
         let id = baseId
@@ -66,19 +68,23 @@ export const useFrameworkSubCategoryStore = create<FrameworkSubCategoryState>()(
         return created
       },
 
-      update: (id, patch) =>
+      update: (id, patch) => {
+        requirePermission('Configure Lists & Categories', { storeName: 'frameworkSubCategory', actionName: 'update', id })
         set((s) => ({
           subCategories: s.subCategories.map((sc) =>
             sc.id === id ? { ...sc, ...patch } : sc
           ),
-        })),
+        }))
+      },
 
-      remove: (id) =>
+      remove: (id) => {
+        requirePermission('Configure Lists & Categories', { storeName: 'frameworkSubCategory', actionName: 'remove', id })
         set((s) => ({
           // Seeds are deletable — see SPRINT-FOLLOWUP-PLAN §2.3. Persisted
           // letters retain the raw sub-category id as text-only.
           subCategories: s.subCategories.filter((sc) => sc.id !== id),
-        })),
+        }))
+      },
     }),
     {
       name: 'sama-sub-category-storage',

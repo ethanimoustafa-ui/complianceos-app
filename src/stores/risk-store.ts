@@ -11,6 +11,7 @@ import type {
   DepartmentProposedPlan,
 } from '@/types'
 import { computeNextReview } from '@/lib/review-schedule'
+import { requirePermission } from '@/lib/rbac-store-gate'
 
 function computeNextReviewDate(from: string, frequency: MonitoringFrequency): string {
   const d = new Date(from)
@@ -307,6 +308,7 @@ export const useRiskStore = create<RiskState>()(
       },
 
       create: async (data) => {
+        requirePermission('Manage Audit Findings', { storeName: 'risk', actionName: 'create' })
         set({ isLoading: true, error: null })
         try {
           await new Promise((resolve) => setTimeout(resolve, 500))
@@ -363,6 +365,7 @@ export const useRiskStore = create<RiskState>()(
       },
 
       update: async (id: string, data: Partial<Risk>) => {
+        requirePermission('Manage Audit Findings', { storeName: 'risk', actionName: 'update', id })
         set({ isLoading: true, error: null })
         try {
           await new Promise((resolve) => setTimeout(resolve, 500))
@@ -407,6 +410,7 @@ export const useRiskStore = create<RiskState>()(
       },
 
       delete: async (id: string) => {
+        requirePermission('Manage Audit Findings', { storeName: 'risk', actionName: 'delete', id })
         set({ isLoading: true, error: null })
         try {
           await new Promise((resolve) => setTimeout(resolve, 500))
@@ -426,6 +430,7 @@ export const useRiskStore = create<RiskState>()(
       },
 
       updateStatus: (id: string, newStatus: Risk['status']) => {
+        requirePermission('Manage Audit Findings', { storeName: 'risk', actionName: `updateStatus:${newStatus}`, id })
         set((state) => ({
           risks: state.risks.map((r) => {
             if (r.id === id) {
@@ -648,6 +653,7 @@ export const useRiskStore = create<RiskState>()(
       },
 
       acceptDepartmentPlan: (riskId, actingUser) => {
+        requirePermission('Manage Audit Findings', { storeName: 'risk', actionName: 'acceptDepartmentPlan', id: riskId })
         set((state) => ({
           risks: state.risks.map((r) => {
             if (r.id !== riskId || !r.departmentProposedPlan) return r

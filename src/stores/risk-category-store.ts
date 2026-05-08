@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
+import { requirePermission } from '@/lib/rbac-store-gate'
 
 // RiskCategory — opaque string id. Seeds match the legacy union literal
 // values: operational | financial | compliance | strategic | reputational
@@ -36,6 +37,7 @@ export const useRiskCategoryStore = create<RiskCategoryState>()(
       categories: seeds,
 
       add: (label, labelAr) => {
+        requirePermission('Configure Lists & Categories', { storeName: 'riskCategory', actionName: 'add' })
         const baseId = slugify(label) || `cat-${Date.now()}`
         const existingIds = new Set(get().categories.map((c) => c.id))
         let id = baseId
@@ -47,18 +49,24 @@ export const useRiskCategoryStore = create<RiskCategoryState>()(
         return id
       },
 
-      update: (id, patch) =>
+      update: (id, patch) => {
+        requirePermission('Configure Lists & Categories', { storeName: 'riskCategory', actionName: 'update', id })
         set((s) => ({
           categories: s.categories.map((c) => (c.id === id ? { ...c, ...patch } : c)),
-        })),
+        }))
+      },
 
-      remove: (id) =>
+      remove: (id) => {
+        requirePermission('Configure Lists & Categories', { storeName: 'riskCategory', actionName: 'remove', id })
         set((s) => ({
-          // Seeds are deletable — see SPRINT-FOLLOWUP-PLAN §2.3.
           categories: s.categories.filter((c) => c.id !== id),
-        })),
+        }))
+      },
 
-      resetToDefaults: () => set({ categories: seeds }),
+      resetToDefaults: () => {
+        requirePermission('Configure Lists & Categories', { storeName: 'riskCategory', actionName: 'resetToDefaults' })
+        set({ categories: seeds })
+      },
     }),
     {
       name: 'risk-category-storage',

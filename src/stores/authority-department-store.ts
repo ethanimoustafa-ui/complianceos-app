@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { AUTHORITY_DEPARTMENTS, type DeptDescriptor } from '@/lib/letter-authority'
+import { requirePermission } from '@/lib/rbac-store-gate'
 
 export interface AuthorityDept extends DeptDescriptor {
   isSeed?: boolean
@@ -48,6 +49,7 @@ export const useAuthorityDeptStore = create<AuthorityDeptState>()(
       getDepartments: (authority) => get().byAuthority[key(authority)] ?? [],
 
       addDepartment: (authority, en, ar, email) => {
+        requirePermission('Configure Lists & Categories', { storeName: 'authorityDepartment', actionName: `addDepartment:${authority}` })
         const k = key(authority)
         const id = `${k}-${slug(en) || Date.now()}`
         const dept: AuthorityDept = { id, en, ar: ar || en, email, isSeed: false }
@@ -59,6 +61,7 @@ export const useAuthorityDeptStore = create<AuthorityDeptState>()(
       },
 
       updateDepartment: (authority, deptId, patch) => {
+        requirePermission('Configure Lists & Categories', { storeName: 'authorityDepartment', actionName: `updateDepartment:${authority}`, id: deptId })
         const k = key(authority)
         set((s) => {
           const list = s.byAuthority[k] ?? []
@@ -72,6 +75,7 @@ export const useAuthorityDeptStore = create<AuthorityDeptState>()(
       },
 
       removeDepartment: (authority, deptId) => {
+        requirePermission('Configure Lists & Categories', { storeName: 'authorityDepartment', actionName: `removeDepartment:${authority}`, id: deptId })
         const k = key(authority)
         set((s) => {
           const list = s.byAuthority[k] ?? []

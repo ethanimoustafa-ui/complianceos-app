@@ -9,6 +9,7 @@ import type {
   PaginationState,
   SortState,
 } from '@/types'
+import { requirePermission } from '@/lib/rbac-store-gate'
 
 interface SAMALetterFilters {
   type?: SAMALetterType[]
@@ -157,8 +158,10 @@ interface SAMALetterState {
   update: (id: string, data: Partial<SAMALetter>) => void
   delete: (id: string) => void
   submitForApproval: (id: string) => void
-  approveStep: (id: string, step: 1 | 2 | 3, approverName: string, notes?: string) => void
-  rejectStep: (id: string, step: 1 | 2 | 3, approverName: string, notes: string) => void
+  // Round 4 Phase 6: the previous `approverName` argument is gone — the store
+  // reads `useAuthStore.getState().user.name` itself after the gate passes.
+  approveStep: (id: string, step: 1 | 2 | 3, notes?: string) => void
+  rejectStep: (id: string, step: 1 | 2 | 3, notes: string) => void
   send: (id: string) => void
   markResponseReceived: (id: string) => void
   setFilters: (filters: SAMALetterFilters) => void
@@ -244,6 +247,7 @@ export const useSAMALetterStore = create<SAMALetterState>()(
       },
 
       submitForApproval: (id) => {
+        requirePermission('Approve SAMA Letters', { storeName: 'samaLetter', actionName: 'submitForApproval', id })
         // TODO: Replace with actual API call
         const now = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
         const newEvent: SAMALetterTimelineEvent = {
@@ -270,7 +274,9 @@ export const useSAMALetterStore = create<SAMALetterState>()(
         })
       },
 
-      approveStep: (id, step, approverName, notes) => {
+      approveStep: (id, step, notes) => {
+        const user = requirePermission('Approve SAMA Letters', { storeName: 'samaLetter', actionName: `approveStep:${step}`, id })
+        const approverName = user.name
         // TODO: Replace with actual API call
         const now = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
         set((state) => {
@@ -307,7 +313,9 @@ export const useSAMALetterStore = create<SAMALetterState>()(
         })
       },
 
-      rejectStep: (id, step, approverName, notes) => {
+      rejectStep: (id, step, notes) => {
+        const user = requirePermission('Approve SAMA Letters', { storeName: 'samaLetter', actionName: `rejectStep:${step}`, id })
+        const approverName = user.name
         // TODO: Replace with actual API call
         const now = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
         set((state) => {
@@ -343,6 +351,7 @@ export const useSAMALetterStore = create<SAMALetterState>()(
       },
 
       send: (id) => {
+        requirePermission('Approve SAMA Letters', { storeName: 'samaLetter', actionName: 'send', id })
         // TODO: Replace with actual API call
         const now = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
         // Lazy-import the renderer to avoid a circular import; this collapses
@@ -389,6 +398,7 @@ export const useSAMALetterStore = create<SAMALetterState>()(
       },
 
       markResponseReceived: (id) => {
+        requirePermission('Approve SAMA Letters', { storeName: 'samaLetter', actionName: 'markResponseReceived', id })
         // TODO: Replace with actual API call
         const now = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
         set((state) => {
