@@ -81,7 +81,7 @@ export function useCalendarEvents() {
       })
     }
 
-    // SAMA Letters
+    // Letters
     for (const l of letters) {
       const date = extractDate(l.responseDeadline)
       if (!date) continue
@@ -93,7 +93,7 @@ export function useCalendarEvents() {
         date,
         status: l.status,
         priority: l.status === 'overdue' ? 'critical' : 'high',
-        route: `/correspondence/sama-letters?id=${l.id}`,
+        route: `/correspondence/letters?id=${l.id}`,
         colorKey: 'sama-letter',
       })
     }

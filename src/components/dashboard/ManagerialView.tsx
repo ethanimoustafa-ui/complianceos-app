@@ -46,7 +46,7 @@ export function ManagerialView({ metrics }: ManagerialViewProps) {
 
     for (const l of letters) {
       if (l.status === 'pending-approval') {
-        items.push({ id: l.id, type: 'SAMA Letter', typeKey: t('samaLetters.title'), title: l.subject, status: l.status, dueDate: l.responseDeadline, route: `/correspondence/sama-letters?id=${l.id}` })
+        items.push({ id: l.id, type: 'SAMA Letter', typeKey: t('samaLetters.title'), title: l.subject, status: l.status, dueDate: l.responseDeadline, route: `/correspondence/letters?id=${l.id}` })
       }
     }
     for (const p of policies) {

@@ -287,7 +287,7 @@ export default function ObservationsPage() {
           {/* Quick Links */}
           <div className="hidden lg:flex gap-2">
             <Link
-              href="/correspondence/sama-letters"
+              href="/correspondence/letters"
               className={`px-3 py-1.5 text-xs font-bold text-slate-600 bg-slate-50 hover:bg-slate-100 rounded-lg transition-all border border-slate-200 flex items-center gap-2`}
             >
               <Icon icon="lucide:mail" className="text-emerald-500" />

@@ -87,9 +87,9 @@ export function PendingApprovalsCard() {
           title: l.subject || l.reference,
           reference: l.reference,
           urgent: l.priority === 'urgent' || deadlineClose,
-          contextSummary: `SAMA letter awaiting Department Head approval`,
+          contextSummary: `Letter awaiting Department Head approval`,
           workflowStepInfo: deptHeadStep.assignedTo ? `Pending: ${deptHeadStep.assignedTo}` : 'Pending: Department Head',
-          linkHref: `/correspondence/sama-letters?id=${l.id}`,
+          linkHref: `/correspondence/letters?id=${l.id}`,
           approvalChain: l.approvalChain,
         })
       }
@@ -107,7 +107,7 @@ export function PendingApprovalsCard() {
 
   const typeLabels: Record<string, string> = {
     policy: t('correspondence.policyReview' as TranslationKey),
-    'sama-letter': t('navigation.samaLetters' as TranslationKey),
+    'sama-letter': t('navigation.letters' as TranslationKey),
   }
 
   const handleApprove = (item: ApprovalItem) => {

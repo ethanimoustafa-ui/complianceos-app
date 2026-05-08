@@ -104,7 +104,7 @@ export function OfficerView({ metrics }: OfficerViewProps) {
       if (l.status !== 'pending-approval') continue
       for (const step of l.approvalChain) {
         if (step.status === 'pending' && (step.assignedTo === userId || step.assignedTo === userName)) {
-          items.push({ id: l.id, title: `${l.subject} — Step ${step.step} (${step.role})`, type: t('samaLetters.title'), route: `/correspondence/sama-letters?id=${l.id}` })
+          items.push({ id: l.id, title: `${l.subject} — Step ${step.step} (${step.role})`, type: t('samaLetters.title'), route: `/correspondence/letters?id=${l.id}` })
         }
       }
     }

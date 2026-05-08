@@ -2,7 +2,8 @@
 
 **Version:** 1.0
 **Date:** February 2026
-**Last Updated:** May 9, 2026 (Round 4.5 post-script — Access Matrix Settings section. Members × 15 permissions 2-D table with sticky member column + role-aware admin rows + bulk Apply role defaults / Clear all + per-cell `team.permissions_changed` audit log + `<Gate perm="Manage Team & Permissions">` wrap. Closes RBAC-008. Round 4 RBAC sprint + Access Matrix all complete.)
+**Last Updated:** May 9, 2026 (audit-loop iter-1 — `sama-letters` route renamed to `letters`. Page directory moved from `src/app/(dashboard)/correspondence/sama-letters/` to `…/letters/`; redirect shim at `(dashboard)/sama-letters/page.tsx` repointed; 11 `/correspondence/sama-letters` href/route strings updated across feed/advisory/observations/regulatory-updates pages, hooks (`useNotificationEngine`, `useCalendarEvents`), and dashboard views (Officer/Managerial). New i18n alias keys `navigation.letters`, `sidebar.letters`, `letters.title` (EN: "Letters", AR: "الخطابات"); `pending-approvals-card` consumer switched to `navigation.letters`. Generic "SAMA letter" comments + `contextSummary` strings normalised to "letter". Store name `sama-letter-store`, `useSAMALetterStore` hook, `SAMALetter*` types, and component dir `src/components/correspondence/sama-letters/` retained — out-of-scope per iteration brief. `npx tsc --noEmit` clean.)
+**Previously:** May 9, 2026 (Round 4.5 post-script — Access Matrix Settings section. Members × 15 permissions 2-D table with sticky member column + role-aware admin rows + bulk Apply role defaults / Clear all + per-cell `team.permissions_changed` audit log + `<Gate perm="Manage Team & Permissions">` wrap. Closes RBAC-008. Round 4 RBAC sprint + Access Matrix all complete.)
 
 ---
 

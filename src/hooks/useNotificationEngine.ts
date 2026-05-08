@@ -123,16 +123,16 @@ export function useNotificationEngine() {
       }
     }
 
-    // ── SAMA Letters ──
+    // ── Letters ──
     if (modules.samaLetters) {
       for (const l of letters) {
         if (l.status === 'overdue' && events.overdueItems) {
-          notifs.push(makeNotif('sama-letter', l.id, 'overdue', t('notifications.samaLetterOverdue' as TranslationKey), t('notifications.isOverdueRef' as TranslationKey, { ref: l.reference, name: l.subject }), 'error', `/correspondence/sama-letters?id=${l.id}`))
+          notifs.push(makeNotif('sama-letter', l.id, 'overdue', t('notifications.samaLetterOverdue' as TranslationKey), t('notifications.isOverdueRef' as TranslationKey, { ref: l.reference, name: l.subject }), 'error', `/correspondence/letters?id=${l.id}`))
         }
         if (l.status === 'sent' && l.responseDeadline && events.dueDates) {
           const d = daysUntil(l.responseDeadline)
           if (d <= 7 && d > 0) {
-            notifs.push(makeNotif('sama-letter', l.id, 'due-7d', t('notifications.samaResponseDueSoon' as TranslationKey), t('notifications.responseInDays' as TranslationKey, { name: l.reference, days: String(Math.ceil(d)) }), 'warning', `/correspondence/sama-letters?id=${l.id}`))
+            notifs.push(makeNotif('sama-letter', l.id, 'due-7d', t('notifications.samaResponseDueSoon' as TranslationKey), t('notifications.responseInDays' as TranslationKey, { name: l.reference, days: String(Math.ceil(d)) }), 'warning', `/correspondence/letters?id=${l.id}`))
           }
         }
       }

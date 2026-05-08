@@ -116,7 +116,7 @@ function RegulatoryUpdatesRulesPageContent() {
           </div>
           <div className="hidden lg:block h-8 w-px bg-slate-200" />
           <div className="hidden lg:flex gap-2">
-            <Link href="/correspondence/sama-letters" className={`px-3 py-1.5 text-xs font-bold text-slate-600 bg-slate-50 hover:bg-slate-100 rounded-lg border border-slate-200 flex items-center gap-2`}>
+            <Link href="/correspondence/letters" className={`px-3 py-1.5 text-xs font-bold text-slate-600 bg-slate-50 hover:bg-slate-100 rounded-lg border border-slate-200 flex items-center gap-2`}>
               <Icon icon="lucide:mail" className="text-emerald-500" />
               {t('samaLetters.tabLetters')}
             </Link>

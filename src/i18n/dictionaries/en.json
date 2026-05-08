@@ -79,6 +79,7 @@
     "team": "Team",
     "settings": "Settings",
     "samaLetters": "SAMA Letters",
+    "letters": "Letters",
     "regulatoryUpdates": "Regulatory Updates",
     "observations": "Observations",
     "observationsTracker": "Observations Tracker",
@@ -86,6 +87,7 @@
     "riskRegister": "Risk Register"
   },
   "sidebar": {
+    "letters": "Letters",
     "notifications": "Notifications",
     "messages": "Messages",
     "helpCenter": "Help Center",
@@ -471,6 +473,9 @@
     "typeSubmission": "Submission",
     "typeReview": "Review",
     "markAsComplete": "Mark as Complete"
+  },
+  "letters": {
+    "title": "Letters"
   },
   "samaLetters": {
     "title": "SAMA Letters",

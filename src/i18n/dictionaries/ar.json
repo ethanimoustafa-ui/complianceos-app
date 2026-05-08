@@ -79,6 +79,7 @@
     "team": "الفريق",
     "settings": "الإعدادات",
     "samaLetters": "خطابات ساما",
+    "letters": "الخطابات",
     "regulatoryUpdates": "التحديثات التنظيمية",
     "observations": "الملاحظات",
     "observationsTracker": "متابعة الملاحظات",
@@ -86,6 +87,7 @@
     "riskRegister": "سجل المخاطر"
   },
   "sidebar": {
+    "letters": "الخطابات",
     "notifications": "الإشعارات",
     "messages": "الرسائل",
     "helpCenter": "مركز المساعدة",
@@ -471,6 +473,9 @@
     "typeSubmission": "تقديم",
     "typeReview": "مراجعة",
     "markAsComplete": "تحديد كمكتمل"
+  },
+  "letters": {
+    "title": "الخطابات"
   },
   "samaLetters": {
     "title": "خطابات ساما",
