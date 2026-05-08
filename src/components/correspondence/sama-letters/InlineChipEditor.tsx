@@ -240,11 +240,16 @@ export function InlineChipEditor({
   const rebuild = useCallback(() => {
     const root = containerRef.current
     if (!root) return
-    // Unmount any chip roots that may exist from a prior render.
-    for (const r of chipRootsRef.current) {
-      try { r.unmount() } catch { /* unmount race during HMR */ }
-    }
+    // Defer unmount of prior chip roots to a microtask. React 18+ blocks
+    // synchronous root unmounts during the parent's commit phase, which is
+    // exactly when this `rebuild()` runs (called from a useEffect).
+    const oldRoots = chipRootsRef.current
     chipRootsRef.current = []
+    queueMicrotask(() => {
+      for (const r of oldRoots) {
+        try { r.unmount() } catch { /* ignore */ }
+      }
+    })
     root.innerHTML = ''
 
     const text = value
@@ -267,7 +272,7 @@ export function InlineChipEditor({
       // Pass a zero-width char so cursor placement around the chip is consistent.
       root.appendChild(chipHost)
 
-      const def = defByKey.get(tokenKey) ?? { key: tokenKey, label: tokenKey, type: 'text' as const }
+      const def = defByKey.get(tokenKey) ?? { key: tokenKey, label: tokenKey, type: 'date' as const }
       const value_ = placeholderValues[tokenKey]
       const chipRoot = createRoot(chipHost)
       chipRoot.render(

@@ -1,11 +1,12 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Icon } from '@iconify/react'
 import { cn } from '@/lib/utils'
 import type { PlaceholderDef, PlaceholderValue } from '@/types'
 import { formatRef } from '@/lib/letter-placeholders'
 import { PlaceholderPicker } from './PlaceholderPicker'
+import { useTranslation } from '@/i18n'
 
 interface PlaceholderChipProps {
   def: PlaceholderDef
@@ -30,19 +31,52 @@ export function PlaceholderChip({
   isRTL = false,
   size = 'md',
 }: PlaceholderChipProps) {
+  const { t, language } = useTranslation()
   const [open, setOpen] = useState(false)
   const rootRef = useRef<HTMLSpanElement>(null)
+  const triggerRef = useRef<HTMLButtonElement>(null)
+  const popoverRef = useRef<HTMLSpanElement>(null)
+  const [popPos, setPopPos] = useState<{ top: number; left: number } | null>(null)
 
   useEffect(() => {
     if (!open) return
     const handler = (e: MouseEvent) => {
-      if (rootRef.current && !rootRef.current.contains(e.target as Node)) {
+      const target = e.target as Node
+      const insideRoot = rootRef.current?.contains(target)
+      const insidePopover = popoverRef.current?.contains(target)
+      if (!insideRoot && !insidePopover) {
         setOpen(false)
       }
     }
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
   }, [open])
+
+  // Compute fixed-position coords each time the popover opens. Using
+  // `position: fixed` lets the popover escape any `overflow:hidden` ancestor
+  // (the chip lives in a contenteditable region with hidden overflow).
+  useLayoutEffect(() => {
+    if (!open) return
+    if (!triggerRef.current) return
+    const POPOVER_WIDTH = 288 // 18rem max
+    const compute = () => {
+      const node = triggerRef.current
+      if (!node) return
+      const rect = node.getBoundingClientRect()
+      const top = rect.bottom + 4
+      const left = isRTL
+        ? Math.max(8, rect.right - POPOVER_WIDTH)
+        : Math.min(rect.left, window.innerWidth - POPOVER_WIDTH - 8)
+      setPopPos({ top, left })
+    }
+    compute()
+    window.addEventListener('resize', compute)
+    window.addEventListener('scroll', compute, true)
+    return () => {
+      window.removeEventListener('resize', compute)
+      window.removeEventListener('scroll', compute, true)
+    }
+  }, [open, isRTL])
 
   const filled = !!value && (
     (value.type === 'reference' && !!value.value?.id) ||
@@ -64,6 +98,7 @@ export function PlaceholderChip({
   return (
     <span ref={rootRef} className="relative inline-flex align-baseline" dir="ltr">
       <button
+        ref={triggerRef}
         type="button"
         onClick={() => setOpen((o) => !o)}
         className={cn(
@@ -91,37 +126,38 @@ export function PlaceholderChip({
               onClear()
             }}
             className="ms-0.5 opacity-60 hover:opacity-100 cursor-pointer"
-            title="Clear"
+            title={t('placeholderPicker.clear')}
           >
             <Icon icon="lucide:x" className={size === 'sm' ? 'text-[10px]' : 'text-xs'} />
           </span>
         )}
       </button>
 
-      {open && (
+      {open && popPos && (
         <span
-          className={cn(
-            'absolute z-50 top-full mt-1 w-72',
-            isRTL ? 'right-0' : 'left-0',
-          )}
-          // Popovers should always render LTR for picker controls regardless of body dir.
-          dir="ltr"
+          ref={popoverRef}
+          className="z-[60] min-w-[260px] max-w-[320px]"
+          style={{
+            position: 'fixed',
+            top: popPos.top,
+            left: popPos.left,
+            width: 288,
+          }}
+          dir={language === 'ar' ? 'rtl' : 'ltr'}
         >
           <span className="block bg-white border border-slate-200 rounded-lg shadow-xl p-3 space-y-2">
-            <span className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+            <span className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider whitespace-normal break-words">
               {def.label}{' '}
-              <code className="ms-1 text-[10px] text-slate-400 font-mono">{`{{${def.key}}}`}</code>
+              <code className="ms-1 text-[10px] text-slate-400 font-mono break-all">{`{{${def.key}}}`}</code>
             </span>
             <PlaceholderPicker
               def={def}
               value={value}
               onChange={(v) => {
                 onChange(v)
-                if (def.type !== 'text') {
-                  // Auto-close after a discrete pick (date/reference);
-                  // text input stays open so the user can keep typing.
-                  setOpen(false)
-                }
+                // Only date and reference exist now — both are discrete
+                // picks, so always auto-close.
+                setOpen(false)
               }}
             />
             <span className="flex justify-end pt-1">
@@ -130,7 +166,7 @@ export function PlaceholderChip({
                 onClick={() => setOpen(false)}
                 className="px-2 py-1 text-[11px] font-bold text-slate-500 hover:text-slate-900 cursor-pointer"
               >
-                Done
+                {t('placeholderPicker.done')}
               </button>
             </span>
           </span>

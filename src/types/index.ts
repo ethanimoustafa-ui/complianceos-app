@@ -412,7 +412,7 @@ export type TemplateStatus = 'Active' | 'Draft'
 // Smart placeholder system for letter templates.
 // Authors insert placeholders by token (e.g., {{candidate_name}}). Each token
 // has a typed definition that drives the compose-time picker.
-export type PlaceholderType = 'text' | 'date' | 'reference'
+export type PlaceholderType = 'date' | 'reference'
 export type PlaceholderRefKind = 'observation' | 'audit' | 'letter' | 'rule' | 'policy'
 
 export interface PlaceholderDef {
@@ -435,7 +435,6 @@ export interface PlaceholderRefValue {
 }
 
 export type PlaceholderValue =
-  | { type: 'text'; value: string }
   | { type: 'date'; value: string }
   | { type: 'reference'; value: PlaceholderRefValue }
 

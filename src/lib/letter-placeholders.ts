@@ -20,8 +20,9 @@ export function extractPlaceholderTokens(text: string | undefined): string[] {
 }
 
 // Reconcile a template's placeholderDefs with the tokens that appear in its
-// body/subject text. Adds defs for new tokens (default type 'text') and keeps
-// any author-edited types/refKinds intact.
+// body/subject text. Adds defs for new tokens (default type 'date') and keeps
+// any author-edited types/refKinds intact. Any legacy def with the obsolete
+// `type: 'text'` is auto-upgraded to `type: 'date'` (key + label preserved).
 export function reconcilePlaceholderDefs(
   defs: PlaceholderDef[] | undefined,
   body: string | undefined,
@@ -31,14 +32,22 @@ export function reconcilePlaceholderDefs(
     ...extractPlaceholderTokens(body),
     ...extractPlaceholderTokens(subject),
   ])
-  const byKey = new Map((defs ?? []).map((d) => [d.key, d]))
+  const byKey = new Map(
+    (defs ?? []).map((d) => {
+      // Legacy 'text' kind no longer exists — promote to 'date' on read.
+      const legacyType = (d as { type?: string }).type
+      const next: PlaceholderDef =
+        legacyType === 'text' ? { ...d, type: 'date' } : d
+      return [d.key, next]
+    }),
+  )
   const out: PlaceholderDef[] = []
   for (const tok of tokens) {
     const existing = byKey.get(tok)
     if (existing) {
       out.push(existing)
     } else {
-      out.push({ key: tok, label: humanizeToken(tok), type: 'text' })
+      out.push({ key: tok, label: humanizeToken(tok), type: 'date' })
     }
   }
   return out
@@ -101,10 +110,35 @@ export function autoPromoteTypedTokens(
   return reconcilePlaceholderDefs(currentDefs, body, subject)
 }
 
+// English fallbacks. Components should prefer `refKindLabel(kind, t)` so
+// Arabic/locale-aware strings come through `t('placeholderPicker.refKind*')`.
 export const REF_KIND_LABELS: Record<PlaceholderRefKind, string> = {
   observation: 'Observation',
   audit:       'Audit',
   letter:      'Letter',
   rule:        'Rule / Circular',
   policy:      'Policy',
+}
+
+// Resolves a localized label for a reference kind. Pass the `t` translator
+// from `useTranslation()` to get Arabic strings when language is `ar`. The
+// `t` parameter is loosely typed (`unknown`) so we can accept the strongly
+// typed translator without forcing callers into a contravariant cast.
+export function refKindLabel(
+  kind: PlaceholderRefKind,
+  t?: unknown,
+): string {
+  const REF_KIND_KEYS: Record<PlaceholderRefKind, string> = {
+    observation: 'placeholderPicker.refKindObservation',
+    audit:       'placeholderPicker.refKindAudit',
+    letter:      'placeholderPicker.refKindLetter',
+    rule:        'placeholderPicker.refKindRule',
+    policy:      'placeholderPicker.refKindPolicy',
+  }
+  if (typeof t !== 'function') return REF_KIND_LABELS[kind]
+  const fn = t as (key: string) => string
+  const localized = fn(REF_KIND_KEYS[kind])
+  return localized && localized !== REF_KIND_KEYS[kind]
+    ? localized
+    : REF_KIND_LABELS[kind]
 }

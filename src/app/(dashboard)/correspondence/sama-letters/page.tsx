@@ -2506,7 +2506,7 @@ function LetterBodyEditor({
             ) : (
               <PlaceholderChip
                 key={`${idx}-${seg.key}`}
-                def={defByKey.get(seg.key) ?? { key: seg.key, label: seg.key, type: 'text' }}
+                def={defByKey.get(seg.key) ?? { key: seg.key, label: seg.key, type: 'date' }}
                 value={placeholderValues[seg.key]}
                 onChange={(v) => onPlaceholderChange(seg.key, v)}
                 onClear={() => onPlaceholderChange(seg.key, undefined)}
@@ -2638,7 +2638,7 @@ function LetterSubjectEditor({
             ) : (
               <PlaceholderChip
                 key={`${idx}-${seg.key}`}
-                def={defByKey.get(seg.key) ?? { key: seg.key, label: seg.key, type: 'text' }}
+                def={defByKey.get(seg.key) ?? { key: seg.key, label: seg.key, type: 'date' }}
                 value={placeholderValues[seg.key]}
                 onChange={(v) => onPlaceholderChange(seg.key, v)}
                 onClear={() => onPlaceholderChange(seg.key, undefined)}
@@ -3465,7 +3465,7 @@ function TemplateEditForm({
             </p>
             <p className="text-[11px] text-blue-700">
               Insert <code className="px-1 py-0.5 bg-white text-blue-900 rounded text-[10px]">{'{{token}}'}</code>{' '}
-              tokens (e.g. <code className="px-1 py-0.5 bg-white text-blue-900 rounded text-[10px]">{'{{candidate_name}}'}</code>) into the subject or body. Each token surfaces below — pick its type so composers see the right input (free text, date, or a picker linked to a document).
+              tokens (e.g. <code className="px-1 py-0.5 bg-white text-blue-900 rounded text-[10px]">{'{{candidate_name}}'}</code>) into the subject or body. Each token surfaces below — pick its type (date or document reference) so composers see the right input.
             </p>
           </div>
 

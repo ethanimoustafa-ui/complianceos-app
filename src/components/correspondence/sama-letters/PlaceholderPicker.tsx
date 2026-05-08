@@ -4,7 +4,8 @@ import { useMemo, useState } from 'react'
 import { Icon } from '@iconify/react'
 import { cn } from '@/lib/utils'
 import type { PlaceholderDef, PlaceholderRefKind, PlaceholderValue } from '@/types'
-import { REF_KIND_LABELS } from '@/lib/letter-placeholders'
+import { refKindLabel } from '@/lib/letter-placeholders'
+import { useTranslation } from '@/i18n'
 import { useObservationStore } from '@/stores/observation-store'
 import { useAuditStore } from '@/stores/audit-store'
 import { useSAMALetterStore } from '@/stores/sama-letter-store'
@@ -25,18 +26,6 @@ interface RefOption {
 }
 
 export function PlaceholderPicker({ def, value, onChange }: PlaceholderPickerProps) {
-  if (def.type === 'text') {
-    return (
-      <input
-        type="text"
-        value={value?.type === 'text' ? value.value : ''}
-        onChange={(e) => onChange({ type: 'text', value: e.target.value })}
-        placeholder={`Enter ${def.label.toLowerCase()}`}
-        className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
-      />
-    )
-  }
-
   if (def.type === 'date') {
     return (
       <input
@@ -66,6 +55,7 @@ function ReferencePicker({
   value?: Extract<PlaceholderValue, { type: 'reference' }>
   onChange: (next: Extract<PlaceholderValue, { type: 'reference' }>) => void
 }) {
+  const { t } = useTranslation()
   const observations = useObservationStore((s) => s.observations)
   const audits = useAuditStore((s) => s.audits)
   const letters = useSAMALetterStore((s) => s.letters)
@@ -111,13 +101,13 @@ function ReferencePicker({
         {value ? (
           <span className="truncate">
             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mr-2">
-              {REF_KIND_LABELS[value.value.kind]}
+              {refKindLabel(value.value.kind, t)}
             </span>
             <span className="text-slate-900 font-medium">{value.value.reference}</span>
             <span className="text-slate-500"> — {value.value.title}</span>
           </span>
         ) : (
-          <span className="text-slate-400">Pick a reference...</span>
+          <span className="text-slate-400">{t('placeholderPicker.pickReference')}</span>
         )}
         <Icon icon="lucide:chevron-down" className="text-slate-400 text-sm" />
       </button>
@@ -137,7 +127,7 @@ function ReferencePicker({
                     : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300',
                 )}
               >
-                {REF_KIND_LABELS[kind]}
+                {refKindLabel(kind, t)}
               </button>
             ))}
           </div>
@@ -147,13 +137,13 @@ function ReferencePicker({
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder={`Search ${REF_KIND_LABELS[activeKind].toLowerCase()}...`}
+              placeholder={t('placeholderPicker.searchKind', { kind: refKindLabel(activeKind, t) })}
               className="w-full pl-8 pr-2 py-1.5 text-xs border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
             />
           </div>
           <div className="max-h-48 overflow-y-auto divide-y divide-slate-100">
             {options.length === 0 ? (
-              <p className="text-[11px] text-slate-400 italic p-2">No matches</p>
+              <p className="text-[11px] text-slate-400 italic p-2">{t('placeholderPicker.noMatches')}</p>
             ) : (
               options.map((opt) => (
                 <button

@@ -3,7 +3,8 @@
 import { Icon } from '@iconify/react'
 import { cn } from '@/lib/utils'
 import type { PlaceholderDef, PlaceholderRefKind, PlaceholderType } from '@/types'
-import { REF_KIND_LABELS, reconcilePlaceholderDefs } from '@/lib/letter-placeholders'
+import { reconcilePlaceholderDefs, refKindLabel } from '@/lib/letter-placeholders'
+import { useTranslation } from '@/i18n'
 
 interface PlaceholderDefEditorProps {
   defs: PlaceholderDef[]
@@ -12,15 +13,15 @@ interface PlaceholderDefEditorProps {
   onChange: (next: PlaceholderDef[]) => void
 }
 
-const TYPE_OPTIONS: { value: PlaceholderType; label: string; icon: string }[] = [
-  { value: 'text',      label: 'Free text', icon: 'lucide:text-cursor-input' },
-  { value: 'date',      label: 'Date',      icon: 'lucide:calendar' },
-  { value: 'reference', label: 'Reference', icon: 'lucide:link' },
-]
-
 const REF_KINDS: PlaceholderRefKind[] = ['observation', 'audit', 'letter', 'rule', 'policy']
 
 export function PlaceholderDefEditor({ defs, bodyEn, subjectEn, onChange }: PlaceholderDefEditorProps) {
+  const { t } = useTranslation()
+  // Move TYPE_OPTIONS inside the component so `t` is in scope.
+  const TYPE_OPTIONS: { value: PlaceholderType; label: string; icon: string }[] = [
+    { value: 'date',      label: t('placeholderPicker.kindDate'),      icon: 'lucide:calendar' },
+    { value: 'reference', label: t('placeholderPicker.kindReference'), icon: 'lucide:link' },
+  ]
   const reconciled = reconcilePlaceholderDefs(defs, bodyEn, subjectEn)
   const list = reconciled.length > 0 ? reconciled : defs
 
@@ -28,8 +29,9 @@ export function PlaceholderDefEditor({ defs, bodyEn, subjectEn, onChange }: Plac
     return (
       <div className="p-4 border border-dashed border-slate-200 rounded-xl text-center">
         <p className="text-xs text-slate-500">
-          Insert <code className="px-1 py-0.5 bg-slate-100 rounded text-[11px]">{'{{token}}'}</code> placeholders into the
-          subject or body. Each one will appear here so you can configure its type.
+          {t('placeholderPicker.emptyHintPrefix')}{' '}
+          <code className="px-1 py-0.5 bg-slate-100 rounded text-[11px]">{'{{token}}'}</code>{' '}
+          {t('placeholderPicker.emptyHintSuffix')}
         </p>
       </div>
     )
@@ -50,7 +52,7 @@ export function PlaceholderDefEditor({ defs, bodyEn, subjectEn, onChange }: Plac
             <input
               value={def.label}
               onChange={(e) => updateDef(def.key, { label: e.target.value })}
-              placeholder="Label shown in compose"
+              placeholder={t('placeholderPicker.labelPlaceholder')}
               className="flex-1 px-2 py-1 text-xs border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
             />
           </div>
@@ -77,7 +79,7 @@ export function PlaceholderDefEditor({ defs, bodyEn, subjectEn, onChange }: Plac
           {def.type === 'reference' && (
             <div className="pl-1">
               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
-                Allowed reference types
+                {t('placeholderPicker.allowedReferenceTypes')}
               </p>
               <div className="flex items-center gap-1 flex-wrap">
                 {REF_KINDS.map((kind) => {
@@ -100,7 +102,7 @@ export function PlaceholderDefEditor({ defs, bodyEn, subjectEn, onChange }: Plac
                           : 'bg-white text-slate-400 border-slate-200 hover:border-slate-300',
                       )}
                     >
-                      {REF_KIND_LABELS[kind]}
+                      {refKindLabel(kind, t)}
                     </button>
                   )
                 })}
