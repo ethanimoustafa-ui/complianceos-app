@@ -10,6 +10,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { cn } from '@/lib/utils'
 import { useCorrespondenceStore } from '@/stores/correspondence-store'
+import { useAuthStore } from '@/stores/auth-store'
 import type { Correspondence } from '@/types'
 import { EditableSelect } from '@/components/ui/editable-select'
 
@@ -86,7 +87,7 @@ export function AddCorrespondenceModal({ isOpen, onClose, onSuccess }: AddCorres
           type: f.type,
           size: f.size,
           uploadedAt: new Date().toISOString(),
-          uploadedBy: 'current-user',
+          uploadedBy: useAuthStore.getState().user?.id ?? 'admin',
         })),
       }
 

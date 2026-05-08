@@ -1,17 +1,10 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import type { TeamMember, PaginationState, SortState } from '@/types'
+import { STANDARD_PERMISSIONS } from '@/lib/permissions-registry'
 
-// Sample team members for dropdown and display
-const STANDARD_PERMISSIONS = [
-  'Approve Policy Reviews',
-  'Approve SAMA Letters',
-  'Manage Audit Findings',
-  'View Risk Register',
-  'Export Compliance Data',
-  'Can Act As Approver',
-  'Manage Training Programs',
-] as const
+// Re-exported for any direct callers (kept for backwards compat).
+export { STANDARD_PERMISSIONS }
 
 function perms(enabled: boolean[]): { label: string; enabled: boolean }[] {
   return STANDARD_PERMISSIONS.map((label, i) => ({ label, enabled: enabled[i] ?? false }))
@@ -45,7 +38,10 @@ const sampleMembers: TeamMember[] = [
     assignments: [
       { title: 'Q4 Compliance Report', dueDate: 'Dec 1, 2024' },
     ],
-    accessControls: perms([true, true, true, true, true, true, true]),
+    // Admin role grants every permission via `getEffectivePermissions` regardless,
+    // but we mirror the full set in accessControls so the member-drawer toggles
+    // render as on for transparency.
+    accessControls: perms([true, true, true, true, true, true, true, true, true, true, true, true, true, true, true]),
   },
   {
     id: '5', name: 'Dr. Hassan Ali', email: 'hassan@company.com', role: 'manager', department: 'Compliance', avatar: 'Hassan', workload: 70, status: 'active', joinedAt: '2021-09-05', nationality: 'Saudi',

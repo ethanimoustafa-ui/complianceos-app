@@ -272,6 +272,14 @@ export function MemberDetailDrawer({
                     'View Risk Register': 'team.permissionViewRiskRegister',
                     'Can Act As Approver': 'team.canActAsApprover',
                     'Manage Training Programs': 'training.manageTrainingPrograms',
+                    'Manage Settings': 'team.permissionManageSettings',
+                    'Manage Team & Permissions': 'team.permissionManageTeamPermissions',
+                    'Configure Frameworks': 'team.permissionConfigureFrameworks',
+                    'Configure Lists & Categories': 'team.permissionConfigureLists',
+                    'Manage Letter Templates': 'team.permissionManageLetterTemplates',
+                    'Manage Policy Templates': 'team.permissionManagePolicyTemplates',
+                    'Manage Audit Templates': 'team.permissionManageAuditTemplates',
+                    'Switch User (Demo)': 'team.permissionSwitchUserDemo',
                   }
                   return (
                   <label

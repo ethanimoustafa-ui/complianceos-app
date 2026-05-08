@@ -2,6 +2,34 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import type { User } from '@/types'
 
+// ── Seed users (RBAC-009) ────────────────────────────────────────────────────
+// Mirror the team-store seeds so impersonation (Phase 4 RBAC-024) can switch
+// between any of them. The admin user's id is `'admin'` to keep it stable
+// across the v3→v4 migration; the other seed ids ('1'..'5') match team-store
+// member ids exactly so `getEffectivePermissions` finds the matching record.
+const SEED_USERS: User[] = [
+  {
+    id: 'admin',
+    name: 'Test Admin',
+    email: 'admin@example.com',
+    role: 'admin',
+    department: 'Compliance',
+    phone: '+966 50 123 4567',
+    avatarSeed: 'Felix',
+    workload: 75,
+  },
+  // Mirrors team-store seed members (id 1..5):
+  { id: '1', name: 'Sarah Connor', email: 'sarah@company.com', role: 'manager', department: 'Compliance', avatarSeed: 'Sarah', workload: 65 },
+  { id: '2', name: 'Ahmed Khan', email: 'ahmed@company.com', role: 'manager', department: 'Risk Management', avatarSeed: 'Ahmed', workload: 45 },
+  { id: '3', name: 'Lisa Martinez', email: 'lisa@company.com', role: 'officer', department: 'Legal', avatarSeed: 'Lisa', workload: 80 },
+  { id: '4', name: 'Michael Scott', email: 'michael@company.com', role: 'admin', department: 'IT & Cybersecurity', avatarSeed: 'Michael', workload: 55 },
+  { id: '5', name: 'Dr. Hassan Ali', email: 'hassan@company.com', role: 'manager', department: 'Compliance', avatarSeed: 'Hassan', workload: 70 },
+]
+
+const DEFAULT_USER = SEED_USERS[0]
+
+export { SEED_USERS, DEFAULT_USER }
+
 interface AuthState {
   user: User | null
   token: string | null
@@ -10,7 +38,7 @@ interface AuthState {
   error: string | null
 
   // Actions
-  login: (email: string, password: string) => Promise<void>
+  login: (email: string, password: string) => Promise<{ ok: boolean; error?: string }>
   logout: () => void
   refreshToken: () => Promise<void>
   updateProfile: (data: Partial<User>) => void
@@ -24,61 +52,46 @@ interface AuthState {
 export const useAuthStore = create<AuthState>()(
   persist(
     (set, get) => ({
-      // Auto-login with mock user for development
-      // TESTING: Change role to test different permissions
-      // 'officer' = View only + full observation access
-      // 'manager' = View + Create + Edit + Export
-      // 'admin'   = Full access (including Delete, Settings, Team)
-      user: {
-        id: 'current-user', // Unique ID to avoid collision with team members
-        name: 'Test User',
-        email: 'test@example.com',
-        role: 'admin', // <-- Change this to test: 'officer' | 'manager' | 'admin'
-        department: 'Compliance',
-        phone: '+966 50 123 4567',
-        avatarSeed: 'Felix',
-        workload: 75,
-      },
-      token: 'mock-token',
+      // Default current user — admin so existing demo flows keep working.
+      // Phase 3 (RBAC-011) wires the real sign-in form to this store; Phase 4
+      // (RBAC-024) adds an Acting-As switcher.
+      user: { ...DEFAULT_USER },
+      token: 'demo-token',
       isAuthenticated: true,
       isLoading: false,
       error: null,
 
-      login: async (email: string, password: string) => {
+      // Mock login — matches `email` against SEED_USERS, ignores password.
+      // Returns `{ ok, error? }` so callers can branch without try/catch.
+      login: async (email, password) => {
         set({ isLoading: true, error: null })
         try {
-          // TODO: Replace with actual API call
-          console.log('Login attempt:', { email, password })
-          await new Promise((resolve) => setTimeout(resolve, 1000))
+          // Pretend network round-trip so the spinner is visible.
+          await new Promise((resolve) => setTimeout(resolve, 400))
 
-          // Mock user for now
-          // TESTING: Change role to test different permissions
-          // 'officer' = View only
-          // 'manager' = View + Create + Edit + Export
-          // 'admin'   = Full access (including Delete, Settings, Team)
-          const mockUser: User = {
-            id: 'current-user', // Unique ID to avoid collision with team members
-            name: 'Test User',
-            email,
-            role: 'admin', // <-- Change this to test: 'officer' | 'manager' | 'admin'
-            department: 'Compliance',
-            phone: '+966 50 123 4567',
-            avatarSeed: 'Felix',
-            workload: 75,
+          const normalised = email.trim().toLowerCase()
+          const matched = SEED_USERS.find((u) => u.email.toLowerCase() === normalised)
+          // password ignored on purpose — this is a demo. See plan §11.1.
+          void password
+
+          if (!matched) {
+            const error = 'Invalid credentials'
+            set({ isLoading: false, error })
+            return { ok: false, error }
           }
 
           set({
-            user: mockUser,
-            token: 'mock-token',
+            user: { ...matched },
+            token: 'demo-token',
             isAuthenticated: true,
             isLoading: false,
+            error: null,
           })
+          return { ok: true }
         } catch (error) {
-          set({
-            error: error instanceof Error ? error.message : 'Login failed',
-            isLoading: false,
-          })
-          throw error
+          const message = error instanceof Error ? error.message : 'Login failed'
+          set({ error: message, isLoading: false })
+          return { ok: false, error: message }
         }
       },
 
@@ -96,10 +109,9 @@ export const useAuthStore = create<AuthState>()(
         if (!token) return
 
         try {
-          // TODO: Replace with actual API call
           await new Promise((resolve) => setTimeout(resolve, 500))
-          set({ token: 'refreshed-mock-token' })
-        } catch (error) {
+          set({ token: 'demo-token-refreshed' })
+        } catch {
           set({
             user: null,
             token: null,
@@ -109,7 +121,7 @@ export const useAuthStore = create<AuthState>()(
         }
       },
 
-      updateProfile: (data: Partial<User>) => {
+      updateProfile: (data) => {
         const { user } = get()
         if (!user) return
         set({ user: { ...user, ...data } })
@@ -123,21 +135,34 @@ export const useAuthStore = create<AuthState>()(
     }),
     {
       name: 'auth-storage',
-      version: 3,
-      migrate: () => ({
-        user: {
-          id: 'current-user',
-          name: 'Test User',
-          email: 'test@example.com',
-          role: 'admin',
-          department: 'Compliance',
-          phone: '+966 50 123 4567',
-          avatarSeed: 'Felix',
-          workload: 75,
-        } as User,
-        token: 'mock-token' as string | null,
-        isAuthenticated: true,
-      }),
+      version: 4,
+      migrate: (persistedState, fromVersion) => {
+        // v3→v4 (RBAC-009): rewrite `id: 'current-user'` to `id: 'admin'` so
+        // the user matches a stable seed id; preserve any other persisted user.
+        type PartialAuth = { user?: User | null; token?: string | null; isAuthenticated?: boolean }
+        const state = (persistedState ?? {}) as PartialAuth
+        if (fromVersion < 4) {
+          if (!state.user) {
+            return {
+              user: { ...DEFAULT_USER },
+              token: 'demo-token',
+              isAuthenticated: true,
+            }
+          }
+          if (state.user.id === 'current-user') {
+            return {
+              user: { ...state.user, id: 'admin' },
+              token: state.token ?? 'demo-token',
+              isAuthenticated: state.isAuthenticated ?? true,
+            }
+          }
+        }
+        return {
+          user: state.user ?? { ...DEFAULT_USER },
+          token: state.token ?? 'demo-token',
+          isAuthenticated: state.isAuthenticated ?? true,
+        }
+      },
       partialize: (state) => ({
         user: state.user,
         token: state.token,

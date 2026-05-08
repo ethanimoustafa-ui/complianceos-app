@@ -16,17 +16,17 @@ const SEED_MESSAGES: Message[] = [
   { id: 'msg-3', threadId: 'thread-1', senderId: 'user-sarah', senderName: 'Sarah Al-Rashid', content: 'Good progress. Can you share the draft by tomorrow morning?', createdAt: hoursAgo(2), read: false },
   // Thread 2: Audit Follow-up
   { id: 'msg-4', threadId: 'thread-2', senderId: 'user-omar', senderName: 'Omar Khalid', content: 'The IT audit remediation items need status updates. Can you check with the teams?', createdAt: daysAgo(2), read: true },
-  { id: 'msg-5', threadId: 'thread-2', senderId: 'current-user', senderName: 'Test User', content: 'I will follow up with IT and Operations today.', createdAt: daysAgo(1), read: true },
+  { id: 'msg-5', threadId: 'thread-2', senderId: 'admin', senderName: 'Test User', content: 'I will follow up with IT and Operations today.', createdAt: daysAgo(1), read: true },
   { id: 'msg-6', threadId: 'thread-2', senderId: 'user-omar', senderName: 'Omar Khalid', content: 'Thanks. The SAMA deadline is March 20th, so we need everything wrapped up by the 18th.', createdAt: hoursAgo(5), read: false },
   // Thread 3: Policy Review
   { id: 'msg-7', threadId: 'thread-3', senderId: 'user-fatima', senderName: 'Fatima Nasser', content: 'The Data Privacy Policy draft is ready for your review. I have attached the redline version.', createdAt: daysAgo(3), read: true },
-  { id: 'msg-8', threadId: 'thread-3', senderId: 'current-user', senderName: 'Test User', content: 'Reviewed — minor edits on section 4.2. Otherwise looks great.', createdAt: daysAgo(2), read: true },
+  { id: 'msg-8', threadId: 'thread-3', senderId: 'admin', senderName: 'Test User', content: 'Reviewed — minor edits on section 4.2. Otherwise looks great.', createdAt: daysAgo(2), read: true },
 ]
 
 const SEED_THREADS: MessageThread[] = [
-  { id: 'thread-1', participants: ['Sarah Al-Rashid', 'Ahmed Hassan'], participantIds: ['user-sarah', 'user-ahmed'], subject: 'SAMA AML Circular Review', lastMessage: 'Can you share the draft by tomorrow morning?', lastMessageAt: hoursAgo(2), unreadCount: 1, isGroup: true, createdBy: 'current-user', admins: ['current-user'] },
-  { id: 'thread-2', participants: ['Omar Khalid'], participantIds: ['user-omar'], subject: 'IT Audit Remediation Follow-up', lastMessage: 'Thanks. The SAMA deadline is March 20th...', lastMessageAt: hoursAgo(5), unreadCount: 1, isGroup: false, createdBy: 'current-user', admins: ['current-user'] },
-  { id: 'thread-3', participants: ['Fatima Nasser'], participantIds: ['user-fatima'], subject: 'Data Privacy Policy Review', lastMessage: 'Reviewed — minor edits on section 4.2.', lastMessageAt: daysAgo(2), unreadCount: 0, isGroup: false, createdBy: 'current-user', admins: ['current-user'] },
+  { id: 'thread-1', participants: ['Sarah Al-Rashid', 'Ahmed Hassan'], participantIds: ['user-sarah', 'user-ahmed'], subject: 'SAMA AML Circular Review', lastMessage: 'Can you share the draft by tomorrow morning?', lastMessageAt: hoursAgo(2), unreadCount: 1, isGroup: true, createdBy: 'admin', admins: ['admin'] },
+  { id: 'thread-2', participants: ['Omar Khalid'], participantIds: ['user-omar'], subject: 'IT Audit Remediation Follow-up', lastMessage: 'Thanks. The SAMA deadline is March 20th...', lastMessageAt: hoursAgo(5), unreadCount: 1, isGroup: false, createdBy: 'admin', admins: ['admin'] },
+  { id: 'thread-3', participants: ['Fatima Nasser'], participantIds: ['user-fatima'], subject: 'Data Privacy Policy Review', lastMessage: 'Reviewed — minor edits on section 4.2.', lastMessageAt: daysAgo(2), unreadCount: 0, isGroup: false, createdBy: 'admin', admins: ['admin'] },
 ]
 
 interface MessageState {
@@ -211,11 +211,31 @@ export const useMessageStore = create<MessageState>()(
     }),
     {
       name: 'message-storage',
-      version: 2,
-      migrate: () => ({
-        threads: SEED_THREADS,
-        messages: SEED_MESSAGES,
-      }),
+      version: 3,
+      migrate: (persistedState, fromVersion) => {
+        // v2→v3 (RBAC-009): rewrite legacy `'current-user'` ids to `'admin'` so
+        // thread ownership / message authorship lines up with the new auth-store
+        // user id. Anything else in localStorage is preserved.
+        const state = (persistedState ?? {}) as { threads?: MessageThread[]; messages?: Message[] }
+        if (fromVersion < 2) {
+          return { threads: SEED_THREADS, messages: SEED_MESSAGES }
+        }
+        if (fromVersion < 3) {
+          const rewriteId = (id: string) => (id === 'current-user' ? 'admin' : id)
+          return {
+            threads: (state.threads ?? []).map((t) => ({
+              ...t,
+              createdBy: rewriteId(t.createdBy),
+              admins: (t.admins ?? []).map(rewriteId),
+            })),
+            messages: (state.messages ?? []).map((m) => ({
+              ...m,
+              senderId: rewriteId(m.senderId),
+            })),
+          }
+        }
+        return state
+      },
       partialize: (state) => ({
         threads: state.threads,
         messages: state.messages,
