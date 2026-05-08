@@ -10,12 +10,14 @@ import { UserPreferencesSection } from '@/components/settings/UserPreferencesSec
 import { AuditTemplatesSection } from '@/components/settings/AuditTemplatesSection'
 import { PolicyTemplatesSection } from '@/components/settings/PolicyTemplatesSection'
 import { ListsAndCategoriesSection } from '@/components/settings/ListsAndCategoriesSection'
+import { Gate } from '@/components/auth/gate'
+import { ForbiddenPanel } from '@/components/auth/forbidden-panel'
 
 export default function SettingsPage() {
   const { t } = useTranslation()
 
   return (
-    <>
+    <Gate perm="Manage Settings" fallback={<ForbiddenPanel />}>
       <header className="h-20 bg-white border-b border-slate-200 px-8 flex items-center justify-between shrink-0">
         <div className="flex items-center gap-8">
           <div>
@@ -53,6 +55,6 @@ export default function SettingsPage() {
           <ListsAndCategoriesSection />
         </div>
       </div>
-    </>
+    </Gate>
   )
 }

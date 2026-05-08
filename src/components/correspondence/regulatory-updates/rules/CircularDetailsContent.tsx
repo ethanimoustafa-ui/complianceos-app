@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils'
 import { useCircularStore } from '@/stores/circular-store'
 import { useFrameworkConfigStore } from '@/stores/framework-config-store'
 import { useAuthStore } from '@/stores/auth-store'
+import { useCan } from '@/lib/permissions'
 import { resolveAuthorityLabel } from '@/lib/authority-display'
 import { InlineDeadlinePicker } from '@/components/ui/inline-deadline-picker'
 import type { Circular, CircularArticle, CircularWorkflowStep } from '@/types'
@@ -28,6 +29,7 @@ type Props = {
 
 export function CircularDetailsContent({ circular, onClose, onOpenBOModal, onEditOpen, onDeleteOpen, t, isRTL }: Props) {
   const [activeTab, setActiveTab] = useState<DetailTab>('overview')
+  const canManage = useCan('Manage Audit Findings')
   const [articleModal, setArticleModal] = useState<{
     open: boolean
     article?: CircularArticle
@@ -860,7 +862,13 @@ export function CircularDetailsContent({ circular, onClose, onOpenBOModal, onEdi
         )}
 
         <div className="space-y-2 pt-3 border-t border-slate-200">
-          <Button variant="outline" className="w-full" onClick={onEditOpen}>
+          <Button
+            variant="outline"
+            className="w-full"
+            onClick={onEditOpen}
+            disabled={!canManage}
+            title={canManage ? '' : t('rbac.deniedTooltip')}
+          >
             <Icon icon="lucide:pencil" className="w-4 h-4" />
             {t('regulatoryUpdates.editCircular')}
           </Button>
@@ -899,6 +907,8 @@ export function CircularDetailsContent({ circular, onClose, onOpenBOModal, onEdi
             variant="outline"
             className="w-full border-rose-200 text-rose-600 hover:bg-rose-50"
             onClick={() => onDeleteOpen(freshCircular.id)}
+            disabled={!canManage}
+            title={canManage ? '' : t('rbac.deniedTooltip')}
           >
             <Icon icon="lucide:trash-2" className="w-4 h-4" />
             {t('regulatoryUpdates.deleteCircular')}

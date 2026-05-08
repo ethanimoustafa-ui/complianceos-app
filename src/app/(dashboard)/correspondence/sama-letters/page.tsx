@@ -8,7 +8,8 @@ import { Icon } from '@iconify/react'
 import { Modal } from '@/components/ui/modal'
 import { cn } from '@/lib/utils'
 import { useTranslation } from '@/i18n'
-import { RoleGuard } from '@/components/auth/role-guard'
+import { Gate } from '@/components/auth/gate'
+import { useCan } from '@/lib/permissions'
 import { useSAMALetterStore } from '@/stores/sama-letter-store'
 import { useAuthStore } from '@/stores/auth-store'
 import type { SAMALetter, SAMALetterType, SAMALetterStatus, SAMALetterApprovalStep, Attachment, LetterTemplate, TemplateStatus, CircularAuthority } from '@/types'
@@ -914,13 +915,15 @@ export default function SAMALettersPage() {
             </div>
           </div>
 
-          <button
-            onClick={() => handleOpenCreateModal()}
-            className={`bg-emerald-600 text-white px-5 py-2.5 rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-emerald-700 transition-colors shadow-lg shadow-emerald-100 cursor-pointer`}
-          >
-            <Icon icon="lucide:plus" />
-            {t('samaLetters.draftNewLetter')}
-          </button>
+          <Gate perm="Approve SAMA Letters">
+            <button
+              onClick={() => handleOpenCreateModal()}
+              className={`bg-emerald-600 text-white px-5 py-2.5 rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-emerald-700 transition-colors shadow-lg shadow-emerald-100 cursor-pointer`}
+            >
+              <Icon icon="lucide:plus" />
+              {t('samaLetters.draftNewLetter')}
+            </button>
+          </Gate>
         </div>
       </header>
 
@@ -948,13 +951,15 @@ export default function SAMALettersPage() {
                   <p className="text-sm text-slate-500">{t('samaLetters.manageOrganizeTemplates')}</p>
                 </div>
               </div>
-              <button
-                onClick={handleCreateTemplate}
-                className={`bg-emerald-600 text-white px-5 py-2.5 rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-emerald-700 transition-colors shadow-lg shadow-emerald-100 cursor-pointer`}
-              >
-                <Icon icon="lucide:plus" />
-                {t('samaLetters.createTemplate')}
-              </button>
+              <Gate perm="Manage Letter Templates">
+                <button
+                  onClick={handleCreateTemplate}
+                  className={`bg-emerald-600 text-white px-5 py-2.5 rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-emerald-700 transition-colors shadow-lg shadow-emerald-100 cursor-pointer`}
+                >
+                  <Icon icon="lucide:plus" />
+                  {t('samaLetters.createTemplate')}
+                </button>
+              </Gate>
             </div>
 
             {/* Filters Section */}
@@ -1130,7 +1135,7 @@ export default function SAMALettersPage() {
                               >
                                 <Icon icon="lucide:eye" />
                               </button>
-                              <RoleGuard editOnly hidden>
+                              <Gate perm="Manage Letter Templates">
                                 <button
                                   onClick={() => handleEditTemplate(template)}
                                   className="p-1.5 hover:bg-slate-200 rounded text-slate-400 hover:text-slate-900 transition-colors cursor-pointer"
@@ -1138,7 +1143,7 @@ export default function SAMALettersPage() {
                                 >
                                   <Icon icon="lucide:pencil" />
                                 </button>
-                              </RoleGuard>
+                              </Gate>
                               <button
                                 onClick={() => handleDuplicateTemplate(template)}
                                 className="p-1.5 hover:bg-slate-200 rounded text-slate-400 hover:text-slate-900 transition-colors cursor-pointer"
@@ -1146,7 +1151,7 @@ export default function SAMALettersPage() {
                               >
                                 <Icon icon="lucide:copy" />
                               </button>
-                              <RoleGuard deleteOnly hidden>
+                              <Gate perm="Manage Letter Templates">
                                 <button
                                   onClick={() => handleDeleteTemplate(template)}
                                   className="p-1.5 hover:bg-rose-100 rounded text-slate-400 hover:text-rose-600 transition-colors cursor-pointer"
@@ -1154,7 +1159,7 @@ export default function SAMALettersPage() {
                                 >
                                   <Icon icon="lucide:trash-2" />
                                 </button>
-                              </RoleGuard>
+                              </Gate>
                             </div>
                           </td>
                         </tr>
@@ -1208,14 +1213,14 @@ export default function SAMALettersPage() {
             <div className="mb-10">
               <div className={`flex items-baseline justify-between mb-6`}>
                 <h2 className="text-lg font-bold font-display text-slate-900">{t('samaLetters.letterTemplates')}</h2>
-                <RoleGuard editOnly hidden>
+                <Gate perm="Manage Letter Templates">
                   <button
                     onClick={() => setIsTemplateManagementOpen(true)}
                     className="text-xs font-bold text-emerald-600 hover:underline cursor-pointer"
                   >
                     {t('samaLetters.manageTemplates')} {isRTL ? '\u2190' : '\u2192'}
                   </button>
-                </RoleGuard>
+                </Gate>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 {templateTypeCards.map((template) => {
@@ -3230,15 +3235,20 @@ function ApprovalStepActions({
   const store = useSAMALetterStore()
   const [notes, setNotes] = useState('')
   const [showNotes, setShowNotes] = useState(false)
+  const canApprove = useCan('Approve SAMA Letters')
 
   const handleApprove = () => {
-    store.approveStep(letterId, step, approverName, notes || undefined)
+    // Round 4 Phase 6: store derives approver name from auth user; legacy
+    // `approverName` arg dropped. The local `approverName` prop stays for
+    // display purposes elsewhere in the component.
+    void approverName
+    store.approveStep(letterId, step, notes || undefined)
     setNotes('')
     setShowNotes(false)
   }
 
   const handleReject = () => {
-    store.rejectStep(letterId, step, approverName, notes)
+    store.rejectStep(letterId, step, notes)
     setNotes('')
     setShowNotes(false)
   }
@@ -3257,13 +3267,17 @@ function ApprovalStepActions({
       <div className={`flex gap-2`}>
         <button
           onClick={handleApprove}
-          className="flex-1 py-1.5 bg-emerald-600 text-white rounded-lg text-xs font-bold hover:bg-emerald-700 transition-colors cursor-pointer"
+          disabled={!canApprove}
+          title={canApprove ? '' : t('rbac.deniedTooltip')}
+          className="flex-1 py-1.5 bg-emerald-600 text-white rounded-lg text-xs font-bold hover:bg-emerald-700 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {t('samaLetters.approveStep')}
         </button>
         <button
           onClick={handleReject}
-          className="flex-1 py-1.5 bg-rose-100 text-rose-700 rounded-lg text-xs font-bold hover:bg-rose-200 transition-colors cursor-pointer"
+          disabled={!canApprove}
+          title={canApprove ? '' : t('rbac.deniedTooltip')}
+          className="flex-1 py-1.5 bg-rose-100 text-rose-700 rounded-lg text-xs font-bold hover:bg-rose-200 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {t('samaLetters.rejectStep')}
         </button>

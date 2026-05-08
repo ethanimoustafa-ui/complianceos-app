@@ -27,6 +27,7 @@ import { exportRisksLocalized } from '@/lib/export'
 import type { TranslationKey } from '@/i18n'
 import { useFormattedDate } from '@/hooks/useFormattedDate'
 import { ChecklistSection } from '@/components/observations/detail/checklist-section'
+import { Gate } from '@/components/auth/gate'
 
 // Types
 // RiskCategory is now an opaque string (managed via useRiskCategoryStore).
@@ -413,10 +414,12 @@ export default function ReportsRisksPage() {
           >
             <Icon icon="lucide:download-cloud" className="text-lg" />
           </button>
-          <Button className="shadow-lg shadow-emerald-100" onClick={() => setShowAddRiskModal(true)}>
-            <Icon icon="lucide:plus" />
-            {t('reports.addRisk' as TranslationKey)}
-          </Button>
+          <Gate perm="Manage Audit Findings">
+            <Button className="shadow-lg shadow-emerald-100" onClick={() => setShowAddRiskModal(true)}>
+              <Icon icon="lucide:plus" />
+              {t('reports.addRisk' as TranslationKey)}
+            </Button>
+          </Gate>
         </div>
       </header>
 
@@ -1073,17 +1076,21 @@ export default function ReportsRisksPage() {
               </div>
               <div className="pt-4 border-t border-slate-100 flex gap-3">
                 <button className="flex-1 bg-slate-100 text-slate-700 py-3 rounded-xl font-bold text-xs hover:bg-slate-200 transition-all cursor-pointer" onClick={() => { const sanitizedName = selectedRisk.name.replace(/[^a-zA-Z0-9]/g, '-').toLowerCase(); exportRisksLocalized([selectedRisk], `risk-${sanitizedName}-${new Date().toISOString().slice(0, 10)}`, t, isRTL) }}>{t('reports.exportRisk' as TranslationKey)}</button>
-                <button className="flex-1 bg-emerald-600 text-white py-3 rounded-xl font-bold text-xs hover:bg-emerald-700 transition-all cursor-pointer" onClick={() => {
-                  setEditingRiskId(selectedRisk.id); setNewRiskName(selectedRisk.name); setNewRiskCategory(selectedRisk.category); setNewRiskDescription(selectedRisk.description)
-                  setNewRiskLikelihood(selectedRisk.likelihood); setNewRiskImpact(selectedRisk.impact); setNewRiskMitigation(selectedRisk.mitigationPlan || '')
-                  setNewRiskMonitoringFrequency(selectedRisk.monitoringFrequency)
-                  setNewRiskSchedule(selectedRisk.reviewSchedule ?? { cadence: 'monthly', dayOfMonth: 1 })
-                  const storeRisk = storeRisks.find(r => r.id === selectedRisk.id)
-                  setFrameworkIds(storeRisk?.frameworkIds ?? [])
-                  const matchingMember = teamMembers.find(m => m.name === selectedRisk.owner.name)
-                  setNewRiskOwnerId(matchingMember?.id || ''); setShowAddRiskModal(true); setIsRiskDrawerOpen(false)
-                }}>{t('reports.editRisk' as TranslationKey)}</button>
-                <button className="bg-rose-100 text-rose-600 py-3 px-4 rounded-xl font-bold text-xs hover:bg-rose-200 transition-all cursor-pointer" onClick={() => { setRiskToDelete(selectedRisk); setShowRiskDeleteConfirm(true) }}><Icon icon="lucide:trash-2" className="text-base" /></button>
+                <Gate perm="Manage Audit Findings">
+                  <button className="flex-1 bg-emerald-600 text-white py-3 rounded-xl font-bold text-xs hover:bg-emerald-700 transition-all cursor-pointer" onClick={() => {
+                    setEditingRiskId(selectedRisk.id); setNewRiskName(selectedRisk.name); setNewRiskCategory(selectedRisk.category); setNewRiskDescription(selectedRisk.description)
+                    setNewRiskLikelihood(selectedRisk.likelihood); setNewRiskImpact(selectedRisk.impact); setNewRiskMitigation(selectedRisk.mitigationPlan || '')
+                    setNewRiskMonitoringFrequency(selectedRisk.monitoringFrequency)
+                    setNewRiskSchedule(selectedRisk.reviewSchedule ?? { cadence: 'monthly', dayOfMonth: 1 })
+                    const storeRisk = storeRisks.find(r => r.id === selectedRisk.id)
+                    setFrameworkIds(storeRisk?.frameworkIds ?? [])
+                    const matchingMember = teamMembers.find(m => m.name === selectedRisk.owner.name)
+                    setNewRiskOwnerId(matchingMember?.id || ''); setShowAddRiskModal(true); setIsRiskDrawerOpen(false)
+                  }}>{t('reports.editRisk' as TranslationKey)}</button>
+                </Gate>
+                <Gate perm="Manage Audit Findings">
+                  <button className="bg-rose-100 text-rose-600 py-3 px-4 rounded-xl font-bold text-xs hover:bg-rose-200 transition-all cursor-pointer" onClick={() => { setRiskToDelete(selectedRisk); setShowRiskDeleteConfirm(true) }}><Icon icon="lucide:trash-2" className="text-base" /></button>
+                </Gate>
               </div>
             </div>
           )

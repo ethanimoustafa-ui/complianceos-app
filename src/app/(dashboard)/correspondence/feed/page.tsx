@@ -23,6 +23,7 @@ import type { Correspondence, Circular } from '@/types'
 import { useFormattedDate } from '@/hooks/useFormattedDate'
 import { formatDateWithPreference } from '@/lib/date-format'
 import { useUserPreferencesStore } from '@/stores/user-preferences-store'
+import { Gate } from '@/components/auth/gate'
 import { useTeamWorkloads } from '@/hooks/useWorkload'
 import { useFrameworkConfigStore } from '@/stores/framework-config-store'
 import { resolveAuthorityCode } from '@/lib/authority-display'
@@ -362,13 +363,15 @@ export default function CorrespondenceFeedPage() {
           </div>
         </div>
         <div className={`flex items-center gap-4`}>
-          <button
-            onClick={() => setIsNewCorrespondenceOpen(true)}
-            className={`bg-emerald-600 text-white px-5 py-2.5 rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-emerald-700 transition-colors shadow-lg shadow-emerald-100 cursor-pointer`}
-          >
-            <Icon icon="lucide:plus" />
-            {t('correspondence.logCommunication' as TranslationKey)}
-          </button>
+          <Gate perm="Manage Audit Findings">
+            <button
+              onClick={() => setIsNewCorrespondenceOpen(true)}
+              className={`bg-emerald-600 text-white px-5 py-2.5 rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-emerald-700 transition-colors shadow-lg shadow-emerald-100 cursor-pointer`}
+            >
+              <Icon icon="lucide:plus" />
+              {t('correspondence.logCommunication' as TranslationKey)}
+            </button>
+          </Gate>
         </div>
       </header>
 

@@ -14,6 +14,7 @@ import { RegDocCard } from '@/components/correspondence/regulatory-updates/RegDo
 import { RegDocFilterBar } from '@/components/correspondence/regulatory-updates/RegDocFilterBar'
 import type { CircularAuthority } from '@/types'
 import { exportRulesLocalized } from '@/lib/export'
+import { Gate } from '@/components/auth/gate'
 
 import { StatCard } from '@/components/correspondence/regulatory-updates/rules/StatCard'
 import { RegisterCircularModal } from '@/components/correspondence/regulatory-updates/rules/RegisterCircularModal'
@@ -149,14 +150,16 @@ function RegulatoryUpdatesRulesPageContent() {
           >
             <Icon icon="lucide:download-cloud" className="text-lg" />
           </button>
-          <Button
-            variant="primary"
-            className="shadow-lg shadow-emerald-100"
-            onClick={() => setIsAddModalOpen(true)}
-          >
-            <Icon icon="lucide:plus" />
-            {t('regulatoryUpdates.registerNewCircular')}
-          </Button>
+          <Gate perm="Manage Audit Findings">
+            <Button
+              variant="primary"
+              className="shadow-lg shadow-emerald-100"
+              onClick={() => setIsAddModalOpen(true)}
+            >
+              <Icon icon="lucide:plus" />
+              {t('regulatoryUpdates.registerNewCircular')}
+            </Button>
+          </Gate>
         </div>
       </header>
 

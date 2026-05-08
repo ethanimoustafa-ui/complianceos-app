@@ -10,7 +10,7 @@ import { Input } from '@/components/ui/input'
 import { Modal } from '@/components/ui/modal'
 import { useTranslation } from '@/i18n'
 import type { TranslationKey } from '@/i18n'
-import { RoleGuard } from '@/components/auth/role-guard'
+import { Gate } from '@/components/auth/gate'
 import { useTeamStore } from '@/stores/team-store'
 import { useWorkload } from '@/hooks/useWorkload'
 import { SortHeader, type SortState } from '@/components/ui/sort-header'
@@ -221,12 +221,12 @@ export default function TeamDirectoryPage() {
           </div>
         </div>
         <div className="flex items-center gap-4">
-          <RoleGuard requiredPermission="team:invite" hidden>
+          <Gate perm="Manage Team & Permissions">
             <Button onClick={() => setIsInviteModalOpen(true)}>
               <Icon icon="lucide:user-plus" />
               {t('team.inviteMember')}
             </Button>
-          </RoleGuard>
+          </Gate>
         </div>
       </header>
 
@@ -337,11 +337,11 @@ export default function TeamDirectoryPage() {
                         </td>
                         <td className="px-6 py-4 text-xs text-slate-500">{member.joinedAt}</td>
                         <td className="px-6 py-4 text-end">
-                          <RoleGuard requiredPermission="team:edit" hidden>
+                          <Gate perm="Manage Team & Permissions">
                             <button onClick={(e) => { e.stopPropagation(); setSelectedMemberId(member.id); setIsDrawerOpen(true) }} className="text-slate-400 hover:text-slate-900 transition-colors p-2 cursor-pointer">
                               <Icon icon="lucide:edit-3" />
                             </button>
-                          </RoleGuard>
+                          </Gate>
                         </td>
                       </tr>
                     ))}

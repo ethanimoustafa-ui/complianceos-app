@@ -15,9 +15,13 @@ import { useTeamStore } from '@/stores/team-store'
 import { MemberDetailDrawer } from '@/components/team/directory/member-detail-drawer'
 import { EditableSelect } from '@/components/ui/editable-select'
 import type { TeamMember } from '@/types'
+import { Gate } from '@/components/auth/gate'
 
 // Helper Components
 function UserActionBadge({ action, label }: { action: UserLog['action']; label: string }) {
+  // Round 4 Phase 6 widened the UserLogAction union with auth/team events.
+  // The richer Phase 7 filter UI lands later; for now Phase 6 just maps the
+  // new actions to neutral palette tokens so the badge renders.
   const actionColors: Record<UserLog['action'], string> = {
     sign_in: 'bg-emerald-100 text-emerald-700',
     sign_out: 'bg-slate-100 text-slate-700',
@@ -27,6 +31,11 @@ function UserActionBadge({ action, label }: { action: UserLog['action']; label: 
     permission_change: 'bg-orange-100 text-orange-700',
     mfa_enabled: 'bg-green-100 text-green-700',
     failed_login: 'bg-rose-100 text-rose-700',
+    'auth.permission_denied': 'bg-rose-100 text-rose-700',
+    'auth.login': 'bg-emerald-100 text-emerald-700',
+    'auth.logout': 'bg-slate-100 text-slate-700',
+    'auth.switch_user': 'bg-amber-100 text-amber-700',
+    'team.permissions_changed': 'bg-orange-100 text-orange-700',
   }
 
   return (
@@ -74,7 +83,8 @@ export default function TeamLogsPage() {
   const members = useTeamStore((s) => s.members)
   const storeUpdate = useTeamStore((s) => s.update)
 
-  // Translated action labels
+  // Translated action labels. Phase 6 adds raw English fallbacks for the
+  // RBAC/auth events; Phase 7 will replace these with proper i18n keys.
   const actionLabels: Record<UserLog['action'], string> = {
     sign_in: t('team.signIn'),
     sign_out: t('team.signOut'),
@@ -84,6 +94,11 @@ export default function TeamLogsPage() {
     permission_change: t('team.permissionChange'),
     mfa_enabled: t('team.mfaEnabled'),
     failed_login: t('team.failedLogin'),
+    'auth.permission_denied': 'Permission Denied',
+    'auth.login': 'Login',
+    'auth.logout': 'Logout',
+    'auth.switch_user': 'Switch User',
+    'team.permissions_changed': 'Permissions Changed',
   }
 
   // Translated status labels
@@ -269,14 +284,16 @@ export default function TeamLogsPage() {
             >
               {t('team.clearFilters')}
             </button>
-            <Button size="sm" onClick={() => {
-              import('@/lib/export').then(({ exportUserLogsLocalized }) => {
-                exportUserLogsLocalized(filteredLogs, 'user-logs', t)
-              })
-            }}>
-              <Icon icon="lucide:download" />
-              {t('team.exportLogs')}
-            </Button>
+            <Gate perm="Export Compliance Data">
+              <Button size="sm" onClick={() => {
+                import('@/lib/export').then(({ exportUserLogsLocalized }) => {
+                  exportUserLogsLocalized(filteredLogs, 'user-logs', t)
+                })
+              }}>
+                <Icon icon="lucide:download" />
+                {t('team.exportLogs')}
+              </Button>
+            </Gate>
           </div>
         </Card>
 
@@ -403,15 +420,17 @@ export default function TeamLogsPage() {
                                 <Icon icon="lucide:user" className="w-3 h-3" />
                                 {t('team.viewUserProfile')}
                               </Button>
-                              <Button variant="ghost" size="sm" onClick={(e) => {
-                                e.stopPropagation()
-                                import('@/lib/export').then(({ exportUserLogsLocalized }) => {
-                                  exportUserLogsLocalized([log], `log-${log.id}`, t)
-                                })
-                              }}>
-                                <Icon icon="lucide:download" className="w-3 h-3" />
-                                {t('team.exportLogEntry')}
-                              </Button>
+                              <Gate perm="Export Compliance Data">
+                                <Button variant="ghost" size="sm" onClick={(e) => {
+                                  e.stopPropagation()
+                                  import('@/lib/export').then(({ exportUserLogsLocalized }) => {
+                                    exportUserLogsLocalized([log], `log-${log.id}`, t)
+                                  })
+                                }}>
+                                  <Icon icon="lucide:download" className="w-3 h-3" />
+                                  {t('team.exportLogEntry')}
+                                </Button>
+                              </Gate>
                             </div>
                           </div>
                         </td>

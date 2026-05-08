@@ -23,6 +23,7 @@ import { Input } from '@/components/ui/input'
 import { EditableSelect } from '@/components/ui/editable-select'
 
 // ── Stores actually used to count usage ──────────────────────────────────────
+import { Gate } from '@/components/auth/gate'
 import { useSAMALetterStore } from '@/stores/sama-letter-store'
 import { useCalendarStore } from '@/stores/calendar-store'
 import { useAdvisoryStore } from '@/stores/advisory-store'
@@ -536,6 +537,7 @@ export function ListsAndCategoriesSection() {
     risks.filter((r) => r.category === id).length, [risks])
 
   return (
+    <Gate perm="Configure Lists & Categories">
     <section className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
       <div className="p-8 border-b border-slate-100">
         <h2 className="text-lg font-bold text-slate-900 font-display">
@@ -652,5 +654,6 @@ export function ListsAndCategoriesSection() {
         />
       </div>
     </section>
+    </Gate>
   )
 }

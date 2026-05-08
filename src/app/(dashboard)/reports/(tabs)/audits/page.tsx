@@ -18,6 +18,7 @@ import { exportAuditsLocalized } from '@/lib/export'
 import type { TranslationKey } from '@/i18n'
 import { useFormattedDate } from '@/hooks/useFormattedDate'
 import { useComplianceScore } from '@/hooks/useComplianceScore'
+import { Gate } from '@/components/auth/gate'
 
 // Audit type definitions
 type AuditSource = 'sama_inspection' | 'internal_audit' | 'sharia_audit'
@@ -371,10 +372,12 @@ export default function ReportsAuditsPage() {
           >
             <Icon icon="lucide:download-cloud" className="text-lg" />
           </button>
-          <Button className="shadow-lg shadow-emerald-100" onClick={() => setShowScheduleAuditModal(true)}>
-            <Icon icon="lucide:plus" />
-            {t('reports.scheduleAudit')}
-          </Button>
+          <Gate perm="Manage Audit Findings">
+            <Button className="shadow-lg shadow-emerald-100" onClick={() => setShowScheduleAuditModal(true)}>
+              <Icon icon="lucide:plus" />
+              {t('reports.scheduleAudit')}
+            </Button>
+          </Gate>
         </div>
       </header>
 
@@ -462,10 +465,12 @@ export default function ReportsAuditsPage() {
                             <p className="text-sm font-bold text-slate-900 mb-1">{t('reports.noAuditsFound')}</p>
                             <p className="text-xs text-slate-500">{t('reports.createFirstAudit')}</p>
                           </div>
-                          <Button className="mt-2" onClick={() => setShowScheduleAuditModal(true)}>
-                            <Icon icon="lucide:plus" />
-                            {t('reports.scheduleAudit')}
-                          </Button>
+                          <Gate perm="Manage Audit Findings">
+                            <Button className="mt-2" onClick={() => setShowScheduleAuditModal(true)}>
+                              <Icon icon="lucide:plus" />
+                              {t('reports.scheduleAudit')}
+                            </Button>
+                          </Gate>
                         </div>
                       </td>
                     </tr>
@@ -533,31 +538,35 @@ export default function ReportsAuditsPage() {
                                   className={`absolute ${isRTL ? 'left-0' : 'right-0'} mt-1 w-36 bg-white border border-slate-200 rounded-xl shadow-xl z-50 overflow-hidden`}
                                   onClick={(e) => e.stopPropagation()}
                                 >
-                                  <button
-                                    onClick={() => {
-                                      const storeAudit = storeAudits.find(a => a.id === audit.id)
-                                      if (storeAudit) setAuditToEdit(storeAudit)
-                                      setAuditDropdownOpen(null)
-                                    }}
-                                    className={`w-full ${isRTL ? 'text-right' : 'text-left'} px-4 py-2.5 text-sm hover:bg-slate-50 font-medium border-b border-slate-100 transition-colors cursor-pointer flex items-center gap-2`}
-                                  >
-                                    <Icon icon="lucide:edit-3" className="text-slate-400" />
-                                    {t('common.edit')}
-                                  </button>
-                                  <button
-                                    onClick={() => {
-                                      const storeAudit = storeAudits.find(a => a.id === audit.id)
-                                      if (storeAudit) {
-                                        setAuditToDelete(storeAudit)
-                                        setShowDeleteConfirm(true)
-                                      }
-                                      setAuditDropdownOpen(null)
-                                    }}
-                                    className={`w-full ${isRTL ? 'text-right' : 'text-left'} px-4 py-2.5 text-sm hover:bg-rose-50 font-medium text-rose-600 transition-colors cursor-pointer flex items-center gap-2`}
-                                  >
-                                    <Icon icon="lucide:trash-2" className="text-rose-400" />
-                                    {t('common.delete')}
-                                  </button>
+                                  <Gate perm="Manage Audit Findings">
+                                    <button
+                                      onClick={() => {
+                                        const storeAudit = storeAudits.find(a => a.id === audit.id)
+                                        if (storeAudit) setAuditToEdit(storeAudit)
+                                        setAuditDropdownOpen(null)
+                                      }}
+                                      className={`w-full ${isRTL ? 'text-right' : 'text-left'} px-4 py-2.5 text-sm hover:bg-slate-50 font-medium border-b border-slate-100 transition-colors cursor-pointer flex items-center gap-2`}
+                                    >
+                                      <Icon icon="lucide:edit-3" className="text-slate-400" />
+                                      {t('common.edit')}
+                                    </button>
+                                  </Gate>
+                                  <Gate perm="Manage Audit Findings">
+                                    <button
+                                      onClick={() => {
+                                        const storeAudit = storeAudits.find(a => a.id === audit.id)
+                                        if (storeAudit) {
+                                          setAuditToDelete(storeAudit)
+                                          setShowDeleteConfirm(true)
+                                        }
+                                        setAuditDropdownOpen(null)
+                                      }}
+                                      className={`w-full ${isRTL ? 'text-right' : 'text-left'} px-4 py-2.5 text-sm hover:bg-rose-50 font-medium text-rose-600 transition-colors cursor-pointer flex items-center gap-2`}
+                                    >
+                                      <Icon icon="lucide:trash-2" className="text-rose-400" />
+                                      {t('common.delete')}
+                                    </button>
+                                  </Gate>
                                 </div>
                               )}
                             </div>

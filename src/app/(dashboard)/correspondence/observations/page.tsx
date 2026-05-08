@@ -7,7 +7,7 @@ import { Icon } from '@iconify/react'
 import { Button } from '@/components/ui/button'
 import { useTranslation } from '@/i18n'
 import { exportObservations } from '@/lib/export'
-import { RoleGuard } from '@/components/auth/role-guard'
+import { Gate } from '@/components/auth/gate'
 import { DeleteConfirmationDialog } from '@/components/ui/delete-confirmation-dialog'
 import { useObservationStore } from '@/stores/observation-store'
 import { useAuthStore } from '@/stores/auth-store'
@@ -309,7 +309,7 @@ export default function ObservationsPage() {
 
         <div className={`flex items-center gap-4`}>
           {/* Export Button */}
-          <RoleGuard requiredPermission="export" hidden>
+          <Gate perm="Export Compliance Data">
             <Button
               variant="outline"
               onClick={handleExport}
@@ -318,10 +318,10 @@ export default function ObservationsPage() {
               <Icon icon="lucide:download" />
               {t('common.exportCsv')}
             </Button>
-          </RoleGuard>
+          </Gate>
 
           {/* Add Observation Button */}
-          <RoleGuard requiredPermission="observation:create" hidden>
+          <Gate perm="Manage Audit Findings">
             <Button
               variant="primary"
               onClick={() => setIsAddModalOpen(true)}
@@ -330,7 +330,7 @@ export default function ObservationsPage() {
               <Icon icon="lucide:plus" />
               {t('observations.addObservation')}
             </Button>
-          </RoleGuard>
+          </Gate>
         </div>
       </header>
 

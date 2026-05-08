@@ -8,6 +8,7 @@ import { usePolicyStore } from '@/stores/policy-store'
 import { useAuthStore } from '@/stores/auth-store'
 import { useNotificationStore } from '@/stores/notification-store'
 import { useDepartmentStore } from '@/stores/department-store'
+import { useCan } from '@/lib/permissions'
 import { EditableSelect } from '@/components/ui/editable-select'
 import { InlineDeadlinePicker } from '@/components/ui/inline-deadline-picker'
 import type {
@@ -84,6 +85,7 @@ export function PolicyDetailsContent({
 }: Props) {
   const [activeTab, setActiveTab] = useState<DetailTab>(initialTab ?? 'overview')
   const [expandedVersion, setExpandedVersion] = useState<number | null>(null)
+  const canApprovePolicy = useCan('Approve Policy Reviews')
 
   // Attachment file upload
   const docFileRef = useRef<HTMLInputElement>(null)
@@ -1071,7 +1073,13 @@ export function PolicyDetailsContent({
                 {t('policies.policyActions')}
               </h3>
               {fresh.status === 'draft' && (
-                <Button variant="outline" className="w-full" onClick={() => setNotePromptFor('submit')}>
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => setNotePromptFor('submit')}
+                  disabled={!canApprovePolicy}
+                  title={canApprovePolicy ? '' : t('rbac.deniedTooltip')}
+                >
                   <Icon icon="lucide:send" className="w-4 h-4" />
                   {t('policies.submitForReview')}
                 </Button>
@@ -1090,12 +1098,23 @@ export function PolicyDetailsContent({
                         <span className="text-xs font-bold text-amber-700">{t('policies.awaitingApproval')}</span>
                       </div>
                       <div className="flex gap-2">
-                        <Button variant="primary" className="flex-1 text-xs h-9" onClick={() => setNotePromptFor('approve-step')}>
+                        <Button
+                          variant="primary"
+                          className="flex-1 text-xs h-9"
+                          onClick={() => setNotePromptFor('approve-step')}
+                          disabled={!canApprovePolicy}
+                          title={canApprovePolicy ? '' : t('rbac.deniedTooltip')}
+                        >
                           <Icon icon="lucide:check-circle" className="w-3.5 h-3.5" />
                           {t('policies.approveStep')}
                         </Button>
-                        <Button variant="outline" className="flex-1 text-xs h-9 text-rose-600 border-rose-200 hover:bg-rose-50"
-                          onClick={() => setNotePromptFor('deny-step')}>
+                        <Button
+                          variant="outline"
+                          className="flex-1 text-xs h-9 text-rose-600 border-rose-200 hover:bg-rose-50"
+                          onClick={() => setNotePromptFor('deny-step')}
+                          disabled={!canApprovePolicy}
+                          title={canApprovePolicy ? '' : t('rbac.deniedTooltip')}
+                        >
                           <Icon icon="lucide:x-circle" className="w-3.5 h-3.5" />
                           {t('policies.denyStep')}
                         </Button>
@@ -1408,7 +1427,13 @@ export function PolicyDetailsContent({
 
         {/* Actions */}
         <div className="space-y-2 pt-4 border-t border-slate-200">
-          <Button variant="primary" className="w-full" onClick={onEditOpen}>
+          <Button
+            variant="primary"
+            className="w-full"
+            onClick={onEditOpen}
+            disabled={!canApprovePolicy}
+            title={canApprovePolicy ? '' : t('rbac.deniedTooltip')}
+          >
             <Icon icon="lucide:edit" className="w-4 h-4" />
             {t('policies.editPolicy')}
           </Button>

@@ -7,6 +7,7 @@ import { Modal } from '@/components/ui/modal'
 import { useTranslation } from '@/i18n'
 import type { TranslationKey } from '@/i18n'
 import { RoleGuard } from '@/components/auth/role-guard'
+import { Gate } from '@/components/auth/gate'
 import { useAuthStore } from '@/stores/auth-store'
 import { useTeamStore } from '@/stores/team-store'
 import { useWorkload } from '@/hooks/useWorkload'
@@ -258,6 +259,26 @@ export function MemberDetailDrawer({
             </RoleGuard>
 
             {/* Permissions */}
+            <Gate
+              perm="Manage Team & Permissions"
+              fallback={
+                <section>
+                  <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">
+                    {t('team.accessControl')}
+                  </h3>
+                  <ul className="space-y-2">
+                    {stagedPermissions.filter((p) => p.enabled).map((p, i) => (
+                      <li key={i} className="text-xs text-slate-600 px-3 py-2 bg-slate-50 rounded-lg">
+                        {p.label}
+                      </li>
+                    ))}
+                    {stagedPermissions.filter((p) => p.enabled).length === 0 && (
+                      <li className="text-xs text-slate-400 italic">—</li>
+                    )}
+                  </ul>
+                </section>
+              }
+            >
             <section>
               <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">
                 {t('team.accessControl')}
@@ -307,6 +328,7 @@ export function MemberDetailDrawer({
                 })}
               </div>
             </section>
+            </Gate>
           </div>
 
           <div className="p-6 border-t border-slate-100 space-y-3">

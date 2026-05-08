@@ -8,7 +8,7 @@ import { Modal } from '@/components/ui/modal'
 import { useAuditTemplateStore } from '@/stores/audit-template-store'
 import { useFrameworkConfigStore } from '@/stores/framework-config-store'
 import { useTranslation } from '@/i18n'
-import { RoleGuard } from '@/components/auth/role-guard'
+import { Gate } from '@/components/auth/gate'
 import { SortHeader, type SortState } from '@/components/ui/sort-header'
 import { EditableSelect } from '@/components/ui/editable-select'
 import type { AuditAuthority, AuditTemplate, AuditTemplateCategory, AuditPriority, AuditFrequency, FrequencySchedule } from '@/types'
@@ -68,12 +68,12 @@ export function AuditTemplatesSection() {
           <h2 className="text-lg font-bold text-slate-900 font-display">{t('settings.auditTemplates')}</h2>
           <p className="text-sm text-slate-500">{t('settings.standardizeChecks')}</p>
         </div>
-        <RoleGuard adminOnly hidden>
+        <Gate perm="Manage Audit Templates">
           <Button variant="dark" onClick={() => setIsCreateOpen(true)}>
             <Icon icon="lucide:plus" />
             {t('settings.newTemplate')}
           </Button>
-        </RoleGuard>
+        </Gate>
       </div>
       <div className="overflow-x-auto">
         <table className="w-full text-left">
@@ -113,14 +113,14 @@ export function AuditTemplatesSection() {
                   <span className="text-xs font-bold text-slate-600">{tmpl.usageCount}</span>
                 </td>
                 <td className="px-8 py-4 text-end">
-                  <RoleGuard editOnly hidden>
+                  <Gate perm="Manage Audit Templates">
                     <button
                       onClick={() => setEditId(tmpl.id)}
                       className="text-slate-400 hover:text-emerald-600 transition-colors cursor-pointer"
                     >
                       <Icon icon="lucide:edit-3" />
                     </button>
-                  </RoleGuard>
+                  </Gate>
                 </td>
               </tr>
             ))}
@@ -369,11 +369,11 @@ function AuditTemplateFormModal({
         <div className="flex gap-3 pt-4">
           <Button variant="outline" onClick={onClose}>{t('common.cancel')}</Button>
           {onDelete && (
-            <RoleGuard deleteOnly hidden>
+            <Gate perm="Manage Audit Templates">
               <button onClick={onDelete} className="px-4 py-2 text-sm font-bold text-rose-600 hover:text-rose-700 hover:bg-rose-50 rounded-xl transition-colors cursor-pointer">
                 {t('settings.deleteTemplate')}
               </button>
-            </RoleGuard>
+            </Gate>
           )}
           <Button variant="primary" className="flex-1" onClick={handleSave}>
             {t('common.saveChanges')}

@@ -16,6 +16,7 @@ import { exportAdvisoryLocalized } from '@/lib/export'
 import type { AdvisoryRequest, AdvisoryStatus, AdvisoryPriority, BusinessUnit } from '@/types'
 import { useDepartmentStore } from '@/stores/department-store'
 import { EditableSelect } from '@/components/ui/editable-select'
+import { Gate } from '@/components/auth/gate'
 
 type TimeFrequency = 'week' | 'month' | 'quarter' | 'semi_annual' | 'annual' | 'fiscal'
 
@@ -233,13 +234,15 @@ export default function AdvisoryPage() {
           </div>
         </div>
         <div className={`flex items-center gap-4`}>
-          <button
-            onClick={() => setIsNewAdvisoryOpen(true)}
-            className={`bg-emerald-600 text-white px-5 py-2.5 rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-emerald-700 transition-colors shadow-lg shadow-emerald-100 cursor-pointer`}
-          >
-            <Icon icon="lucide:plus" />
-            {t('advisory.newRequest' as TranslationKey)}
-          </button>
+          <Gate perm="Manage Audit Findings">
+            <button
+              onClick={() => setIsNewAdvisoryOpen(true)}
+              className={`bg-emerald-600 text-white px-5 py-2.5 rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-emerald-700 transition-colors shadow-lg shadow-emerald-100 cursor-pointer`}
+            >
+              <Icon icon="lucide:plus" />
+              {t('advisory.newRequest' as TranslationKey)}
+            </button>
+          </Gate>
         </div>
       </header>
 
@@ -722,7 +725,7 @@ export default function AdvisoryPage() {
             {/* Actions */}
             <div className={`flex gap-3 pt-4 border-t border-slate-200`}>
               {selectedAdvisory.status !== 'completed' && (
-                <>
+                <Gate perm="Manage Audit Findings">
                   <button
                     onClick={() => {
                       advisoryStore.updateStatus(selectedAdvisory.id, 'completed')
@@ -751,7 +754,7 @@ export default function AdvisoryPage() {
                       isRTL={isRTL}
                     />
                   </div>
-                </>
+                </Gate>
               )}
               <button
                 onClick={() => setIsDeleteAdvisoryOpen(true)}

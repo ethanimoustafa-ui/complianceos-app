@@ -26,6 +26,7 @@ import { useDepartmentStore } from '@/stores/department-store'
 import { usePolicyCategoryStore } from '@/stores/policy-category-store'
 import { EditableSelect } from '@/components/ui/editable-select'
 import { exportPoliciesLocalized } from '@/lib/export'
+import { Gate } from '@/components/auth/gate'
 
 // Toast component
 function Toast({ message, onClose }: { message: string; onClose: () => void }) {
@@ -476,14 +477,16 @@ export default function RegulatoryUpdatesPoliciesPage() {
           >
             <Icon icon="lucide:download-cloud" className="text-lg" />
           </button>
-          <Button
-            variant="primary"
-            className="shadow-lg shadow-emerald-100"
-            onClick={() => setIsCreatePolicyModalOpen(true)}
-          >
-            <Icon icon="lucide:plus" />
-            {t('policies.createPolicy')}
-          </Button>
+          <Gate perm="Approve Policy Reviews">
+            <Button
+              variant="primary"
+              className="shadow-lg shadow-emerald-100"
+              onClick={() => setIsCreatePolicyModalOpen(true)}
+            >
+              <Icon icon="lucide:plus" />
+              {t('policies.createPolicy')}
+            </Button>
+          </Gate>
         </div>
       </header>
 

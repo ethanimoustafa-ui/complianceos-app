@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Modal } from '@/components/ui/modal'
 import { useTranslation } from '@/i18n'
 import type { TranslationKey } from '@/i18n'
-import { RoleGuard } from '@/components/auth/role-guard'
+import { Gate } from '@/components/auth/gate'
 import { useTrainingStore } from '@/stores/training-store'
 import type { TrainingEmployee, TrainingCourse, CourseProgress } from '@/types'
 
@@ -193,7 +193,7 @@ function TeamTrainingPageContent() {
             <Icon icon="lucide:download" className="mr-1.5" />
             {t('training.exportReport' as TranslationKey)}
           </Button>
-          <RoleGuard requiredRole="manager" hidden>
+          <Gate perm="Manage Training Programs">
             <Button variant="outline" size="sm" onClick={() => setIsManualEntryOpen(true)}>
               <Icon icon="lucide:pencil" className="mr-1.5" />
               {t('training.editMetrics' as TranslationKey)}
@@ -202,7 +202,7 @@ function TeamTrainingPageContent() {
               <Icon icon="lucide:upload" className="mr-1.5" />
               {t('training.uploadFile' as TranslationKey)}
             </Button>
-          </RoleGuard>
+          </Gate>
         </div>
       </header>
 

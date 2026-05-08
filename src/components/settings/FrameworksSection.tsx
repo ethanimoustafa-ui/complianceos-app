@@ -5,7 +5,7 @@ import { Icon } from '@iconify/react'
 import { Modal } from '@/components/ui/modal'
 import { useFrameworkConfigStore } from '@/stores/framework-config-store'
 import { useTranslation } from '@/i18n'
-import { RoleGuard } from '@/components/auth/role-guard'
+import { Gate } from '@/components/auth/gate'
 import { FrameworkConfigModal } from './FrameworkConfigModal'
 import { AddFrameworkModal } from './AddFrameworkModal'
 import type { RegulatoryBodyId, FrameworkConfig } from '@/types'
@@ -88,6 +88,7 @@ export function FrameworksSection() {
               frameworks aren't pinnable because pinning drives the scored
               dashboard, which excludes them. */}
           {fw.correspondenceBased && (
+            <Gate perm="Configure Frameworks">
             <div className="relative">
               <button
                 onClick={() => handlePin(fw.id)}
@@ -123,6 +124,7 @@ export function FrameworksSection() {
                 </div>
               )}
             </div>
+            </Gate>
           )}
           <button
             className={`w-9 h-5 rounded-full relative transition-colors cursor-pointer ${
@@ -136,14 +138,14 @@ export function FrameworksSection() {
               }`}
             />
           </button>
-          <RoleGuard adminOnly hidden>
+          <Gate perm="Configure Frameworks">
             <button
               onClick={() => { setShowAllModal(false); setConfigureId(fw.id) }}
               className="text-xs font-bold text-slate-400 hover:text-slate-700 cursor-pointer"
             >
               {t('settings.configure')}
             </button>
-          </RoleGuard>
+          </Gate>
         </div>
       </div>
     )
@@ -176,12 +178,14 @@ export function FrameworksSection() {
       </div>
 
       <div className="mt-6 text-center">
-        <button
-          onClick={() => setShowAllModal(true)}
-          className="text-sm font-bold text-emerald-600 hover:text-emerald-700 cursor-pointer"
-        >
-          {t('settings.viewAllFrameworks')} &rarr;
-        </button>
+        <Gate perm="Configure Frameworks">
+          <button
+            onClick={() => setShowAllModal(true)}
+            className="text-sm font-bold text-emerald-600 hover:text-emerald-700 cursor-pointer"
+          >
+            {t('settings.viewAllFrameworks')} &rarr;
+          </button>
+        </Gate>
       </div>
 
       {/* View All Frameworks Modal */}
@@ -204,7 +208,7 @@ export function FrameworksSection() {
                 className="w-full ps-9 pe-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
               />
             </div>
-            <RoleGuard adminOnly hidden>
+            <Gate perm="Configure Frameworks">
               <button
                 onClick={() => setShowAddModal(true)}
                 className="shrink-0 inline-flex items-center gap-1.5 px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold rounded-xl cursor-pointer transition-colors"
@@ -212,7 +216,7 @@ export function FrameworksSection() {
                 <Icon icon="lucide:plus" className="text-sm" />
                 <span>{t('settings.addFramework')}</span>
               </button>
-            </RoleGuard>
+            </Gate>
           </div>
           <div className="max-h-[60vh] overflow-y-auto space-y-6">
             {correspondenceFiltered.length > 0 && (
@@ -293,13 +297,15 @@ function FrameworkCard({
           <Icon icon={framework.icon} className="text-2xl" />
         </div>
         <div className="flex items-center gap-2">
-          <button
-            onClick={onPin}
-            className="text-slate-300 hover:text-emerald-500 transition-colors cursor-pointer"
-            title={t('settings.unpinFramework')}
-          >
-            <Icon icon="lucide:pin-off" className="text-sm" />
-          </button>
+          <Gate perm="Configure Frameworks">
+            <button
+              onClick={onPin}
+              className="text-slate-300 hover:text-emerald-500 transition-colors cursor-pointer"
+              title={t('settings.unpinFramework')}
+            >
+              <Icon icon="lucide:pin-off" className="text-sm" />
+            </button>
+          </Gate>
           <button
             className={`w-9 h-5 rounded-full relative transition-colors cursor-pointer ${
               framework.enabled ? 'bg-emerald-500' : 'bg-slate-200'
@@ -333,7 +339,7 @@ function FrameworkCard({
         <span className={`text-[10px] font-black ${framework.enabled ? 'text-emerald-600' : 'text-slate-400'}`}>
           {framework.enabled ? t('common.active') : t('settings.disabled')}
         </span>
-        <RoleGuard adminOnly hidden>
+        <Gate perm="Configure Frameworks">
           <button
             onClick={onConfigure}
             className={`text-xs font-bold cursor-pointer ${
@@ -342,7 +348,7 @@ function FrameworkCard({
           >
             {framework.enabled ? t('settings.configure') : t('settings.enableNow')} &rarr;
           </button>
-        </RoleGuard>
+        </Gate>
       </div>
     </div>
   )
