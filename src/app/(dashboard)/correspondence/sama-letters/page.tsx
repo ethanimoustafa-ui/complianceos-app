@@ -974,20 +974,36 @@ export default function SAMALettersPage() {
                   />
                 </div>
 
-                {/* Type Filter */}
+                {/* Type Filter — BUG-R3-05: bound to useSAMALetterTypeStore so
+                    user-added types appear here. A synthetic "All" item is
+                    prepended (isDefault so it can't be deleted/edited). */}
                 <div className={`flex items-center gap-2`}>
                   <label className="text-xs font-bold text-slate-500 uppercase tracking-wide">{t('common.type')}:</label>
-                  <select
-                    value={templateTypeFilter}
-                    onChange={(e) => setTemplateTypeFilter(e.target.value as SAMALetterType | 'All')}
-                    className="px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm font-medium focus:ring-2 focus:ring-emerald-500 outline-none min-w-[150px]"
-                  >
-                    <option value="All">{t('samaLetters.allTypes')}</option>
-                    <option value="non-objection">{t('samaLetters.nonObjection')}</option>
-                    <option value="inquiry">{t('samaLetters.inquiry')}</option>
-                    <option value="submission">{t('samaLetters.submission')}</option>
-                    <option value="notification">{t('samaLetters.notification')}</option>
-                  </select>
+                  <div className="min-w-[150px]">
+                    <EditableSelect
+                      value={templateTypeFilter}
+                      onChange={(id) => setTemplateTypeFilter(id as SAMALetterType | 'All')}
+                      items={[
+                        { id: 'All', label: t('samaLetters.allTypes'), labelAr: t('samaLetters.allTypes'), isDefault: true },
+                        ...letterTypeStore.types.map((tt) => ({
+                          id: tt.id,
+                          label: tt.label,
+                          labelAr: tt.labelAr,
+                          isDefault: tt.isDefault,
+                        })),
+                      ]}
+                      onAdd={(label, labelAr) => letterTypeStore.add(label, labelAr)}
+                      onEdit={(id, label, labelAr) => {
+                        if (id === 'All') return
+                        letterTypeStore.update(id, { label, labelAr: labelAr ?? label })
+                      }}
+                      onDelete={(id) => {
+                        if (id === 'All') return
+                        letterTypeStore.remove(id)
+                      }}
+                      isRTL={isRTL}
+                    />
+                  </div>
                 </div>
 
                 {/* Status Filter */}
@@ -2734,10 +2750,15 @@ function CreateLetterForm({
   // "Inquiry" only surfaces inquiry-type templates. Sourced live from
   // useSAMATemplateStore so user-created templates appear here as well.
   // Sorted by lastModified desc to match Template Registry ordering.
+  // BUG-R3-04: do NOT gate on `status === 'Active'` — `TemplateEditForm`
+  // creates new templates with default status `'Draft'`. Showing every
+  // non-archived template surfaces user-created drafts in the picker. The
+  // `TemplateStatus` union is `'Active' | 'Draft'` only (no 'Archived'),
+  // so we drop the status clause entirely.
   const filteredTemplates = useMemo(
     () =>
       allTemplates
-        .filter((t) => t.type === selectedType && t.status === 'Active')
+        .filter((t) => t.type === selectedType)
         .slice()
         .sort((a, b) => {
           const da = new Date(a.lastModified).getTime()
@@ -3231,9 +3252,15 @@ function TemplateEditForm({
   onSave: (data: Partial<LetterTemplate>) => void
 }) {
   const { t, isRTL } = useTranslation()
+  const letterTypeStore = useSAMALetterTypeStore()
   const [activeTab, setActiveTab] = useState<'basic' | 'content' | 'signer' | 'recipient'>('basic')
   const [name, setName] = useState(template?.name || '')
-  const [type, setType] = useState<SAMALetterType>(template?.type || 'non-objection')
+  // BUG-R3-05: `setType` widened to `string` (option (a)). The Letter Type
+  // picker is now an EditableSelect bound to `useSAMALetterTypeStore`, so the
+  // saved id can be a user-added type ("internal-memo") that doesn't fit the
+  // legacy literal union. `SAMALetterType` is already widened to `string` in
+  // `src/types/index.ts`, so this is a no-op widening for the local setter.
+  const [type, setType] = useState<string>(template?.type || 'non-objection')
   const [description, setDescription] = useState(template?.description || '')
   const [status, setStatus] = useState<TemplateStatus>(template?.status || 'Draft')
   const [defaultSubjectEn, setDefaultSubjectEn] = useState(template?.defaultSubjectEn || '')
@@ -3396,16 +3423,27 @@ function TemplateEditForm({
             <label className={`text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-2`}>
               {t('samaLetters.letterType')}
             </label>
-            <select
-              value={type}
-              onChange={(e) => setType(e.target.value as SAMALetterType)}
-              className={`w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-sm font-medium focus:ring-2 focus:ring-emerald-500 outline-none`}
-            >
-              <option value="non-objection">{t('samaLetters.nonObjection')}</option>
-              <option value="inquiry">{t('samaLetters.inquiry')}</option>
-              <option value="submission">{t('samaLetters.submission')}</option>
-              <option value="notification">{t('samaLetters.notification')}</option>
-            </select>
+            {/* BUG-R3-05: bound to useSAMALetterTypeStore so user-added types
+                from the Draft modal also surface here (and admins can manage
+                types from this surface too). The saved value is the type id
+                (e.g. 'inquiry' or a user-added 'internal-memo'), not the label. */}
+            <EditableSelect
+              value={type || null}
+              onChange={(id) => setType(id)}
+              items={letterTypeStore.types.map((tt) => ({
+                id: tt.id,
+                label: tt.label,
+                labelAr: tt.labelAr,
+                isDefault: tt.isDefault,
+              }))}
+              placeholder={t('samaLetters.letterType')}
+              onAdd={(label, labelAr) => letterTypeStore.add(label, labelAr)}
+              onEdit={(id, label, labelAr) =>
+                letterTypeStore.update(id, { label, labelAr: labelAr ?? label })
+              }
+              onDelete={(id) => letterTypeStore.remove(id)}
+              isRTL={isRTL}
+            />
           </div>
 
           <div>
