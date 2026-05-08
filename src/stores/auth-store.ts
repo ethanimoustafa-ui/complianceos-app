@@ -47,6 +47,7 @@ interface AuthState {
   setLoading: (loading: boolean) => void
   setError: (error: string | null) => void
   clearError: () => void
+  switchUser: (userId: string) => void
 }
 
 export const useAuthStore = create<AuthState>()(
@@ -132,6 +133,22 @@ export const useAuthStore = create<AuthState>()(
       setLoading: (isLoading) => set({ isLoading }),
       setError: (error) => set({ error }),
       clearError: () => set({ error: null }),
+
+      // RBAC-010: switch the current user by id (used by the demo Acting-As
+      // picker added in Phase 4). Throws if `userId` is not in SEED_USERS.
+      // Phase 7 will layer `auth.switch_user` audit logging on top of this.
+      switchUser: (userId) => {
+        const matched = SEED_USERS.find((u) => u.id === userId)
+        if (!matched) {
+          throw new Error(`switchUser: unknown userId "${userId}"`)
+        }
+        set({
+          user: { ...matched },
+          token: 'demo-token',
+          isAuthenticated: true,
+          error: null,
+        })
+      },
     }),
     {
       name: 'auth-storage',

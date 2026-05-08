@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useForm } from 'react-hook-form'
@@ -10,6 +10,7 @@ import { Icon } from '@iconify/react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { useTranslation } from '@/i18n'
+import { useAuthStore } from '@/stores/auth-store'
 
 const signInSchema = z.object({
   email: z.string().email('Please enter a valid email'),
@@ -22,7 +23,22 @@ export default function SignInPage() {
   const router = useRouter()
   const [showPassword, setShowPassword] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
+  const [submitError, setSubmitError] = useState<string | null>(null)
   const { t, isRTL } = useTranslation()
+  const login = useAuthStore((s) => s.login)
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated)
+  const [hasMounted, setHasMounted] = useState(false)
+
+  useEffect(() => {
+    setHasMounted(true)
+  }, [])
+
+  // RBAC-018: if already authenticated after hydration, redirect to dashboard.
+  useEffect(() => {
+    if (hasMounted && isAuthenticated) {
+      router.replace('/dashboard')
+    }
+  }, [hasMounted, isAuthenticated, router])
 
   const {
     register,
@@ -32,13 +48,31 @@ export default function SignInPage() {
     resolver: zodResolver(signInSchema),
   })
 
+  // RBAC-011: real sign-in. `login` matches by email against SEED_USERS
+  // (case-insensitive) and ignores password. On success, push to dashboard;
+  // on failure, surface the error under the password field.
   const onSubmit = async (data: SignInInput) => {
+    setSubmitError(null)
     setIsLoading(true)
-    // Simulate API call
-    await new Promise((resolve) => setTimeout(resolve, 1500))
+    const result = await login(data.email, data.password)
     setIsLoading(false)
-    // Navigate to dashboard
-    router.push('/dashboard')
+    if (result.ok) {
+      router.push('/dashboard')
+    } else {
+      setSubmitError(result.error ?? 'Invalid credentials')
+    }
+  }
+
+  const handleDemoAdmin = async () => {
+    setSubmitError(null)
+    setIsLoading(true)
+    const result = await login('admin@example.com', 'demo')
+    setIsLoading(false)
+    if (result.ok) {
+      router.push('/dashboard')
+    } else {
+      setSubmitError(result.error ?? 'Invalid credentials')
+    }
   }
 
   return (
@@ -107,6 +141,9 @@ export default function SignInPage() {
               {errors.password && (
                 <p className="mt-1.5 text-xs text-rose-500">{errors.password.message}</p>
               )}
+              {!errors.password && submitError && (
+                <p className="mt-1.5 text-xs text-rose-500">{submitError}</p>
+              )}
             </div>
 
             {/* Remember Me & Forgot Password */}
@@ -147,6 +184,21 @@ export default function SignInPage() {
                 </>
               )}
             </Button>
+
+            {/* Demo Admin Shortcut (RBAC-011) */}
+            <Button
+              type="button"
+              onClick={handleDemoAdmin}
+              disabled={isLoading}
+              variant="outline"
+              className="w-full py-3 text-sm"
+            >
+              <Icon icon="lucide:shield-check" className="text-base" />
+              Sign in as demo admin
+            </Button>
+            <p className="text-center text-xs text-slate-400 -mt-2">
+              Demo seeds: admin@example.com (admin) · sarah@company.com (manager) · lisa@company.com (officer). Password is ignored.
+            </p>
 
             {/* Sign Up Link */}
             <div className="text-center pt-4">
