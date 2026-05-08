@@ -14,7 +14,7 @@ import { useTeamStore } from '@/stores/team-store'
 import { useAuthStore } from '@/stores/auth-store'
 import { exportAdvisoryLocalized } from '@/lib/export'
 import type { AdvisoryRequest, AdvisoryStatus, AdvisoryPriority, BusinessUnit } from '@/types'
-import { useBusinessUnitStore } from '@/stores/business-unit-store'
+import { useDepartmentStore } from '@/stores/department-store'
 import { EditableSelect } from '@/components/ui/editable-select'
 
 type TimeFrequency = 'week' | 'month' | 'quarter' | 'semi_annual' | 'annual' | 'fiscal'
@@ -43,12 +43,14 @@ export default function AdvisoryPage() {
   const advisoryStore = useAdvisoryStore()
   const teamStore = useTeamStore()
   const authStore = useAuthStore()
-  // Business unit store — seeds match the legacy BusinessUnit literal union;
-  // user can extend via the EditableSelect picker below.
-  const businessUnits = useBusinessUnitStore((s) => s.units)
-  const addBusinessUnit = useBusinessUnitStore((s) => s.add)
-  const updateBusinessUnit = useBusinessUnitStore((s) => s.update)
-  const removeBusinessUnit = useBusinessUnitStore((s) => s.remove)
+  // Round-3 follow-up: the "Business Unit" picker now sources from the
+  // department store so the same single source of truth feeds every dropdown
+  // in the app. The advisory record's field is still called `businessUnit`
+  // (legacy schema) but stores a department id.
+  const departments = useDepartmentStore((s) => s.departments)
+  const addDepartment = useDepartmentStore((s) => s.addDepartment)
+  const updateDepartment = useDepartmentStore((s) => s.updateDepartment)
+  const removeDepartment = useDepartmentStore((s) => s.removeDepartment)
 
   const [toastMessage, setToastMessage] = useState<string | null>(null)
 
@@ -169,9 +171,10 @@ export default function AdvisoryPage() {
     high: { bg: 'bg-rose-100', text: 'text-rose-700', labelKey: 'advisory.high' },
   }
 
-  // Business unit display label — checks the editable store first, falls back
-  // to the legacy i18n keys for the seed ids, and finally to the raw id so
-  // user-added units stay readable even before they get a translation.
+  // Business unit display label — checks the department store first, falls
+  // back to the legacy i18n keys (advisories created before the department
+  // migration), and finally to the raw id so user-added departments stay
+  // readable even before they get a translation.
   const legacyBusinessUnitKeys: Record<string, string> = {
     corporate_banking: 'advisory.corporateBanking',
     compliance: 'advisory.compliance',
@@ -182,8 +185,8 @@ export default function AdvisoryPage() {
     hr: 'advisory.hr',
   }
   const renderBusinessUnit = (id: string): string => {
-    const fromStore = businessUnits.find((u) => u.id === id)
-    if (fromStore) return isRTL && fromStore.labelAr ? fromStore.labelAr : fromStore.label
+    const fromStore = departments.find((d) => d.id === id)
+    if (fromStore) return isRTL && fromStore.nameAr ? fromStore.nameAr : fromStore.name
     const legacyKey = legacyBusinessUnitKeys[id]
     if (legacyKey) return t(legacyKey as TranslationKey)
     return id
@@ -319,11 +322,11 @@ export default function AdvisoryPage() {
                   onChange={(id) => setAdvisoryBusinessUnitFilter(id as BusinessUnit | '')}
                   items={[
                     { id: '', label: t('advisory.allUnits') },
-                    ...businessUnits.map((u) => ({ id: u.id, label: u.label, labelAr: u.labelAr, isDefault: u.isDefault })),
+                    ...departments.map((d) => ({ id: d.id, label: d.name, labelAr: d.nameAr, isDefault: d.isDefault })),
                   ]}
-                  onAdd={(label, labelAr) => addBusinessUnit(label, labelAr)}
-                  onEdit={(id, label, labelAr) => updateBusinessUnit(id, { label, labelAr })}
-                  onDelete={(id) => removeBusinessUnit(id)}
+                  onAdd={(label, labelAr) => addDepartment(label, labelAr ?? label).id}
+                  onEdit={(id, label, labelAr) => updateDepartment(id, { name: label, nameAr: labelAr ?? label })}
+                  onDelete={(id) => removeDepartment(id)}
                   placeholder={t('advisory.allUnits')}
                   isRTL={isRTL}
                 />
@@ -512,10 +515,10 @@ export default function AdvisoryPage() {
               <EditableSelect
                 value={newAdvBusinessUnit || null}
                 onChange={(id) => setNewAdvBusinessUnit(id as BusinessUnit)}
-                items={businessUnits.map((u) => ({ id: u.id, label: u.label, labelAr: u.labelAr, isDefault: u.isDefault }))}
-                onAdd={(label, labelAr) => addBusinessUnit(label, labelAr)}
-                onEdit={(id, label, labelAr) => updateBusinessUnit(id, { label, labelAr })}
-                onDelete={(id) => removeBusinessUnit(id)}
+                items={departments.map((d) => ({ id: d.id, label: d.name, labelAr: d.nameAr, isDefault: d.isDefault }))}
+                onAdd={(label, labelAr) => addDepartment(label, labelAr ?? label).id}
+                onEdit={(id, label, labelAr) => updateDepartment(id, { name: label, nameAr: labelAr ?? label })}
+                onDelete={(id) => removeDepartment(id)}
                 placeholder={t('advisory.selectUnit')}
                 isRTL={isRTL}
               />

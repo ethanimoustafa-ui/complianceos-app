@@ -24,7 +24,6 @@ import { EditableSelect } from '@/components/ui/editable-select'
 
 // ── Stores actually used to count usage ──────────────────────────────────────
 import { useSAMALetterStore } from '@/stores/sama-letter-store'
-import { useCorrespondenceStore } from '@/stores/correspondence-store'
 import { useCalendarStore } from '@/stores/calendar-store'
 import { useAdvisoryStore } from '@/stores/advisory-store'
 import { usePolicyStore } from '@/stores/policy-store'
@@ -44,12 +43,15 @@ import { useRiskCategoryStore } from '@/stores/risk-category-store'
 // ── Defensive imports for Agent D's stores (may not exist yet) ───────────────
 // We import lazily via require-style guards so a missing store hides its section
 // without breaking the page.
+//
+// Round-3 follow-up: Correspondence Type is intentionally NOT exposed here.
+// Whether a framework supports correspondence is tracked on the framework
+// itself (`useFrameworkConfigStore.frameworks[].correspondenceBased`); a
+// separate Correspondence Type list would duplicate that signal.
 let useBusinessUnitStore: any = null
 let useCalendarEventTypeStore: any = null
-let useCorrespondenceTypeStore: any = null
 try { useBusinessUnitStore = require('@/stores/business-unit-store').useBusinessUnitStore } catch {}
 try { useCalendarEventTypeStore = require('@/stores/calendar-event-type-store').useCalendarEventTypeStore } catch {}
-try { useCorrespondenceTypeStore = require('@/stores/correspondence-type-store').useCorrespondenceTypeStore } catch {}
 
 // ── Generic shape every editable-list section consumes ───────────────────────
 
@@ -311,6 +313,41 @@ function ListSection({
   )
 }
 
+// ── Generic launcher button + modal wrapper for any ListSection ─────────────
+//
+// Round-3 follow-up: the original page rendered every ListSection inline, so
+// the page scrolled forever. Now each list is summoned via a compact button
+// (label + count badge) that opens a modal hosting the full ListSection. The
+// underlying CRUD UX is unchanged — only the entry point.
+
+interface ListSectionLauncherProps extends ListSectionProps {
+  /** Inline button copy — usually the section title. */
+  buttonLabel?: string
+}
+
+function ListSectionLauncher(props: ListSectionLauncherProps) {
+  const { buttonLabel, title, items } = props
+  const [open, setOpen] = useState(false)
+  return (
+    <>
+      <Button
+        size="sm"
+        variant="outline"
+        onClick={() => setOpen(true)}
+      >
+        <Icon icon="lucide:list" className="text-sm" />
+        {buttonLabel ?? title}
+        <span className="text-[10px] font-bold text-slate-400 ms-1">
+          ({items.length})
+        </span>
+      </Button>
+      <Modal isOpen={open} onClose={() => setOpen(false)} title={title} size="lg">
+        <ListSection {...props} />
+      </Modal>
+    </>
+  )
+}
+
 // ── Per-framework sub-category launcher ─────────────────────────────────────
 //
 // Round-3 §5: sub-categories are scoped per framework. The Settings UI exposes
@@ -470,7 +507,6 @@ export function ListsAndCategoriesSection() {
 
   // ── Counter sources
   const letters = useSAMALetterStore((s) => s.letters)
-  const correspondence = useCorrespondenceStore((s) => s.correspondence)
   const calendarEvents = useCalendarStore((s) => s.events)
   const advisory = useAdvisoryStore((s) => s.advisoryRequests)
   const policies = usePolicyStore((s) => s.policies)
@@ -482,13 +518,10 @@ export function ListsAndCategoriesSection() {
   // unconditionally; if the import is null we use an empty fallback.
   const businessUnits = useBusinessUnitStore ? useBusinessUnitStore() : null
   const calendarEventType = useCalendarEventTypeStore ? useCalendarEventTypeStore() : null
-  const correspondenceType = useCorrespondenceTypeStore ? useCorrespondenceTypeStore() : null
 
   // ── Counters ─────────────────────────────────────────────────────────────
   const countLetterType = useCallback((id: string) =>
     letters.filter((l) => l.type === id).length, [letters])
-  const countCorrespondenceType = useCallback((id: string) =>
-    correspondence.filter((c) => c.type === id).length, [correspondence])
   const countCalendarEventType = useCallback((id: string) =>
     calendarEvents.filter((e) => e.type === id).length, [calendarEvents])
   const countAdvisoryBU = useCallback((id: string) =>
@@ -513,121 +546,107 @@ export function ListsAndCategoriesSection() {
         </p>
       </div>
       <div className="p-6 space-y-6 bg-slate-50">
+        {/* Compact launcher row — every editable list is one click + modal away,
+            so the Settings page no longer scrolls forever. Per-framework
+            sub-categories keep their own dedicated section below since each
+            framework gets its own button. */}
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
+          <h3 className="text-sm font-bold text-slate-900 mb-1">
+            {t('listsAndCategories.title')}
+          </h3>
+          <p className="text-xs text-slate-500 mb-4">
+            {t('listsAndCategories.subtitle')}
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <ListSectionLauncher
+              title={t('listsAndCategories.sectionLetterType')}
+              description={t('listsAndCategories.sectionLetterTypeDesc')}
+              items={letterType.types}
+              countUsage={countLetterType}
+              onAdd={letterType.add}
+              onEdit={(id, label, labelAr) => letterType.update(id, { label, labelAr })}
+              onDelete={letterType.remove}
+              isRTL={isRTL}
+              t={t}
+            />
+            {calendarEventType && (
+              <ListSectionLauncher
+                title={t('listsAndCategories.sectionCalendarEventType')}
+                items={calendarEventType.types}
+                countUsage={countCalendarEventType}
+                onAdd={calendarEventType.add}
+                onEdit={(id, label, labelAr) => calendarEventType.update(id, { label, labelAr })}
+                onDelete={calendarEventType.remove}
+                isRTL={isRTL}
+                t={t}
+              />
+            )}
+            {businessUnits && (
+              <ListSectionLauncher
+                title={t('listsAndCategories.sectionBusinessUnit')}
+                items={businessUnits.units}
+                countUsage={countAdvisoryBU}
+                onAdd={businessUnits.add}
+                onEdit={(id, label, labelAr) => businessUnits.update(id, { label, labelAr })}
+                onDelete={businessUnits.remove}
+                isRTL={isRTL}
+                t={t}
+              />
+            )}
+            <ListSectionLauncher
+              title={t('listsAndCategories.sectionPolicyCategory')}
+              description={t('listsAndCategories.sectionPolicyCategoryDesc')}
+              items={policyCat.categories}
+              countUsage={countPolicyCategory}
+              onAdd={policyCat.add}
+              onEdit={(id, label, labelAr) => policyCat.update(id, { label, labelAr })}
+              onDelete={policyCat.remove}
+              onResetSection={policyCat.resetToDefaults}
+              isRTL={isRTL}
+              t={t}
+            />
+            <ListSectionLauncher
+              title={t('listsAndCategories.sectionTrainingCategory')}
+              description={t('listsAndCategories.sectionTrainingCategoryDesc')}
+              items={trainingCat.categories}
+              countUsage={countTrainingCategory}
+              onAdd={trainingCat.add}
+              onEdit={(id, label, labelAr) => trainingCat.update(id, { label, labelAr })}
+              onDelete={trainingCat.remove}
+              onResetSection={trainingCat.resetToDefaults}
+              isRTL={isRTL}
+              t={t}
+            />
+            <ListSectionLauncher
+              title={t('listsAndCategories.sectionAuditCategory')}
+              description={t('listsAndCategories.sectionAuditCategoryDesc')}
+              items={auditCat.categories}
+              countUsage={countAuditCategory}
+              onAdd={auditCat.add}
+              onEdit={(id, label, labelAr) => auditCat.update(id, { label, labelAr })}
+              onDelete={auditCat.remove}
+              onResetSection={auditCat.resetToDefaults}
+              isRTL={isRTL}
+              t={t}
+            />
+            <ListSectionLauncher
+              title={t('listsAndCategories.sectionRiskCategory')}
+              description={t('listsAndCategories.sectionRiskCategoryDesc')}
+              items={riskCat.categories}
+              countUsage={countRiskCategory}
+              onAdd={riskCat.add}
+              onEdit={(id, label, labelAr) => riskCat.update(id, { label, labelAr })}
+              onDelete={riskCat.remove}
+              onResetSection={riskCat.resetToDefaults}
+              isRTL={isRTL}
+              t={t}
+            />
+          </div>
+        </div>
 
-        {/* SAMA letter type */}
-        <ListSection
-          title={t('listsAndCategories.sectionLetterType')}
-          description={t('listsAndCategories.sectionLetterTypeDesc')}
-          items={letterType.types}
-          countUsage={countLetterType}
-          onAdd={letterType.add}
-          onEdit={(id, label, labelAr) => letterType.update(id, { label, labelAr })}
-          onDelete={letterType.remove}
-          isRTL={isRTL}
-          t={t}
-        />
-
-        {/* Per-framework sub-categories — one launcher button per enabled
-            framework, opening a modal with the EditableSelect for that
-            framework's sub-category list. Replaces the inline SAMA-only
-            ListSection per round-3 §5. */}
+        {/* Per-framework sub-categories keep their own section since each
+            enabled framework gets a dedicated button. */}
         <FrameworkSubCategoryLauncher
-          isRTL={isRTL}
-          t={t}
-        />
-
-
-        {/* Correspondence type (Agent D) */}
-        {correspondenceType && (
-          <ListSection
-            title={t('listsAndCategories.sectionCorrespondenceType')}
-            items={correspondenceType.types}
-            countUsage={countCorrespondenceType}
-            onAdd={correspondenceType.add}
-            onEdit={(id, label, labelAr) => correspondenceType.update(id, { label, labelAr })}
-            onDelete={correspondenceType.remove}
-            isRTL={isRTL}
-            t={t}
-          />
-        )}
-
-        {/* Calendar event type (Agent D) */}
-        {calendarEventType && (
-          <ListSection
-            title={t('listsAndCategories.sectionCalendarEventType')}
-            items={calendarEventType.types}
-            countUsage={countCalendarEventType}
-            onAdd={calendarEventType.add}
-            onEdit={(id, label, labelAr) => calendarEventType.update(id, { label, labelAr })}
-            onDelete={calendarEventType.remove}
-            isRTL={isRTL}
-            t={t}
-          />
-        )}
-
-        {/* Advisory business unit (Agent D) */}
-        {businessUnits && (
-          <ListSection
-            title={t('listsAndCategories.sectionBusinessUnit')}
-            items={businessUnits.units}
-            countUsage={countAdvisoryBU}
-            onAdd={businessUnits.add}
-            onEdit={(id, label, labelAr) => businessUnits.update(id, { label, labelAr })}
-            onDelete={businessUnits.remove}
-            isRTL={isRTL}
-            t={t}
-          />
-        )}
-
-        {/* Onboarding industry/region/headcount sections removed per Round 3 §2.2.
-            Their stores remain on disk for future RBAC work. */}
-
-        {/* Policy / Training / Audit / Risk categories (mine) */}
-        <ListSection
-          title={t('listsAndCategories.sectionPolicyCategory')}
-          description={t('listsAndCategories.sectionPolicyCategoryDesc')}
-          items={policyCat.categories}
-          countUsage={countPolicyCategory}
-          onAdd={policyCat.add}
-          onEdit={(id, label, labelAr) => policyCat.update(id, { label, labelAr })}
-          onDelete={policyCat.remove}
-          onResetSection={policyCat.resetToDefaults}
-          isRTL={isRTL}
-          t={t}
-        />
-        <ListSection
-          title={t('listsAndCategories.sectionTrainingCategory')}
-          description={t('listsAndCategories.sectionTrainingCategoryDesc')}
-          items={trainingCat.categories}
-          countUsage={countTrainingCategory}
-          onAdd={trainingCat.add}
-          onEdit={(id, label, labelAr) => trainingCat.update(id, { label, labelAr })}
-          onDelete={trainingCat.remove}
-          onResetSection={trainingCat.resetToDefaults}
-          isRTL={isRTL}
-          t={t}
-        />
-        <ListSection
-          title={t('listsAndCategories.sectionAuditCategory')}
-          description={t('listsAndCategories.sectionAuditCategoryDesc')}
-          items={auditCat.categories}
-          countUsage={countAuditCategory}
-          onAdd={auditCat.add}
-          onEdit={(id, label, labelAr) => auditCat.update(id, { label, labelAr })}
-          onDelete={auditCat.remove}
-          onResetSection={auditCat.resetToDefaults}
-          isRTL={isRTL}
-          t={t}
-        />
-        <ListSection
-          title={t('listsAndCategories.sectionRiskCategory')}
-          description={t('listsAndCategories.sectionRiskCategoryDesc')}
-          items={riskCat.categories}
-          countUsage={countRiskCategory}
-          onAdd={riskCat.add}
-          onEdit={(id, label, labelAr) => riskCat.update(id, { label, labelAr })}
-          onDelete={riskCat.remove}
-          onResetSection={riskCat.resetToDefaults}
           isRTL={isRTL}
           t={t}
         />
