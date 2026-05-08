@@ -1,337 +1,493 @@
-# Sprint Follow-Up Plan — May 2026
+# Sprint Follow-Up Plan — May 2026 (round 3)
 
-> **Status (May 8 2026):** Rounds 1 + 2 landed and Playwright-validated. Round-2 reworks (§1.A–H) and the universal editable-dropdown migration (§2) shipped under commit following `031df1e`. The §3 RBAC matrix remains deferred to a future session per the original sequencing. See `PRODUCT-BACKLOG.md` summary dashboard for the closure list.
+**Source:** Live demo review (May 8 2026) of the work that landed in commit `49f3a75` ("Sprint follow-up round 2 — pending visual, dashboard parity, auto-tick, inline chips, universal editable dropdowns"). Round 2 closed the demo-review reworks (§1.A–H) and the universal editable-dropdown migration (§2). Round 3 is the corrections list from the May 8 demo.
 
-**Source:** Live demo review (May 7 2026) of the work shipped under "Editable Dropdowns + Compliance Review + Policy Owner Rename + Phase Deadlines + Risk Workflow + Exports + Permission Strip + SAMA Templates" sprint.
-
-**Purpose:** This document captures every item raised during the review in one place, so the next session can pick it up clean. Each entry is a brief — not a full spec — with enough scope, file pointers, and gotchas that an implementer can hit the ground running. Backlog rows (`📋`) for every item below were appended to `PRODUCT-BACKLOG.md` in the same pass.
+**Purpose:** Hand off to a fresh session. This document supersedes the round-2 plan. The next session should (a) audit each bug below in code before fixing, (b) land fixes in §1, (c) execute the architectural corrections in §2 — these reverse a chunk of round-2 work that the user found incorrect on review, (d) the consistency sweep in §3, (e) the propagation work in §4, (f) the framework/sub-category Settings refactor in §5. There is no §6 RBAC matrix in this round — that remains deferred per the original sequencing.
 
 ---
 
-## Section 1 — Bugs & Gaps in This Sprint's Work
+## Section 0 — What's locked / approved
 
-These are corrections to behavior that already shipped but doesn't match the intent.
+These items shipped in `49f3a75` and survived the May 8 review. Do not retouch unless §1–§5 explicitly asks:
 
-### 1.1 Compliance Review tab — make rows clickable + paginated + filtered by business owner
-
-**Problem.** On `/reports/compliance-review` every department currently sees every rule. The score is meaningless because the same 5 rules are applied to all 10 departments. Also, clicking a rule in the checklist does nothing (no detail open). Also no pagination.
-
-**Fix scope.**
-1. Filter the rules shown for an "active department" to only those whose `circular.businessOwnerDepartment` (a name string) — or, after the data-model cleanup below, `businessOwnerDepartmentId` — matches the active department. Rules with no business owner stay hidden from per-department views (or surface in a separate "Unassigned" bucket — design call: I'd vote a count badge on the dept card).
-2. Same treatment for **policies**: spec'd this sprint adds `policy.businessOwnerDepartmentId`. Compliance Review must include policies, not just circulars. The per-department checklist becomes a unioned list of `[rules → businessOwner === dept] + [policies → businessOwnerDepartmentId === dept.id]`.
-3. Each row in the checklist is a button: clicking opens the **same** detail modal used elsewhere (rule → `RegisterCircularModal` view OR `CircularDetailsContent` modal in `rules/page.tsx`; policy → `PolicyDetailsContent` modal in `policies/page.tsx`). Easiest path: navigate `/correspondence/regulatory-updates/rules?id={ruleId}` or `/correspondence/regulatory-updates/policies?id={policyId}` — both pages already deep-link `?id=` and auto-open the modal.
-4. Pagination identical to the policies page (10/page, prev/next, page numbers).
-
-**Affected files.**
-- `src/app/(dashboard)/reports/(tabs)/compliance-review/page.tsx` (the whole page).
-- Pull from `useCircularStore` (already there) **and** `usePolicyStore` (new).
-- `src/stores/compliance-evaluation-store.ts` — `getDepartmentScore` already takes `applicableRuleIds`; just feed it the filtered list. Consider extending the eval key namespace to support both `rule:` and `policy:` prefixes so the same store handles both: `${kind}:${itemId}::${departmentId}`.
-
-**Edge cases.** Migration: existing evaluations stored under bare-id keys need a one-shot migrate to `rule:{id}::{deptId}` (since today only rules are evaluated, this is safe — every existing key is a rule).
+1. §1.A pending bucket visual (amber `Pending` pill + `+N pending` caption).
+2. §1.B `overallByRecords` dashboard ↔ Compliance Review parity.
+3. §1.C derived-on-read auto-tick (rule + policy workflow completion → `compliant` with `AUTO` pill).
+4. §1.D revert of `settings.executiveView` / `dashboard.viewExecutive` to "Executive".
+5. §1.G "Choose Template" reads from `useSAMATemplateStore` — wiring is correct in code, but see BUG-R3-04 for the user's contrary report; audit before re-touching.
+6. §1.H `placeholderPicker.*` i18n sweep on `PlaceholderPicker` + `PlaceholderDefEditor`.
+7. The new stores from §2 — they are not deleted. They are kept; what changes is **which** ones are exposed in the UI, and how (see §2 below).
+8. The new "Lists & Categories" Settings sub-tab framework — kept. Its **content** is what gets reshuffled in §2 + §5.
 
 ---
 
-### 1.2 Risk drawer — surface the department-side workflow actions
+## Section 1 — Bugs to fix (round-2 regressions discovered May 8)
 
-**Problem.** The store actions `submitDepartmentPlan`, `acceptDepartmentPlan`, `toggleDepartmentPlanItem` are wired but the drawer panel never lets a department actually submit a plan. Once an officer hits "Send to department", the workflow status moves to `sent-to-department` and stays there forever — there's no UI surface to advance to `plan-proposed`.
+### BUG-R3-01 — `InlineChipEditor` synchronous unmount race (console error)
 
-**Fix scope.**
-1. Add a "Propose mitigation plan" CTA to the drawer panel that's visible only when `wfStatus === 'sent-to-department'`. Clicking opens an inline form (or a nested modal) with: free-text plan, dynamic checklist (add rows, each row has text + optional deadline via `InlineDeadlinePicker`). On submit, calls `submitDepartmentPlan(riskId, plan, items, submittedBy)`.
-2. The "Accept plan" button already exists (`acceptDepartmentPlan`) but only renders inside the `departmentProposedPlan` block — confirm it's reachable and prominent enough.
-3. While in `in-progress` or `mitigated`, the existing checkbox list per item is fine; verify "Mark as reviewed" and "Mark all done" rolls up to `mitigationWorkflowStatus = 'mitigated'`.
-
-**Affected files.**
-- `src/app/(dashboard)/reports/(tabs)/risks/page.tsx` — IIFE around line 684–800.
-
-**Note.** Today there's no separate "department user" persona, so the propose-plan UI is just the same drawer — that's fine for the demo. When RBAC comes back (see §3), gate the CTA on the user's department matching `risk.intendedDepartmentId`.
-
----
-
-### 1.3 Phase/workflow deadlines on rules (parity with policies)
-
-**Problem.** `setPhaseDeadline` works on policies (great UI). Rules (circulars) have a workflow but no inline deadline picker on each step.
-
-**Fix scope.**
-1. Add `deadline?: string` to `CircularWorkflowStep` in `src/types/index.ts`.
-2. Add `setRuleStepDeadline()` action to `useCircularStore` that mirrors `usePolicyStore.setPhaseDeadline()`: same parent-deadline validation against `circular.dueDate` (or `capDeadline` for CAP-phase steps — design call), same activity-log entry pattern (will need a circular-side `activityLog` mirror; today circulars have a `timeline` array — re-use it with a new event type `phase_deadline_set`).
-3. Render `InlineDeadlinePicker` inside the existing rule workflow step row in `CircularDetailsContent.tsx` (find via `workflowSteps.map` — same layout as the rule details page).
-
-**Affected files.**
-- `src/types/index.ts` — `CircularWorkflowStep`.
-- `src/stores/circular-store.ts`.
-- `src/components/correspondence/regulatory-updates/rules/CircularDetailsContent.tsx`.
-
----
-
-### 1.4 Configurable workflow phases on rules (and policies)
-
-**Problem.** Rule and policy workflows are seeded from hardcoded `TIER_WORKFLOWS` (policies) and equivalent hardcoded `defaultWorkflowSteps` (rules). Users can't rename a step or insert a new one freely.
-
-**Fix scope.**
-1. Policies already partly support this — the `WorkflowAddStep` UI exists in `PolicyDetailsContent`. Extend it so the user can also **rename** an existing step inline (pencil icon on hover, inline edit, Enter to save). Activity log entry: `step_renamed`.
-2. Mirror the same pattern on rules. Today's `CircularDetailsContent` displays workflow steps from `workflowSteps[]` (already store-backed) but doesn't let the user add/rename/delete them. Add an "Add step" button at the bottom of the workflow tab and per-row edit/delete, gated on the step not being completed (matches policy rules).
-3. Keep the **visual** UI of rules workflow as it is today (the user explicitly called out that they want to maintain the look).
-
-**Affected files.**
-- `src/components/correspondence/regulatory-updates/policies/PolicyDetailsContent.tsx` (rename only).
-- `src/components/correspondence/regulatory-updates/rules/CircularDetailsContent.tsx` (full add/rename/delete/reorder + deadline picker).
-- `src/stores/circular-store.ts` — add `addWorkflowStep`, `renameWorkflowStep`, `removeWorkflowStep`, `reorderWorkflowSteps`.
-
----
-
-### 1.5 SAMA letter draft — turn `{{token}}` placeholders into inline UI on the letter body
-
-**Problem.** Today the placeholder pickers live in a separate "Fill in placeholders" panel above the editor. The user wants the experience to feel like an `@`-mention: the token in the letter body itself becomes a clickable chip that, when clicked, opens a searchable dropdown matching its configured type. Once filled, the chip displays the chosen value.
-
-**Fix scope.**
-1. Replace the raw `<textarea>` in the letter body with a contenteditable rich editor (or a lightweight token-aware renderer over a textarea — a `<div>` that re-renders the body with React, splitting on `{{token}}` and rendering inline `<PlaceholderChip>` components).
-2. `PlaceholderChip` is essentially today's `PlaceholderPicker` but inline — small chip showing either the token name (unfilled, dashed border, amber) or the chosen value (filled, solid emerald). Click → dropdown with the existing search-by-kind UI.
-3. Same treatment for the subject line.
-4. Keep the body's actual stored string as `{{token}}` plus the `placeholderValues` map; only the rendered-on-screen view substitutes. On save, run `renderTemplate()` exactly as today.
-5. The Arabic body needs the same treatment in RTL.
-
-**Affected files.**
-- `src/app/(dashboard)/correspondence/sama-letters/page.tsx` (`CreateLetterForm` — the bilingual editor block).
-- `src/components/correspondence/sama-letters/PlaceholderPicker.tsx` — re-shape the `text`/`date`/`reference` cases into a smaller chip-friendly dropdown variant. Probably split into `PlaceholderChip.tsx` (the inline chip) and keep `PlaceholderPicker.tsx` for the popover content.
-6. Drop the standalone "Fill in placeholders" panel (or keep it as an optional summary table — design call).
-
-**Edge cases.** Cursor position handling in a contenteditable. RTL bidi inside Arabic body. The simpler implementation: render the body as a flexible block of plain-text spans + chip components, with the chip replacing the token. Editing of plain text proceeds via per-span contenteditable. This is non-trivial — budget half a day.
-
----
-
-### 1.6 "Draft New Letter" modal — sync with Template Registry
-
-**Problem.** Two entry paths into the create-letter modal:
-- Click a registry template → "Use Template" → modal opens with subject/body/etc. pre-filled. Works.
-- Click "Draft New Letter" button on the Letters tab → modal opens with letter-type dropdown but no template selection — body is empty.
-
-The user wants both to feel like the same flow: when they pick a letter type from the dropdown in the create modal, they should also be able to pick a specific template (from the same template bank that the registry uses), and picking one fills the form.
-
-**Fix scope.**
-1. In `CreateLetterForm`, add a "Choose template" `EditableSelect` (or styled select) below the Letter Type dropdown. It's filtered to templates of the currently-selected `selectedType`. Picking one → call the same effect that `template?.id` already triggers (the existing useEffect at line ~2329 that pre-fills subject/body/authority).
-2. The select should be optional — picking nothing keeps the form empty.
-3. Pre-select the template if `template` was passed in (i.e., the "Use Template" path).
-
-**Affected files.**
-- `src/app/(dashboard)/correspondence/sama-letters/page.tsx` — `CreateLetterForm` component.
-
----
-
-### 1.7 Compliance Health on the dashboard must be sourced from Compliance Review
-
-**Problem.** Today's dashboard `Compliance Health` hero card is computed by `useDashboardHealth` from a 7-component formula (audits, observations, letters, policies, circulars, riskPosture, training). The user wants it to be the same number that surfaces on `/reports/compliance-review` — i.e., compliant ÷ (compliant + non-compliant) across departments × rules+policies.
-
-**Fix scope.**
-1. Add a new function `calculateComplianceReviewScore(circulars, policies, departments, evaluations)` in `src/stores/compliance-evaluation-store.ts` (or a new `src/lib/compliance-review-score.ts`).
-2. Score per department = compliant / (compliant + non-compliant), filtered by business owner of each rule/policy as in §1.1.
-3. Overall = weighted mean across departments (equal weights for now — make weights configurable later).
-4. `useDashboardHealth` calls this and exposes it as `metrics.health.businessComplianceScore` separately from the existing component-driven `overall`. Or replace `overall` with this number — design call to align with the user's intent.
-5. The Executive view's hero ring number, the Managerial view's threshold bar, and the Officer view's "your actions" panel all read from this new source. The 7-component breakdown remains visible elsewhere (renamed appropriately — see §1.8).
-
-**Affected files.**
-- New: `src/lib/compliance-review-score.ts`.
-- `src/hooks/useDashboardHealth.ts` — wire new input + emit new field.
-- `src/components/dashboard/{Executive,Managerial,Officer}View.tsx` — read the new field.
-
-**Migration note.** The existing 7-component score is still useful as a *team-performance* metric. Keep it, just rename and relocate (see §1.8).
-
----
-
-### 1.8 Rename "Executive View" / "Compliance Health" → "Team Score" wherever it represents team performance
-
-**Problem.** The user explicitly said: the existing "Executive View" tab is showing team performance, not business compliance. Rename to **"Team Score"** everywhere. The current sprint added `reports.teamPerformanceTab: "Team Performance"` for the new tab nav label — change that to "Team Score" too.
-
-**Fix scope.**
-1. `src/i18n/dictionaries/en.json` + `ar.json`:
-   - `reports.teamPerformanceTab: "Team Performance"` → `"Team Score"`.
-   - `settings.executiveView: "Executive"` (used in user-preferences default-view dropdown at `src/components/settings/UserPreferencesSection.tsx:64`) → `"Team Score"`.
-   - Also `viewExecutive: "Executive"` (en.json:212) — same rename.
-   - Stale unused keys flagged by audit: `audits.executiveView` (en.json:1374) and `reports.executiveView` (en.json:2326) — delete; no callers.
-2. The Executive tab on `/reports/executive` shows the 7-component dashboard health — its page header should say "Team Score" too (currently `t('reports.auditManagement')` which now resolves to "Compliance Review" — wrong on this tab, see §1.9).
-3. The dashboard hero card label: when displaying the 7-component score, label it "Team Score". When displaying the new Compliance-Review-derived score (§1.7), label it "Compliance Health".
-
-**Affected files.**
-- Both i18n dictionaries.
-- `src/components/settings/UserPreferencesSection.tsx`.
-- `src/app/(dashboard)/reports/(tabs)/executive/page.tsx` — header text.
-- `src/components/dashboard/{Executive,Managerial,Officer}View.tsx` — hero card label logic.
-
----
-
-### 1.9 Audit-page header copy on non-Audits tabs
-
-**Problem.** The audits/executive/detailed/risks pages share a header that reads `t('reports.auditManagement')` when the path starts with `/reports/audits` and `t('reports.auditReports')` otherwise. Last sprint we renamed `auditManagement` → "Compliance Review" — but `auditReports` (still "Audit Reports") shows on the Team Score / Audit Logs / Risks tabs and now reads stale.
-
-**Fix scope.**
-1. Decide the right page-level title per tab. Cleanest: each tab sets its own title, not the shared header logic. Or: `auditReports` becomes "Compliance Review" too (the umbrella page name) and the per-tab name lives in the tab pill, which it already does.
-2. New `compliance-review` tab page already has its own header text "Compliance Review / Per-department compliance evaluation" — that's correct, no change.
-
-**Affected files.**
-- `src/app/(dashboard)/reports/(tabs)/{audits,executive,detailed,risks}/page.tsx` — header conditional.
-- i18n.
-
----
-
-## Section 2 — Universal Editable Dropdowns (the big one)
-
-### 2.1 The user's ask, restated
-
-Every dropdown in the app — **including** today's enum-backed ones (priority `critical|high|medium|low`, severity, risk likelihood/impact 1–5, monitoring frequency, audit frequency, status lifecycles, approval tiers, observation source, advisory priority/businessUnit, training category, etc.) — should look and behave like the new `EditableSelect`: pick from a list, or add a new entry, or edit/delete existing entries (with sensible guards on defaults).
-
-The user explicitly acknowledged this is a data-model decision and asked for the migration approach to be discussed before implementation. This section is that discussion, backed by a full code audit (~70 dropdown call sites inventoried).
-
-### 2.2 The four-bucket migration framework
-
-For each dropdown, pick one of these strategies:
-
-- **Bucket A — store-backed CRUD (no enum at all).** Already true for `Department`, `LetterTemplate`, `AuditTemplate`, `PolicyTemplate`, `Framework`. No change needed except UI swap to `EditableSelect`.
-- **Bucket B — hybrid (seed + custom).** Keep the enum literal type, but allow users to add string-keyed "custom" values that live in a new per-category Zustand store. Persisted records keep their enum value; new ones can be either the enum literal or a custom string. This is what `Department` already does (`isDefault: true` seed rows the user can extend). Persisted data stays untouched. **Recommended for most cosmetic enums.**
-- **Bucket C — full open string list.** Drop the enum literal, replace with `string`. Color maps lose their `Record<EnumKey, X>` shape and become lookups via the new store. Use only when the enum is purely cosmetic.
-- **Bucket D — locked / labels-only.** The underlying value drives math or workflow logic; users may edit display labels but not the underlying values. Likelihood/impact 1–5 is the obvious case (`riskScore = likelihood × impact`); status lifecycles also fall here because they gate state-machine transitions in the engine and stores.
-
-### 2.3 Per-category recommendation (post-audit)
-
-The audit found 70+ dropdown call sites. Grouped recommendation:
-
-| Category | Type | Bucket | Notes |
-|---|---|---|---|
-| **Department / business owner / dept filter** | `string` (already store-backed) | A | Already EditableSelect in 7 sites; sweep the remaining: `employee-table.tsx:114` (training filter — uses hardcoded labels instead of department-store), `RegDocFilterBar.tsx`, `feed/page.tsx`, `advisory/page.tsx`, `[auditId]/page.tsx`, both audit modals, `correspondence` modals. |
-| **Assignee / officer (team member)** | `string` (team-store user IDs) | (d) Don't change | Team members are managed by the invite flow, not by an EditableSelect. Adding an "Add new" here would conflict. Just swap the visual style to match. |
-| **Authority** in `RegDocFilterBar.tsx:71` | hardcoded 7-value array | A — read from `framework-config-store` | The store already has every framework. Easiest first task. |
-| **Authority dept (per authority)** | `useAuthorityDeptStore` | A | Done this sprint. |
-| **SAMA sub-category** (`sama-letters/page.tsx:2482`) | already `string` | A — new `useSAMASubCategoryStore` | Trivial, no migration. |
-| **Calendar event type, Correspondence type, Advisory businessUnit** | enum, drives small `Record<>` icons | B | Add fallback config block, then EditableSelect with hybrid persistence. |
-| **Audit/Observation/Advisory/Circular priority + Article risk-level + ComplianceThreshold** | `critical|high|medium|low` enum (or 4-tier) | D — labels-only | Color ramp depends on the 4-tier ordering; renaming "Critical" → "Severe" is the realistic ask. |
-| **Likelihood / Impact 1–5** (`risks/page.tsx:869,870`) | `1|2|3|4|5` literal | D — labels-only | `riskScore = likelihood × impact` math. Allow editing labels ("Rare"…"Catastrophic") only. |
-| **Observation severity** | `critical|high|medium|low` | D — labels-only | Severity feeds compliance engine deductions; tiers must stay 4. |
-| **MonitoringFrequency, AuditFrequency, ReviewCadence, ReportPeriod** | enum, drives `computeNextReview()` math | D — labels-only | Adding a custom cadence requires a corresponding interval that can't be inferred. Defer "add custom" until an interval-math API exists. |
-| **PolicyApprovalTier + workflow actionType** | enum, drives `TIER_WORKFLOWS` state machine | D — locked | Adding a tier needs explicit step definitions; not safe via UI. |
-| **Audit/Observation/Risk/Policy/Circular/Correspondence/Training status** | enum, drives state-machine transitions, overdue calc, sort, color | D — labels-only | Adding a custom status would silently break workflow logic in `policies/page.tsx`, `compliance-engine.ts`, store actions like `submitForApproval`/`approve`. Recommend **labels-only mode**: rename "approved" → "Approved by Council", but underlying string stays canonical. |
-| **Audit category, Policy category, Training category** | enum, drives `Record<>` color/icon | B | Add generic neutral fallback config, then hybrid EditableSelect that adds string IDs alongside built-ins. |
-| **Risk category** | enum, drives 3 separate color maps + 2 reports tabs | B (phase 2) | Bigger blast radius. Central `getCategoryConfig(id)` helper replaces every direct `Record<RiskCategory, ...>` lookup before opening the dropdown. |
-| **SAMALetterType, SAMASubCategory** | enum + already `string` | B | Letter type drives `LETTER_EMAIL_SUBJECTS` + sort; needs fallback. |
-| **User role** (`officer|manager|admin`) | enum, gates RBAC | D — locked | Wait until §3 (RBAC matrix) is built. |
-| **Onboarding employees / industry / region** | hardcoded | B | Pure metadata, no downstream `Record<>` consumers. |
-| **Date format / dashboard view / notification scope / language** | enum, tied to formatting code | D — locked | Not user-managed. |
-
-### 2.4 Concrete fallback pattern (every consumer of the form `config[entity.field]`)
-
-Every place that does `categoryConfig[risk.category]` will break when `risk.category` becomes a custom string. Standard fix:
-
-```ts
-const fallbackColor = { dot: 'bg-slate-400', bg: 'bg-slate-50', text: 'text-slate-600', border: 'border-slate-200' }
-const conf = riskCategoryConfig[risk.category as RiskCategory] ?? fallbackColor
+**Symptom.** Console error during render: *"Attempted to synchronously unmount a root while React was already rendering. React cannot finish unmounting the root until the current render has completed, which may lead to a race condition."* Stack:
+```
+at InlineChipEditor.useCallback[rebuild] (InlineChipEditor.tsx:245)
+at InlineChipEditor.useEffect (InlineChipEditor.tsx:305)
+at SAMALettersPage (sama-letters/page.tsx:1583)
 ```
 
-Audit-found maps that break (every one needs the fallback before opening its dropdown):
-- `riskCategoryConfig` (`risks/page.tsx:67`), `riskCategoryLabelKeys:82`, `riskCategoryBarColors` (`executive/page.tsx:60`)
-- `riskStatusConfig` (`risks/page.tsx:75`), `statusOrder:314`, `uiStatusToStoreStatus:246`
-- `auditStatusColors`/`auditPriorityColors`/`auditCategoryColors`/`auditFrequencyColors` (`reports/(tabs)/audits/page.tsx:53,60,66,74,83,91`)
-- `severityConfig`/`statusConfig` (`observation-types.ts:134,164`); `severityOrder`
-- `STATUS_COLORS` (`PolicyDetailsContent.tsx:50`), `POLICY_STATUS_COLORS` (`RegDocCard.tsx:84`), `tierLabels:129`, `TIER_COLORS` (`PolicyDetailsContent.tsx:43`, `RegDocCard.tsx:102`)
-- `PRIORITY_COLORS`/`CIRCULAR_STATUS_COLORS` (`RegDocCard.tsx:47,54`)
-- `advisoryStatusConfig`/`advisoryPriorityConfig` (`advisory/page.tsx:151,158`), `businessUnitLabels`
-- `LETTER_EMAIL_SUBJECTS:45`, `typeColors:551`, `typeIcons:554`, `statusOrder:400`, `intros:99,107` (`sama-letters/page.tsx`)
-- `trainingStatusConfig` (`employee-detail-modal.tsx:124`)
+**Root cause.** `InlineChipEditor.tsx:240–290` calls `r.unmount()` synchronously inside `rebuild()`, which is invoked from a `useEffect`. React 18+ blocks synchronous root unmounts during the parent's commit phase. The `try/catch` swallows the warning but doesn't prevent the race.
 
-### 2.5 The "label-only" pattern (Bucket D refined)
-
-For likelihood/impact/severity/status/priority and any enum that drives math or workflow:
-
+**Fix.** Defer the unmount to the next microtask:
 ```ts
-// New store: src/stores/scale-labels-store.ts
-interface ScaleLabelsState {
-  // For each canonical enum key, hold an optional user override label per locale.
-  riskLikelihood:        Record<1|2|3|4|5,                      { en?: string; ar?: string }>
-  riskImpact:            Record<1|2|3|4|5,                      { en?: string; ar?: string }>
-  observationSeverity:   Record<'critical'|'high'|'medium'|'low', { en?: string; ar?: string }>
-  policyStatus:          Record<PolicyStatus,                   { en?: string; ar?: string }>
-  // ...
-  setLabel: (scale: string, key: string|number, lang: 'en'|'ar', value: string) => void
-  resetLabel: (scale: string, key: string|number) => void
+for (const r of chipRootsRef.current) {
+  const root = r
+  queueMicrotask(() => { try { root.unmount() } catch {} })
 }
+chipRootsRef.current = []
 ```
+Or schedule via `setTimeout(() => root.unmount(), 0)`. Either pulls the unmount out of React's render phase.
 
-UI: `EditableSelect` variant where **add and delete are disabled** but **edit is enabled**, with a reset-to-default button per row.
+Audit the second `useEffect` (`InlineChipEditor.tsx:318+`) for the cleanup-on-unmount path — same pattern; same fix.
 
-### 2.6 Recommended tackle order (cheapest first)
-
-Rebuilt from the audit's "easiest → hardest" list:
-
-1. `RegDocFilterBar` authority filter (`RegDocFilterBar.tsx:71`) — swap 7 hardcoded `<option>`s for `frameworks.map(...)`. ~30 min.
-2. Training department filter (`employee-table.tsx:114`) — wrap in EditableSelect bound to `useDepartmentStore`. ~30 min.
-3. Onboarding pickers (`onboarding/page.tsx:432,452,475`) — EditableSelect with hybrid persistence to org metadata. ~1 hour.
-4. SAMA sub-category — new `useSAMASubCategoryStore` + EditableSelect, no migration. ~1 hour.
-5. Calendar event type, Correspondence type, Advisory businessUnit — hybrid (b); add fallback config block + EditableSelect; persisted seeds stay valid. ~2 hours each.
-6. Priority + ComplianceThreshold (labels-only) — new `useScaleLabelsStore`; EditableSelect rename-only mode. ~half a day.
-7. Likelihood/Impact 1–5 labels — same store; scale stays 1–5. ~1 hour.
-8. MonitoringFrequency / AuditFrequency / ReviewCadence — labels-only first; defer "add custom cadence" until interval-math API exists. ~1 hour.
-9. PolicyCategory / TrainingCategory / AuditCategory — hybrid (b) with generic neutral fallback config + central `getCategoryConfig(id)` helper. ~half a day each.
-10. RiskCategory — phase-2 of #9; bigger blast radius. ~half a day.
-11. Status enums (Audit, Observation, Risk, Policy, Circular, Correspondence, Training) and PolicyApprovalTier — recommend Bucket D label-edit only. Document explicitly as "fixed by design".
-
-### 2.7 Persisted-data migration policy (the user's question)
-
-The user asked: "are we going to append or edit old data so that it is represented by the correct new category, or will it be old category plus anything new?"
-
-**Recommendation: append, never rewrite.**
-- For Buckets A/B: existing records keep their old values. New records can pick from old + new options. The rendering layer falls back gracefully if a value doesn't match any current option (greyed-out chip with the raw string and the §2.4 fallback config).
-- For Bucket C: when the user deletes an option that records still reference, two choices appear in a confirm dialog: "merge into another option" (rewrites those records) or "keep label, just remove from picker" (records stay, picker hides it). Default: keep label.
-- For Bucket D: labels are pure presentation — old data is fine. The integer or canonical key on the record never changes.
-
-### 2.8 Settings UI for managing options
-
-A new Settings sub-tab, **"Lists & Categories"**, with one section per managed category. Each section shows the EditableSelect's content as a table (label, EN, AR, isSeed, usage count across stores, actions). Bulk reset-to-defaults per section. This is where users add/edit/delete entries in bulk; per-form EditableSelect popovers stay for inline edits where they're convenient.
+**Acceptance.** Open `/correspondence/sama-letters`, click any saved draft, type into the body, switch language EN ↔ AR, navigate away. No console errors at any step.
 
 ---
 
-## Section 3 — RBAC Permissions Matrix (post-final feature)
+### BUG-R3-02 — `PlaceholderPicker` popup is visually clipped
 
-The user explicitly requested this be added to the backlog (not immediately implemented).
+**Symptom (see screenshot in user message).** The picker popover renders the chip header *"TEST {{TEST}}"* but the right edge is cut off; same for long labels.
 
-**Brief.** A new Settings page tab — **"Access Matrix"** — rendered as a 2-D table:
-- Rows: every team member (from `team-store`).
-- Columns: every module/feature in the application (audits, observations, policies, rules, SAMA letters, training, risk register, calendar, settings, team, dashboard, exports, etc.).
-- Each cell: a checkbox or a small dropdown with `none | view | edit | full`. Default per role.
-- Bulk actions: "Grant all view" / "Revoke" / "Apply role template".
+**Likely cause.** The popover container in `PlaceholderPicker.tsx` uses a fixed width / `whitespace-nowrap` / overflow-hidden, or sits inside an overflow-clipped parent. Audit the popover container's CSS chain from `LetterBodyEditor` outward. Likely fix: `whitespace-normal` on the header label, `min-w-[260px]` on the popover, raise `z-index`, and ensure the popover's `position: fixed` (not `absolute` inside a clipped parent) so it can escape the editor's bounding box.
 
-**Scope hints.**
-- New store: `permission-matrix-store.ts` keyed by `${userId}::${module}` → `'none'|'view'|'edit'|'full'`.
-- Replace today's `hasPermission(user, 'observation:edit')` calls (currently no-ops since the strip in this sprint) with lookups against this matrix.
-- 30+ modules — list needs to be enumerated up front. Best done by scanning the routes file.
-- Tied to backlog item RBAC-NEW (added below).
-
-**Acceptance.** Compliance officer can open the matrix, see "Mark Wallace — Audits: edit, Observations: full, Policies: view-only, all else: none", and toggle.
+**Acceptance.** Click any chip with a long token (`{{my_long_reference_id}}`) in either language. The popover renders with the full header visible, no clipping, no horizontal scroll.
 
 ---
 
-## Section 4 — Bug List (small things)
+### BUG-R3-03 — Placeholder picker labels don't translate to Arabic
 
-Append to the new "Bug List" backlog section (BUG-NEW-XXX series, see Backlog updates).
+**Symptom.** When the app language is Arabic, the `PlaceholderPicker` and chip labels still render English strings (e.g., the kind label "Text" / "Date" / "Reference").
 
-| # | What | Where | Severity |
+**Likely cause.** Round-2's i18n sweep added `placeholderPicker.*` keys to both `en.json` and `ar.json`. Verify the `ar.json` entries are populated AND the picker's `useTranslation()` hook actually re-renders when the language switches. If a value falls through to the EN fallback, the AR key is probably missing or whitespace-only.
+
+**Audit checklist.**
+1. Open `src/i18n/dictionaries/ar.json` → confirm `placeholderPicker.*` block has 16 entries with non-empty Arabic strings.
+2. Open `PlaceholderPicker.tsx` → confirm every visible string goes through `t(...)` (no leftover JS string literals).
+3. Confirm the chip placeholder text inside the contentEditable also renders via `t(...)` — that's the part the user might be seeing as English.
+4. Verify `<div dir="rtl">` wraps the popover when `language === 'ar'`.
+
+**Acceptance.** Toggle language to العربية. Open a draft. Click a chip. Every visible string in the popover (kind label, header, hints, button captions) renders in Arabic.
+
+---
+
+### BUG-R3-04 — "Choose Template" still doesn't show user-created templates
+
+**User report.** The "Choose Template" dropdown in the Draft New Letter modal does not list templates the user has created.
+
+**Code state.** `sama-letters/page.tsx:2737–2748` filters `allTemplates` from `useSAMATemplateStore` by `t.type === selectedType && t.status === 'Active'`. This *should* be correct — round 2 verified it. BUT the user found it broken. Two probable causes:
+
+1. **Status mismatch.** User-created templates may save with status `'active'` (lowercase) or `'Draft'` instead of `'Active'`. Audit the create-template flow's status field and align the filter.
+2. **Type mismatch.** User-created templates may save the letter-type **label** ("Inquiry") instead of the **id** (`inquiry`). With `SAMALetterType` widened to string, a label vs id confusion would silently fail the filter. Audit the template create form's type field and the seed template `type` values for shape consistency.
+
+**Fix.** First reproduce the bug: create a brand-new template, assign letter type "Inquiry", save, return to Draft New Letter modal, pick "Inquiry" type — verify the new template appears or doesn't. Then trace the data path. The filter should be tolerant: `t.type === selectedType || t.type?.toLowerCase().replace(/\s+/g, '-') === selectedType`.
+
+**Acceptance.** Create a template "My Test Template" of type "Inquiry". Open Draft New Letter, set Letter Type to "Inquiry", open the Choose Template select — "My Test Template" appears in the list along with seed inquiry templates.
+
+---
+
+### BUG-R3-05 — New letter types added in Draft modal don't show in template registry
+
+**Symptom.** Adding a new letter type via the EditableSelect inside Draft New Letter persists to `useSAMALetterTypeStore`, but when the user opens the Letter Templates section / template-create form, the new letter type doesn't appear in the type filter or the type picker.
+
+**Likely cause.** The template editor surface (search the codebase for the template create/edit modal — likely a sibling component on the same `sama-letters/page.tsx`) reads letter types from a hardcoded array or from the OLD `SAMALetterType` literal union, not from `useSAMALetterTypeStore`.
+
+**Fix.**
+1. Find the template create/edit modal. Search `sama-letters/page.tsx` for `Letter Type` or the seed letter-type strings in JSX context.
+2. Replace the hardcoded select with an `EditableSelect` (or a read-only custom-styled select per §3 below) bound to `useSAMALetterTypeStore`.
+3. Same applies to the template-list **filter** dropdown if present.
+4. Ensure the template editor passes the letter-type **id** when saving (not the label) — tied to BUG-R3-04.
+
+**Acceptance.** Add a new letter type "Internal Memo" via Draft New Letter modal. Open the Letter Templates section / template editor. The "Internal Memo" type is selectable when creating a new template. Saving a template with that type and reopening Draft New Letter with type = "Internal Memo" surfaces it in Choose Template.
+
+---
+
+### BUG-R3-06 — Free-text option in placeholder picker is awkward; remove it
+
+**User feedback.** "Doesn't accept text as gracefully as I wanted it to be. So remove the option of free text. Feels useless when they could just write it up without having to use their braces."
+
+**Decision.** Remove the `kind: 'text'` placeholder option entirely from `PlaceholderDef.kind` and from the `PlaceholderPicker` UI. The valid kinds become **`'date'` and `'reference'`** only.
+
+**Implication.** A user who wants to embed an arbitrary string in a letter just types the string directly in the editor — no braces, no chip. The chip mechanism is reserved for two cases where structure matters: a date (so we can format it consistently and show a date picker) or a reference (so we can link to an observation/audit/letter/rule/policy by id).
+
+**Fix scope.**
+1. `src/types/index.ts` → narrow `PlaceholderDef['kind']` from `'text' | 'date' | 'reference'` to `'date' | 'reference'`.
+2. `src/lib/letter-placeholders.ts` → `autoPromoteTypedTokens` currently defaults newly-typed `{{tokens}}` to `kind: 'text'`. Change default to `kind: 'date'` (or surface an inline picker on first save asking the user to choose date vs reference). Recommended: default `'date'`, the user can change to reference via `PlaceholderDefEditor`.
+3. `PlaceholderPicker.tsx` → remove the `'Text'` tab/option from the kind switcher. Drop the corresponding free-text input.
+4. `PlaceholderDefEditor.tsx` → remove "Free text" from `TYPE_OPTIONS`.
+5. `PlaceholderChip.tsx` → drop the text-rendering branch. Unfilled chips render with the same dashed amber style; clicking opens the date or reference picker per the def's `kind`.
+6. Migration: any existing letter draft with `kind: 'text'` placeholders should auto-upgrade to `'date'` on next save (or warn the user with a toast).
+7. i18n: remove `placeholderPicker.kindText` key from both dictionaries.
+
+**Acceptance.** Open Draft New Letter. Type `{{my_ref}}` in the body. Save → reopen → chip is present and clicking it opens a chooser between "Date" and "Reference" only (no "Free text"). The placeholder def editor on the right shows only those two kinds.
+
+---
+
+## Section 2 — Architectural correction: revert calculation-bound editability
+
+The user's hard rule (paraphrased): *"any field whose value drives a calculation must not be user-editable."*
+
+Round 2 introduced `useScaleLabelsStore` (§2.5) for likelihood/impact/frequency labels. The user rejects this for any field that is calculation-bound. The store stays in the codebase for now (no destructive deletion until the next session implements §2 fully) but **its UI surface gets removed and its consumers revert to the canonical i18n labels**.
+
+### 2.1 Calculation-bound enums — REVERT to non-editable
+
+These are **fixed by design** and must not be user-editable in any way (no add, no rename, no delete):
+
+| Field | Type | Where used |
+|---|---|---|
+| Likelihood (1–5) | `1\|2\|3\|4\|5` | Risk register, risk matrix |
+| Impact (1–5) | `1\|2\|3\|4\|5` | Risk register, risk matrix |
+| Severity | `'critical'\|'high'\|'medium'\|'low'` | Observations |
+| Criticality | similar 4-bucket scale | Audits, observations |
+| Priority | `'critical'\|'high'\|'medium'\|'low'` | Audits, observations, advisory, circulars |
+| Approval Tier | tier 1 / tier 2 / tier 3 (or whatever the policy store defines) | Policy workflow |
+| Article risk-level | similar bucket | Circular articles |
+| MonitoringFrequency / AuditFrequency / ReviewCadence | enum (daily, weekly, monthly, …) | Audits, policies, monitoring tasks |
+| All status enums | per-entity union | Audits, observations, risks, policies, circulars, correspondence, training |
+| ComplianceThreshold | numeric scale | Compliance scoring |
+
+**Action items.**
+1. **Delete `useScaleLabelsStore` consumers** (likelihood/impact display, frequency display) and revert their rendering to direct `t(risk.likelihoodLabel.<n>)` style i18n keys. The store file may stay on disk pending §6 of round 4 (RBAC) but with no callers.
+2. **Audit every Settings → Lists & Categories table** and remove the rows for: likelihood, impact, severity, criticality, priority, approval tier, status enums, frequencies. Keep the table framework — just hide these specific lists.
+3. **`EditableSelect`** must continue to render in **read-only mode** wherever a calculation-bound field needs a picker (so the UI looks the same as the editable selects per §3) — but the Add/Edit/Delete affordances are absent. The read-only mode already exists conceptually; `mode="labels-only"` from round 2 hides Add/Delete but allows label editing — instead introduce or reuse a `mode="locked"` (or `addable={false} editable={false} deletable={false}`) that renders zero CRUD affordances, just the dropdown.
+
+### 2.2 Onboarding pickers — REMOVE from Settings UI (keep code)
+
+User: *"remove any onboarding drop down customs from the settings, but you can keep the UI if there is any."* Translation: hide the onboarding-industry / onboarding-region / onboarding-headcount sections from the Settings → Lists & Categories tab. Keep the stores in code for the future admin/user split (RBAC round, post-§6).
+
+**Action.** In `ListsAndCategoriesSection.tsx`, remove (or feature-flag off) the three `<ListSection>` blocks for onboarding industry/region/headcount. The stores stay; their consumer is the onboarding page itself.
+
+### 2.3 Configurable categories MUST allow deleting seeds
+
+User: *"Why can't I delete the premade departments? Maybe there are too many of them and I want to delete some of the ones that the system has as default. That needs to be configurable."*
+
+**Action.** For these stores **only** (configurable lists, not calculation-bound):
+- `department-store`
+- `policy-category-store`
+- `training-category-store`
+- `audit-category-store`
+- `risk-category-store`
+- `business-unit-store`
+- `correspondence-type-store`
+- `calendar-event-type-store`
+- `sama-letter-type-store`
+- `sama-sub-category-store`
+- `authority-dept-store`
+
+→ Drop the `isDefault` deletion guard. Allow delete of any entry. Keep the `isDefault` flag for **display** (a "SEED" badge in the Lists & Categories table) but not for enforcement.
+
+**Orphan protection (still needed).** If a category id is referenced by N records, on delete the user should see a confirm modal: *"3 risks reference this category. Delete it anyway? Records will retain the label as text-only."* — same pattern §2.1 of round 2 specified for Bucket C (open string).
+
+**Acceptance.** Open Settings → Lists & Categories → Department. Hit the trash icon on a seed department ("Compliance"). Confirm dialog warns about N referencing records. Confirm. Department is removed from the store. Existing records that referenced it keep showing the raw label string (no crash).
+
+---
+
+## Section 3 — Visual consistency sweep: every dropdown gets the custom UI
+
+User: *"all drop downs have the similar UI. So that consistency across the page and the website lands on. … the priority drop down is your default drop down which feels goofy."*
+
+**Action.** Audit every `<select>` (native HTML) and `<EditableSelect>` and any other dropdown variant in the codebase. Replace native `<select>` with the custom `EditableSelect` component in **read-only mode** (per §2.1) wherever the field is calculation-bound. Where the field is configurable, use full `EditableSelect`.
+
+**Audit script.**
+```bash
+grep -rn "<select" src/app src/components | grep -v ".test.\|node_modules"
+```
+Every hit needs to either become `<EditableSelect>` (with the appropriate `mode`) or be flagged in this section as "intentionally native, here's why."
+
+**Known offenders called out in May 8 review.**
+- Advisory page (`correspondence/advisory/page.tsx`): the **priority** dropdown next to the **business unit** dropdown — business unit is custom (round 2 ✅), priority is native ❌. Make priority a read-only custom dropdown bound to a hardcoded `['low','medium','high','critical']` list.
+- Rules creation modal: priority dropdown is native. Same fix.
+- Policy creation modal: approval tier is native. Same fix.
+- Observation create modal: severity is native. Same fix.
+- Any status pickers: native. Same fix.
+
+**Don't break the read-only contract.** A locked `EditableSelect` must:
+- Not show Add Entry button
+- Not show pencil/trash icons on rows
+- Not allow inline rename
+- Render the dropdown trigger and options visually identical to the editable variant
+- Accept `value` and `onChange` props as a normal controlled select
+
+If `EditableSelect` doesn't currently support this combination cleanly, refactor it to add a `locked` boolean prop that disables every CRUD affordance.
+
+---
+
+## Section 4 — Department single source of truth (cross-page propagation)
+
+User: *"compliance review page. If we add a department, that corresponding department should be on the store. And it should be represented in the compliance review. And it should appear on all of the corresponding pop up models. From affected departments, to business owners and so much more."*
+
+**Goal.** `useDepartmentStore` is the single source of truth for every department dropdown in the app. Adding a department in Settings → Lists & Categories → Department appears immediately in:
+
+1. Compliance Review per-department cards (`reports/(tabs)/compliance-review/page.tsx`)
+2. **Affected Departments** multi-select on:
+   - Rules creation modal
+   - Rules edit modal
+   - Policy creation modal
+   - Policy edit modal
+   - Observation creation modal
+   - Observation edit modal
+   - Audit creation modal
+   - Audit edit modal
+   - Calendar event create modal
+   - SAMA letter draft modal (if applicable)
+3. **Business Owner** single-select on:
+   - Rules creation modal (NEW per user — currently missing)
+   - Policy creation modal
+   - Risk register
+4. Department filter dropdowns on:
+   - Compliance Review
+   - Risks page
+   - Audits page
+   - Observations page
+   - Training page (already done in round 1)
+   - Advisory page
+5. RegDocFilterBar department filter
+6. Team directory department picker
+7. Member detail drawer department field
+
+**Audit script.**
+```bash
+grep -rn "department\|Department" src/app src/components --include="*.tsx" --include="*.ts" \
+  | grep -iE "options|seed|hardcoded|select|<option" \
+  | grep -v "department-store\|useDepartmentStore"
+```
+Every hit that picks departments must read from `useDepartmentStore().departments` (or its seed-aware accessor). No hardcoded arrays. No local copies of department names. No compile-time literal unions.
+
+**Specific user-called-out gaps.**
+- Rules creation modal lacks an **affected departments** picker AND a **business owner** picker. Add both, both bound to `useDepartmentStore`.
+- Policy creation modal: verify both pickers exist and are wired correctly.
+
+**Acceptance.** Open Settings → Lists & Categories → Department. Add a custom department "Special Projects". Open Rules Create modal — "Special Projects" appears in both Affected Departments multi-select and Business Owner single-select. Save a rule with that owner. Open Compliance Review — a new card "Special Projects" appears with the rule listed under it. Delete "Special Projects" from Settings — the warning surfaces "1 rule references this department"; on confirm, the Compliance Review card disappears, the rule keeps the raw "Special Projects" label.
+
+---
+
+## Section 5 — Framework / sub-category Settings refactor
+
+User feedback (paraphrased):
+1. Compliance frameworks (SAMA, CMA, IA, ZATCA, CITC, …) are already configured in Settings → Frameworks via the existing `FrameworkConfigModal`. **Do not** add a "Compliance Framework" dropdown to Lists & Categories — it would duplicate.
+2. SAMA sub-category and any other per-framework taxonomy: don't list every framework's sub-categories inline on the Settings page (it would clutter). Instead, surface a single button per framework: *"Configure SAMA sub-categories"* → opens a modal with the sub-category EditableSelect inside it.
+
+**Action.**
+1. Remove the "Compliance Framework" row from `ListsAndCategoriesSection.tsx` if one exists. The `framework-config-store` already drives that picker via `FrameworksSection` and `FrameworkConfigModal`.
+2. Replace the inline "SAMA Sub-Category" list section with a single row that says "Sub-categories" + per-framework buttons (e.g., "Configure SAMA…", "Configure CMA…"). Clicking opens a modal hosting the EditableSelect for that framework's sub-categories.
+3. The existing `useSAMASubCategoryStore` is the right shape — generalize it so each framework gets its own sub-category list, OR keep one store with a `frameworkId` discriminator. Recommended: extend `useSAMASubCategoryStore` to `useFrameworkSubCategoryStore` keyed by `(frameworkId, id)`. Migration: existing sub-category entries get `frameworkId: 'sama'` on the next persist version bump.
+4. Letters drafted for non-SAMA authorities (CMA, ZATCA, CITC, etc.) currently might not have a sub-category picker. Either (a) only show sub-category when `authority === 'sama'`, or (b) show whatever sub-category list matches the authority. Decision: (b), per-authority. The picker reads `useFrameworkSubCategoryStore.list(authorityId)`.
+
+**Acceptance.** Open Settings → Lists & Categories. There is no "Compliance Framework" row. The "Sub-categories" row shows one button per enabled framework. Clicking "Configure SAMA…" opens a modal with the SAMA sub-category list. Switching the SAMA letters Authority dropdown to "CMA" and opening the Sub-Category select shows CMA-specific sub-categories (initially empty — the user adds the first one).
+
+---
+
+## Section 6 — Audit checklist for the new session (run BEFORE coding)
+
+The user said *"After auditing the bugs"*. Before writing code, the new session must:
+
+1. **Reproduce every BUG-R3-XX** in §1 against the current build. For each:
+   - Confirm the symptom matches the user's report
+   - Capture a screenshot or console log
+   - If the bug is not reproducible, document why before closing
+2. **Run `grep -rn "<select" src/app src/components`** and produce a punch list. Tag each hit as: needs-conversion / intentionally-native / already-EditableSelect.
+3. **Run `grep -rn "department" src/app src/components`** filtered for hardcoded option arrays. Produce a punch list of every place that needs to read from `useDepartmentStore`.
+4. **Verify the §2.1 list of calculation-bound fields** matches what the codebase uses today. If a field listed there isn't actually calculation-bound, demote it to configurable. If a configurable field IS calculation-bound, promote it.
+5. **Reproduce the "Choose Template missing" report (BUG-R3-04)** against a brand-new template. The round-2 commit verified the wiring works for seed templates; the bug must be reproduced against a user-created template specifically. If it can't be reproduced, document and skip.
+6. **Smoke-check the framework config**. Confirm `useFrameworkConfigStore` already covers what §5 says (SAMA, CMA, ZATCA, CITC, IA, Sharia Board, Internal). If a framework the user mentioned isn't there, open a sub-task before §5.
+
+Once the audit is captured (a short markdown report appended to the bottom of this file is fine), proceed to code.
+
+---
+
+## Section 7 — Suggested execution order for the new session
+
+1. **§1 bugs first** — they're discrete and unblock the user. Single-agent or two parallel:
+   - Agent X: BUG-R3-01 (chip race), BUG-R3-02 (popup clip), BUG-R3-03 (Arabic), BUG-R3-06 (drop free-text)
+   - Agent Y: BUG-R3-04 (template select), BUG-R3-05 (letter type → template registry)
+2. **§2 reverts** — single agent, sequential. Ordering:
+   1. Remove §2.5 scale-labels-store consumers (revert displays to direct i18n)
+   2. Hide §2.2 onboarding sections from Lists & Categories tab
+   3. Drop `isDefault` deletion guard for §2.3 configurable stores
+3. **§3 consistency sweep** — fork-style: produce the `<select>` audit punch list first, then one agent per ~10 hits.
+4. **§4 department propagation** — one agent. This is structural; sequence after §3 because it overlaps with the same modals that §3 touches.
+5. **§5 framework / sub-category refactor** — one agent. Touches `ListsAndCategoriesSection.tsx` and the SAMA letters page.
+6. **Audit + commit + Playwright** — single commit per major section so the user can roll back cleanly if any one section regresses.
+
+---
+
+## Section 8 — File-conflict map
+
+The same shared files round 2 hit will get hit again. The big ones:
+
+- `src/i18n/dictionaries/{en,ar}.json` — every agent. Each agent must add to a unique top-level section. New top-level sections introduced by round 3: `roundThree.*` is fine, or per-feature like `frameworkSubCategory.*`.
+- `src/types/index.ts` — §1.6 (kind union narrow) and §5 (framework sub-category type). Sequence to avoid stomp.
+- `src/components/ui/editable-select.tsx` — §2.1 (`locked` mode) and §3 (consumers). Land §2.1 first.
+- `src/components/settings/ListsAndCategoriesSection.tsx` — §2.2 (remove onboarding), §2.3 (drop default-guard rendering), §5 (sub-category modal launcher). Land in that order.
+- `src/app/(dashboard)/correspondence/sama-letters/page.tsx` — §1.4, §1.5, §1.6, §5. Sequence: §1.6 first (type narrow), then §1.4/§1.5, then §5.
+
+---
+
+## Section 9 — What's NOT in scope for round 3
+
+- §3 RBAC matrix from earlier rounds — still deferred. Implement after round 3 user-approves §1–§5.
+- Heavyweight editor library (Lexical / Slate / Tiptap) for the chip editor — `InlineChipEditor` is sticking with contentEditable; only the BUG-R3-01 race fix is in scope.
+- New translations beyond the keys explicitly added by §1–§5.
+- Any change to the calculation engine itself (§2 only changes label-rendering paths; the underlying scale values stay).
+
+---
+
+## Section 10 — Quick reference
+
+- **Last green commit:** `49f3a75` on `main` (May 8 2026).
+- **Round-2 closures still standing:** §0 list above.
+- **Round-3 scope:** 6 bugs, 3 architectural reverts, a consistency sweep, department propagation, framework sub-category refactor.
+- **Round-3 touches a lot of the same files round 2 did.** Be careful with the file-conflict map (§8) and sequence per §7.
+- **Calculation-bound fields are not user-editable.** Period. (§2.1.)
+- **Departments + categories must be fully editable, including seed deletion.** (§2.3.) With orphan-protection warning, not refusal.
+- **Single source of truth for departments.** (§4.)
+- **Visual consistency: every dropdown looks identical.** (§3.)
+
+---
+
+## Section 11 — Pre-coding audit report (May 8 2026)
+
+This audit was run before any §1–§5 code changes. Four parallel code-audit agents + Playwright reproduction against `localhost:3000`. Findings below revise the assumptions in §1, §2.1, §3, §4 — read this section before writing any fix.
+
+### 11.1 — §1 bug status (corrected)
+
+| Bug | Plan claim | Audit reality | Critical files |
 |---|---|---|---|
-| B-1 | `regulatoryUpdates.articles` i18n key missing in both en.json and ar.json | `src/lib/export.ts:1242` (only caller) | Med — Arabic CSV export shows literal key string |
-| B-2 | `navigation.reportsHelp: "Reports"` still says "Reports" after rename | `src/i18n/dictionaries/en.json:120` + ar.json:120 | Low — appears in help-store but no callers found |
-| B-3 | `settings.executiveView: "Executive"` still surfaces in user-preferences view dropdown | `src/components/settings/UserPreferencesSection.tsx:64` + en.json:2003 | Med — user-facing |
-| B-4 | `viewExecutive: "Executive"` literal in dashboard view selector still says "Executive" | `src/i18n/dictionaries/en.json:212` | Med |
-| B-5 | Stale unused i18n keys `audits.executiveView` (en.json:1374) and `reports.executiveView` (en.json:2326) — no callers, can delete | en.json + ar.json | Low |
-| B-6 | ~50 non-translated English literals across new files (`compliance-review/page.tsx`, `PlaceholderPicker.tsx`, `PlaceholderDefEditor.tsx`, `inline-deadline-picker.tsx`, `editable-select.tsx`) — full list in i18n agent report | various | Med — Arabic users see English strings in new UI |
-| B-7 | Risk-page row click doesn't open the drawer; only the eye-icon button does. (Confirmed via Playwright in May 7 demo.) Inconsistent with the rest of the app where row-click is the open action. | `src/app/(dashboard)/reports/(tabs)/risks/page.tsx` | Low |
-| B-8 | Compliance Review has no per-department applicable rule filter — every dept gets every rule (covered by §1.1, listed here for completeness). | `compliance-review/page.tsx` | High |
-| B-9 | Compliance Review pagination missing | same | Med |
-| B-10 | Compliance Review rule rows aren't clickable | same | Med |
-| B-11 | Risk drawer department-side workflow has no UI surface (covered by §1.2). | `risks/page.tsx` | High |
-| B-12 | Rule workflow steps lack inline deadline picker (covered by §1.3). | `CircularDetailsContent.tsx` | High |
-| B-13 | Audit/executive/detailed/risks tabs share `auditReports` page header which still says "Audit Reports" — should reflect the new "Compliance Review" umbrella (covered by §1.9) | various tab pages | Low |
-| B-14 | "Draft New Letter" modal does not let user pick a template (covered by §1.6) | `sama-letters/page.tsx` | High |
-| B-15 | Letter placeholders presented in a side panel rather than inline in the body (covered by §1.5) | `sama-letters/page.tsx` | High — UX miss |
-| B-16 | Policy Owner dropdown allows add/edit but the user explicitly confirmed delete should also persist via the department store (already wired — verify on QA pass; if any UI hides delete for non-default depts, surface it) | `PolicyDetailsContent.tsx`, `useDepartmentStore` | Low — verify only |
+| R3-01 | unmount race | **partially fixed** — cleanup `useEffect` (lines 318-330) already uses `queueMicrotask`. Race source is `rebuild()` callback at `InlineChipEditor.tsx:240-246` calling `r.unmount()` synchronously inside the effect that calls `rebuild()` (lines 295-315). Apply the same `queueMicrotask` pattern to lines 240-246. | `src/components/correspondence/sama-letters/InlineChipEditor.tsx:240-246` |
+| R3-02 | clipped popup | **confirmed.** Popover lives in `PlaceholderChip.tsx:101-110`, not `PlaceholderPicker.tsx`. `position: absolute`, `w-72` (288px), `top-full mt-1`, sits inside an `inline-flex` chip span inside a `contenteditable` editor. With long tokens the right edge clips. Header has no `whitespace-normal`. Plan's fix (position fixed, raise z-index, widen) is correct — just edit `PlaceholderChip.tsx`. | `src/components/correspondence/sama-letters/PlaceholderChip.tsx:101-114` |
+| R3-03 | Arabic strings missing | **confirmed but plan diagnosis is wrong.** `placeholderPicker.*` keys exist in BOTH `en.json:3244-3261` AND `ar.json:3244-3261` with non-empty Arabic strings. The bug is that `PlaceholderPicker.tsx`, `PlaceholderChip.tsx`, `PlaceholderDefEditor.tsx` have **zero `useTranslation`/`t(...)` calls** — every visible string is a hardcoded English literal. Round 2 added the keys but never wired the components. Fix: introduce `useTranslation()` in all three components and replace literals with `t('placeholderPicker.…')`. Specific literal sites listed in agent report: `PlaceholderPicker.tsx:34, 120, 150, 156`, `PlaceholderChip.tsx:94, 133`, `PlaceholderDefEditor.tsx:16, 31, 53, 80`, `letter-placeholders.ts:104-110` (`REF_KIND_LABELS`). | as listed |
+| R3-04 | "Choose Template" missing user templates | **confirmed. Mismatch is `status` only, not `type`.** `sama-letters/page.tsx:2740` filters `t.status === 'Active'`. Create form at `:3238` defaults `useState<TemplateStatus>(template?.status \|\| 'Draft')`. `'Active'` is only ever set if user clicks the Active pill at line 3431. Save handler `:612-621` further defaults `'Draft'`. Even seed `tmpl-004` is `status: 'Draft'` and is also invisible. Type is consistent (id form on both sides). Fix: drop the `status === 'Active'` clause OR widen to `t.status !== 'Archived'`. Round-2 §1.G note "wiring is correct" is incorrect — the filter is incompatible with the form default. | `sama-letters/page.tsx:2740, 3238, 3431, 612-621` |
+| R3-05 | new letter type missing in template registry | **confirmed in 2 places.** Draft modal Letter Type at `sama-letters/page.tsx:2901-2918` correctly reads `useSAMALetterTypeStore`. But (a) **template create/edit form** at `:3399-3408` is a hardcoded `<select>` with the four seed `<option>` values; (b) **template-list filter** at `:980-990` is the same hardcoded `<select>`. Both must be replaced with EditableSelect bound to `useSAMALetterTypeStore`. | `sama-letters/page.tsx:980-990, 3399-3408` |
+| R3-06 | drop free-text | **not fixed; plan terminology is wrong.** The field is `PlaceholderDef.type` not `.kind`. `PlaceholderType = 'text' \| 'date' \| 'reference'` at `types/index.ts:415`. `PlaceholderValue` discriminated union at `:438` includes `{ type: 'text'; value: string }`. `reconcilePlaceholderDefs` at `letter-placeholders.ts:41` defaults new tokens to `type: 'text'`. The "Text" tab is the first entry in `TYPE_OPTIONS` at `PlaceholderDefEditor.tsx:16`. `PlaceholderPicker.tsx:28-37` has the text-input branch. `InlineChipEditor.tsx:270` and `sama-letters/page.tsx:2509, 2641` also fall back to `type: 'text'`. EN/AR `kindText` keys at `*.json:3253` must be removed. (Note: `page.tsx:2464, 2470, 2476, 2591, 2596, 2600` use a separate `kind: 'text' \| 'chip'` discriminator — unrelated text-segment splitter; **leave alone**.) Visual confirmation: the right-panel "Configure Placeholders" toggle in the draft view (screenshot `audit-03-draft-detail.png`) still shows **Free text \| Date \| Reference**. | as listed |
+
+### 11.2 — §2.1 calc-bound list (corrections)
+
+The plan's calc-bound list overshoots. Verified against `compliance-engine.ts`:
+
+| Field | Plan | Reality | Action |
+|---|---|---|---|
+| Likelihood, Impact | calc-bound | **calc-bound** ✓ — `compliance-engine.ts:168` (`risk.likelihood * risk.impact`) | keep locked |
+| Severity | calc-bound | **calc-bound** ✓ — `SEVERITY_WEIGHT:76-81`, `calcObservationClosure:143`, deductions `:337,350,389` | keep locked |
+| Status enums | calc-bound | **calc-bound** ✓ — engine branches on status throughout (`:115,143,170,190,264-266,337,363`) | keep locked |
+| Priority | calc-bound | **partially calc-bound** — `CIRCULAR_PRIORITY_WEIGHT:242-247` only. Audit/Advisory priority is label-only. | keep locked (one path is enough) |
+| Approval Tier | calc-bound | **NOT calc-bound** — engine never reads `approvalTier`; only drives workflow steps. | **demote to configurable** |
+| Article risk-level | calc-bound | **NOT calc-bound** — engine reads circular-level `priority`, never article `riskLevel`. | **demote to configurable** (or keep locked for UX consistency) |
+| MonitoringFrequency / AuditFrequency / ReviewCadence | calc-bound | **NOT calc-bound** — none referenced in engine. | **demote to configurable** |
+| ComplianceThreshold | calc-bound | **NOT calc-bound today** — stored on `FrameworkConfig` but never read by engine. | safe to keep locked, but isn't actually math-bound |
+| Criticality | calc-bound | **does not exist** in `src/types/index.ts` (zero hits). | drop from list (likely an alias for severity) |
+
+### 11.3 — §2.1 useScaleLabelsStore consumers
+
+Three import sites; only **one** is a real consumer:
+- `src/stores/scale-labels-store.ts` — definition.
+- `src/components/settings/ListsAndCategoriesSection.tsx:65` — defensive lazy import, never used in render. Effectively dead reference.
+- `src/app/(dashboard)/reports/(tabs)/risks/page.tsx:19, 160-168` — `scaleLabels.getLabel('riskLikelihood'|'riskImpact', n, lang)` wraps the default i18n keys. **The only file that needs reverting.**
+
+### 11.4 — §2.2 onboarding sections
+
+`ListsAndCategoriesSection.tsx`:
+- Industry — `<ListSection>` lines **409-420**.
+- Region — `<ListSection>` lines **421-432**.
+- Headcount — `<ListSection>` lines **433-444**.
+
+Remove or feature-flag all three. Stores stay on disk.
+
+### 11.5 — §2.3 isDefault deletion guards
+
+All eleven stores listed in §2.3 (except `authority-department-store`) guard delete via `filter((x) => x.isDefault || x.id !== id)`. Lines: `department-store:43`, `policy-category-store:62`, `training-category-store:68`, `audit-category-store:59`, `risk-category-store:57`, `business-unit-store:57`, `correspondence-type-store:58`, `calendar-event-type-store:55`, `sama-letter-type-store:62`, `sama-sub-category-store:66`. Plus UI-side disable at `ListsAndCategoriesSection.tsx:223-228`. Both layers must be torn out and replaced with the orphan-confirm modal.
+
+**Flag:** `authority-department-store.ts` exists but has a different shape — **no `remove` action and no `isDefault` field**. Confirm with user before touching; the plan may be referencing a renamed store.
+
+### 11.6 — §3 native `<select>` punch list
+
+**105 native `<select>` hits across 38 files. Zero are intentional.** Top files (full list in agent report):
+- `correspondence/advisory/page.tsx` — 7 hits (status/priority/businessUnit/timeframe filters + create modal pickers)
+- `correspondence/regulatory-updates/policies/page.tsx` — 5 hits (approvalTier, owner, template — both create + edit)
+- `correspondence/regulatory-updates/rules/RegisterCircularModal.tsx` + `EditCircularModal.tsx` — 8 hits (authority, priority, dept, officer)
+- `observations/observation-form-fields.tsx`, `observation-filters.tsx`, `edit-observation-modal.tsx` — 8 hits (severity, status, source, assignee)
+- `reports/audits/add-audit-modal.tsx` + `edit-audit-modal.tsx` — 8 hits (status, priority, assignee, template)
+- `reports/(tabs)/risks/page.tsx` — 7 hits (monitoringFreq, category, status)
+- `correspondence/sama-letters/page.tsx` — 7 hits (incl. Choose Template at :2925, type filter at :94, template-list filters at :980, :996; template editor pickers at :1811, :1858, :3399)
+- `correspondence/feed/page.tsx` — 5 hits
+- Settings sub-components — `UserPreferencesSection.tsx` (5), `PolicyTemplatesSection.tsx` (5), `AuditTemplatesSection.tsx` (6), `FrameworkConfigModal.tsx` (1)
+- Team — `team/logs/page.tsx` (3), `team/directory/page.tsx` (1), `edit-member-modal.tsx`, `member-detail-drawer.tsx`, `employee-table.tsx`
+- Calendar — `edit-event-modal.tsx`
+- Misc — `correspondence/registry/page.tsx` (2), `add/edit-correspondence-modal.tsx`, `RegDocFilterBar.tsx` (4), `PolicyDetailsContent.tsx` (2), `ArticleDetailModal.tsx` (4), `ReviewSchedulePicker.tsx`
+
+**Visual confirmation:** the Draft New Letter modal itself currently uses **native `<select>` for "Regulatory Authority" and "Choose Template"** while "Letter Type", "Sub-Category", "Target Department" are custom `EditableSelect` — proven via Playwright snapshot showing `combobox` (= native `<select>`) at refs e504 and e516.
+
+**Recommendation for §3 execution:** before touching any consumer, add a `locked` boolean prop to `EditableSelect` that disables every CRUD affordance (no Add Entry button, no row pencil/trash, no inline rename) while keeping the trigger and option visuals identical. Then sweep the 105 hits in batches grouped by file.
+
+### 11.7 — §4 department propagation
+
+| Question | Answer |
+|---|---|
+| `useDepartmentStore` is single source of truth in Compliance Review? | **YES** — `compliance-review/page.tsx:52, 57, 62-74` iterates the store. |
+| Rules creation modal — Affected Departments multi-select? | **YES** — `RegisterCircularModal.tsx:241-253` checkbox list reading `allDepartments`. |
+| Rules creation modal — Business Owner single-select? | **YES** — line 165 (currently a native `<select>` reading store; needs §3 conversion). |
+| Policy creation modal — Affected Departments multi-select? | **NO — MISSING.** `policies/page.tsx:754-849` has no affected-departments picker. Must be added per §4. |
+| Policy creation modal — Business Owner department single-select? | **PARTIAL.** Conflated with the team-member `OWNERS` picker (`{name} — {department}`). No independent dept picker. Needs decoupling per §4. |
+
+**Hardcoded department arrays still in code:**
+- `observation-form-fields.tsx:13-23` — `departmentKeys` map + exported `departments` array of 7 hardcoded keys. **Must be replaced** with `useDepartmentStore().departments`.
+- Seed data in `circular-store.ts:173,242,276,315` and `framework-config-store.ts` (13 sites) — string seeds, acceptable but flag for v2 id-ref migration.
+
+**No `<option value="dept-string">` literal-union dropdowns exist** — search returned 0 hits. The only meaningful gap in JSX is the observation-form-fields export.
+
+### 11.8 — §5 framework / sub-category
+
+- **Regulators** in `framework-config-store.seedFrameworks` — **19 total**: 8 correspondence-based (sama, citc, cma, zatca, misa, safiu, ia, sharia-board) + 11 self-assessment (nca-ecc, ndmo-pdpl, nca-cscc, nca-ccc, sdaia-pdpl, iso-27001, iso-22301, iso-31000, coso-ic, coso-erm, saso). Default pinned: `['sama', 'cma', 'sharia-board']` at line 359.
+- **"Compliance Framework" row in Lists & Categories** — **does not exist.** §5 requirement (don't add it) is already satisfied.
+- **SAMA Sub-Category inline?** — **YES** at `ListsAndCategoriesSection.tsx:354-364` via `useSAMASubCategoryStore`. Per §5 this needs to become a per-framework "Configure…" launcher modal.
+- **`useSAMASubCategoryStore` shape** — flat list `subCategories[]` with `{id, label, labelAr, isDefault}`. No `frameworkId` discriminator. §5 generalisation will need a v2 persist migration adding `frameworkId: 'sama'` to existing entries.
+
+### 11.9 — Audit conclusions
+
+- All 6 §1 bugs reproducible from code inspection alone. Two (R3-01, R3-04) need the plan's fix description revised; one (R3-03) needs the plan's diagnosis revised; the other three match the plan.
+- §2.1's calc-bound list overstates by 4 fields and includes one non-existent field. Approval Tier, Article risk-level, the three Frequency enums, and ComplianceThreshold should be demoted; Criticality dropped.
+- §3 has 105 hits, not the handful implied by the May-8-review callouts. Add `locked` prop to `EditableSelect` first, then sweep.
+- §4 gap is real but smaller than the plan suggests — only the policy-create modal is genuinely missing pickers.
+- §5 wiring is already cleaner than the plan assumes (no duplicate framework row exists).
+- `authority-department-store` is structurally different from the §2.3 list — confirm scope with user.
+
+Audit complete. Ready to code per the §7 execution order, with the corrections above applied.
 
 ---
 
-## Section 5 — Backlog Mirror
+## Section 12 — Round 3 completion log (May 8 2026)
 
-Every brief in §1, §2, §3 has a matching `📋 To Do` row appended to `PRODUCT-BACKLOG.md` under the appropriate epic. Every bug in §4 is a `📋` row in a new "Epic 26: Bug List & UX Polish" section. Every feature shipped this sprint is a `✅ Done` row in its existing epic.
+All §1–§5 work landed across 9 commits on `main`:
 
-See `PRODUCT-BACKLOG.md` (updated in this same commit) for the canonical IDs assigned (`COMPREV-*`, `RSK-*`, `RUL-*`, `POL-*`, `LETTER-*`, `DRP-*`, `RBAC-*`, `BUG-*`).
+| Commit | Phase | Scope | Files |
+|---|---|---|---|
+| `b0acf13` | §3-prep | Add `locked` prop to `EditableSelect` | 1 |
+| `f05579d` | §2 | Scale-labels revert + onboarding pickers removal + isDefault deletion guards drop + orphan-confirm modal in `ListsAndCategoriesSection` | 14 |
+| `3f6c4e2` | §1A | InlineChipEditor `queueMicrotask` race fix; `PlaceholderChip` popover → `position:fixed` + dynamic dir + min/max width; i18n wiring in 3 placeholder components; drop `'text'` placeholder kind everywhere | 7 |
+| `c75a50b` | §1B | Widen `Choose Template` filter (drop `status === 'Active'`); bind template editor + filter Letter Type to `useSAMALetterTypeStore` (BUG-R3-04, R3-05) | 1 |
+| `dbdc5fd` | §3 Group 3 | Native `<select>` → `EditableSelect` in 10 files (settings/team/calendar) | 10 |
+| `f3f2966` | §3 Group 1 + §4-obs | Native `<select>` → `EditableSelect` in 9 files (observations/audits/risks/reports); `observation-form-fields` `departmentKeys` array → `useDepartmentStore` | 9 |
+| `da6202e` | §5 | `useSAMASubCategoryStore` → per-framework `useFrameworkSubCategoryStore` (v1→v2 migration); per-framework Configure Sub-Categories launcher modals in Lists & Categories; SAMA letters Sub-Category picker is now authority-aware | 6 |
+| `8a37ff1` | §3 Group 2 + §4-pol | Native `<select>` → `EditableSelect` in 12 correspondence files; **policy create + edit modals now have Affected Departments multi-select + Business Owner Department single-select** (new fields on `Policy` type) | 13 |
+| `8ee7589` | Cleanup | 6 native selects in `sama-letters/page.tsx` missed by §1B (Authority dropdown, Choose Template in Draft modal, list filters, sidebar pickers) | 1 |
+
+**Net stats:** ~62 files changed. Native `<select>` count across `src/app` + `src/components`: **0 remaining**. `npx tsc --noEmit` clean.
+
+### Verified live on localhost:3000
+- ✅ §1.A — Draft modal renders with consistent custom dropdowns end-to-end (Authority, Letter Type, Choose Template, Sub-Category, Target Department).
+- ✅ §1.06 — Right-panel "Configure Placeholders" no longer shows "Free text" tab; only Date | Reference.
+- ✅ §2.2 — Settings → Lists & Categories: no Onboarding Industry / Region / Headcount sections.
+- ✅ §2.3 — Trash icon on seed entries no longer disabled (orphan-confirm modal wires through `getReferenceCount`).
+- ✅ §3 — Advisory page filters, Risks page MONITORING FREQUENCY, Settings sub-pages, Policy create modal — all use the unified `EditableSelect` styling.
+- ✅ §4 — Policy Create/Edit modal renders both **Affected Departments** (checkbox list) and **Business Owner Department** (single-select), both bound to `useDepartmentStore`.
+- ✅ §5 — Lists & Categories shows **"Configure SAMA Sub-Categories (9)"**, **"Configure NCA ECC-1:2018 Sub-Categories (0)"**, **"Configure Sharia Board Sub-Categories (0)"** — one launcher per enabled framework. No "Compliance Framework" duplicate row.
+
+### Known follow-ups (out of scope this round)
+- **§2.1 calc-bound list corrections.** The plan listed Approval Tier, Article risk-level, MonitoringFrequency / AuditFrequency / ReviewCadence, ComplianceThreshold as calc-bound, but the audit (§11.2) found none of these are actually used in `compliance-engine.ts`. They remain `locked` in the §3 sweep for visual consistency; demote to editable in a future round only if the user needs admin-side configurability.
+- **`authority-department-store`** — different shape (no `remove`, no `isDefault`); deliberately skipped per audit §11.5 flag. Confirm scope before touching.
+- **§6 RBAC matrix** — still deferred per round-3 §9.
+- **`observation-form-fields` team picker (`leadAuthor`, risk `owner`, etc.)** — Group 1 used `locked` mode for these because team membership isn't manageable through inline rename (members come from invites). If the user wants editable team pickers, a "Manage team" affordance needs design work.
