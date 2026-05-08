@@ -37,8 +37,39 @@ interface EditableSelectProps {
   // Behaviour preset. `'labels-only'` hides Add and Delete affordances even
   // if the corresponding callbacks are provided; only Edit + Reset are shown.
   mode?: 'default' | 'labels-only'
+  // When `true`, hides every CRUD affordance (no Add Entry button, no
+  // pencil/trash/reset row icons) and disables inline rename / commit-on-blur.
+  // Used for calculation-bound enums per round-3 §2.1 / §3 — see JSDoc above.
+  // `locked` wins over `mode` and over any onAdd/onEdit/onDelete/onReset
+  // callbacks the caller passes.
+  locked?: boolean
 }
 
+/**
+ * `EditableSelect` — shared dropdown component used across the app for
+ * both configurable and calculation-bound enum pickers.
+ *
+ * Three operating modes:
+ *
+ * 1. **full-edit (default)** — `mode="default"`, `locked=false`. When the
+ *    matching callback is passed, renders Add Entry button, per-row pencil
+ *    (rename), per-row trash (delete) and per-row reset affordances. Used
+ *    for configurable lists like departments, categories, business units.
+ *
+ * 2. **labels-only (legacy)** — `mode="labels-only"`. Hides Add and Delete
+ *    affordances even when `onAdd` / `onDelete` are passed; keeps Edit +
+ *    Reset for label-override surfaces (Bucket-D). Pre-existing behaviour;
+ *    kept for backwards compatibility with consumers that haven't migrated.
+ *
+ * 3. **locked (new — round-3 §2.1 / §3)** — `locked=true`. Hides every
+ *    CRUD affordance (Add button, pencil, trash, reset) and disables inline
+ *    rename / commit-on-blur. Used for calculation-bound enums (likelihood,
+ *    impact, severity, status, priority, …) where the value drives a score
+ *    and must not be user-editable. Trigger button + dropdown options are
+ *    visually identical to the full-edit variant — same paddings, chevron,
+ *    hover state, selected state, colors. `locked` wins over `mode` and
+ *    over any onAdd/onEdit/onDelete/onReset callbacks the caller passes.
+ */
 export function EditableSelect({
   value,
   onChange,
@@ -55,10 +86,16 @@ export function EditableSelect({
   bilingual = true,
   size = 'md',
   mode = 'default',
+  locked = false,
 }: EditableSelectProps) {
   const labelsOnly = mode === 'labels-only'
-  const effectiveOnAdd = labelsOnly ? undefined : onAdd
-  const effectiveOnDelete = labelsOnly ? undefined : onDelete
+  // `locked` is the strongest gate — it suppresses every CRUD affordance
+  // regardless of `mode` or which callbacks were passed in. It also
+  // disables the inline rename flow (the add/edit panel is never opened).
+  const effectiveOnAdd = locked ? undefined : labelsOnly ? undefined : onAdd
+  const effectiveOnEdit = locked ? undefined : onEdit
+  const effectiveOnDelete = locked ? undefined : labelsOnly ? undefined : onDelete
+  const effectiveOnReset = locked ? undefined : onReset
   const { t } = useTranslation()
   const [open, setOpen] = useState(false)
   const [view, setView] = useState<'list' | 'add' | 'edit'>('list')
@@ -106,8 +143,8 @@ export function EditableSelect({
     if (view === 'add' && effectiveOnAdd) {
       const newId = effectiveOnAdd(label, labelAr)
       if (typeof newId === 'string') onChange(newId)
-    } else if (view === 'edit' && editingId && onEdit) {
-      onEdit(editingId, label, labelAr)
+    } else if (view === 'edit' && editingId && effectiveOnEdit) {
+      effectiveOnEdit(editingId, label, labelAr)
     }
     setView('list')
     setEditingId(null)
@@ -171,7 +208,7 @@ export function EditableSelect({
                         {label}
                       </span>
                       <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                        {onEdit && (
+                        {effectiveOnEdit && (
                           <button
                             type="button"
                             className="p-1 text-slate-400 hover:text-emerald-600"
@@ -197,14 +234,14 @@ export function EditableSelect({
                             <Icon icon="lucide:trash-2" className="text-[11px]" />
                           </button>
                         )}
-                        {onReset && (!isReset || isReset(item.id)) && (
+                        {effectiveOnReset && (!isReset || isReset(item.id)) && (
                           <button
                             type="button"
                             className="p-1 text-slate-400 hover:text-amber-600"
                             title={t('editableSelect.reset')}
                             onClick={(e) => {
                               e.stopPropagation()
-                              onReset(item.id)
+                              effectiveOnReset(item.id)
                             }}
                           >
                             <Icon icon="lucide:rotate-ccw" className="text-[11px]" />
