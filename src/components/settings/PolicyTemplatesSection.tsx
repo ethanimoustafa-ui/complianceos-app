@@ -9,6 +9,7 @@ import { usePolicyTemplateStore } from '@/stores/policy-template-store'
 import { useTranslation } from '@/i18n'
 import { RoleGuard } from '@/components/auth/role-guard'
 import { SortHeader, type SortState } from '@/components/ui/sort-header'
+import { EditableSelect } from '@/components/ui/editable-select'
 import type { PolicyTemplate, PolicyCategory, PolicyApprovalTier, AuditFrequency, FrequencySchedule } from '@/types'
 
 type SortCol = 'name' | 'category' | 'updatedAt' | 'usageCount'
@@ -240,47 +241,54 @@ function PolicyTemplateFormModal({
         <div className="grid grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('settings.categoryCol')}</label>
-            <select value={category} onChange={(e) => setCategory(e.target.value as PolicyCategory)} className="flex h-11 w-full rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent">
-              {POLICY_CATEGORIES.map((c) => (
-                <option key={c} value={c}>{
+            <EditableSelect
+              locked
+              value={category}
+              onChange={(id) => setCategory(id as PolicyCategory)}
+              items={POLICY_CATEGORIES.map((c) => ({
+                id: c,
+                label:
                   c === 'compliance' ? t('policies.categoryCompliance') :
                   c === 'it' ? t('policies.categoryIt') :
                   c === 'operations' ? t('policies.categoryOperations') :
                   c === 'risk' ? t('policies.categoryRisk') :
                   c === 'hr' ? t('policies.categoryHr') :
-                  t('policies.categoryFinance')
-                }</option>
-              ))}
-            </select>
+                  t('policies.categoryFinance'),
+              }))}
+            />
           </div>
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('settings.approvalTier')}</label>
-            <select value={approvalTier} onChange={(e) => setApprovalTier(e.target.value as PolicyApprovalTier)} className="flex h-11 w-full rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent">
-              {APPROVAL_TIERS.map((tier) => (
-                <option key={tier} value={tier}>{
+            <EditableSelect
+              locked
+              value={approvalTier}
+              onChange={(id) => setApprovalTier(id as PolicyApprovalTier)}
+              items={APPROVAL_TIERS.map((tier) => ({
+                id: tier,
+                label:
                   tier === 'board' ? t('policies.tierBoard') :
                   tier === 'management' ? t('policies.tierManagement') :
                   tier === 'sharia' ? t('policies.tierSharia') :
-                  t('policies.tierAgm')
-                }</option>
-              ))}
-            </select>
+                  t('policies.tierAgm'),
+              }))}
+            />
           </div>
         </div>
         {/* Frequency */}
         <div>
           <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('settings.reviewFrequency')}</label>
-          <select
+          <EditableSelect
+            locked
             value={frequency}
-            onChange={(e) => setFrequency(e.target.value as AuditFrequency)}
-            className="flex h-11 w-full rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-          >
-            <option value="monthly">{t('settings.freqMonthly')}</option>
-            <option value="quarterly">{t('settings.freqQuarterly')}</option>
-            <option value="semi_annual">{t('settings.freqSemiAnnual')}</option>
-            <option value="annual">{t('settings.freqAnnual')}</option>
-            <option value="ad_hoc">{t('settings.freqAdHoc')}</option>
-          </select>
+            onChange={(id) => setFrequency(id as AuditFrequency)}
+            items={[
+              { id: 'monthly', label: t('settings.freqMonthly') },
+              { id: 'quarterly', label: t('settings.freqQuarterly') },
+              { id: 'semi_annual', label: t('settings.freqSemiAnnual') },
+              { id: 'annual', label: t('settings.freqAnnual') },
+              { id: 'ad_hoc', label: t('settings.freqAdHoc') },
+            ]}
+          />
         </div>
         {/* Frequency Schedule Picker */}
         {frequency === 'ad_hoc' && (
@@ -302,31 +310,30 @@ function PolicyTemplateFormModal({
               {frequency === 'quarterly' && (
                 <div>
                   <label className="block text-xs font-medium text-slate-500 mb-1">{t('settings.monthInQuarter')}</label>
-                  <select
-                    value={monthInQuarter}
-                    onChange={(e) => setMonthInQuarter(Number(e.target.value) as 1 | 2 | 3)}
-                    className="h-9 rounded-lg border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                  >
-                    <option value={1}>{t('settings.firstMonth')}</option>
-                    <option value={2}>{t('settings.secondMonth')}</option>
-                    <option value={3}>{t('settings.thirdMonth')}</option>
-                  </select>
+                  <EditableSelect
+                    locked
+                    value={String(monthInQuarter)}
+                    onChange={(id) => setMonthInQuarter(Number(id) as 1 | 2 | 3)}
+                    items={[
+                      { id: '1', label: t('settings.firstMonth') },
+                      { id: '2', label: t('settings.secondMonth') },
+                      { id: '3', label: t('settings.thirdMonth') },
+                    ]}
+                  />
                 </div>
               )}
               {(frequency === 'semi_annual' || frequency === 'annual') && (
                 <div>
                   <label className="block text-xs font-medium text-slate-500 mb-1">{t('settings.selectMonth')}</label>
-                  <select
-                    value={monthOfYear}
-                    onChange={(e) => setMonthOfYear(Number(e.target.value))}
-                    className="h-9 rounded-lg border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                  >
-                    {Array.from({ length: frequency === 'semi_annual' ? 6 : 12 }, (_, i) => (
-                      <option key={i + 1} value={i + 1}>
-                        {new Date(2026, i, 1).toLocaleString(isRTL ? 'ar' : 'en', { month: 'long' })}
-                      </option>
-                    ))}
-                  </select>
+                  <EditableSelect
+                    locked
+                    value={String(monthOfYear)}
+                    onChange={(id) => setMonthOfYear(Number(id))}
+                    items={Array.from({ length: frequency === 'semi_annual' ? 6 : 12 }, (_, i) => ({
+                      id: String(i + 1),
+                      label: new Date(2026, i, 1).toLocaleString(isRTL ? 'ar' : 'en', { month: 'long' }),
+                    }))}
+                  />
                 </div>
               )}
               <div>

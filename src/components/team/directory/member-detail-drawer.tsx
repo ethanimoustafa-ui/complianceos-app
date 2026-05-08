@@ -10,6 +10,7 @@ import { RoleGuard } from '@/components/auth/role-guard'
 import { useAuthStore } from '@/stores/auth-store'
 import { useTeamStore } from '@/stores/team-store'
 import { useWorkload } from '@/hooks/useWorkload'
+import { EditableSelect } from '@/components/ui/editable-select'
 import type { TeamMember } from '@/types'
 
 function CapacityRing({ capacity }: { capacity: number }) {
@@ -241,17 +242,18 @@ export function MemberDetailDrawer({
                 <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">
                   {t('team.memberRole' as TranslationKey)}
                 </h3>
-                <select
+                <EditableSelect
+                  locked
                   value={roleValue}
-                  onChange={(e) => handleRoleChange(e.target.value as TeamMember['role'])}
-                  className="w-full h-11 px-4 py-2 border border-slate-200 rounded-xl text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent bg-white"
-                >
-                  <option value="officer">{t('team.roleOfficer' as TranslationKey)}</option>
-                  <option value="manager">{t('team.roleManager' as TranslationKey)}</option>
-                  {currentUser?.role === 'admin' && (
-                    <option value="admin">{t('team.roleAdmin' as TranslationKey)}</option>
-                  )}
-                </select>
+                  onChange={(id) => handleRoleChange(id as TeamMember['role'])}
+                  items={[
+                    { id: 'officer', label: t('team.roleOfficer' as TranslationKey) },
+                    { id: 'manager', label: t('team.roleManager' as TranslationKey) },
+                    ...(currentUser?.role === 'admin'
+                      ? [{ id: 'admin', label: t('team.roleAdmin' as TranslationKey) }]
+                      : []),
+                  ]}
+                />
               </section>
             </RoleGuard>
 

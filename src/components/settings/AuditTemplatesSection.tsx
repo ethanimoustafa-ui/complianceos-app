@@ -10,6 +10,7 @@ import { useFrameworkConfigStore } from '@/stores/framework-config-store'
 import { useTranslation } from '@/i18n'
 import { RoleGuard } from '@/components/auth/role-guard'
 import { SortHeader, type SortState } from '@/components/ui/sort-header'
+import { EditableSelect } from '@/components/ui/editable-select'
 import type { AuditAuthority, AuditTemplate, AuditTemplateCategory, AuditPriority, AuditFrequency, FrequencySchedule } from '@/types'
 
 type SortCol = 'name' | 'category' | 'updatedAt' | 'usageCount'
@@ -247,30 +248,41 @@ function AuditTemplateFormModal({
           <AuditTypeSelect auditType={auditType} setAuditType={setAuditType} t={t} isRTL={isRTL} />
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('settings.categoryCol')}</label>
-            <select value={category} onChange={(e) => setCategory(e.target.value as AuditTemplateCategory)} className="flex h-11 w-full rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent">
-              {CATEGORIES.map((c) => (
-                <option key={c} value={c}>{t(('settings.' + CATEGORY_LABELS[c]) as any)}</option>
-              ))}
-            </select>
+            <EditableSelect
+              locked
+              value={category}
+              onChange={(id) => setCategory(id as AuditTemplateCategory)}
+              items={CATEGORIES.map((c) => ({ id: c, label: t(('settings.' + CATEGORY_LABELS[c]) as any) }))}
+            />
           </div>
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('settings.templatePriority')}</label>
-            <select value={priority} onChange={(e) => setPriority(e.target.value as AuditPriority)} className="flex h-11 w-full rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent">
-              <option value="critical">{t('settings.priorityCritical')}</option>
-              <option value="high">{t('settings.priorityHigh')}</option>
-              <option value="medium">{t('settings.priorityMedium')}</option>
-              <option value="low">{t('settings.priorityLow')}</option>
-            </select>
+            <EditableSelect
+              locked
+              value={priority}
+              onChange={(id) => setPriority(id as AuditPriority)}
+              items={[
+                { id: 'critical', label: t('settings.priorityCritical') },
+                { id: 'high', label: t('settings.priorityHigh') },
+                { id: 'medium', label: t('settings.priorityMedium') },
+                { id: 'low', label: t('settings.priorityLow') },
+              ]}
+            />
           </div>
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('settings.templateFrequency')}</label>
-            <select value={frequency} onChange={(e) => setFrequency(e.target.value as AuditFrequency)} className="flex h-11 w-full rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent">
-              <option value="quarterly">{t('settings.freqQuarterly')}</option>
-              <option value="semi_annual">{t('settings.freqSemiAnnual')}</option>
-              <option value="annual">{t('settings.freqAnnual')}</option>
-              <option value="monthly">{t('settings.freqMonthly')}</option>
-              <option value="ad_hoc">{t('settings.freqAdHoc')}</option>
-            </select>
+            <EditableSelect
+              locked
+              value={frequency}
+              onChange={(id) => setFrequency(id as AuditFrequency)}
+              items={[
+                { id: 'quarterly', label: t('settings.freqQuarterly') },
+                { id: 'semi_annual', label: t('settings.freqSemiAnnual') },
+                { id: 'annual', label: t('settings.freqAnnual') },
+                { id: 'monthly', label: t('settings.freqMonthly') },
+                { id: 'ad_hoc', label: t('settings.freqAdHoc') },
+              ]}
+            />
           </div>
         </div>
         {/* Frequency Schedule Picker */}
@@ -293,31 +305,30 @@ function AuditTemplateFormModal({
               {(frequency === 'quarterly') && (
                 <div>
                   <label className="block text-xs font-medium text-slate-500 mb-1">{t('settings.monthInQuarter')}</label>
-                  <select
-                    value={monthInQuarter}
-                    onChange={(e) => setMonthInQuarter(Number(e.target.value) as 1 | 2 | 3)}
-                    className="h-9 rounded-lg border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                  >
-                    <option value={1}>{t('settings.firstMonth')}</option>
-                    <option value={2}>{t('settings.secondMonth')}</option>
-                    <option value={3}>{t('settings.thirdMonth')}</option>
-                  </select>
+                  <EditableSelect
+                    locked
+                    value={String(monthInQuarter)}
+                    onChange={(id) => setMonthInQuarter(Number(id) as 1 | 2 | 3)}
+                    items={[
+                      { id: '1', label: t('settings.firstMonth') },
+                      { id: '2', label: t('settings.secondMonth') },
+                      { id: '3', label: t('settings.thirdMonth') },
+                    ]}
+                  />
                 </div>
               )}
               {(frequency === 'semi_annual' || frequency === 'annual') && (
                 <div>
                   <label className="block text-xs font-medium text-slate-500 mb-1">{t('settings.selectMonth')}</label>
-                  <select
-                    value={monthOfYear}
-                    onChange={(e) => setMonthOfYear(Number(e.target.value))}
-                    className="h-9 rounded-lg border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                  >
-                    {Array.from({ length: frequency === 'semi_annual' ? 6 : 12 }, (_, i) => (
-                      <option key={i + 1} value={i + 1}>
-                        {new Date(2026, i, 1).toLocaleString(isRTL ? 'ar' : 'en', { month: 'long' })}
-                      </option>
-                    ))}
-                  </select>
+                  <EditableSelect
+                    locked
+                    value={String(monthOfYear)}
+                    onChange={(id) => setMonthOfYear(Number(id))}
+                    items={Array.from({ length: frequency === 'semi_annual' ? 6 : 12 }, (_, i) => ({
+                      id: String(i + 1),
+                      label: new Date(2026, i, 1).toLocaleString(isRTL ? 'ar' : 'en', { month: 'long' }),
+                    }))}
+                  />
                 </div>
               )}
               <div>
@@ -393,16 +404,18 @@ function AuditTypeSelect({
   return (
     <div>
       <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('settings.templateType')}</label>
-      <select
+      <EditableSelect
+        locked
         value={auditType}
-        onChange={(e) => setAuditType(e.target.value as AuditAuthority)}
-        className="flex h-11 w-full rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-      >
-        <option value="internal">{t('auditDetail.internalAuditType')}</option>
-        {enabledCorrespondence.map((fw) => (
-          <option key={fw.id} value={fw.id}>{isRTL ? fw.nameAr : fw.name}</option>
-        ))}
-      </select>
+        onChange={(id) => setAuditType(id as AuditAuthority)}
+        items={[
+          { id: 'internal', label: t('auditDetail.internalAuditType') },
+          ...enabledCorrespondence.map((fw) => ({
+            id: fw.id,
+            label: isRTL ? fw.nameAr : fw.name,
+          })),
+        ]}
+      />
     </div>
   )
 }

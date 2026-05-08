@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input'
 import { Modal } from '@/components/ui/modal'
 import { useUserPreferencesStore } from '@/stores/user-preferences-store'
 import { useTranslation } from '@/i18n'
+import { EditableSelect } from '@/components/ui/editable-select'
 import type { DashboardView, DateFormatPreference } from '@/types'
 
 const TIMEZONES = [
@@ -35,6 +36,7 @@ export function UserPreferencesSection() {
   } = useUserPreferencesStore()
 
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false)
+  const [profileRole, setProfileRole] = useState<'compliance-manager' | 'auditor' | 'administrator'>('compliance-manager')
 
   return (
     <>
@@ -56,29 +58,27 @@ export function UserPreferencesSection() {
               <label className="text-xs font-bold text-slate-700 uppercase mb-2 block">
                 {t('settings.defaultDashboardView')}
               </label>
-              <select
+              <EditableSelect
+                locked
                 value={dashboardView}
-                onChange={(e) => setDashboardView(e.target.value as DashboardView)}
-                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:outline-none text-sm"
-              >
-                <option value="executive">{t('settings.executiveView')}</option>
-                <option value="managerial">{t('settings.managerialView')}</option>
-                <option value="officer">{t('settings.officerView')}</option>
-              </select>
+                onChange={(id) => setDashboardView(id as DashboardView)}
+                items={[
+                  { id: 'executive', label: t('settings.executiveView') },
+                  { id: 'managerial', label: t('settings.managerialView') },
+                  { id: 'officer', label: t('settings.officerView') },
+                ]}
+              />
             </div>
             <div>
               <label className="text-xs font-bold text-slate-700 uppercase mb-2 block">
                 {t('settings.timeZone')}
               </label>
-              <select
+              <EditableSelect
+                locked
                 value={timezone}
-                onChange={(e) => setTimezone(e.target.value)}
-                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:outline-none text-sm"
-              >
-                {TIMEZONES.map((tz) => (
-                  <option key={tz} value={tz}>{tz}</option>
-                ))}
-              </select>
+                onChange={(id) => setTimezone(id)}
+                items={TIMEZONES.map((tz) => ({ id: tz, label: tz }))}
+              />
             </div>
           </div>
           <div className="space-y-4">
@@ -86,28 +86,30 @@ export function UserPreferencesSection() {
               <label className="text-xs font-bold text-slate-700 uppercase mb-2 block">
                 {t('settings.language')}
               </label>
-              <select
+              <EditableSelect
+                locked
                 value={language}
-                onChange={(e) => setLanguage(e.target.value as 'en' | 'ar')}
-                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:outline-none text-sm"
-              >
-                <option value="en">English</option>
-                <option value="ar">العربية</option>
-              </select>
+                onChange={(id) => setLanguage(id as 'en' | 'ar')}
+                items={[
+                  { id: 'en', label: 'English' },
+                  { id: 'ar', label: 'العربية' },
+                ]}
+              />
             </div>
             <div>
               <label className="text-xs font-bold text-slate-700 uppercase mb-2 block">
                 {t('settings.dateFormat')}
               </label>
-              <select
+              <EditableSelect
+                locked
                 value={dateFormat}
-                onChange={(e) => setDateFormat(e.target.value as DateFormatPreference)}
-                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:outline-none text-sm"
-              >
-                <option value="DD/MM/YYYY">DD/MM/YYYY</option>
-                <option value="MM/DD/YYYY">MM/DD/YYYY</option>
-                <option value="YYYY-MM-DD">YYYY-MM-DD</option>
-              </select>
+                onChange={(id) => setDateFormat(id as DateFormatPreference)}
+                items={[
+                  { id: 'DD/MM/YYYY', label: 'DD/MM/YYYY' },
+                  { id: 'MM/DD/YYYY', label: 'MM/DD/YYYY' },
+                  { id: 'YYYY-MM-DD', label: 'YYYY-MM-DD' },
+                ]}
+              />
             </div>
           </div>
         </div>
@@ -140,11 +142,16 @@ export function UserPreferencesSection() {
           <Input label={t('sidebar.emailAddress')} type="email" defaultValue="felix@complianceos.io" />
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('sidebar.role')}</label>
-            <select className="flex h-11 w-full rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm text-slate-900 transition-colors hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent">
-              <option>{t('settings.complianceManager')}</option>
-              <option>{t('settings.auditor')}</option>
-              <option>{t('settings.administrator')}</option>
-            </select>
+            <EditableSelect
+              locked
+              value={profileRole}
+              onChange={(id) => setProfileRole(id as typeof profileRole)}
+              items={[
+                { id: 'compliance-manager', label: t('settings.complianceManager') },
+                { id: 'auditor', label: t('settings.auditor') },
+                { id: 'administrator', label: t('settings.administrator') },
+              ]}
+            />
           </div>
           <Input label={t('sidebar.department')} defaultValue="Risk & Compliance" />
           <div className="flex gap-3 pt-4">

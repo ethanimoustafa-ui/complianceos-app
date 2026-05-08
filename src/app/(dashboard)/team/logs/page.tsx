@@ -13,6 +13,7 @@ import { useUserLogStore } from '@/stores/user-log-store'
 import type { UserLog } from '@/stores/user-log-store'
 import { useTeamStore } from '@/stores/team-store'
 import { MemberDetailDrawer } from '@/components/team/directory/member-detail-drawer'
+import { EditableSelect } from '@/components/ui/editable-select'
 import type { TeamMember } from '@/types'
 
 // Helper Components
@@ -209,52 +210,56 @@ export default function TeamLogsPage() {
               <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-2">
                 {t('team.user')}
               </label>
-              <select
+              <EditableSelect
+                locked
                 value={filterUser}
-                onChange={(e) => setFilterUser(e.target.value)}
-                className="w-full px-4 py-2.5 border border-slate-200 rounded-lg text-sm font-medium focus:outline-none focus:border-emerald-500 transition-colors bg-white"
-              >
-                <option value="">{t('team.allUsers')}</option>
-                {Array.from(new Set(userLogs.map(l => l.user))).map(name => (
-                  <option key={name} value={name}>{name}</option>
-                ))}
-              </select>
+                onChange={(id) => setFilterUser(id)}
+                placeholder={t('team.allUsers')}
+                items={[
+                  { id: '', label: t('team.allUsers') },
+                  ...Array.from(new Set(userLogs.map(l => l.user))).map(name => ({ id: name, label: name })),
+                ]}
+              />
             </div>
             <div>
               <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-2">
                 {t('team.actionType')}
               </label>
-              <select
+              <EditableSelect
+                locked
                 value={filterAction}
-                onChange={(e) => setFilterAction(e.target.value)}
-                className="w-full px-4 py-2.5 border border-slate-200 rounded-lg text-sm font-medium focus:outline-none focus:border-emerald-500 transition-colors bg-white"
-              >
-                <option value="">{t('team.allActions')}</option>
-                <option value="sign_in">{t('team.signIn')}</option>
-                <option value="sign_out">{t('team.signOut')}</option>
-                <option value="session_timeout">{t('team.sessionTimeout')}</option>
-                <option value="password_change">{t('team.passwordChange')}</option>
-                <option value="profile_update">{t('team.profileUpdate')}</option>
-                <option value="permission_change">{t('team.permissionChange')}</option>
-                <option value="mfa_enabled">{t('team.mfaEnabled')}</option>
-                <option value="failed_login">{t('team.failedLogin')}</option>
-              </select>
+                onChange={(id) => setFilterAction(id)}
+                placeholder={t('team.allActions')}
+                items={[
+                  { id: '', label: t('team.allActions') },
+                  { id: 'sign_in', label: t('team.signIn') },
+                  { id: 'sign_out', label: t('team.signOut') },
+                  { id: 'session_timeout', label: t('team.sessionTimeout') },
+                  { id: 'password_change', label: t('team.passwordChange') },
+                  { id: 'profile_update', label: t('team.profileUpdate') },
+                  { id: 'permission_change', label: t('team.permissionChange') },
+                  { id: 'mfa_enabled', label: t('team.mfaEnabled') },
+                  { id: 'failed_login', label: t('team.failedLogin') },
+                ]}
+              />
             </div>
             <div>
               <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-2">
                 {t('team.status')}
               </label>
-              <select
+              <EditableSelect
+                locked
                 value={filterStatus}
-                onChange={(e) => setFilterStatus(e.target.value)}
-                className="w-full px-4 py-2.5 border border-slate-200 rounded-lg text-sm font-medium focus:outline-none focus:border-emerald-500 transition-colors bg-white"
-              >
-                <option value="">{t('team.allStatuses')}</option>
-                <option value="success">{t('team.success')}</option>
-                <option value="warning">{t('team.warning')}</option>
-                <option value="failed">{t('team.failed')}</option>
-                <option value="info">{t('team.info')}</option>
-              </select>
+                onChange={(id) => setFilterStatus(id)}
+                placeholder={t('team.allStatuses')}
+                items={[
+                  { id: '', label: t('team.allStatuses') },
+                  { id: 'success', label: t('team.success') },
+                  { id: 'warning', label: t('team.warning') },
+                  { id: 'failed', label: t('team.failed') },
+                  { id: 'info', label: t('team.info') },
+                ]}
+              />
             </div>
           </div>
           <div className="flex items-center justify-between mt-4 pt-4 border-t border-slate-100">

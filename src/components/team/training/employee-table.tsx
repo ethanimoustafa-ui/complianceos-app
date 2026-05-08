@@ -7,6 +7,7 @@ import { useTranslation } from '@/i18n'
 import type { TranslationKey } from '@/i18n'
 import { NoDataEmptyState } from '@/components/ui/empty-state'
 import { useDepartmentStore } from '@/stores/department-store'
+import { EditableSelect } from '@/components/ui/editable-select'
 import type { TrainingEmployee, TrainingStatus } from '@/types'
 
 interface EmployeeTableProps {
@@ -19,6 +20,9 @@ interface EmployeeTableProps {
 export function EmployeeTable({ employees, onViewEmployee, onHrReminder, onExport }: EmployeeTableProps) {
   const { t, isRTL } = useTranslation()
   const departments = useDepartmentStore(s => s.departments)
+  const addDepartment = useDepartmentStore(s => s.addDepartment)
+  const updateDepartment = useDepartmentStore(s => s.updateDepartment)
+  const removeDepartment = useDepartmentStore(s => s.removeDepartment)
   const deptLabel = (name: string) => {
     if (!isRTL) return name
     const dept = departments.find(d => d.name === name)
@@ -111,29 +115,58 @@ export function EmployeeTable({ employees, onViewEmployee, onHrReminder, onExpor
           <div className="w-full flex items-center justify-between">
             <h3 className="text-sm font-bold text-slate-900">{t('training.employeeRecords' as TranslationKey)}</h3>
             <div className="flex items-center gap-4">
-              <select
-                value={deptFilter}
-                onChange={(e) => setDeptFilter(e.target.value)}
-                className="px-3 py-1.5 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
-              >
-                <option value="">{t('training.allDepartments' as TranslationKey)}</option>
-                {departments.map((dept) => (
-                  <option key={dept.id} value={dept.name}>
-                    {isRTL ? dept.nameAr : dept.name}
-                  </option>
-                ))}
-              </select>
-              <select
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value as TrainingStatus | '')}
-                className="px-3 py-1.5 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
-              >
-                <option value="">{t('training.allStatuses' as TranslationKey)}</option>
-                <option value="completed">{t('training.completed' as TranslationKey)}</option>
-                <option value="in_progress">{t('training.inProgress' as TranslationKey)}</option>
-                <option value="overdue">{t('training.overdue' as TranslationKey)}</option>
-                <option value="not_started">{t('training.notStarted' as TranslationKey)}</option>
-              </select>
+              <div className="min-w-[180px]">
+                <EditableSelect
+                  value={deptFilter || null}
+                  onChange={(id) => {
+                    // Selecting the "all" sentinel clears the filter; ids match dept.name otherwise.
+                    if (id === '__ALL__') { setDeptFilter(''); return }
+                    setDeptFilter(id)
+                  }}
+                  size="sm"
+                  placeholder={t('training.allDepartments' as TranslationKey)}
+                  items={[
+                    { id: '__ALL__', label: t('training.allDepartments' as TranslationKey) },
+                    ...departments.map((dept) => ({
+                      id: dept.name,
+                      label: dept.name,
+                      labelAr: dept.nameAr,
+                      isDefault: dept.isDefault,
+                    })),
+                  ]}
+                  onAdd={(label, labelAr) => {
+                    const created = addDepartment(label, labelAr ?? label)
+                    return created.name
+                  }}
+                  onEdit={(id, label, labelAr) => {
+                    const dept = departments.find((d) => d.name === id)
+                    if (dept) updateDepartment(dept.id, { name: label, nameAr: labelAr ?? label })
+                  }}
+                  onDelete={(id) => {
+                    const dept = departments.find((d) => d.name === id)
+                    if (dept) removeDepartment(dept.id)
+                  }}
+                />
+              </div>
+              <div className="min-w-[180px]">
+                <EditableSelect
+                  locked
+                  value={statusFilter || null}
+                  onChange={(id) => {
+                    if (id === '__ALL__') { setStatusFilter(''); return }
+                    setStatusFilter(id as TrainingStatus)
+                  }}
+                  size="sm"
+                  placeholder={t('training.allStatuses' as TranslationKey)}
+                  items={[
+                    { id: '__ALL__', label: t('training.allStatuses' as TranslationKey) },
+                    { id: 'completed', label: t('training.completed' as TranslationKey) },
+                    { id: 'in_progress', label: t('training.inProgress' as TranslationKey) },
+                    { id: 'overdue', label: t('training.overdue' as TranslationKey) },
+                    { id: 'not_started', label: t('training.notStarted' as TranslationKey) },
+                  ]}
+                />
+              </div>
               {onHrReminder && (
                 <button onClick={onHrReminder} className="px-3 py-1.5 text-xs font-bold text-slate-700 bg-white border border-slate-200 rounded-lg flex items-center gap-1.5 hover:bg-slate-50 transition-colors cursor-pointer">
                   <Icon icon="lucide:mail-warning" className="text-amber-500 text-sm" />

@@ -14,6 +14,7 @@ import { RoleGuard } from '@/components/auth/role-guard'
 import { useTeamStore } from '@/stores/team-store'
 import { useWorkload } from '@/hooks/useWorkload'
 import { SortHeader, type SortState } from '@/components/ui/sort-header'
+import { EditableSelect } from '@/components/ui/editable-select'
 import type { TeamMember } from '@/types'
 
 import { DirectoryStatCards } from '@/components/team/directory/stat-cards'
@@ -407,15 +408,16 @@ export default function TeamDirectoryPage() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('team.assignRole')}</label>
-                  <select
+                  <EditableSelect
+                    locked
                     value={row.role}
-                    onChange={(e) => setInviteRows(prev => prev.map((r, i) => i === idx ? { ...r, role: e.target.value as TeamMember['role'] } : r))}
-                    className="w-full h-11 px-4 py-2 border border-slate-200 rounded-xl text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent bg-white"
-                  >
-                    <option value="officer">{t('team.complianceOfficer')}</option>
-                    <option value="manager">{t('team.leadAuditor')}</option>
-                    <option value="admin">{t('team.organizationAdmin')}</option>
-                  </select>
+                    onChange={(id) => setInviteRows(prev => prev.map((r, i) => i === idx ? { ...r, role: id as TeamMember['role'] } : r))}
+                    items={[
+                      { id: 'officer', label: t('team.complianceOfficer') },
+                      { id: 'manager', label: t('team.leadAuditor') },
+                      { id: 'admin', label: t('team.organizationAdmin') },
+                    ]}
+                  />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('team.accessLevel')}</label>

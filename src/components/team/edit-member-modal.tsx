@@ -164,14 +164,16 @@ export function EditMemberModal({ isOpen, onClose, member, onSuccess }: EditMemb
                   name="role"
                   control={control}
                   render={({ field }) => (
-                    <select
-                      {...field}
-                      className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                    >
-                      <option value="officer">Officer (View Only)</option>
-                      <option value="manager">Manager (View + Edit)</option>
-                      <option value="admin">Administrator (Full Access)</option>
-                    </select>
+                    <EditableSelect
+                      locked
+                      value={field.value}
+                      onChange={(id) => field.onChange(id)}
+                      items={[
+                        { id: 'officer', label: 'Officer (View Only)' },
+                        { id: 'manager', label: 'Manager (View + Edit)' },
+                        { id: 'admin', label: 'Administrator (Full Access)' },
+                      ]}
+                    />
                   )}
                 />
               </div>

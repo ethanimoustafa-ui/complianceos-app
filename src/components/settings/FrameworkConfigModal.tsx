@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { useFrameworkConfigStore, getDefaultWeights } from '@/stores/framework-config-store'
 import { useDepartmentStore } from '@/stores/department-store'
 import { useTranslation } from '@/i18n'
+import { EditableSelect } from '@/components/ui/editable-select'
 import type { RegulatoryBodyId, ComplianceThreshold, FrameworkWeights } from '@/types'
 
 interface Props {
@@ -232,16 +233,17 @@ export function FrameworkConfigModal({ frameworkId, isOpen, onClose }: Props) {
               </div>
             </div>
           </div>
-          <select
+          <EditableSelect
+            locked
             value={threshold}
-            onChange={(e) => setThreshold(e.target.value as ComplianceThreshold)}
-            className="flex h-11 w-full rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-          >
-            <option value="strict">{t('settings.strict90')}</option>
-            <option value="standard">{t('settings.standard80')}</option>
-            <option value="relaxed">{t('settings.relaxed70')}</option>
-            <option value="custom">{t('settings.custom')}</option>
-          </select>
+            onChange={(id) => setThreshold(id as ComplianceThreshold)}
+            items={[
+              { id: 'strict', label: t('settings.strict90') },
+              { id: 'standard', label: t('settings.standard80') },
+              { id: 'relaxed', label: t('settings.relaxed70') },
+              { id: 'custom', label: t('settings.custom') },
+            ]}
+          />
           {threshold === 'custom' && (
             <div className="mt-2">
               <label className="block text-xs font-medium text-slate-500 mb-1">{t('settings.customThreshold')}</label>

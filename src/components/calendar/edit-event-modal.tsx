@@ -9,6 +9,9 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { cn } from '@/lib/utils'
 import { useCalendarStore } from '@/stores/calendar-store'
+import { useCalendarEventTypeStore } from '@/stores/calendar-event-type-store'
+import { EditableSelect } from '@/components/ui/editable-select'
+import { useTranslation } from '@/i18n'
 import type { CalendarEvent } from '@/types'
 
 const eventSchema = z.object({
@@ -33,6 +36,11 @@ interface EditEventModalProps {
 
 export function EditEventModal({ isOpen, onClose, event, onSuccess }: EditEventModalProps) {
   const { updateEvent, isLoading } = useCalendarStore()
+  const { isRTL } = useTranslation()
+  const eventTypes = useCalendarEventTypeStore((s) => s.types)
+  const addEventType = useCalendarEventTypeStore((s) => s.add)
+  const updateEventType = useCalendarEventTypeStore((s) => s.update)
+  const removeEventType = useCalendarEventTypeStore((s) => s.remove)
 
   const {
     control,
@@ -135,15 +143,19 @@ export function EditEventModal({ isOpen, onClose, event, onSuccess }: EditEventM
                 name="type"
                 control={control}
                 render={({ field }) => (
-                  <select
-                    {...field}
-                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                  >
-                    <option value="deadline">Deadline</option>
-                    <option value="meeting">Meeting</option>
-                    <option value="submission">Submission</option>
-                    <option value="review">Review</option>
-                  </select>
+                  <EditableSelect
+                    value={field.value}
+                    onChange={(id) => field.onChange(id)}
+                    items={eventTypes.map((et) => ({
+                      id: et.id,
+                      label: isRTL && et.labelAr ? et.labelAr : et.label,
+                      labelAr: et.labelAr,
+                      isDefault: et.isDefault,
+                    }))}
+                    onAdd={(label, labelAr) => addEventType(label, labelAr)}
+                    onEdit={(id, label, labelAr) => updateEventType(id, { label, labelAr: labelAr ?? label })}
+                    onDelete={(id) => removeEventType(id)}
+                  />
                 )}
               />
             </div>
