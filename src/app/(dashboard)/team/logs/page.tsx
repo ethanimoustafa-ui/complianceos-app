@@ -36,6 +36,13 @@ function UserActionBadge({ action, label }: { action: UserLog['action']; label: 
     'auth.logout': 'bg-slate-100 text-slate-700',
     'auth.switch_user': 'bg-amber-100 text-amber-700',
     'team.permissions_changed': 'bg-orange-100 text-orange-700',
+    'team.member_invited': 'bg-emerald-100 text-emerald-700',
+    'team.member_removed': 'bg-rose-100 text-rose-700',
+    'team.member_role_changed': 'bg-orange-100 text-orange-700',
+    'policy.approval_step_committed': 'bg-blue-100 text-blue-700',
+    'policy.rejection': 'bg-rose-100 text-rose-700',
+    'samaLetter.approval_step_committed': 'bg-blue-100 text-blue-700',
+    'samaLetter.sent': 'bg-emerald-100 text-emerald-700',
   }
 
   return (
@@ -94,11 +101,18 @@ export default function TeamLogsPage() {
     permission_change: t('team.permissionChange'),
     mfa_enabled: t('team.mfaEnabled'),
     failed_login: t('team.failedLogin'),
-    'auth.permission_denied': 'Permission Denied',
-    'auth.login': 'Login',
-    'auth.logout': 'Logout',
-    'auth.switch_user': 'Switch User',
-    'team.permissions_changed': 'Permissions Changed',
+    'auth.permission_denied': t('team.logActionPermissionDenied' as TranslationKey),
+    'auth.login': t('team.logActionAuthLogin' as TranslationKey),
+    'auth.logout': t('team.logActionAuthLogout' as TranslationKey),
+    'auth.switch_user': t('team.logActionAuthSwitchUser' as TranslationKey),
+    'team.permissions_changed': t('team.logActionPermissionsChanged' as TranslationKey),
+    'team.member_invited': t('team.logActionMemberInvited' as TranslationKey),
+    'team.member_removed': t('team.logActionMemberRemoved' as TranslationKey),
+    'team.member_role_changed': t('team.logActionMemberRoleChanged' as TranslationKey),
+    'policy.approval_step_committed': t('team.logActionPolicyApproval' as TranslationKey),
+    'policy.rejection': t('team.logActionPolicyRejection' as TranslationKey),
+    'samaLetter.approval_step_committed': t('team.logActionSamaLetterApproval' as TranslationKey),
+    'samaLetter.sent': t('team.logActionSamaLetterSent' as TranslationKey),
   }
 
   // Translated status labels
@@ -255,6 +269,18 @@ export default function TeamLogsPage() {
                   { id: 'permission_change', label: t('team.permissionChange') },
                   { id: 'mfa_enabled', label: t('team.mfaEnabled') },
                   { id: 'failed_login', label: t('team.failedLogin') },
+                  { id: 'auth.login', label: t('team.logActionAuthLogin' as TranslationKey) },
+                  { id: 'auth.logout', label: t('team.logActionAuthLogout' as TranslationKey) },
+                  { id: 'auth.switch_user', label: t('team.logActionAuthSwitchUser' as TranslationKey) },
+                  { id: 'auth.permission_denied', label: t('team.logActionPermissionDenied' as TranslationKey) },
+                  { id: 'team.permissions_changed', label: t('team.logActionPermissionsChanged' as TranslationKey) },
+                  { id: 'team.member_invited', label: t('team.logActionMemberInvited' as TranslationKey) },
+                  { id: 'team.member_removed', label: t('team.logActionMemberRemoved' as TranslationKey) },
+                  { id: 'team.member_role_changed', label: t('team.logActionMemberRoleChanged' as TranslationKey) },
+                  { id: 'policy.approval_step_committed', label: t('team.logActionPolicyApproval' as TranslationKey) },
+                  { id: 'policy.rejection', label: t('team.logActionPolicyRejection' as TranslationKey) },
+                  { id: 'samaLetter.approval_step_committed', label: t('team.logActionSamaLetterApproval' as TranslationKey) },
+                  { id: 'samaLetter.sent', label: t('team.logActionSamaLetterSent' as TranslationKey) },
                 ]}
               />
             </div>

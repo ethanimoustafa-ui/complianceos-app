@@ -4,6 +4,7 @@ import type { Policy, PolicyFilters, PolicyStatus, PolicyWorkflowStep, PolicyAct
 import { computeNextReview, cadenceToReviewCycleDays } from '@/lib/review-schedule'
 import { validateChildDeadline } from '@/lib/deadline-validation'
 import { requirePermission } from '@/lib/rbac-store-gate'
+import { useUserLogStore } from '@/stores/user-log-store'
 
 function restatusTimeline(timeline: PolicyWorkflowStep[]): PolicyWorkflowStep[] {
   let firstNonCompleted = false
@@ -305,6 +306,13 @@ export const usePolicyStore = create<PolicyState>()(
         // TODO: Replace with actual API call
         const policy = get().policies.find((p) => p.id === id)
         if (!policy) return
+        // RBAC-025: audit log the approval.
+        useUserLogStore.getState().log({
+          userId: user.id,
+          action: 'policy.approval_step_committed',
+          target: id,
+          metadata: notes ? { notes } : undefined,
+        })
         const today = new Date().toISOString().split('T')[0]
         const currentIdx = policy.workflowTimeline.findIndex(s => s.status === 'current')
         const updatedTimeline = policy.workflowTimeline.map((step, idx) =>

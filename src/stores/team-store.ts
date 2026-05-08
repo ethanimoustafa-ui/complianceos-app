@@ -3,6 +3,7 @@ import { persist } from 'zustand/middleware'
 import type { TeamMember, PaginationState, SortState } from '@/types'
 import { STANDARD_PERMISSIONS } from '@/lib/permissions-registry'
 import { requirePermission } from '@/lib/rbac-store-gate'
+import { useUserLogStore } from '@/stores/user-log-store'
 
 // Re-exported for any direct callers (kept for backwards compat).
 export { STANDARD_PERMISSIONS }
@@ -150,7 +151,7 @@ export const useTeamStore = create<TeamState>()(
       },
 
       invite: async (data) => {
-        requirePermission('Manage Team & Permissions', { storeName: 'team', actionName: 'invite' })
+        const actor = requirePermission('Manage Team & Permissions', { storeName: 'team', actionName: 'invite' })
         set({ isLoading: true, error: null })
         try {
           // TODO: Replace with actual API call
@@ -171,6 +172,14 @@ export const useTeamStore = create<TeamState>()(
             members: [...state.members, newMember],
             isLoading: false,
           }))
+
+          // RBAC-025: audit log a successful invite.
+          useUserLogStore.getState().log({
+            userId: actor.id,
+            action: 'team.member_invited',
+            target: newMember.id,
+            metadata: { email: data.email, role: data.role, department: data.department },
+          })
 
           return newMember
         } catch (error) {
@@ -221,7 +230,7 @@ export const useTeamStore = create<TeamState>()(
       },
 
       updateRole: (memberId: string, newRole: TeamMember['role']) => {
-        requirePermission('Manage Team & Permissions', { storeName: 'team', actionName: `updateRole:${newRole}`, id: memberId })
+        const actor = requirePermission('Manage Team & Permissions', { storeName: 'team', actionName: `updateRole:${newRole}`, id: memberId })
         set((state) => ({
           members: state.members.map((m) =>
             m.id === memberId ? { ...m, role: newRole } : m
@@ -231,10 +240,23 @@ export const useTeamStore = create<TeamState>()(
               ? { ...state.selectedMember, role: newRole }
               : state.selectedMember,
         }))
+        // RBAC-025: audit log the role change.
+        useUserLogStore.getState().log({
+          userId: actor.id,
+          action: 'team.member_role_changed',
+          target: memberId,
+          metadata: { newRole },
+        })
       },
 
       remove: async (id: string) => {
-        requirePermission('Manage Team & Permissions', { storeName: 'team', actionName: 'remove', id })
+        const actor = requirePermission('Manage Team & Permissions', { storeName: 'team', actionName: 'remove', id })
+        // RBAC-025: log BEFORE the mutation so the target id is still resolvable.
+        useUserLogStore.getState().log({
+          userId: actor.id,
+          action: 'team.member_removed',
+          target: id,
+        })
         set({ isLoading: true, error: null })
         try {
           // TODO: Replace with actual API call

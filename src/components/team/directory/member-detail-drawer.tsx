@@ -10,6 +10,7 @@ import { RoleGuard } from '@/components/auth/role-guard'
 import { Gate } from '@/components/auth/gate'
 import { useAuthStore } from '@/stores/auth-store'
 import { useTeamStore } from '@/stores/team-store'
+import { useUserLogStore } from '@/stores/user-log-store'
 import { useWorkload } from '@/hooks/useWorkload'
 import { EditableSelect } from '@/components/ui/editable-select'
 import type { TeamMember } from '@/types'
@@ -347,11 +348,27 @@ export function MemberDetailDrawer({
                 if (roleValue !== member.role) {
                   onUpdateRole(member.id, roleValue)
                 }
+                // RBAC-023: diff stagedPermissions against the pre-staged
+                // baseline (member.accessControls snapshot at open time) so we
+                // can write a single audit-log entry summarising granted /
+                // revoked perms instead of one entry per toggle.
+                const granted: string[] = []
+                const revoked: string[] = []
                 for (const sp of stagedPermissions) {
                   const orig = (member.accessControls || []).find(p => p.label === sp.label)
                   if (orig && orig.enabled !== sp.enabled) {
                     onUpdatePermission(member.id, sp.label, sp.enabled)
+                    if (sp.enabled) granted.push(sp.label)
+                    else revoked.push(sp.label)
                   }
+                }
+                if (granted.length || revoked.length) {
+                  useUserLogStore.getState().log({
+                    userId: currentUser?.id ?? 'anonymous',
+                    action: 'team.permissions_changed',
+                    target: member.id,
+                    metadata: { granted, revoked, targetMemberName: member.name },
+                  })
                 }
                 setHasUnsavedChanges(false)
                 onToast(t('team.updatePermissions'))

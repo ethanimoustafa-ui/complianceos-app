@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import type { User } from '@/types'
+import { useUserLogStore } from '@/stores/user-log-store'
 
 // ── Seed users (RBAC-009) ────────────────────────────────────────────────────
 // Mirror the team-store seeds so impersonation (Phase 4 RBAC-024) can switch
@@ -36,6 +37,10 @@ interface AuthState {
   isAuthenticated: boolean
   isLoading: boolean
   error: string | null
+  // RBAC-024: tracks the original logged-in identity (the "real" account
+  // behind any Acting-As impersonation). Stays untouched by `switchUser` so
+  // the demo banner + Reset can return to it. Cleared on `logout`.
+  originalUserId?: string
 
   // Actions
   login: (email: string, password: string) => Promise<{ ok: boolean; error?: string }>
@@ -61,6 +66,7 @@ export const useAuthStore = create<AuthState>()(
       isAuthenticated: true,
       isLoading: false,
       error: null,
+      originalUserId: DEFAULT_USER.id,
 
       // Mock login — matches `email` against SEED_USERS, ignores password.
       // Returns `{ ok, error? }` so callers can branch without try/catch.
@@ -87,6 +93,15 @@ export const useAuthStore = create<AuthState>()(
             isAuthenticated: true,
             isLoading: false,
             error: null,
+            // RBAC-024: stamp the genuine logged-in identity. switchUser()
+            // does not touch this; logout() clears it.
+            originalUserId: matched.id,
+          })
+          // RBAC-025: audit log every successful login.
+          useUserLogStore.getState().log({
+            userId: matched.id,
+            action: 'auth.login',
+            target: 'sign-in',
           })
           return { ok: true }
         } catch (error) {
@@ -97,11 +112,21 @@ export const useAuthStore = create<AuthState>()(
       },
 
       logout: () => {
+        const previousUserId = get().user?.id
+        // RBAC-025: log BEFORE clearing the user so the actor id is captured.
+        if (previousUserId) {
+          useUserLogStore.getState().log({
+            userId: previousUserId,
+            action: 'auth.logout',
+            target: 'sign-out',
+          })
+        }
         set({
           user: null,
           token: null,
           isAuthenticated: false,
           error: null,
+          originalUserId: undefined,
         })
       },
 
@@ -134,14 +159,23 @@ export const useAuthStore = create<AuthState>()(
       setError: (error) => set({ error }),
       clearError: () => set({ error: null }),
 
-      // RBAC-010: switch the current user by id (used by the demo Acting-As
-      // picker added in Phase 4). Throws if `userId` is not in SEED_USERS.
-      // Phase 7 will layer `auth.switch_user` audit logging on top of this.
+      // RBAC-010 / RBAC-024 / RBAC-025: switch the current user by id (used by
+      // the demo Acting-As picker). Throws if `userId` is not in SEED_USERS.
+      // Audit-logs an `auth.switch_user` entry with the actor id BEFORE the
+      // swap so direct callers (not just the UI) get audited too. Does NOT
+      // mutate `originalUserId` — that stays anchored to the genuine
+      // logged-in identity for as long as the session is alive.
       switchUser: (userId) => {
         const matched = SEED_USERS.find((u) => u.id === userId)
         if (!matched) {
           throw new Error(`switchUser: unknown userId "${userId}"`)
         }
+        const previousUserId = get().user?.id ?? 'anonymous'
+        useUserLogStore.getState().log({
+          userId: previousUserId,
+          action: 'auth.switch_user',
+          target: userId,
+        })
         set({
           user: { ...matched },
           token: 'demo-token',
@@ -152,38 +186,37 @@ export const useAuthStore = create<AuthState>()(
     }),
     {
       name: 'auth-storage',
-      version: 4,
+      version: 5,
       migrate: (persistedState, fromVersion) => {
         // v3→v4 (RBAC-009): rewrite `id: 'current-user'` to `id: 'admin'` so
         // the user matches a stable seed id; preserve any other persisted user.
-        type PartialAuth = { user?: User | null; token?: string | null; isAuthenticated?: boolean }
-        const state = (persistedState ?? {}) as PartialAuth
-        if (fromVersion < 4) {
-          if (!state.user) {
-            return {
-              user: { ...DEFAULT_USER },
-              token: 'demo-token',
-              isAuthenticated: true,
-            }
-          }
-          if (state.user.id === 'current-user') {
-            return {
-              user: { ...state.user, id: 'admin' },
-              token: state.token ?? 'demo-token',
-              isAuthenticated: state.isAuthenticated ?? true,
-            }
-          }
+        // v4→v5 (RBAC-024): add `originalUserId` (defaults to current user's
+        // id, or `'admin'` as fallback) so the demo banner / Reset can return
+        // to the genuine logged-in identity.
+        type PartialAuth = {
+          user?: User | null
+          token?: string | null
+          isAuthenticated?: boolean
+          originalUserId?: string
         }
+        const state = (persistedState ?? {}) as PartialAuth
+        let user: User | null = state.user ?? { ...DEFAULT_USER }
+        if (fromVersion < 4 && user && user.id === 'current-user') {
+          user = { ...user, id: 'admin' }
+        }
+        const originalUserId = state.originalUserId ?? user?.id ?? 'admin'
         return {
-          user: state.user ?? { ...DEFAULT_USER },
+          user,
           token: state.token ?? 'demo-token',
-          isAuthenticated: state.isAuthenticated ?? true,
+          isAuthenticated: state.isAuthenticated ?? !!user,
+          originalUserId,
         }
       },
       partialize: (state) => ({
         user: state.user,
         token: state.token,
         isAuthenticated: state.isAuthenticated,
+        originalUserId: state.originalUserId,
       }),
     }
   )

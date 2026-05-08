@@ -1,9 +1,10 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 
-// Round 4 Phase 6 expands the action union with `auth.permission_denied`. The
-// remaining `auth.*` and `team.*` events are reserved for Phase 7. The existing
-// underscore-cased tokens stay for backwards compatibility with the seed logs.
+// Round 4 Phase 6 expands the action union with `auth.permission_denied`.
+// Round 4 Phase 7 adds the rest of the auth/team/policy/letter audit events.
+// The existing underscore-cased tokens stay for backwards compatibility with
+// the seed logs.
 export type UserLogAction =
   | 'sign_in'
   | 'sign_out'
@@ -18,6 +19,13 @@ export type UserLogAction =
   | 'auth.logout'
   | 'auth.switch_user'
   | 'team.permissions_changed'
+  | 'team.member_invited'
+  | 'team.member_removed'
+  | 'team.member_role_changed'
+  | 'policy.approval_step_committed'
+  | 'policy.rejection'
+  | 'samaLetter.approval_step_committed'
+  | 'samaLetter.sent'
 
 export interface UserLog {
   id: number
@@ -33,14 +41,20 @@ export interface UserLog {
   // Optional free-form target for RBAC-denied entries. Phase 6 records this
   // as `${storeName}:${id}:${actionName}` so logs can be filtered later.
   target?: string
+  // Phase 7: optional structured payload for events that need to record more
+  // than a single target id (e.g. `team.permissions_changed` with arrays of
+  // granted/revoked permissions).
+  metadata?: unknown
 }
 
-// Compact shape used by store-action gate failures (Phase 6 §8.1). The store
-// `log()` action below normalises this into a full `UserLog` entry.
+// Compact shape used by store-action gate failures (Phase 6 §8.1) and the
+// expanded Phase 7 audit-log emitters. The store `log()` action below
+// normalises this into a full `UserLog` entry.
 export interface RBACDeniedLogEntry {
   userId: string
   action: UserLogAction
   target?: string
+  metadata?: unknown
 }
 
 interface UserLogState {
@@ -91,7 +105,11 @@ export const useUserLogStore = create<UserLogState>()(
               ? 'team.permissionDenied'
               : `team.${entry.action.replace(/\./g, '_')}`
           const status: UserLog['status'] =
-            entry.action === 'auth.permission_denied' ? 'warning' : 'info'
+            entry.action === 'auth.permission_denied' || entry.action === 'policy.rejection'
+              ? 'warning'
+              : entry.action === 'auth.login' || entry.action === 'auth.logout'
+                ? 'success'
+                : 'info'
           const next: UserLog = {
             id: Math.max(0, ...state.logs.map(l => l.id)) + 1,
             timestamp: new Date().toISOString(),
@@ -104,6 +122,7 @@ export const useUserLogStore = create<UserLogState>()(
             status,
             userId: entry.userId,
             target: entry.target,
+            metadata: entry.metadata,
           }
           return { logs: [next, ...state.logs] }
         }),

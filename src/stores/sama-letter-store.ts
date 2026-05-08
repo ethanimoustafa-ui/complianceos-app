@@ -10,6 +10,7 @@ import type {
   SortState,
 } from '@/types'
 import { requirePermission } from '@/lib/rbac-store-gate'
+import { useUserLogStore } from '@/stores/user-log-store'
 
 interface SAMALetterFilters {
   type?: SAMALetterType[]
@@ -277,6 +278,13 @@ export const useSAMALetterStore = create<SAMALetterState>()(
       approveStep: (id, step, notes) => {
         const user = requirePermission('Approve SAMA Letters', { storeName: 'samaLetter', actionName: `approveStep:${step}`, id })
         const approverName = user.name
+        // RBAC-025: audit log the step approval.
+        useUserLogStore.getState().log({
+          userId: user.id,
+          action: 'samaLetter.approval_step_committed',
+          target: id,
+          metadata: { step, notes: notes ?? null },
+        })
         // TODO: Replace with actual API call
         const now = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
         set((state) => {
@@ -351,7 +359,13 @@ export const useSAMALetterStore = create<SAMALetterState>()(
       },
 
       send: (id) => {
-        requirePermission('Approve SAMA Letters', { storeName: 'samaLetter', actionName: 'send', id })
+        const user = requirePermission('Approve SAMA Letters', { storeName: 'samaLetter', actionName: 'send', id })
+        // RBAC-025: audit log the send.
+        useUserLogStore.getState().log({
+          userId: user.id,
+          action: 'samaLetter.sent',
+          target: id,
+        })
         // TODO: Replace with actual API call
         const now = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
         // Lazy-import the renderer to avoid a circular import; this collapses
