@@ -272,15 +272,18 @@ export function EditAuditModal({ isOpen, onClose, audit, onSuccess, calculatedPr
                   name="status"
                   control={control}
                   render={({ field }) => (
-                    <select
-                      {...field}
-                      className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                    >
-                      <option value="pending">{t('auditDetail.pending')}</option>
-                      <option value="in_progress">{t('auditDetail.inProgress')}</option>
-                      <option value="completed">{t('auditDetail.completed')}</option>
-                      <option value="overdue">{t('auditDetail.overdue')}</option>
-                    </select>
+                    <EditableSelect
+                      locked
+                      value={field.value}
+                      onChange={(id) => field.onChange(id)}
+                      items={[
+                        { id: 'pending', label: t('auditDetail.pending') },
+                        { id: 'in_progress', label: t('auditDetail.inProgress') },
+                        { id: 'completed', label: t('auditDetail.completed') },
+                        { id: 'overdue', label: t('auditDetail.overdue') },
+                      ]}
+                      isRTL={isRTL}
+                    />
                   )}
                 />
               </div>
@@ -319,18 +322,19 @@ export function EditAuditModal({ isOpen, onClose, audit, onSuccess, calculatedPr
                   name="priority"
                   control={control}
                   render={({ field }) => (
-                    <select
-                      {...field}
-                      value={field.value || ''}
-                      onChange={(e) => field.onChange(e.target.value || undefined)}
-                      className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                    >
-                      <option value="">{t('auditDetail.selectPriority')}</option>
-                      <option value="critical">{t('auditDetail.priorityCritical')}</option>
-                      <option value="high">{t('auditDetail.priorityHigh')}</option>
-                      <option value="medium">{t('auditDetail.priorityMedium')}</option>
-                      <option value="low">{t('auditDetail.priorityLow')}</option>
-                    </select>
+                    <EditableSelect
+                      locked
+                      value={field.value || null}
+                      onChange={(id) => field.onChange(id || undefined)}
+                      items={[
+                        { id: 'critical', label: t('auditDetail.priorityCritical') },
+                        { id: 'high', label: t('auditDetail.priorityHigh') },
+                        { id: 'medium', label: t('auditDetail.priorityMedium') },
+                        { id: 'low', label: t('auditDetail.priorityLow') },
+                      ]}
+                      placeholder={t('auditDetail.selectPriority')}
+                      isRTL={isRTL}
+                    />
                   )}
                 />
               </div>
@@ -343,25 +347,24 @@ export function EditAuditModal({ isOpen, onClose, audit, onSuccess, calculatedPr
                   name="assigneeId"
                   control={control}
                   render={({ field }) => (
-                    <select
-                      {...field}
-                      className={cn(
-                        'w-full px-4 py-3 bg-slate-50 border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500',
-                        errors.assigneeId ? 'border-rose-300' : 'border-slate-200'
-                      )}
-                    >
-                      <option value="">{t('auditDetail.selectLeadAuthor')}</option>
-                      {currentUser && (
-                        <option value={currentUser.id}>{currentUser.name} {t('auditDetail.youSuffix')}</option>
-                      )}
-                      {members
-                        .filter((m) => m.id !== currentUser?.id)
-                        .map((member) => (
-                          <option key={member.id} value={member.id}>
-                            {member.name} - {member.department}
-                          </option>
-                        ))}
-                    </select>
+                    <EditableSelect
+                      locked
+                      value={field.value || null}
+                      onChange={(id) => field.onChange(id)}
+                      items={[
+                        ...(currentUser
+                          ? [{ id: currentUser.id, label: `${currentUser.name} ${t('auditDetail.youSuffix')}` }]
+                          : []),
+                        ...members
+                          .filter((m) => m.id !== currentUser?.id)
+                          .map((member) => ({
+                            id: member.id,
+                            label: `${member.name} - ${member.department}`,
+                          })),
+                      ]}
+                      placeholder={t('auditDetail.selectLeadAuthor')}
+                      isRTL={isRTL}
+                    />
                   )}
                 />
                 {errors.assigneeId && (

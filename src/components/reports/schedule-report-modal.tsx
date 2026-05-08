@@ -10,6 +10,7 @@ import { z } from 'zod'
 import { cn } from '@/lib/utils'
 import { useReportStore } from '@/stores/report-store'
 import type { Report, ReportType, ReportFormat, ReportPeriod } from '@/types'
+import { EditableSelect } from '@/components/ui/editable-select'
 
 const reportSchema = z.object({
   name: z.string().min(3, 'Name must be at least 3 characters'),
@@ -214,16 +215,12 @@ export function ScheduleReportModal({ isOpen, onClose, onSuccess }: ScheduleRepo
                   name="period"
                   control={control}
                   render={({ field }) => (
-                    <select
-                      {...field}
-                      className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                    >
-                      {reportPeriods.map((period) => (
-                        <option key={period.id} value={period.id}>
-                          {period.label}
-                        </option>
-                      ))}
-                    </select>
+                    <EditableSelect
+                      locked
+                      value={field.value}
+                      onChange={(id) => field.onChange(id)}
+                      items={reportPeriods.map((period) => ({ id: period.id, label: period.label }))}
+                    />
                   )}
                 />
               </div>

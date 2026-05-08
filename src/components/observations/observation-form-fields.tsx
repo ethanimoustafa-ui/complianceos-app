@@ -9,19 +9,6 @@ import { useDepartmentStore } from '@/stores/department-store'
 import { useFrameworkConfigStore } from '@/stores/framework-config-store'
 import { EditableSelect } from '@/components/ui/editable-select'
 
-// Department keys for translation lookup (kept for backward compatibility)
-export const departmentKeys: Record<string, string> = {
-  'IT & Cybersecurity': 'observations.departments.itCybersecurity',
-  'Human Resources': 'observations.departments.humanResources',
-  'Risk Management': 'observations.departments.riskManagement',
-  'Operations': 'observations.departments.operations',
-  'Legal': 'observations.departments.legal',
-  'Compliance': 'observations.departments.compliance',
-  'Finance': 'observations.departments.finance',
-}
-
-export const departments = Object.keys(departmentKeys)
-
 export interface ObservationFormFieldsProps {
   values: {
     source: ObservationSource
@@ -154,23 +141,25 @@ export const SeverityField = memo(function SeverityField({
   onChange: (severity: ObservationSeverity) => void
   error?: string
 }) {
-  const { t } = useTranslation()
+  const { t, isRTL } = useTranslation()
 
   return (
     <div>
       <label className={`text-xs font-black uppercase text-slate-500 tracking-widest mb-2 block`}>
         {t('observations.severity')}
       </label>
-      <select
+      <EditableSelect
+        locked
+        items={[
+          { id: 'critical', label: t('observations.severityOptions.critical') },
+          { id: 'high', label: t('observations.severityOptions.high') },
+          { id: 'medium', label: t('observations.severityOptions.medium') },
+          { id: 'low', label: t('observations.severityOptions.low') },
+        ]}
         value={value}
-        onChange={(e) => onChange(e.target.value as ObservationSeverity)}
-        className={`w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500`}
-      >
-        <option value="critical">{t('observations.severityOptions.critical')}</option>
-        <option value="high">{t('observations.severityOptions.high')}</option>
-        <option value="medium">{t('observations.severityOptions.medium')}</option>
-        <option value="low">{t('observations.severityOptions.low')}</option>
-      </select>
+        onChange={(id) => onChange(id as ObservationSeverity)}
+        isRTL={isRTL}
+      />
       {error ? <p className="text-rose-500 text-xs mt-1">{error}</p> : null}
     </div>
   )
@@ -283,28 +272,17 @@ export const AssigneeField = memo(function AssigneeField({
         </div>
       ) : null}
       {/* Dropdown to add more */}
-      <div className="relative">
-        <Icon
-          icon="lucide:user-plus"
-          className={`absolute ${isRTL ? 'right-3' : 'left-3'} top-1/2 -translate-y-1/2 text-slate-400`}
-        />
-        <select
-          value=""
-          onChange={(e) => handleAdd(e.target.value)}
-          className={`w-full pl-10 pr-8 py-3 bg-slate-50 border ${error ? 'border-rose-300' : 'border-slate-200'} rounded-xl text-sm appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-emerald-500`}
-        >
-          <option value="">{t('observations.form.addAssignee')}</option>
-          {filteredMembers.map((member) => (
-            <option key={member.id} value={member.id}>
-              {member.name} - {member.role} ({member.department})
-            </option>
-          ))}
-        </select>
-        <Icon
-          icon="lucide:chevron-down"
-          className={`absolute ${isRTL ? 'left-3' : 'right-3'} top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none`}
-        />
-      </div>
+      <EditableSelect
+        locked
+        value={null}
+        onChange={(id) => handleAdd(id)}
+        items={filteredMembers.map((m) => ({
+          id: m.id,
+          label: `${m.name} - ${m.role} (${m.department})`,
+        }))}
+        placeholder={t('observations.form.addAssignee')}
+        isRTL={isRTL}
+      />
       {error ? <p className="text-rose-500 text-xs mt-1">{error}</p> : null}
     </div>
   )

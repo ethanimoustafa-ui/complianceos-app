@@ -20,6 +20,7 @@ import { useFrameworkConfigStore } from '@/stores/framework-config-store'
 import type { RegulatoryBodyId } from '@/types'
 import { EditAuditModal } from '@/components/reports/audits/edit-audit-modal'
 import { AddAuditModal } from '@/components/reports/audits/add-audit-modal'
+import { EditableSelect } from '@/components/ui/editable-select'
 import type { Audit, AuditDocument, AuditComment } from '@/types'
 import { canEditComment, canDeleteComment } from '@/lib/permissions'
 
@@ -1372,34 +1373,33 @@ export default function AuditDetailPage() {
           </div>
           <div>
             <label className={`block text-sm font-bold text-slate-700 mb-2`}>{t('common.category')}</label>
-            <select
+            <EditableSelect
+              locked
               value={newTaskForm.category}
-              onChange={(e) => setNewTaskForm(prev => ({ ...prev, category: e.target.value }))}
-              className={`w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500`}
-            >
-              {taskCategories.map((cat) => (
-                <option key={cat.value} value={cat.value}>{cat.label}</option>
-              ))}
-            </select>
+              onChange={(id) => setNewTaskForm(prev => ({ ...prev, category: id }))}
+              items={taskCategories.map((cat) => ({ id: cat.value, label: cat.label }))}
+              isRTL={isRTL}
+            />
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className={`block text-sm font-bold text-slate-700 mb-2`}>{t('auditDetail.assignee')}</label>
-              <select
-                value={newTaskForm.assigneeId}
-                onChange={(e) => setNewTaskForm(prev => ({ ...prev, assigneeId: e.target.value }))}
-                className={`w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500`}
-              >
-                <option value="">{t('auditDetail.selectAssignee')}</option>
-                {currentUser && !auditTeam.some(m => m.id === currentUser.id) && (
-                  <option value={currentUser.id}>{currentUser.name} {t('auditDetail.youSuffix')}</option>
-                )}
-                {auditTeam.map((member) => (
-                  <option key={member.id} value={member.id}>
-                    {member.name}{member.id === currentUser?.id ? ` ${t('auditDetail.youSuffix')}` : ''}
-                  </option>
-                ))}
-              </select>
+              <EditableSelect
+                locked
+                value={newTaskForm.assigneeId || null}
+                onChange={(id) => setNewTaskForm(prev => ({ ...prev, assigneeId: id }))}
+                items={[
+                  ...(currentUser && !auditTeam.some(m => m.id === currentUser.id)
+                    ? [{ id: currentUser.id, label: `${currentUser.name} ${t('auditDetail.youSuffix')}` }]
+                    : []),
+                  ...auditTeam.map((member) => ({
+                    id: member.id,
+                    label: `${member.name}${member.id === currentUser?.id ? ` ${t('auditDetail.youSuffix')}` : ''}`,
+                  })),
+                ]}
+                placeholder={t('auditDetail.selectAssignee')}
+                isRTL={isRTL}
+              />
             </div>
             <div>
               <label className={`block text-sm font-bold text-slate-700 mb-2`}>{t('auditDetail.dueDate')}</label>
@@ -1443,34 +1443,33 @@ export default function AuditDetailPage() {
           </div>
           <div>
             <label className={`block text-sm font-bold text-slate-700 mb-2`}>{t('common.category')}</label>
-            <select
+            <EditableSelect
+              locked
               value={editTaskForm.category}
-              onChange={(e) => setEditTaskForm(prev => ({ ...prev, category: e.target.value }))}
-              className={`w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500`}
-            >
-              {taskCategories.map((cat) => (
-                <option key={cat.value} value={cat.value}>{cat.label}</option>
-              ))}
-            </select>
+              onChange={(id) => setEditTaskForm(prev => ({ ...prev, category: id }))}
+              items={taskCategories.map((cat) => ({ id: cat.value, label: cat.label }))}
+              isRTL={isRTL}
+            />
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className={`block text-sm font-bold text-slate-700 mb-2`}>{t('auditDetail.assignee')}</label>
-              <select
-                value={editTaskForm.assigneeId}
-                onChange={(e) => setEditTaskForm(prev => ({ ...prev, assigneeId: e.target.value }))}
-                className={`w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500`}
-              >
-                <option value="">{t('auditDetail.selectAssignee')}</option>
-                {currentUser && !auditTeam.some(m => m.id === currentUser.id) && (
-                  <option value={currentUser.id}>{currentUser.name} {t('auditDetail.youSuffix')}</option>
-                )}
-                {auditTeam.map((member) => (
-                  <option key={member.id} value={member.id}>
-                    {member.name}{member.id === currentUser?.id ? ` ${t('auditDetail.youSuffix')}` : ''}
-                  </option>
-                ))}
-              </select>
+              <EditableSelect
+                locked
+                value={editTaskForm.assigneeId || null}
+                onChange={(id) => setEditTaskForm(prev => ({ ...prev, assigneeId: id }))}
+                items={[
+                  ...(currentUser && !auditTeam.some(m => m.id === currentUser.id)
+                    ? [{ id: currentUser.id, label: `${currentUser.name} ${t('auditDetail.youSuffix')}` }]
+                    : []),
+                  ...auditTeam.map((member) => ({
+                    id: member.id,
+                    label: `${member.name}${member.id === currentUser?.id ? ` ${t('auditDetail.youSuffix')}` : ''}`,
+                  })),
+                ]}
+                placeholder={t('auditDetail.selectAssignee')}
+                isRTL={isRTL}
+              />
             </div>
             <div>
               <label className={`block text-sm font-bold text-slate-700 mb-2`}>{t('auditDetail.dueDate')}</label>
@@ -1541,31 +1540,32 @@ export default function AuditDetailPage() {
         <div className="space-y-6">
           <div>
             <label className={`block text-sm font-bold text-slate-700 mb-2`}>Select Team Member</label>
-            <select
-              value={selectedMemberId}
-              onChange={(e) => setSelectedMemberId(e.target.value)}
-              className={`w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all`}
-            >
-              <option value="">{t('auditDetail.selectTeamMember')}</option>
-              {availableTeamMembers.map((member) => (
-                <option key={member.id} value={member.id}>
-                  {member.name} - {member.department}
-                </option>
-              ))}
-            </select>
+            <EditableSelect
+              locked
+              value={selectedMemberId || null}
+              onChange={(id) => setSelectedMemberId(id)}
+              items={availableTeamMembers.map((member) => ({
+                id: member.id,
+                label: `${member.name} - ${member.department}`,
+              }))}
+              placeholder={t('auditDetail.selectTeamMember')}
+              isRTL={isRTL}
+            />
           </div>
           <div>
             <label className={`block text-sm font-bold text-slate-700 mb-2`}>{t('auditDetail.role')}</label>
-            <select
+            <EditableSelect
+              locked
               value={memberRole}
-              onChange={(e) => setMemberRole(e.target.value)}
-              className={`w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all`}
-            >
-              <option value="Auditor">{t('auditDetail.auditor')}</option>
-              <option value="Security Officer">{t('auditDetail.securityOfficer')}</option>
-              <option value="Compliance Analyst">{t('auditDetail.complianceAnalyst')}</option>
-              <option value="Reviewer">{t('auditDetail.reviewer')}</option>
-            </select>
+              onChange={(id) => setMemberRole(id)}
+              items={[
+                { id: 'Auditor', label: t('auditDetail.auditor') },
+                { id: 'Security Officer', label: t('auditDetail.securityOfficer') },
+                { id: 'Compliance Analyst', label: t('auditDetail.complianceAnalyst') },
+                { id: 'Reviewer', label: t('auditDetail.reviewer') },
+              ]}
+              isRTL={isRTL}
+            />
           </div>
         </div>
         <div className={`mt-6 pt-6 border-t border-slate-100 flex justify-end gap-3`}>

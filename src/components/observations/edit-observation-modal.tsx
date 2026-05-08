@@ -14,12 +14,12 @@ import { useFrameworkConfigStore } from '@/stores/framework-config-store'
 import { useTranslation } from '@/i18n'
 import type { TeamMember, RegulatoryBodyId } from '@/types'
 import { FrameworkTagSelector } from '@/components/ui/framework-tag-selector'
+import { EditableSelect } from '@/components/ui/editable-select'
 import {
   SeverityField,
   DepartmentField,
   AssigneeField,
   DueDateField,
-  departments,
 } from './observation-form-fields'
 
 const observationSchema = z.object({
@@ -304,15 +304,18 @@ export const EditObservationModal = memo(function EditObservationModal({
                   name="status"
                   control={control}
                   render={({ field }) => (
-                    <select
-                      {...field}
-                      className={`w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500`}
-                    >
-                      <option value="open">{t('observations.statusOptions.open')}</option>
-                      <option value="in_progress">{t('observations.statusOptions.inProgress')}</option>
-                      <option value="resolved">{t('observations.statusOptions.pendingReview')}</option>
-                      <option value="closed">{t('observations.statusOptions.closed')}</option>
-                    </select>
+                    <EditableSelect
+                      locked
+                      value={field.value}
+                      onChange={(id) => field.onChange(id)}
+                      items={[
+                        { id: 'open', label: t('observations.statusOptions.open') },
+                        { id: 'in_progress', label: t('observations.statusOptions.inProgress') },
+                        { id: 'resolved', label: t('observations.statusOptions.pendingReview') },
+                        { id: 'closed', label: t('observations.statusOptions.closed') },
+                      ]}
+                      isRTL={isRTL}
+                    />
                   )}
                 />
               </div>
@@ -485,14 +488,12 @@ function SourceDropdown({ value, onChange }: { value: string; onChange: (v: stri
   }, [frameworks, value, t, isRTL])
 
   return (
-    <select
+    <EditableSelect
+      locked
       value={value}
-      onChange={(e) => onChange(e.target.value)}
-      className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
-    >
-      {options.map((opt) => (
-        <option key={opt.value} value={opt.value}>{opt.label}</option>
-      ))}
-    </select>
+      onChange={(id) => onChange(id)}
+      items={options.map((opt) => ({ id: opt.value, label: opt.label }))}
+      isRTL={isRTL}
+    />
   )
 }

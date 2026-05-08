@@ -3,6 +3,7 @@
 import { Icon } from '@iconify/react'
 import { ObservationSource, ObservationSeverity, ObservationStatus } from './observation-types'
 import { useTranslation } from '@/i18n'
+import { EditableSelect } from '@/components/ui/editable-select'
 
 interface ObservationFiltersProps {
   searchQuery: string
@@ -51,43 +52,55 @@ export function ObservationFilters({
         />
       </div>
       <div className={`flex flex-wrap gap-2`}>
-        <select
+        <EditableSelect
+          locked
+          className="min-w-[160px]"
+          size="sm"
           value={sourceFilter}
-          onChange={(e) => onSourceChange(e.target.value as ObservationSource | 'all')}
-          className={`bg-white border border-slate-200 px-3 py-2 rounded-lg text-xs font-bold text-slate-600 focus:outline-none focus:ring-2 focus:ring-emerald-500`}
-        >
-          <option value="all">{t('observations.filters.allSources')}</option>
-          <option value="sama">{t('observations.sources.sama')}</option>
-          <option value="cma">{t('observations.sources.cma')}</option>
-          <option value="ia">{t('observations.sources.ia')}</option>
-          <option value="zatca">{t('observations.sources.zatca')}</option>
-          <option value="misa">{t('observations.sources.misa')}</option>
-          <option value="safiu">{t('observations.sources.safiu')}</option>
-          <option value="internal">{t('observations.sources.internal')}</option>
-          <option value="sharia">{t('observations.sources.sharia')}</option>
-        </select>
-        <select
+          onChange={(id) => onSourceChange(id as ObservationSource | 'all')}
+          items={[
+            { id: 'all', label: t('observations.filters.allSources') },
+            { id: 'sama', label: t('observations.sources.sama') },
+            { id: 'cma', label: t('observations.sources.cma') },
+            { id: 'ia', label: t('observations.sources.ia') },
+            { id: 'zatca', label: t('observations.sources.zatca') },
+            { id: 'misa', label: t('observations.sources.misa') },
+            { id: 'safiu', label: t('observations.sources.safiu') },
+            { id: 'internal', label: t('observations.sources.internal') },
+            { id: 'sharia', label: t('observations.sources.sharia') },
+          ]}
+          isRTL={isRTL}
+        />
+        <EditableSelect
+          locked
+          className="min-w-[160px]"
+          size="sm"
           value={severityFilter}
-          onChange={(e) => onSeverityChange(e.target.value as ObservationSeverity | 'all')}
-          className={`bg-white border border-slate-200 px-3 py-2 rounded-lg text-xs font-bold text-slate-600 focus:outline-none focus:ring-2 focus:ring-emerald-500`}
-        >
-          <option value="all">{t('observations.filters.allSeverity')}</option>
-          <option value="critical">{t('observations.severityOptions.critical')}</option>
-          <option value="high">{t('observations.severityOptions.high')}</option>
-          <option value="medium">{t('observations.severityOptions.medium')}</option>
-          <option value="low">{t('observations.severityOptions.low')}</option>
-        </select>
-        <select
+          onChange={(id) => onSeverityChange(id as ObservationSeverity | 'all')}
+          items={[
+            { id: 'all', label: t('observations.filters.allSeverity') },
+            { id: 'critical', label: t('observations.severityOptions.critical') },
+            { id: 'high', label: t('observations.severityOptions.high') },
+            { id: 'medium', label: t('observations.severityOptions.medium') },
+            { id: 'low', label: t('observations.severityOptions.low') },
+          ]}
+          isRTL={isRTL}
+        />
+        <EditableSelect
+          locked
+          className="min-w-[160px]"
+          size="sm"
           value={statusFilter}
-          onChange={(e) => onStatusChange(e.target.value as ObservationStatus | 'all')}
-          className={`bg-white border border-slate-200 px-3 py-2 rounded-lg text-xs font-bold text-slate-600 focus:outline-none focus:ring-2 focus:ring-emerald-500 text-center`}
-        >
-          <option value="all">{t('observations.filters.allStatus')}</option>
-          <option value="open">{t('observations.statusOptions.open')}</option>
-          <option value="in_progress">{t('observations.statusOptions.inProgress')}</option>
-          <option value="resolved">{t('observations.statusOptions.pendingReview')}</option>
-          <option value="closed">{t('observations.statusOptions.closed')}</option>
-        </select>
+          onChange={(id) => onStatusChange(id as ObservationStatus | 'all')}
+          items={[
+            { id: 'all', label: t('observations.filters.allStatus') },
+            { id: 'open', label: t('observations.statusOptions.open') },
+            { id: 'in_progress', label: t('observations.statusOptions.inProgress') },
+            { id: 'resolved', label: t('observations.statusOptions.pendingReview') },
+            { id: 'closed', label: t('observations.statusOptions.closed') },
+          ]}
+          isRTL={isRTL}
+        />
         {/* Remediation Deadline Filter */}
         {onDueDateChange ? (
           <div className={`relative flex items-center gap-1 bg-white border border-slate-200 rounded-lg px-2`}>

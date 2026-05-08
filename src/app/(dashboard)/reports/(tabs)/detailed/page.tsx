@@ -14,6 +14,7 @@ import { useComplianceScore } from '@/hooks/useComplianceScore'
 import type { PeriodFilter } from '@/lib/compliance-engine.types'
 import { exportAuditLogsLocalized, exportSingleLog } from '@/lib/export'
 import type { TranslationKey } from '@/i18n'
+import { EditableSelect } from '@/components/ui/editable-select'
 
 // Types
 type ActionType = 'opened' | 'closed' | 'commented' | 'uploaded' | 'created' | 'assigned' | 'updated' | 'reviewed'
@@ -246,30 +247,50 @@ export default function ReportsDetailedPage() {
               </div>
               <div className="min-w-0">
                 <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 block">{t('reports.actionType')}</label>
-                <select value={filterAction} onChange={(e) => setFilterAction(e.target.value as ActionType | 'all')} className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500">
-                  <option value="all">{t('reports.allActions')}</option>
-                  {Object.entries(actionConfig).map(([key]) => (
-                    <option key={key} value={key}>{actionLabels[key as ActionType]}</option>
-                  ))}
-                </select>
+                <EditableSelect
+                  locked
+                  value={filterAction}
+                  onChange={(id) => setFilterAction(id as ActionType | 'all')}
+                  items={[
+                    { id: 'all', label: t('reports.allActions') },
+                    ...Object.entries(actionConfig).map(([key]) => ({
+                      id: key,
+                      label: actionLabels[key as ActionType],
+                    })),
+                  ]}
+                  isRTL={isRTL}
+                />
               </div>
               <div className="min-w-0">
                 <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 block">{t('reports.auditNameFilter')}</label>
-                <select value={filterAudit} onChange={(e) => setFilterAudit(e.target.value)} className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500">
-                  <option value="all">{t('reports.allAudits')}</option>
-                  {[...new Set(auditLogs.map(l => l.audit))].map((audit) => (
-                    <option key={audit} value={audit}>{audit}</option>
-                  ))}
-                </select>
+                <EditableSelect
+                  locked
+                  value={filterAudit}
+                  onChange={(id) => setFilterAudit(id)}
+                  items={[
+                    { id: 'all', label: t('reports.allAudits') },
+                    ...[...new Set(auditLogs.map(l => l.audit))].map((audit) => ({
+                      id: audit,
+                      label: audit,
+                    })),
+                  ]}
+                  isRTL={isRTL}
+                />
               </div>
               <div className="min-w-0">
                 <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 block">{t('reports.dateRange')}</label>
-                <select value={dateRangeFilter} onChange={(e) => setDateRangeFilter(e.target.value)} className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500">
-                  <option value="today">{t('reports.today')}</option>
-                  <option value="week">{t('reports.thisWeek')}</option>
-                  <option value="month">{t('reports.thisMonth')}</option>
-                  <option value="quarter">{t('reports.thisQuarter')}</option>
-                </select>
+                <EditableSelect
+                  locked
+                  value={dateRangeFilter}
+                  onChange={(id) => setDateRangeFilter(id)}
+                  items={[
+                    { id: 'today', label: t('reports.today') },
+                    { id: 'week', label: t('reports.thisWeek') },
+                    { id: 'month', label: t('reports.thisMonth') },
+                    { id: 'quarter', label: t('reports.thisQuarter') },
+                  ]}
+                  isRTL={isRTL}
+                />
               </div>
             </div>
             <div className="flex items-center justify-between">

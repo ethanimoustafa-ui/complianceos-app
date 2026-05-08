@@ -535,14 +535,22 @@ export default function ReportsRisksPage() {
                 </CardTitle>
                 <div className="flex items-center gap-2">
                   <span className="text-[10px] font-bold text-slate-400 uppercase">{t('reports.monitoringFrequency' as TranslationKey)}:</span>
-                  <select value={monitoringFrequencyFilter} onChange={(e) => setMonitoringFrequencyFilter(e.target.value as MonitoringFrequency | 'all')} className="px-2 py-1 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500">
-                    <option value="all">{t('common.all')}</option>
-                    <option value="weekly">{t('reports.weekly' as TranslationKey)}</option>
-                    <option value="monthly">{t('reports.monthly' as TranslationKey)}</option>
-                    <option value="quarterly">{t('reports.quarterly' as TranslationKey)}</option>
-                    <option value="semi_annual">{t('reports.semiAnnual' as TranslationKey)}</option>
-                    <option value="annual">{t('reports.annual' as TranslationKey)}</option>
-                  </select>
+                  <EditableSelect
+                    locked
+                    size="sm"
+                    className="min-w-[140px]"
+                    value={monitoringFrequencyFilter}
+                    onChange={(id) => setMonitoringFrequencyFilter(id as MonitoringFrequency | 'all')}
+                    items={[
+                      { id: 'all', label: t('common.all') },
+                      { id: 'weekly', label: t('reports.weekly' as TranslationKey) },
+                      { id: 'monthly', label: t('reports.monthly' as TranslationKey) },
+                      { id: 'quarterly', label: t('reports.quarterly' as TranslationKey) },
+                      { id: 'semi_annual', label: t('reports.semiAnnual' as TranslationKey) },
+                      { id: 'annual', label: t('reports.annual' as TranslationKey) },
+                    ]}
+                    isRTL={isRTL}
+                  />
                 </div>
               </div>
             </CardHeader>
@@ -619,19 +627,35 @@ export default function ReportsRisksPage() {
                 <Icon icon="lucide:search" className={`absolute ${isRTL ? 'right-3' : 'left-3'} top-1/2 -translate-y-1/2 text-slate-400 text-sm`} />
                 <input type="text" placeholder={t('reports.searchRisks' as TranslationKey)} value={riskSearchTerm} onChange={(e) => setRiskSearchTerm(e.target.value)} className={`${isRTL ? 'pr-9 pl-3' : 'pl-9 pr-3'} py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 w-48 transition-all`} />
               </div>
-              <select value={riskCategoryFilter} onChange={(e) => setRiskCategoryFilter(e.target.value as RiskCategory | '')} className="px-3 py-1.5 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500">
-                <option value="">{t('reports.allCategories' as TranslationKey)}</option>
-                {riskCategoryItems.map((c) => (
-                  <option key={c.id} value={c.id}>{isRTL && c.labelAr ? c.labelAr : c.label}</option>
-                ))}
-              </select>
-              <select value={riskStatusFilter} onChange={(e) => setRiskStatusFilter(e.target.value as RiskStatus | '')} className="px-3 py-1.5 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500">
-                <option value="">{t('reports.allStatuses' as TranslationKey)}</option>
-                <option value="open">{t('reports.open' as TranslationKey)}</option>
-                <option value="mitigating">{t('reports.mitigating' as TranslationKey)}</option>
-                <option value="accepted">{t('reports.accepted' as TranslationKey)}</option>
-                <option value="closed">{t('reports.closed' as TranslationKey)}</option>
-              </select>
+              <EditableSelect
+                size="sm"
+                className="min-w-[160px]"
+                value={riskCategoryFilter || null}
+                onChange={(id) => setRiskCategoryFilter((id || '') as RiskCategory | '')}
+                items={[
+                  { id: '', label: t('reports.allCategories' as TranslationKey), isDefault: true },
+                  ...riskCategoryItems.map((c) => ({ id: c.id, label: c.label, labelAr: c.labelAr })),
+                ]}
+                onAdd={(label, labelAr) => addRiskCategory(label, labelAr)}
+                onEdit={(id, label, labelAr) => id ? editRiskCategory(id, { label, labelAr }) : undefined}
+                onDelete={(id) => { if (id) removeRiskCategory(id) }}
+                isRTL={isRTL}
+              />
+              <EditableSelect
+                locked
+                size="sm"
+                className="min-w-[140px]"
+                value={riskStatusFilter || null}
+                onChange={(id) => setRiskStatusFilter((id || '') as RiskStatus | '')}
+                items={[
+                  { id: '', label: t('reports.allStatuses' as TranslationKey) },
+                  { id: 'open', label: t('reports.open' as TranslationKey) },
+                  { id: 'mitigating', label: t('reports.mitigating' as TranslationKey) },
+                  { id: 'accepted', label: t('reports.accepted' as TranslationKey) },
+                  { id: 'closed', label: t('reports.closed' as TranslationKey) },
+                ]}
+                isRTL={isRTL}
+              />
             </div>
           </CardHeader>
           <CardContent className="p-0">
@@ -727,12 +751,20 @@ export default function ReportsRisksPage() {
                   <div className={cn('w-12 h-12 rounded-xl flex items-center justify-center text-white font-bold text-lg', level.bgColor)}>{score}</div>
                   <div className={isRTL ? 'text-right' : ''}><p className="text-xs font-bold text-slate-400 uppercase">{t('reports.riskScore' as TranslationKey)}</p><p className={cn('text-sm font-bold', level.color)}>{t(level.labelKey as TranslationKey)} {t('reports.risk' as TranslationKey)}</p></div>
                 </div>
-                <select value={selectedRisk.status} onChange={(e) => updateRiskStatus(selectedRisk.id, uiStatusToStoreStatus(e.target.value as RiskStatus))} className={cn('px-3 py-1 text-xs font-bold rounded-full border-0 cursor-pointer focus:outline-none focus:ring-2 focus:ring-emerald-500', statusConf.color)}>
-                  <option value="open">{t('reports.open' as TranslationKey)}</option>
-                  <option value="mitigating">{t('reports.mitigating' as TranslationKey)}</option>
-                  <option value="accepted">{t('reports.accepted' as TranslationKey)}</option>
-                  <option value="closed">{t('reports.closed' as TranslationKey)}</option>
-                </select>
+                <EditableSelect
+                  locked
+                  size="sm"
+                  className="min-w-[140px]"
+                  value={selectedRisk.status}
+                  onChange={(id) => updateRiskStatus(selectedRisk.id, uiStatusToStoreStatus(id as RiskStatus))}
+                  items={[
+                    { id: 'open', label: t('reports.open' as TranslationKey) },
+                    { id: 'mitigating', label: t('reports.mitigating' as TranslationKey) },
+                    { id: 'accepted', label: t('reports.accepted' as TranslationKey) },
+                    { id: 'closed', label: t('reports.closed' as TranslationKey) },
+                  ]}
+                  isRTL={isRTL}
+                />
               </div>
               <div className="p-4 bg-slate-50 rounded-xl"><p className="text-xs font-bold text-slate-400 uppercase mb-2">{t('reports.category' as TranslationKey)}</p><span className={cn('text-xs font-bold px-3 py-1.5 rounded-full inline-flex items-center gap-1', categoryConfig.color)}><Icon icon={categoryConfig.icon} />{
                   riskCategoryLabelKeys[selectedRisk.category]
@@ -1076,11 +1108,48 @@ export default function ReportsRisksPage() {
                 isRTL={isRTL}
               />
             </div>
-            <div><label className="text-xs font-bold text-slate-700 uppercase mb-2 block">{t('reports.owner' as TranslationKey)} *</label><select value={newRiskOwnerId} onChange={(e) => setNewRiskOwnerId(e.target.value)} className="w-full px-4 py-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"><option value="">{t('reports.selectOwner' as TranslationKey)}</option>{teamMembers.filter(m => m.status === 'active').map((member) => (<option key={member.id} value={member.id}>{member.name} - {member.department}</option>))}</select></div>
+            <div>
+              <label className="text-xs font-bold text-slate-700 uppercase mb-2 block">{t('reports.owner' as TranslationKey)} *</label>
+              <EditableSelect
+                locked
+                value={newRiskOwnerId || null}
+                onChange={(id) => setNewRiskOwnerId(id)}
+                items={teamMembers.filter(m => m.status === 'active').map((member) => ({
+                  id: member.id,
+                  label: `${member.name} - ${member.department}`,
+                }))}
+                placeholder={t('reports.selectOwner' as TranslationKey)}
+                isRTL={isRTL}
+              />
+            </div>
           </div>
           <div className="grid grid-cols-2 gap-4">
-            <div><label className="text-xs font-bold text-slate-700 uppercase mb-2 block">{t('reports.likelihood' as TranslationKey)} *</label><select value={newRiskLikelihood} onChange={(e) => setNewRiskLikelihood(Number(e.target.value) as 1 | 2 | 3 | 4 | 5)} className="w-full px-4 py-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500">{[1, 2, 3, 4, 5].map((n) => (<option key={n} value={n}>{n} - {renderLikelihoodLabel(n as 1 | 2 | 3 | 4 | 5)}</option>))}</select></div>
-            <div><label className="text-xs font-bold text-slate-700 uppercase mb-2 block">{t('reports.impact' as TranslationKey)} *</label><select value={newRiskImpact} onChange={(e) => setNewRiskImpact(Number(e.target.value) as 1 | 2 | 3 | 4 | 5)} className="w-full px-4 py-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500">{[1, 2, 3, 4, 5].map((n) => (<option key={n} value={n}>{n} - {renderImpactLabel(n as 1 | 2 | 3 | 4 | 5)}</option>))}</select></div>
+            <div>
+              <label className="text-xs font-bold text-slate-700 uppercase mb-2 block">{t('reports.likelihood' as TranslationKey)} *</label>
+              <EditableSelect
+                locked
+                value={String(newRiskLikelihood)}
+                onChange={(id) => setNewRiskLikelihood(Number(id) as 1 | 2 | 3 | 4 | 5)}
+                items={[1, 2, 3, 4, 5].map((n) => ({
+                  id: String(n),
+                  label: `${n} - ${renderLikelihoodLabel(n as 1 | 2 | 3 | 4 | 5)}`,
+                }))}
+                isRTL={isRTL}
+              />
+            </div>
+            <div>
+              <label className="text-xs font-bold text-slate-700 uppercase mb-2 block">{t('reports.impact' as TranslationKey)} *</label>
+              <EditableSelect
+                locked
+                value={String(newRiskImpact)}
+                onChange={(id) => setNewRiskImpact(Number(id) as 1 | 2 | 3 | 4 | 5)}
+                items={[1, 2, 3, 4, 5].map((n) => ({
+                  id: String(n),
+                  label: `${n} - ${renderImpactLabel(n as 1 | 2 | 3 | 4 | 5)}`,
+                }))}
+                isRTL={isRTL}
+              />
+            </div>
           </div>
           <div><label className="text-xs font-bold text-slate-700 uppercase mb-2 block">{t('reports.description' as TranslationKey)} *</label><textarea rows={3} value={newRiskDescription} onChange={(e) => setNewRiskDescription(e.target.value)} placeholder={t('reports.enterRiskDescription' as TranslationKey)} className="w-full px-4 py-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500" /></div>
           <div><label className="text-xs font-bold text-slate-700 uppercase mb-2 block">{t('reports.mitigationPlan' as TranslationKey)}</label><textarea rows={2} value={newRiskMitigation} onChange={(e) => setNewRiskMitigation(e.target.value)} placeholder={t('reports.enterMitigationPlan' as TranslationKey)} className="w-full px-4 py-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500" /></div>
