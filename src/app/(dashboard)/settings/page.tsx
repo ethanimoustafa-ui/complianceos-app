@@ -10,6 +10,7 @@ import { UserPreferencesSection } from '@/components/settings/UserPreferencesSec
 import { AuditTemplatesSection } from '@/components/settings/AuditTemplatesSection'
 import { PolicyTemplatesSection } from '@/components/settings/PolicyTemplatesSection'
 import { ListsAndCategoriesSection } from '@/components/settings/ListsAndCategoriesSection'
+import { AccessMatrixSection } from '@/components/settings/AccessMatrixSection'
 import { Gate } from '@/components/auth/gate'
 import { ForbiddenPanel } from '@/components/auth/forbidden-panel'
 
@@ -53,6 +54,7 @@ export default function SettingsPage() {
           <AuditTemplatesSection />
           <PolicyTemplatesSection />
           <ListsAndCategoriesSection />
+          <AccessMatrixSection />
         </div>
       </div>
     </Gate>

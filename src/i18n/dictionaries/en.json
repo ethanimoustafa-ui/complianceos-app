@@ -3335,6 +3335,15 @@
     "subCategoryModalTitle": "{{framework}} Sub-Categories",
     "noEnabledFrameworks": "No frameworks enabled. Enable a framework first."
   },
+  "accessMatrix": {
+    "title": "Access Matrix",
+    "subtitle": "Toggle which permissions each team member has. Admins inherit every permission and cannot be edited from the matrix; change their role in the team directory first if you need to demote.",
+    "member": "Member",
+    "applyRoleDefaults": "Apply role defaults",
+    "clearAll": "Clear all (non-admin)",
+    "adminAlwaysOn": "Admin role grants every permission automatically",
+    "adminFootnote": "Admin members inherit every permission via their role. To restrict an admin, change their role in the team directory first."
+  },
   "rbac": {
     "forbiddenTitle": "Permission required",
     "forbiddenBody": "You don't have permission to view this section. Ask an admin to enable it for you.",
