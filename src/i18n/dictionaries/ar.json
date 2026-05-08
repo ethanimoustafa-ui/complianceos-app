@@ -538,6 +538,7 @@
     "referenceAssigned": "المرجع المعين",
     "letterType": "نوع الخطاب",
     "subCategory": "الفئة الفرعية",
+    "selectAuthorityFirst": "اختر الجهة التنظيمية أولاً",
     "keyFunctionAppointment": "تعيين وظيفة رئيسية",
     "productLaunch": "إطلاق منتج",
     "equityParticipation": "المشاركة في رأس المال",
@@ -3307,6 +3308,11 @@
     "deleteTitle": "حذف الإدخال؟",
     "deleteConfirmSimple": "هل أنت متأكد من حذف \"{{label}}\"؟",
     "deleteConfirmOrphan": "{{count}} سجل يشير إلى هذا الإدخال. هل تريد الحذف على أي حال؟ ستحتفظ السجلات بالتسمية كنص فقط.",
-    "deleteConfirmAction": "حذف"
+    "deleteConfirmAction": "حذف",
+    "subCategoriesTitle": "التصنيفات الفرعية",
+    "subCategoriesDescription": "قم بتكوين التصنيفات الفرعية لكل إطار. ستستخدم الخطابات المسودة لكل جهة قائمة ذلك الإطار.",
+    "configureSubCategoriesFor": "تكوين التصنيفات الفرعية لـ {{framework}}",
+    "subCategoryModalTitle": "التصنيفات الفرعية لـ {{framework}}",
+    "noEnabledFrameworks": "لا توجد أطر مفعّلة. قم بتفعيل إطار أولاً."
   }
 }

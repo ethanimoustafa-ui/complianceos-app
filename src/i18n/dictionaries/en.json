@@ -538,6 +538,7 @@
     "referenceAssigned": "Reference assigned",
     "letterType": "Letter Type",
     "subCategory": "Sub-Category",
+    "selectAuthorityFirst": "Select an authority first",
     "keyFunctionAppointment": "Key Function Appointment",
     "productLaunch": "Product Launch",
     "equityParticipation": "Equity Participation",
@@ -3307,6 +3308,11 @@
     "deleteTitle": "Delete entry?",
     "deleteConfirmSimple": "Are you sure you want to delete \"{{label}}\"?",
     "deleteConfirmOrphan": "{{count}} record(s) reference this entry. Delete it anyway? Records will retain the label as text-only.",
-    "deleteConfirmAction": "Delete"
+    "deleteConfirmAction": "Delete",
+    "subCategoriesTitle": "Sub-categories",
+    "subCategoriesDescription": "Configure sub-categories per framework. Letters drafted to each authority will use that framework's list.",
+    "configureSubCategoriesFor": "Configure {{framework}} Sub-Categories",
+    "subCategoryModalTitle": "{{framework}} Sub-Categories",
+    "noEnabledFrameworks": "No frameworks enabled. Enable a framework first."
   }
 }

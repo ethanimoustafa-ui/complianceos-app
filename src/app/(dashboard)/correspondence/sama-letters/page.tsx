@@ -27,7 +27,7 @@ import {
   getDefaultDepartmentId,
 } from '@/lib/letter-authority'
 import { useAuthorityDeptStore } from '@/stores/authority-department-store'
-import { useSAMASubCategoryStore } from '@/stores/sama-sub-category-store'
+import { useFrameworkSubCategoryStore } from '@/stores/framework-sub-category-store'
 import { useSAMALetterTypeStore } from '@/stores/sama-letter-type-store'
 import { EditableSelect } from '@/components/ui/editable-select'
 import { PlaceholderDefEditor } from '@/components/correspondence/sama-letters/PlaceholderDefEditor'
@@ -2713,7 +2713,7 @@ function CreateLetterForm({
   const [bodyEn, setBodyEn] = useState('')
   const [bodyAr, setBodyAr] = useState('')
   const [subCategory, setSubCategory] = useState<string>('key-function')
-  const subCategoryStore = useSAMASubCategoryStore()
+  const subCategoryStore = useFrameworkSubCategoryStore()
   const [authority, setAuthority] = useState<CircularAuthority>(template?.defaultAuthority ?? 'sama')
   const [samaDepartment, setSamaDepartment] = useState<string>(
     template?.defaultSamaDepartment || getDefaultDepartmentId(template?.defaultAuthority ?? 'sama'),
@@ -2773,6 +2773,17 @@ function CreateLetterForm({
     const validIds = getAuthorityDepartments(authority).map((d) => d.id)
     if (!validIds.includes(samaDepartment)) {
       setSamaDepartment(getDefaultDepartmentId(authority))
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authority])
+
+  // When authority changes, drop any sub-category that doesn't belong to the
+  // new authority. Per round-3 §5 sub-categories are framework-scoped — a
+  // SAMA "Key Function Appointment" must not survive a switch to CMA.
+  useEffect(() => {
+    const valid = subCategoryStore.list(authority).map((sc) => sc.id)
+    if (subCategory && !valid.includes(subCategory)) {
+      setSubCategory(valid[0] ?? '')
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authority])
@@ -2972,22 +2983,35 @@ function CreateLetterForm({
             <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-2">
               {t('samaLetters.subCategory')}
             </label>
+            {/* Authority-aware per round-3 §5: the picker reads sub-categories
+                scoped to the currently selected authority/framework. Adds and
+                edits are scoped to the same authority so they appear under
+                that framework's list in Settings as well. */}
             <EditableSelect
               value={subCategory || null}
               onChange={(id) => setSubCategory(id)}
-              items={subCategoryStore.subCategories.map((sc) => ({
+              items={(authority ? subCategoryStore.list(authority) : []).map((sc) => ({
                 id: sc.id,
                 label: sc.label,
                 labelAr: sc.labelAr,
                 isDefault: sc.isDefault,
               }))}
-              placeholder={t('samaLetters.subCategory')}
-              onAdd={(label, labelAr) => subCategoryStore.add(label, labelAr)}
+              placeholder={
+                authority
+                  ? t('samaLetters.subCategory')
+                  : t('samaLetters.selectAuthorityFirst')
+              }
+              onAdd={(label, labelAr) =>
+                authority
+                  ? subCategoryStore.add(authority, label, labelAr).id
+                  : undefined
+              }
               onEdit={(id, label, labelAr) =>
                 subCategoryStore.update(id, { label, labelAr: labelAr ?? label })
               }
               onDelete={(id) => subCategoryStore.remove(id)}
               isRTL={isRTL}
+              disabled={!authority}
             />
           </div>
         </div>

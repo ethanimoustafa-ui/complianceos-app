@@ -13,13 +13,14 @@
 //   orphan-confirm modal that warns when records reference the entry.
 //   `isDefault` survives as a display-only "SEED" badge.
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useMemo } from 'react'
 import { Icon } from '@iconify/react'
 import { useTranslation } from '@/i18n'
 import type { TranslationKey } from '@/i18n'
 import { Button } from '@/components/ui/button'
 import { Modal } from '@/components/ui/modal'
 import { Input } from '@/components/ui/input'
+import { EditableSelect } from '@/components/ui/editable-select'
 
 // ── Stores actually used to count usage ──────────────────────────────────────
 import { useSAMALetterStore } from '@/stores/sama-letter-store'
@@ -32,7 +33,8 @@ import { useAuditStore } from '@/stores/audit-store'
 import { useRiskStore } from '@/stores/risk-store'
 
 // ── My stores ────────────────────────────────────────────────────────────────
-import { useSAMASubCategoryStore } from '@/stores/sama-sub-category-store'
+import { useFrameworkSubCategoryStore } from '@/stores/framework-sub-category-store'
+import { useFrameworkConfigStore } from '@/stores/framework-config-store'
 import { useSAMALetterTypeStore } from '@/stores/sama-letter-type-store'
 import { usePolicyCategoryStore } from '@/stores/policy-category-store'
 import { useTrainingCategoryStore } from '@/stores/training-category-store'
@@ -309,13 +311,157 @@ function ListSection({
   )
 }
 
+// ── Per-framework sub-category launcher ─────────────────────────────────────
+//
+// Round-3 §5: sub-categories are scoped per framework. The Settings UI exposes
+// one "Configure {framework} Sub-Categories" button per *enabled* framework.
+// Clicking opens a modal hosting an `EditableSelect` (full-edit mode) bound to
+// that framework's slice of `useFrameworkSubCategoryStore`.
+
+interface FrameworkSubCategoryLauncherProps {
+  isRTL: boolean
+  t: (key: TranslationKey, params?: Record<string, string>) => string
+}
+
+function FrameworkSubCategoryLauncher({ isRTL, t }: FrameworkSubCategoryLauncherProps) {
+  const frameworkConfig = useFrameworkConfigStore()
+  const subCategoryStore = useFrameworkSubCategoryStore()
+  const letters = useSAMALetterStore((s) => s.letters)
+
+  const [openFrameworkId, setOpenFrameworkId] = useState<string | null>(null)
+
+  const enabledFrameworks = useMemo(
+    () => frameworkConfig.frameworks.filter((f) => f.enabled),
+    [frameworkConfig.frameworks],
+  )
+
+  const openFramework = useMemo(
+    () => enabledFrameworks.find((f) => f.id === openFrameworkId) ?? null,
+    [enabledFrameworks, openFrameworkId],
+  )
+
+  // EditableSelect needs a single selected `value` — not meaningful for the
+  // bulk-edit modal, so we keep a local highlight that defaults to the first
+  // entry (or null for empty lists).
+  const items = useMemo(
+    () => (openFrameworkId ? subCategoryStore.list(openFrameworkId) : []),
+    [openFrameworkId, subCategoryStore],
+  )
+  const [highlight, setHighlight] = useState<string | null>(null)
+
+  // Count usage of a given sub-category id across letters. Letters reference
+  // the id only (no framework discriminator), so this is global by design.
+  const countUsage = useCallback(
+    (id: string) => letters.filter((l) => l.subCategory === id).length,
+    [letters],
+  )
+
+  return (
+    <section className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+      <div className="px-6 py-4 border-b border-slate-100">
+        <h3 className="text-sm font-bold text-slate-900">
+          {t('listsAndCategories.subCategoriesTitle')}
+        </h3>
+        <p className="text-xs text-slate-500 mt-0.5">
+          {t('listsAndCategories.subCategoriesDescription')}
+        </p>
+      </div>
+      <div className="p-6">
+        {enabledFrameworks.length === 0 ? (
+          <p className="text-xs text-slate-400 italic">
+            {t('listsAndCategories.noEnabledFrameworks')}
+          </p>
+        ) : (
+          <div className="flex flex-wrap gap-2">
+            {enabledFrameworks.map((fw) => {
+              const count = subCategoryStore.list(fw.id).length
+              return (
+                <Button
+                  key={fw.id}
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    setOpenFrameworkId(fw.id)
+                    const first = subCategoryStore.list(fw.id)[0]
+                    setHighlight(first?.id ?? null)
+                  }}
+                >
+                  <Icon icon="lucide:settings-2" className="text-sm" />
+                  {t('listsAndCategories.configureSubCategoriesFor', { framework: fw.name })}
+                  <span className="text-[10px] font-bold text-slate-400 ms-1">
+                    ({count})
+                  </span>
+                </Button>
+              )
+            })}
+          </div>
+        )}
+      </div>
+
+      <Modal
+        isOpen={openFrameworkId !== null}
+        onClose={() => setOpenFrameworkId(null)}
+        title={
+          openFramework
+            ? t('listsAndCategories.subCategoryModalTitle', { framework: openFramework.name })
+            : ''
+        }
+        size="md"
+      >
+        {openFrameworkId && (
+          <div className="space-y-4">
+            <p className="text-xs text-slate-500">
+              {t('listsAndCategories.subCategoriesDescription')}
+            </p>
+            <EditableSelect
+              value={highlight}
+              onChange={(id) => setHighlight(id)}
+              items={items.map((sc) => ({
+                id: sc.id,
+                label: sc.label,
+                labelAr: sc.labelAr,
+                isDefault: sc.isDefault,
+              }))}
+              placeholder={t('listsAndCategories.subCategoriesTitle')}
+              onAdd={(label, labelAr) => {
+                const created = subCategoryStore.add(openFrameworkId, label, labelAr)
+                setHighlight(created.id)
+                return created.id
+              }}
+              onEdit={(id, label, labelAr) =>
+                subCategoryStore.update(id, { label, labelAr: labelAr ?? label })
+              }
+              onDelete={(id) => {
+                subCategoryStore.remove(id)
+                if (highlight === id) setHighlight(null)
+              }}
+              isRTL={isRTL}
+            />
+            {/* Per-row usage hint — surfaces orphan-protection context for the
+                currently highlighted entry. */}
+            {highlight && (
+              <p className="text-[11px] text-slate-500">
+                {t('listsAndCategories.usage')}: <span className="font-bold text-slate-700">{countUsage(highlight)}</span>
+              </p>
+            )}
+            <div className="flex justify-end pt-2">
+              <Button variant="outline" onClick={() => setOpenFrameworkId(null)}>
+                {t('common.cancel')}
+              </Button>
+            </div>
+          </div>
+        )}
+      </Modal>
+    </section>
+  )
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function ListsAndCategoriesSection() {
   const { t, isRTL } = useTranslation()
 
   // ── My stores
-  const samaSub = useSAMASubCategoryStore()
   const letterType = useSAMALetterTypeStore()
   const policyCat = usePolicyCategoryStore()
   const trainingCat = useTrainingCategoryStore()
@@ -341,8 +487,6 @@ export function ListsAndCategoriesSection() {
   // ── Counters ─────────────────────────────────────────────────────────────
   const countLetterType = useCallback((id: string) =>
     letters.filter((l) => l.type === id).length, [letters])
-  const countSamaSub = useCallback((id: string) =>
-    letters.filter((l) => l.subCategory === id).length, [letters])
   const countCorrespondenceType = useCallback((id: string) =>
     correspondence.filter((c) => c.type === id).length, [correspondence])
   const countCalendarEventType = useCallback((id: string) =>
@@ -383,18 +527,15 @@ export function ListsAndCategoriesSection() {
           t={t}
         />
 
-        {/* SAMA sub-category */}
-        <ListSection
-          title={t('listsAndCategories.sectionSamaSubCategory')}
-          description={t('listsAndCategories.sectionSamaSubCategoryDesc')}
-          items={samaSub.subCategories}
-          countUsage={countSamaSub}
-          onAdd={samaSub.add}
-          onEdit={(id, label, labelAr) => samaSub.update(id, { label, labelAr })}
-          onDelete={samaSub.remove}
+        {/* Per-framework sub-categories — one launcher button per enabled
+            framework, opening a modal with the EditableSelect for that
+            framework's sub-category list. Replaces the inline SAMA-only
+            ListSection per round-3 §5. */}
+        <FrameworkSubCategoryLauncher
           isRTL={isRTL}
           t={t}
         />
+
 
         {/* Correspondence type (Agent D) */}
         {correspondenceType && (
