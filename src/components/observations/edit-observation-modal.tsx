@@ -110,7 +110,6 @@ export const EditObservationModal = memo(function EditObservationModal({
 
   useEffect(() => {
     if (observation && isOpen) {
-      console.log('EditObservationModal: Populating form with observation:', observation)
       // Use source value directly (sama, internal, sharia)
       const validSources: ObservationFormData['source'][] = ['sama', 'cma', 'ia', 'zatca', 'misa', 'safiu', 'internal', 'sharia']
       const source = validSources.includes(observation.source as ObservationFormData['source'])

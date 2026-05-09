@@ -35,8 +35,6 @@ export function OfficerView({ metrics }: OfficerViewProps) {
   const healthEvaluated = metrics.health.businessComplianceEvaluated
   const isPending = healthEvaluated === 0
   const isAtRisk = !isPending && healthScore < targetScore
-  const policiesOk = metrics.policies.approved
-  const policiesOverdue = metrics.policies.overdue + metrics.policies.requiresReview
 
   // Personal workload
   const workload = useWorkload(userId, undefined, userName)

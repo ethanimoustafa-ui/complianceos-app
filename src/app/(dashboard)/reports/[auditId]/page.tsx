@@ -1,13 +1,12 @@
 'use client'
 
-import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import Link from 'next/link'
-import { useParams, useRouter } from 'next/navigation'
+import { useParams } from 'next/navigation'
 import { Icon } from '@iconify/react'
-import { Card, CardHeader, CardContent } from '@/components/ui/card'
+import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { Modal } from '@/components/ui/modal'
 import { useTranslation } from '@/i18n'
 import { formatRelativeTime, formatLocalizedDateShort, calculateNextOccurrence, formatFutureCountdown } from '@/lib/time-utils'
@@ -21,7 +20,7 @@ import type { RegulatoryBodyId } from '@/types'
 import { EditAuditModal } from '@/components/reports/audits/edit-audit-modal'
 import { AddAuditModal } from '@/components/reports/audits/add-audit-modal'
 import { EditableSelect } from '@/components/ui/editable-select'
-import type { Audit, AuditDocument, AuditComment } from '@/types'
+import type { Audit, AuditComment } from '@/types'
 import { canEditComment, canDeleteComment } from '@/lib/permissions'
 
 // Types
@@ -49,7 +48,6 @@ const auditStatusConfig: Record<string, { label: string; variant: 'success' | 'w
 export default function AuditDetailPage() {
   const { t, isRTL } = useTranslation()
   const params = useParams()
-  const router = useRouter()
   const auditId = params.auditId as string
 
   // Audit type label resolver — handles 'internal' (fixed) plus any
@@ -87,7 +85,7 @@ export default function AuditDetailPage() {
 
   // Stores
   const { audits, fetchById, update, addDocument, removeDocument, addTeamMember, removeTeamMember, addComment, editComment, deleteComment, updateStatus, isLoading } = useAuditStore()
-  const { logs, getLogsByAuditId } = useAuditLogStore()
+  const { getLogsByAuditId } = useAuditLogStore()
   const auditTaskStore = useAuditTaskStore()
   const { members: teamMembers } = useTeamStore()
   const currentUser = useAuthStore((state) => state.user)

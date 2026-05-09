@@ -604,7 +604,7 @@ export function exportRisksLocalized(
   }>,
   filename = 'risk-register',
   t?: TranslationFunction,
-  isRTL = false
+  _isRTL = false
 ): void {
   const getText = (key: string, fallback: string) => t ? t(key) : fallback
 
@@ -1061,7 +1061,7 @@ export function exportTrainingDataLocalized(
     overallProgress: number
     courses: Array<{ name: string; category: string; status: string; dueDate: string; score?: number }>
   }>,
-  courses: Array<{
+  _courses: Array<{
     name: string
     category: string
     dueDate: string

@@ -8,7 +8,6 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { Icon } from '@iconify/react'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { useTranslation } from '@/i18n'
 import { useAuthStore } from '@/stores/auth-store'
 
@@ -24,7 +23,7 @@ export default function SignInPage() {
   const [showPassword, setShowPassword] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
-  const { t, isRTL } = useTranslation()
+  const { t } = useTranslation()
   const login = useAuthStore((s) => s.login)
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated)
   const [hasMounted, setHasMounted] = useState(false)

@@ -276,7 +276,7 @@ export const useTeamStore = create<TeamState>()(
         }
       },
 
-      resendInvite: async (id: string) => {
+      resendInvite: async (_id: string) => {
         set({ isLoading: true, error: null })
         try {
           // TODO: Replace with actual API call

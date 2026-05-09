@@ -6,26 +6,6 @@ import { validateChildDeadline } from '@/lib/deadline-validation'
 import { requirePermission } from '@/lib/rbac-store-gate'
 import { useUserLogStore } from '@/stores/user-log-store'
 
-function restatusTimeline(timeline: PolicyWorkflowStep[]): PolicyWorkflowStep[] {
-  let firstNonCompleted = false
-  return timeline.map(s => {
-    if (s.status === 'completed') return s
-    if (!firstNonCompleted) { firstNonCompleted = true; return { ...s, status: 'current' as const } }
-    return { ...s, status: 'pending' as const }
-  })
-}
-
-function advanceTimeline(timeline: PolicyWorkflowStep[]): PolicyWorkflowStep[] {
-  const today = new Date().toISOString().split('T')[0]
-  const currentIdx = timeline.findIndex((s) => s.status === 'current')
-  if (currentIdx === -1) return timeline
-  return timeline.map((step, idx) => {
-    if (idx === currentIdx) return { ...step, status: 'completed' as const, date: today }
-    if (idx === currentIdx + 1 && step.status === 'pending') return { ...step, status: 'current' as const }
-    return step
-  })
-}
-
 interface PolicyState {
   policies: Policy[]
   selectedPolicy: Policy | null

@@ -18,13 +18,6 @@ import { useOnboardingRegionStore } from '@/stores/onboarding-region-store'
 import { useOnboardingHeadcountStore } from '@/stores/onboarding-headcount-store'
 import { EditableSelect } from '@/components/ui/editable-select'
 
-// Types — these now widen to `string` because the picker is editable; the
-// stores `useOnboardingIndustryStore` / `useOnboardingRegionStore` /
-// `useOnboardingHeadcountStore` provide the seeds + user-added options.
-type OrgSize = string
-type Industry = string
-type Region = string
-
 const iconColorMap: Record<string, { bg: string; text: string }> = {
   blue: { bg: 'bg-blue-100', text: 'text-blue-600' },
   indigo: { bg: 'bg-indigo-100', text: 'text-indigo-600' },
@@ -177,7 +170,6 @@ export default function OnboardingPage() {
       }
 
       // TODO: Replace with actual API call
-      console.log('Onboarding data:', data)
       await new Promise((resolve) => setTimeout(resolve, 1500))
       router.push('/welcome')
     } catch (error) {

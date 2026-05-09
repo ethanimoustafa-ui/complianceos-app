@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import type { PolicyTemplate, PolicyCategory, PolicyApprovalTier, AuditFrequency, FrequencySchedule } from '@/types'
+import type { PolicyTemplate } from '@/types'
 import { requirePermission } from '@/lib/rbac-store-gate'
 
 const seedTemplates: PolicyTemplate[] = [

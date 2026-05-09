@@ -10,8 +10,6 @@ import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 import { useTranslation } from '@/i18n'
 import { useAuditLogStore, type AuditLog as AuditLogFromStore } from '@/stores/audit-log-store'
-import { useComplianceScore } from '@/hooks/useComplianceScore'
-import type { PeriodFilter } from '@/lib/compliance-engine.types'
 import { exportAuditLogsLocalized, exportSingleLog } from '@/lib/export'
 import type { TranslationKey } from '@/i18n'
 import { EditableSelect } from '@/components/ui/editable-select'
@@ -70,8 +68,6 @@ export default function ReportsDetailedPage() {
   const [sortColumn, setSortColumn] = useState<string | null>('timestamp')
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc')
   const [logPage, setLogPage] = useState(1)
-
-  const complianceScore = useComplianceScore(periodFilter as PeriodFilter)
 
   // Transform store logs
   const auditLogs: AuditLog[] = useMemo(() => {

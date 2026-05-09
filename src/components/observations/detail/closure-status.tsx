@@ -24,7 +24,6 @@ export const ClosureStatus = memo(function ClosureStatus({
   canReviewClosure,
   onRequestClosure,
   onReviewClosure,
-  isRTL,
 }: ClosureStatusProps) {
   const { t } = useTranslation()
   const [showRequestForm, setShowRequestForm] = useState(false)

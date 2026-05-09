@@ -26,7 +26,6 @@ export function MultiSelectFilter<T extends string>({
   allLabel = 'All',
 }: MultiSelectFilterProps<T>) {
   const allSelected = options.every(opt => selected.has(opt.value))
-  const noneSelected = selected.size === 0
 
   const toggleAll = () => {
     if (allSelected) {

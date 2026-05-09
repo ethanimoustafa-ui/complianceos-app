@@ -31,25 +31,10 @@ function h2(text: string): Paragraph {
   })
 }
 
-function h3(text: string): Paragraph {
-  return new Paragraph({
-    heading: HeadingLevel.HEADING_3,
-    spacing: { before: 240, after: 80 },
-    children: [new TextRun({ text, bold: true, font: FONT, size: 24, color: BLUE })],
-  })
-}
-
 function p(text: string): Paragraph {
   return new Paragraph({
     spacing: { after: 120 },
     children: [new TextRun({ text, font: FONT, size: 22 })],
-  })
-}
-
-function bold(text: string): Paragraph {
-  return new Paragraph({
-    spacing: { after: 120 },
-    children: [new TextRun({ text, bold: true, font: FONT, size: 22 })],
   })
 }
 

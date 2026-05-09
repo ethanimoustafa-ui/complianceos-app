@@ -455,7 +455,6 @@ export function PolicyDetailsContent({
     // Helper: mark current step completed and advance next
     function advanceStep(textEn: string, textAr: string) {
       const ci = tl.findIndex(s => s.status === 'current')
-      const currentStep = tl[ci]
       const newTl = tl.map((s, i) => {
         if (i === ci) return { ...s, status: 'completed' as const, date: today, user: actingUser, note, stepState: undefined }
         if (i === ci + 1 && s.status === 'pending') {

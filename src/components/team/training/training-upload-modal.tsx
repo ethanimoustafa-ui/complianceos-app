@@ -100,10 +100,6 @@ export function TrainingUploadModal({ isOpen, onClose, onConfirm }: TrainingUplo
     onClose()
   }
 
-  const handleFieldChange = (field: keyof ParsedData, value: string) => {
-    setParsed((prev) => ({ ...prev, [field]: parseFloat(value) || 0 }))
-  }
-
   return (
     <Modal
       isOpen={isOpen}

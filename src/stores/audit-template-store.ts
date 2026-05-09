@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import type { AuditTemplate, AuditTemplateCategory, AuditPriority, AuditFrequency, FrequencySchedule } from '@/types'
+import type { AuditTemplate } from '@/types'
 import { requirePermission } from '@/lib/rbac-store-gate'
 
 const seedTemplates: AuditTemplate[] = [

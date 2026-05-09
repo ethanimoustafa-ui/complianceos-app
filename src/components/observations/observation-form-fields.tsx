@@ -170,7 +170,6 @@ export const DepartmentField = memo(function DepartmentField({
   value,
   onChange,
   onBlur,
-  showEmpty = false,
   error,
   required = false,
 }: {

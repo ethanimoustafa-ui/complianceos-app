@@ -40,7 +40,7 @@ function VerifyEmailContent() {
     }
   }, [cooldown])
 
-  const handleTokenVerification = async (verificationToken: string) => {
+  const handleTokenVerification = async (_verificationToken: string) => {
     setIsVerifying(true)
     setVerificationError(null)
     try {

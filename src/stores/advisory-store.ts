@@ -153,7 +153,6 @@ export const useAdvisoryStore = create<AdvisoryState>()(
         // TODO: Replace with actual API call
         const now = new Date().toISOString()
         const ref = get().getNextRef()
-        const id = ref.replace('ADV-', 'ADV-').replace(/-/g, '-')
         const newRequest: AdvisoryRequest = {
           ...data,
           id: crypto.randomUUID(),

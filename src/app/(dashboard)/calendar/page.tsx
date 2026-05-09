@@ -3,7 +3,7 @@
 import { useState, useCallback } from 'react'
 import type { CalendarSourceType } from '@/types'
 import type { ViewMode, CalendarType } from '@/components/calendar/calendar-types'
-import { ALL_SOURCE_TYPES, formatDateKey } from '@/components/calendar/calendar-utils'
+import { ALL_SOURCE_TYPES } from '@/components/calendar/calendar-utils'
 import { useCalendarEvents } from '@/hooks/useCalendarEvents'
 import { useTranslation } from '@/i18n'
 import { CalendarHeader } from '@/components/calendar/calendar-header'

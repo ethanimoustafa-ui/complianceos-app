@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import type { FrameworkConfig, RegulatoryBodyId, ComplianceThreshold, FrameworkWeights } from '@/types'
+import type { FrameworkConfig, RegulatoryBodyId, FrameworkWeights } from '@/types'
 import { requirePermission } from '@/lib/rbac-store-gate'
 
 // Per-framework weights must sum to 100. Kept in the 4-surface shape

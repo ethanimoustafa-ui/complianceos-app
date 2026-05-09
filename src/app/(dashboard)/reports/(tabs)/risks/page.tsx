@@ -17,11 +17,10 @@ import { useDepartmentStore } from '@/stores/department-store'
 import { useAuthStore } from '@/stores/auth-store'
 import { useRiskCategoryStore } from '@/stores/risk-category-store'
 import { EditableSelect } from '@/components/ui/editable-select'
-import { getCategoryConfig, fallbackColor } from '@/lib/category-config'
+import { getCategoryConfig } from '@/lib/category-config'
 import { InlineDeadlinePicker } from '@/components/ui/inline-deadline-picker'
 import { ReviewSchedulePicker } from '@/components/ui/ReviewSchedulePicker'
 import type { ReviewSchedule, RegulatoryBodyId } from '@/types'
-import { computeNextReview } from '@/lib/review-schedule'
 import { FrameworkTagSelector } from '@/components/ui/framework-tag-selector'
 import { exportRisksLocalized } from '@/lib/export'
 import type { TranslationKey } from '@/i18n'
@@ -746,7 +745,6 @@ export default function ReportsRisksPage() {
           const level = getRiskLevel(score)
           const categoryConfig = getRiskCatConfig(selectedRisk.category)
           const selectedCatItem = riskCategoryItems.find((c) => c.id === selectedRisk.category)
-          const statusConf = riskStatusConfig[selectedRisk.status]
           return (
             <div className="space-y-6">
               <div className="flex items-center justify-between">

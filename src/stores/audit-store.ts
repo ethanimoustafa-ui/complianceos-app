@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import type { Audit, AuditFilters, PaginationState, SortState, AuditDocument, AuditTeamMember, AuditComment, RegulatoryBodyId } from '@/types'
+import type { Audit, AuditFilters, PaginationState, SortState, AuditDocument, AuditTeamMember, AuditComment } from '@/types'
 import { computeNextReview } from '@/lib/review-schedule'
 import { useAuditLogStore } from './audit-log-store'
 import { useAuthStore } from './auth-store'
@@ -629,7 +629,7 @@ export const useAuditStore = create<AuditState>()(
         return addedComment
       },
 
-      editComment: (auditId: string, commentId: string, newContent: string, editor: { name: string }) => {
+      editComment: (auditId: string, commentId: string, newContent: string, _editor: { name: string }) => {
         set((state) => ({
           audits: state.audits.map((a) => {
             if (a.id === auditId) {
@@ -675,7 +675,7 @@ export const useAuditStore = create<AuditState>()(
         })
       },
 
-      deleteComment: (auditId: string, commentId: string, deleter: { name: string }) => {
+      deleteComment: (auditId: string, commentId: string, _deleter: { name: string }) => {
         const audit = get().audits.find((a) => a.id === auditId)
         const comment = audit?.comments?.find((c) => c.id === commentId)
 
@@ -716,7 +716,7 @@ export const useAuditStore = create<AuditState>()(
       },
 
       // Status management — gated as Phase 6's `closeFinding` analogue.
-      updateStatus: async (auditId: string, newStatus: Audit['status'], user: { name: string }) => {
+      updateStatus: async (auditId: string, newStatus: Audit['status'], _user: { name: string }) => {
         requirePermission('Manage Audit Findings', { storeName: 'audit', actionName: `updateStatus:${newStatus}`, id: auditId })
         const audit = get().audits.find((a) => a.id === auditId)
         const oldStatus = audit?.status

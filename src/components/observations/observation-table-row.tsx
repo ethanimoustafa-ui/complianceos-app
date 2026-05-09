@@ -38,7 +38,6 @@ export const ObservationTableRow = memo(function ObservationTableRow({
   onDelete,
   isMenuOpen,
   onMenuToggle,
-  shouldOpenUpward,
   isRTL,
 }: ObservationTableRowProps) {
   const { t } = useTranslation()

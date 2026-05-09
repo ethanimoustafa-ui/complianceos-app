@@ -24,7 +24,6 @@ export const RemediationStatus = memo(function RemediationStatus({
   canReview,
   onReview,
   documents,
-  isRTL,
 }: RemediationStatusProps) {
   const { t } = useTranslation()
 

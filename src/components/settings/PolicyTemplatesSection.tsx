@@ -198,7 +198,7 @@ function PolicyTemplateFormModal({
   const [adhocDate, setAdhocDate] = useState(template?.frequencySchedule?.adhocDate ?? '')
   const [description, setDescription] = useState(template?.defaultDescription ?? '')
   const [descriptionAr, setDescriptionAr] = useState(template?.defaultDescriptionAr ?? '')
-  const [status, setStatus] = useState<'active' | 'draft'>(template?.status ?? 'active')
+  const [status] = useState<'active' | 'draft'>(template?.status ?? 'active')
 
   function buildSchedule(): FrequencySchedule | undefined {
     if (frequency === 'ad_hoc') return adhocDate ? { adhocDate } : undefined

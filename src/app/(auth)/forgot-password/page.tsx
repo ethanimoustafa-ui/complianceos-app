@@ -27,7 +27,6 @@ export default function ForgotPasswordPage() {
   const {
     register,
     handleSubmit,
-    getValues,
     formState: { errors },
   } = useForm<ForgotPasswordInput>({
     resolver: zodResolver(forgotPasswordSchema),

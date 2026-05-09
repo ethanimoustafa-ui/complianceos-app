@@ -3,11 +3,11 @@
 import { Icon } from '@iconify/react'
 import { differenceInCalendarDays } from 'date-fns'
 import { cn } from '@/lib/utils'
-import type { Circular, Policy, CircularPriority, CircularStatus, PolicyStatus, PolicyCategory, CAPStatus, PolicyApprovalTier } from '@/types'
+import type { Circular, Policy, CircularPriority, CircularStatus, PolicyStatus, PolicyApprovalTier } from '@/types'
 import type { TranslationKey } from '@/i18n'
 import { useDepartmentStore } from '@/stores/department-store'
 import { useFrameworkConfigStore } from '@/stores/framework-config-store'
-import { resolveAuthorityCode, resolveAuthorityLabel } from '@/lib/authority-display'
+import { resolveAuthorityCode } from '@/lib/authority-display'
 import { useTranslation } from '@/i18n'
 
 interface RegDocCardProps {
@@ -56,15 +56,6 @@ const CIRCULAR_STATUS_COLORS: Record<CircularStatus, { bg: string; text: string 
   'in-progress': { bg: 'bg-blue-100',    text: 'text-blue-700'    },
   'completed':   { bg: 'bg-emerald-100', text: 'text-emerald-700' },
   'overdue':     { bg: 'bg-rose-100',    text: 'text-rose-700'    },
-}
-
-const CAP_COLORS: Record<CAPStatus, { bg: string; text: string }> = {
-  'not-started': { bg: 'bg-slate-100',   text: 'text-slate-500'   },
-  'drafting':    { bg: 'bg-amber-100',   text: 'text-amber-700'   },
-  'submitted':   { bg: 'bg-blue-100',    text: 'text-blue-700'    },
-  'approved':    { bg: 'bg-violet-100',  text: 'text-violet-700'  },
-  'in-progress': { bg: 'bg-sky-100',     text: 'text-sky-700'     },
-  'completed':   { bg: 'bg-emerald-100', text: 'text-emerald-700' },
 }
 
 function getDaysLeft(dueDate: string): number {
@@ -142,7 +133,7 @@ export function RegDocCard({ variant, circular, policy, onClick, isNew, t, isRTL
   )
 }
 
-function CircularCardContent({ circular, t, isRTL }: { circular: Circular; t: RegDocCardProps['t']; isRTL: boolean }) {
+function CircularCardContent({ circular, t }: { circular: Circular; t: RegDocCardProps['t']; isRTL: boolean }) {
   const { isRTL: rtl } = useTranslation()
   const departments = useDepartmentStore(s => s.departments)
   const frameworks = useFrameworkConfigStore(s => s.frameworks)
@@ -151,7 +142,6 @@ function CircularCardContent({ circular, t, isRTL }: { circular: Circular; t: Re
   const authorityCode = resolveAuthorityCode(circular.authority, frameworks)
   const priorityStyle = PRIORITY_COLORS[circular.priority]
   const statusStyle = CIRCULAR_STATUS_COLORS[circular.status]
-  const capStyle = CAP_COLORS[circular.capStatus]
   const daysLeft = getDaysLeft(circular.dueDate)
   const isCompleted = circular.status === 'completed'
   const isOverdue = circular.status === 'overdue'
@@ -282,7 +272,7 @@ function CircularCardContent({ circular, t, isRTL }: { circular: Circular; t: Re
   )
 }
 
-function PolicyCardContent({ policy, t, isRTL }: { policy: Policy; t: RegDocCardProps['t']; isRTL: boolean }) {
+function PolicyCardContent({ policy, t }: { policy: Policy; t: RegDocCardProps['t']; isRTL: boolean }) {
   const { isRTL: rtl } = useTranslation()
   const departments = useDepartmentStore(s => s.departments)
   const statusStyle = POLICY_STATUS_COLORS[policy.status]

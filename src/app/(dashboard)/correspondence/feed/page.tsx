@@ -1183,7 +1183,6 @@ function MetricCard({
   progress,
   progressColor = 'bg-emerald-500',
   progressSegments,
-  isRTL = false,
 }: {
   icon: string
   iconColor: 'emerald' | 'rose' | 'blue' | 'amber'
@@ -1245,7 +1244,7 @@ function MetricCard({
   )
 }
 
-function CircularRow({ circular, isRTL, t, onClick }: {
+function CircularRow({ circular, t, onClick }: {
   circular: Circular;
   isRTL: boolean;
   t: (key: TranslationKey, params?: Record<string, string | number>) => string;

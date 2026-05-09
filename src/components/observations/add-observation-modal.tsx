@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, memo, useCallback } from 'react'
+import { useState, memo, useCallback } from 'react'
 import { Icon } from '@iconify/react'
 import { Modal } from '@/components/ui/modal'
 import { Button } from '@/components/ui/button'
