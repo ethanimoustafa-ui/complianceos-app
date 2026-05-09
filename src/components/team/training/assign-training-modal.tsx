@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { useTranslation } from '@/i18n'
 import type { TranslationKey } from '@/i18n'
 import type { TrainingEmployee, TrainingCourse, CourseProgress } from '@/types'
+import { dicebearAvatar } from '@/lib/avatar'
 
 interface AssignTrainingModalProps {
   isOpen: boolean
@@ -64,7 +65,7 @@ export function AssignTrainingModal({ isOpen, onClose, employee, courses, onAssi
           {/* Employee Info */}
           <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl">
             <img
-              src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${employee.name}`}
+              src={dicebearAvatar(employee.name)}
               className="w-10 h-10 rounded-full border-2 border-white"
               alt={employee.name}
             />
@@ -233,7 +234,7 @@ export function BulkAssignModal({ isOpen, onClose, course, employees, onAssign, 
                     className="accent-emerald-600"
                   />
                   <img
-                    src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${emp.name}`}
+                    src={dicebearAvatar(emp.name)}
                     className="w-8 h-8 rounded-full border border-slate-200"
                     alt={emp.name}
                   />

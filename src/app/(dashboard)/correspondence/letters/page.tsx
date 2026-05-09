@@ -13,6 +13,8 @@ import { useSAMALetterStore } from '@/stores/sama-letter-store'
 import { useAuthStore } from '@/stores/auth-store'
 import type { SAMALetter, SAMALetterType, SAMALetterStatus, Attachment, LetterTemplate, TemplateStatus, CircularAuthority } from '@/types'
 import { useSAMATemplateStore } from '@/stores/sama-template-store'
+import { formatBytes as fmtBytes } from '@/lib/format'
+import { dicebearAvatar } from '@/lib/avatar'
 import { useTeamStore } from '@/stores/team-store'
 import { useFrameworkConfigStore } from '@/stores/framework-config-store'
 import { resolveAuthorityCode } from '@/lib/authority-display'
@@ -582,11 +584,7 @@ export default function SAMALettersPage() {
     }
   }
 
-  const formatBytes = (bytes: number): string => {
-    if (bytes < 1024) return `${bytes} B`
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
-  }
+  const formatBytes = (bytes: number): string => fmtBytes(bytes, bytes < 1024 * 1024 ? 0 : 1)
 
   const getTypeLabel = (type: SAMALetterType): string => {
     switch (type) {
@@ -1660,7 +1658,7 @@ export default function SAMALettersPage() {
                       <span className="text-xs text-slate-500">{t('samaLetters.createdBy')}</span>
                       <div className={`flex items-center gap-2`}>
                         <img
-                          src="https://api.dicebear.com/7.x/avataaars/svg?seed=Felix"
+                          src={dicebearAvatar('Felix')}
                           className="w-5 h-5 rounded-full"
                           alt="Felix"
                         />

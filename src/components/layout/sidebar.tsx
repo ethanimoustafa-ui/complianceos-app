@@ -16,6 +16,7 @@ import { SignOutModal } from '@/components/auth/sign-out-modal'
 import { UserSwitcher } from '@/components/auth/user-switcher'
 import { ProfileModal } from '@/components/profile/profile-modal'
 import { useNotificationEngine } from '@/hooks/useNotificationEngine'
+import { dicebearAvatar } from '@/lib/avatar'
 
 const navigation = [
   { nameKey: 'navigation.dashboard', href: '/dashboard', icon: 'lucide:layout-grid' },
@@ -42,7 +43,7 @@ export function Sidebar() {
   const [isProfileOpen, setIsProfileOpen] = useState(false)
 
   const unreadMessages = threads.reduce((sum, t) => sum + t.unreadCount, 0)
-  const avatarSrc = user?.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${user?.avatarSeed || 'Felix'}`
+  const avatarSrc = user?.avatar || dicebearAvatar(user?.avatarSeed || 'Felix')
 
   const togglePanel = (panel: PanelType) => {
     setActivePanel(prev => prev === panel ? null : panel)

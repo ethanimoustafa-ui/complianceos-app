@@ -13,6 +13,8 @@ import { useAuditLogStore, type AuditLog as AuditLogFromStore } from '@/stores/a
 import { exportAuditLogsLocalized, exportSingleLog } from '@/lib/export'
 import type { TranslationKey } from '@/i18n'
 import { EditableSelect } from '@/components/ui/editable-select'
+import { dicebearAvatar } from '@/lib/avatar'
+import { paginate } from '@/lib/pagination'
 
 // Types
 type ActionType = 'opened' | 'closed' | 'commented' | 'uploaded' | 'created' | 'assigned' | 'updated' | 'reviewed'
@@ -146,8 +148,7 @@ export default function ReportsDetailedPage() {
 
   // Pagination
   const LOGS_PER_PAGE = 10
-  const totalLogPages = Math.max(1, Math.ceil(filteredLogs.length / LOGS_PER_PAGE))
-  const paginatedLogs = sortedLogs.slice((logPage - 1) * LOGS_PER_PAGE, logPage * LOGS_PER_PAGE)
+  const { items: paginatedLogs, totalPages: totalLogPages } = paginate(sortedLogs, logPage, LOGS_PER_PAGE)
 
   useEffect(() => { setLogPage(1) }, [searchTerm, filterAction, filterAudit, dateRangeFilter, sortColumn, sortDirection])
 
@@ -399,7 +400,7 @@ export default function ReportsDetailedPage() {
                         </td>
                         <td className="px-4 py-4">
                           <div className="flex items-center gap-2">
-                            <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${log.user.avatar || log.user.name}`} className="w-6 h-6 rounded-full" alt={log.user.name} />
+                            <img src={dicebearAvatar(log.user.avatar || log.user.name)} className="w-6 h-6 rounded-full" alt={log.user.name} />
                             <span className="text-xs font-medium text-slate-700">{log.user.name}</span>
                           </div>
                         </td>
@@ -421,7 +422,7 @@ export default function ReportsDetailedPage() {
                             <div className={`${isRTL ? 'mr-8' : 'ml-8'} p-5 bg-white rounded-xl border border-slate-200 shadow-sm`}>
                               <div className="grid grid-cols-4 gap-6">
                                 <div className="flex items-center gap-3">
-                                  <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${log.user.avatar || log.user.name}`} className="w-10 h-10 rounded-full border-2 border-white shadow-sm" alt={log.user.name} />
+                                  <img src={dicebearAvatar(log.user.avatar || log.user.name)} className="w-10 h-10 rounded-full border-2 border-white shadow-sm" alt={log.user.name} />
                                   <div className={isRTL ? 'text-right' : ''}>
                                     <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{t('reports.performedBy')}</p>
                                     <p className="text-sm font-bold text-slate-900">{log.user.name}</p>

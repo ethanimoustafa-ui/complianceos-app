@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { useTranslation } from '@/i18n'
 import type { TranslationKey } from '@/i18n'
 import type { TrainingEmployee, TrainingStatus } from '@/types'
+import { dicebearAvatar } from '@/lib/avatar'
 
 const trainingStatusConfig: Record<TrainingStatus, { bg: string; text: string; labelKey: string }> = {
   completed: { bg: 'bg-emerald-100', text: 'text-emerald-700', labelKey: 'training.completed' },
@@ -67,7 +68,7 @@ export function EmployeeDetailModal({ isOpen, onClose, employee, onAssignTrainin
         {/* Employee Info */}
         <div className="flex items-center gap-4 p-4 bg-slate-50 rounded-xl">
           <img
-            src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${employee.name}`}
+            src={dicebearAvatar(employee.name)}
             className="w-16 h-16 rounded-full border-4 border-white"
             alt={employee.name}
           />

@@ -27,6 +27,8 @@ import type { TranslationKey } from '@/i18n'
 import { useFormattedDate } from '@/hooks/useFormattedDate'
 import { ChecklistSection } from '@/components/observations/detail/checklist-section'
 import { Gate } from '@/components/auth/gate'
+import { dicebearAvatar } from '@/lib/avatar'
+import { paginate } from '@/lib/pagination'
 
 // Types
 // RiskCategory is now an opaque string (managed via useRiskCategoryStore).
@@ -370,8 +372,7 @@ export default function ReportsRisksPage() {
     })
   }, [filteredRisks, riskSortField, riskSortDirection])
 
-  const totalRiskPages = Math.max(1, Math.ceil(sortedRisks.length / RISKS_PER_PAGE))
-  const paginatedRisks = sortedRisks.slice((riskPage - 1) * RISKS_PER_PAGE, riskPage * RISKS_PER_PAGE)
+  const { items: paginatedRisks, totalPages: totalRiskPages } = paginate(sortedRisks, riskPage, RISKS_PER_PAGE)
 
   useEffect(() => { setRiskPage(1) }, [riskSearchTerm, riskCategoryFilter, riskStatusFilter])
 
@@ -708,7 +709,7 @@ export default function ReportsRisksPage() {
                         <td className="px-6 py-4"><span className={cn('text-xs font-bold px-2.5 py-1 rounded-full', statusConf.color)}>{t(riskStatusLabelKeys[risk.status] as TranslationKey)}</span></td>
                         <td className="px-6 py-4">
                           <div className="flex items-center gap-2">
-                            <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${risk.owner.avatar || risk.owner.name}`} className="w-7 h-7 rounded-full border border-slate-200" alt={risk.owner.name} />
+                            <img src={dicebearAvatar(risk.owner.avatar || risk.owner.name)} className="w-7 h-7 rounded-full border border-slate-200" alt={risk.owner.name} />
                             <div className={isRTL ? 'text-right' : ''}><p className="text-xs font-bold text-slate-700">{risk.owner.name}</p><p className="text-[10px] text-slate-400">{risk.owner.department}</p></div>
                           </div>
                         </td>
@@ -778,7 +779,7 @@ export default function ReportsRisksPage() {
               </div>
               <div className={isRTL ? 'text-right' : ''}><p className="text-xs font-bold text-slate-400 uppercase mb-2">{t('reports.description' as TranslationKey)}</p><p className="text-sm text-slate-600">{selectedRisk.description}</p></div>
               <div className="p-4 bg-slate-50 rounded-xl flex items-center gap-3">
-                <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${selectedRisk.owner.avatar || selectedRisk.owner.name}`} className="w-10 h-10 rounded-full border-2 border-white" alt={selectedRisk.owner.name} />
+                <img src={dicebearAvatar(selectedRisk.owner.avatar || selectedRisk.owner.name)} className="w-10 h-10 rounded-full border-2 border-white" alt={selectedRisk.owner.name} />
                 <div className={isRTL ? 'text-right' : ''}><p className="text-xs font-bold text-slate-400 uppercase">{t('reports.owner' as TranslationKey)}</p><p className="text-sm font-bold text-slate-900">{selectedRisk.owner.name}</p><p className="text-xs text-slate-500">{selectedRisk.owner.department}</p></div>
               </div>
 

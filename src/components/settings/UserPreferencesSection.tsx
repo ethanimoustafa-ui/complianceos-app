@@ -9,6 +9,7 @@ import { useUserPreferencesStore } from '@/stores/user-preferences-store'
 import { useTranslation } from '@/i18n'
 import { EditableSelect } from '@/components/ui/editable-select'
 import type { DashboardView, DateFormatPreference } from '@/types'
+import { dicebearAvatar } from '@/lib/avatar'
 
 const TIMEZONES = [
   'Asia/Riyadh',
@@ -126,7 +127,7 @@ export function UserPreferencesSection() {
           <div className="flex flex-col items-center gap-4 pb-4">
             <div className="relative group">
               <img
-                src="https://api.dicebear.com/7.x/avataaars/svg?seed=Felix"
+                src={dicebearAvatar('Felix')}
                 alt="User"
                 className="w-24 h-24 rounded-full border-4 border-slate-200 group-hover:border-emerald-400 transition-all duration-200"
               />

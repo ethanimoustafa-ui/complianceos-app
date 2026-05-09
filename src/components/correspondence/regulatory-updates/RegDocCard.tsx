@@ -9,6 +9,7 @@ import { useDepartmentStore } from '@/stores/department-store'
 import { useFrameworkConfigStore } from '@/stores/framework-config-store'
 import { resolveAuthorityCode } from '@/lib/authority-display'
 import { useTranslation } from '@/i18n'
+import { dicebearAvatar } from '@/lib/avatar'
 
 interface RegDocCardProps {
   variant: 'circular' | 'policy'
@@ -328,7 +329,7 @@ function PolicyCardContent({ policy, t }: { policy: Policy; t: RegDocCardProps['
       <div className={cn('flex items-center gap-8 shrink-0', )}>
         <div className={cn('flex items-center gap-3', )}>
           <img
-            src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${policy.owner.avatar}`}
+            src={dicebearAvatar(policy.owner.avatar)}
             className="w-8 h-8 rounded-full border border-slate-200"
             alt={policy.owner.name}
           />

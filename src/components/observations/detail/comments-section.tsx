@@ -5,6 +5,7 @@ import { Icon } from '@iconify/react'
 import { useTranslation } from '@/i18n'
 import { formatRelativeTime } from '@/lib/time-utils'
 import { canEditComment, canDeleteComment } from '@/lib/permissions'
+import { dicebearAvatar } from '@/lib/avatar'
 import type { User } from '@/types'
 
 interface Comment {
@@ -91,7 +92,7 @@ export const CommentsSection = memo(function CommentsSection({
           return (
             <div key={comment.id} className={`flex gap-3 group`}>
               <img
-                src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${comment.author.avatar}`}
+                src={dicebearAvatar(comment.author.avatar)}
                 className="w-8 h-8 rounded-full shrink-0"
                 alt={comment.author.name}
               />

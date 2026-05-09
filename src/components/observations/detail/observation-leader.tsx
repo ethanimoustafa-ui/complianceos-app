@@ -3,6 +3,7 @@
 import { memo } from 'react'
 import { Icon } from '@iconify/react'
 import { useTranslation } from '@/i18n'
+import { dicebearAvatar } from '@/lib/avatar'
 
 interface Leader {
   id: string
@@ -45,7 +46,7 @@ export const ObservationLeader = memo(function ObservationLeader({
         <div className={`flex items-center gap-3`}>
           <div className="relative">
             <img
-              src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${leader.avatar || leader.name}`}
+              src={dicebearAvatar(leader.avatar || leader.name)}
               className="w-10 h-10 rounded-full ring-2 ring-emerald-500 ring-offset-2"
               alt={leader.name}
             />

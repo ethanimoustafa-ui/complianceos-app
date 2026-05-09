@@ -15,6 +15,7 @@ import { RegDocFilterBar } from '@/components/correspondence/regulatory-updates/
 import type { CircularAuthority } from '@/types'
 import { exportRulesLocalized } from '@/lib/export'
 import { Gate } from '@/components/auth/gate'
+import { paginate } from '@/lib/pagination'
 
 import { StatCard } from '@/components/correspondence/regulatory-updates/rules/StatCard'
 import { RegisterCircularModal } from '@/components/correspondence/regulatory-updates/rules/RegisterCircularModal'
@@ -82,11 +83,10 @@ function RegulatoryUpdatesRulesPageContent() {
     })
   }, [circulars, searchQuery, authorityFilter, departmentFilter])
 
-  const paginatedCirculars = useMemo(() => {
-    const start = (currentPage - 1) * PAGE_SIZE
-    return filteredCirculars.slice(start, start + PAGE_SIZE)
-  }, [filteredCirculars, currentPage])
-  const totalPages = Math.ceil(filteredCirculars.length / PAGE_SIZE)
+  const { items: paginatedCirculars, totalPages } = useMemo(
+    () => paginate(filteredCirculars, currentPage, PAGE_SIZE),
+    [filteredCirculars, currentPage]
+  )
 
   const stats = useMemo(
     () => ({

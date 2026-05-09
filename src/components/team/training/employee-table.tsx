@@ -9,6 +9,7 @@ import { NoDataEmptyState } from '@/components/ui/empty-state'
 import { useDepartmentStore } from '@/stores/department-store'
 import { EditableSelect } from '@/components/ui/editable-select'
 import type { TrainingEmployee, TrainingStatus } from '@/types'
+import { dicebearAvatar } from '@/lib/avatar'
 
 interface EmployeeTableProps {
   employees: TrainingEmployee[]
@@ -87,7 +88,7 @@ export function EmployeeTable({ employees, onViewEmployee, onHrReminder, onExpor
                   title={emp.name}
                 >
                   <img
-                    src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${emp.name}`}
+                    src={dicebearAvatar(emp.name)}
                     className="w-9 h-9 rounded-full border-2 border-white shadow-sm hover:border-blue-300 transition-all cursor-pointer"
                     alt={emp.name}
                   />
@@ -255,7 +256,7 @@ export function EmployeeTable({ employees, onViewEmployee, onHrReminder, onExpor
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-3">
                           <img
-                            src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${employee.name}`}
+                            src={dicebearAvatar(employee.name)}
                             className="w-10 h-10 rounded-full border-2 border-slate-100"
                             alt={employee.name}
                           />

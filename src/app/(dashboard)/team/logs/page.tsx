@@ -16,6 +16,8 @@ import { MemberDetailDrawer } from '@/components/team/directory/member-detail-dr
 import { EditableSelect } from '@/components/ui/editable-select'
 import type { TeamMember } from '@/types'
 import { Gate } from '@/components/auth/gate'
+import { dicebearAvatar } from '@/lib/avatar'
+import { paginate } from '@/lib/pagination'
 
 // Helper Components
 function UserActionBadge({ action, label }: { action: UserLog['action']; label: string }) {
@@ -165,7 +167,10 @@ export default function TeamLogsPage() {
     return list
   }, [filteredLogs, logSort])
 
-  const totalPages = Math.max(1, Math.ceil(sortedLogs.length / LOGS_PER_PAGE))
+  const { items: pagedLogs, totalPages } = useMemo(
+    () => paginate(sortedLogs, currentPage, LOGS_PER_PAGE),
+    [sortedLogs, currentPage]
+  )
 
   // Reset to page 1 whenever filters / sort / search change the result set
   useEffect(() => {
@@ -176,11 +181,6 @@ export default function TeamLogsPage() {
   useEffect(() => {
     if (currentPage > totalPages) setCurrentPage(totalPages)
   }, [currentPage, totalPages])
-
-  const pagedLogs = useMemo(() => {
-    const start = (currentPage - 1) * LOGS_PER_PAGE
-    return sortedLogs.slice(start, start + LOGS_PER_PAGE)
-  }, [sortedLogs, currentPage])
 
   const toggleLogExpand = (logId: number) => {
     setExpandedLogs((prev) =>
@@ -370,7 +370,7 @@ export default function TeamLogsPage() {
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-2">
                           <img
-                            src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${log.user.split(' ')[0]}`}
+                            src={dicebearAvatar(log.user.split(' ')[0])}
                             className="w-6 h-6 rounded-full border border-slate-200"
                             alt={log.user}
                           />
@@ -407,7 +407,7 @@ export default function TeamLogsPage() {
                             <div className="grid grid-cols-4 gap-6">
                               <div className="flex items-center gap-3">
                                 <img
-                                  src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${log.user.split(' ')[0]}`}
+                                  src={dicebearAvatar(log.user.split(' ')[0])}
                                   className="w-10 h-10 rounded-full border-2 border-white shadow-sm"
                                   alt={log.user}
                                 />

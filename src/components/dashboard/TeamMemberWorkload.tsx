@@ -1,3 +1,5 @@
+import { dicebearAvatar } from '@/lib/avatar'
+
 export interface TeamMemberWorkloadProps {
   name: string
   avatar: string
@@ -16,7 +18,7 @@ export function TeamMemberWorkload({
   return (
     <div className="flex items-center gap-3">
       <img
-        src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${avatar}`}
+        src={dicebearAvatar(avatar)}
         className="w-8 h-8 rounded-lg"
         alt={name}
       />

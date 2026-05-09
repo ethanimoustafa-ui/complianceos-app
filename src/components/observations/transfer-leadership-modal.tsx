@@ -5,6 +5,7 @@ import { Icon } from '@iconify/react'
 import { Modal } from '@/components/ui/modal'
 import { Button } from '@/components/ui/button'
 import { useTranslation } from '@/i18n'
+import { dicebearAvatar } from '@/lib/avatar'
 
 interface Assignee {
   id?: string
@@ -79,7 +80,7 @@ export function TransferLeadershipModal({
                   }`}
                 >
                   <img
-                    src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${member.avatar}`}
+                    src={dicebearAvatar(member.avatar)}
                     className="w-10 h-10 rounded-full"
                     alt={member.name}
                   />

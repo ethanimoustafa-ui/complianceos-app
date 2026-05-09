@@ -19,6 +19,7 @@ import type { TranslationKey } from '@/i18n'
 import { useFormattedDate } from '@/hooks/useFormattedDate'
 import { useComplianceScore } from '@/hooks/useComplianceScore'
 import { Gate } from '@/components/auth/gate'
+import { dicebearAvatar } from '@/lib/avatar'
 
 // Audit type definitions
 type AuditSource = 'sama_inspection' | 'internal_audit' | 'sharia_audit'
@@ -187,7 +188,7 @@ export default function ReportsAuditsPage() {
         description: '',
         responsible: {
           name: audit.assignee?.name || 'Unassigned',
-          avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${audit.assignee?.name || 'default'}`,
+          avatar: dicebearAvatar(audit.assignee?.name || 'default'),
         },
         dueDate: new Date(audit.dueDate),
         status: displayStatus,

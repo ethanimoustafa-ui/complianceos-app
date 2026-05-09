@@ -17,6 +17,7 @@ import type { AdvisoryRequest, AdvisoryStatus, AdvisoryPriority, BusinessUnit } 
 import { useDepartmentStore } from '@/stores/department-store'
 import { EditableSelect } from '@/components/ui/editable-select'
 import { Gate } from '@/components/auth/gate'
+import { paginate } from '@/lib/pagination'
 
 type TimeFrequency = 'week' | 'month' | 'quarter' | 'semi_annual' | 'annual' | 'fiscal'
 
@@ -137,12 +138,10 @@ export default function AdvisoryPage() {
   }, [advisoryStore.advisoryRequests, advisorySearchTerm, advisoryStatusFilter, advisoryPriorityFilter, advisoryBusinessUnitFilter, advisoryFrequencyFilter])
 
   // Paginated advisory results
-  const paginatedAdvisory = useMemo(() => {
-    const start = (advisoryPage - 1) * advisoryPageSize
-    return filteredAdvisory.slice(start, start + advisoryPageSize)
-  }, [filteredAdvisory, advisoryPage])
-
-  const advisoryTotalPages = Math.ceil(filteredAdvisory.length / advisoryPageSize)
+  const { items: paginatedAdvisory, totalPages: advisoryTotalPages } = useMemo(
+    () => paginate(filteredAdvisory, advisoryPage, advisoryPageSize),
+    [filteredAdvisory, advisoryPage, advisoryPageSize]
+  )
 
   // Reset page on filter change
   useEffect(() => {

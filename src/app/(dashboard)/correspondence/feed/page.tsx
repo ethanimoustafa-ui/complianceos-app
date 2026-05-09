@@ -23,6 +23,7 @@ import type { Correspondence, Circular } from '@/types'
 import { useFormattedDate } from '@/hooks/useFormattedDate'
 import { formatDateWithPreference } from '@/lib/date-format'
 import { useUserPreferencesStore } from '@/stores/user-preferences-store'
+import { dicebearAvatar } from '@/lib/avatar'
 import { Gate } from '@/components/auth/gate'
 import { useTeamWorkloads } from '@/hooks/useWorkload'
 import { useFrameworkConfigStore } from '@/stores/framework-config-store'
@@ -1394,7 +1395,7 @@ function TeamMemberRow({
   return (
     <div className="flex items-center gap-3">
       <img
-        src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${member.avatar}`}
+        src={dicebearAvatar(member.avatar)}
         className="w-8 h-8 rounded-full border border-slate-200"
         alt={member.name}
       />

@@ -5,6 +5,7 @@ import { Icon } from '@iconify/react'
 import { Modal } from '@/components/ui/modal'
 import { useAuthStore } from '@/stores/auth-store'
 import { useTranslation } from '@/i18n'
+import { dicebearAvatar } from '@/lib/avatar'
 
 const AVATAR_PRESETS = ['Felix', 'Sarah', 'Michael', 'Ahmed', 'Layla', 'Omar', 'Fatima', 'Hassan', 'Nora', 'Khalid', 'Mona', 'Yusuf']
 
@@ -37,7 +38,7 @@ export function ProfileModal({ isOpen, onClose }: ProfileModalProps) {
     }
   }, [isOpen, user])
 
-  const avatarSrc = customAvatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${avatarSeed}`
+  const avatarSrc = customAvatar || dicebearAvatar(avatarSeed)
 
   const handleSave = () => {
     updateProfile({
@@ -131,7 +132,7 @@ export function ProfileModal({ isOpen, onClose }: ProfileModalProps) {
                     className="w-12 h-12 rounded-full border-2 border-slate-200 hover:border-emerald-500 transition-all overflow-hidden cursor-pointer"
                   >
                     <img
-                      src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${seed}`}
+                      src={dicebearAvatar(seed)}
                       alt={seed}
                       className="w-full h-full"
                     />

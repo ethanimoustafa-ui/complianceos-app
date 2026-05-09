@@ -21,6 +21,7 @@ import { DirectoryStatCards } from '@/components/team/directory/stat-cards'
 import { MemberDetailDrawer } from '@/components/team/directory/member-detail-drawer'
 import { PendingApprovalsCard } from '@/components/team/directory/pending-approvals-card'
 import { BurnoutDetectionCard } from '@/components/team/directory/burnout-detection-card'
+import { dicebearAvatar } from '@/lib/avatar'
 
 // Toast component
 function Toast({ message, onClose }: { message: string; onClose: () => void }) {
@@ -316,7 +317,7 @@ export default function TeamDirectoryPage() {
                         <td className="px-6 py-4">
                           <div className="flex items-center gap-3">
                             <img
-                              src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${member.avatar || member.name}`}
+                              src={dicebearAvatar(member.avatar || member.name)}
                               className="w-10 h-10 rounded-full border-2 border-white shadow-sm"
                               alt={member.name}
                             />

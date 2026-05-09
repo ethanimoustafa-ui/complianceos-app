@@ -12,6 +12,7 @@ import { useTeamStore } from '@/stores/team-store'
 import { useFrameworkConfigStore } from '@/stores/framework-config-store'
 import { useTranslation } from '@/i18n'
 import { readFileAsDataUrl, normalizeUrl } from './utils'
+import { formatBytes } from '@/lib/format'
 import { FrameworkTagSelector } from '@/components/ui/framework-tag-selector'
 import type { RegulatoryBodyId } from '@/types'
 import { EditableSelect } from '@/components/ui/editable-select'
@@ -307,7 +308,7 @@ export function RegisterCircularModal({ isOpen, onClose, onCreated, t }: Props) 
                       <div key={i} className="flex items-center gap-2">
                         <Icon icon="lucide:file-text" className="text-emerald-600 shrink-0" />
                         <span className="text-sm font-medium text-emerald-700 flex-1 truncate">{f.name}</span>
-                        <span className="text-[10px] text-slate-400">{(f.size / 1024).toFixed(0)}KB</span>
+                        <span className="text-[10px] text-slate-400">{formatBytes(f.size, 0)}</span>
                         <button
                           onClick={(e) => { e.stopPropagation(); setFormPdfFiles(prev => prev.filter((_, j) => j !== i)) }}
                           className="text-slate-400 hover:text-rose-500 transition-colors cursor-pointer"

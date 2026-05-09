@@ -4,6 +4,7 @@ import { useState, useRef, useEffect } from 'react'
 import { Icon } from '@iconify/react'
 import { Modal } from '@/components/ui/modal'
 import { useTranslation } from '@/i18n'
+import { formatBytes } from '@/lib/format'
 
 interface FileUploadModalProps {
   isOpen: boolean
@@ -89,11 +90,7 @@ export function FileUploadModal({
     return 'lucide:file'
   }
 
-  const formatFileSize = (bytes: number) => {
-    if (bytes < 1024) return `${bytes} B`
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
-  }
+  const formatFileSize = (bytes: number) => formatBytes(bytes)
 
   return (
     <Modal isOpen={isOpen} onClose={handleClose} size="md">

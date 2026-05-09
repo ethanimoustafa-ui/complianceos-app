@@ -4,6 +4,8 @@ import { useState, useRef, useMemo } from 'react'
 import { Icon } from '@iconify/react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+import { formatBytes } from '@/lib/format'
+import { dicebearAvatar } from '@/lib/avatar'
 import { usePolicyStore } from '@/stores/policy-store'
 import { useAuthStore } from '@/stores/auth-store'
 import { useNotificationStore } from '@/stores/notification-store'
@@ -72,12 +74,6 @@ function readFileAsDataUrl(file: File): Promise<string> {
     reader.onerror = reject
     reader.readAsDataURL(file)
   })
-}
-
-function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
 
 export function PolicyDetailsContent({
@@ -1378,7 +1374,7 @@ export function PolicyDetailsContent({
           <h3 className="text-[10px] font-black text-slate-400 uppercase mb-3">{t('policies.policyLeader')}</h3>
           <div className="flex items-center gap-3">
             <img
-              src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${fresh.owner.avatar}`}
+              src={dicebearAvatar(fresh.owner.avatar)}
               className="w-10 h-10 rounded-full border-2 border-white shadow-sm"
               alt={fresh.owner.name}
             />

@@ -22,6 +22,7 @@ import { AddAuditModal } from '@/components/reports/audits/add-audit-modal'
 import { EditableSelect } from '@/components/ui/editable-select'
 import type { Audit, AuditComment } from '@/types'
 import { canEditComment, canDeleteComment } from '@/lib/permissions'
+import { dicebearAvatar } from '@/lib/avatar'
 
 // Types
 interface TimelineItem {
@@ -742,7 +743,7 @@ export default function AuditDetailPage() {
                         </div>
                         <div className="flex items-center gap-3">
                           <img
-                            src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${task.assignee.avatar}`}
+                            src={dicebearAvatar(task.assignee.avatar)}
                             className="w-6 h-6 rounded-full"
                             alt={task.assignee.name}
                           />
@@ -1096,7 +1097,7 @@ export default function AuditDetailPage() {
                       onClick={() => showToast(t('auditDetail.viewingMemberDetails'))}
                     >
                       <img
-                        src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${member.avatar}`}
+                        src={dicebearAvatar(member.avatar)}
                         className="w-9 h-9 rounded-full bg-slate-100 shrink-0"
                         alt={member.name}
                       />
@@ -1149,7 +1150,7 @@ export default function AuditDetailPage() {
                         <div key={comment.id} className="group">
                           <div className="flex items-start gap-3">
                             <img
-                              src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${comment.author.avatar}`}
+                              src={dicebearAvatar(comment.author.avatar)}
                               className="w-8 h-8 rounded-full bg-slate-100 shrink-0"
                               alt={comment.author.name}
                             />
@@ -1216,7 +1217,7 @@ export default function AuditDetailPage() {
                   <div className="pt-4 border-t border-slate-100">
                     <div className="flex gap-3">
                       <img
-                        src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${currentUser?.avatar || currentUser?.name?.split(' ')[0] || 'User'}`}
+                        src={dicebearAvatar(currentUser?.avatar || currentUser?.name?.split(' ')[0] || 'User')}
                         className="w-8 h-8 rounded-full bg-slate-100 shrink-0"
                         alt={currentUser?.name || 'User'}
                       />
@@ -1502,7 +1503,7 @@ export default function AuditDetailPage() {
           {auditTeam.map((member) => (
             <div key={member.id} className={`flex items-center justify-between p-3 border border-slate-100 rounded-xl hover:bg-slate-50`}>
               <div className={`flex items-center gap-3`}>
-                <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${member.avatar}`} className="w-10 h-10 rounded-full" alt={member.name} />
+                <img src={dicebearAvatar(member.avatar)} className="w-10 h-10 rounded-full" alt={member.name} />
                 <div>
                   <p className="text-sm font-bold text-slate-900">{member.name}</p>
                   <p className="text-xs text-slate-500">{member.role}</p>

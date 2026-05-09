@@ -16,6 +16,7 @@ import {
 } from '@/stores/compliance-evaluation-store'
 import { useAuthStore } from '@/stores/auth-store'
 import { calculateComplianceReviewScore } from '@/lib/compliance-review-score'
+import { paginate } from '@/lib/pagination'
 
 // Color/icon channels are static; the user-visible label comes from i18n
 // (`verdictLabelKeys`). Keeping these split avoids a per-render translate
@@ -113,12 +114,10 @@ export default function ComplianceReviewPage() {
     setCurrentPage(1)
   }, [activeDeptId, search])
 
-  const totalPages = Math.max(1, Math.ceil(filteredItems.length / PAGE_SIZE))
-  const safePage = Math.min(currentPage, totalPages)
-  const pagedItems = useMemo(() => {
-    const start = (safePage - 1) * PAGE_SIZE
-    return filteredItems.slice(start, start + PAGE_SIZE)
-  }, [filteredItems, safePage])
+  const { items: pagedItems, totalPages, page: safePage } = useMemo(
+    () => paginate(filteredItems, currentPage, PAGE_SIZE),
+    [filteredItems, currentPage]
+  )
 
   const handleRowClick = (item: ChecklistItem) => {
     if (item.kind === 'rule') {

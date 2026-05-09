@@ -23,6 +23,7 @@ import { computeNextReview, cadenceToReviewCycleDays } from '@/lib/review-schedu
 import { usePolicyTemplateStore } from '@/stores/policy-template-store'
 import { useTeamStore } from '@/stores/team-store'
 import { useDepartmentStore } from '@/stores/department-store'
+import { paginate } from '@/lib/pagination'
 import { usePolicyCategoryStore } from '@/stores/policy-category-store'
 import { EditableSelect } from '@/components/ui/editable-select'
 import { exportPoliciesLocalized } from '@/lib/export'
@@ -283,11 +284,10 @@ export default function RegulatoryUpdatesPoliciesPage() {
   // Reset to page 1 when filters change
   useEffect(() => { setCurrentPage(1) }, [policySearchQuery, policyCategoryFilter, policyStatusFilter])
 
-  const paginatedPolicies = useMemo(() => {
-    const start = (currentPage - 1) * PAGE_SIZE
-    return filteredPolicies.slice(start, start + PAGE_SIZE)
-  }, [filteredPolicies, currentPage])
-  const totalPages = Math.ceil(filteredPolicies.length / PAGE_SIZE)
+  const { items: paginatedPolicies, totalPages } = useMemo(
+    () => paginate(filteredPolicies, currentPage, PAGE_SIZE),
+    [filteredPolicies, currentPage]
+  )
 
   const policyStats = useMemo(() => ({
     total: policies.length,

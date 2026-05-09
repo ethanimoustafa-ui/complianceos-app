@@ -2,6 +2,7 @@
 
 import { memo } from 'react'
 import { useTranslation } from '@/i18n'
+import { dicebearAvatar } from '@/lib/avatar'
 
 interface TeamMember {
   name: string
@@ -31,7 +32,7 @@ export const AssignedTeam = memo(function AssignedTeam({
         {assignees.map((member, index) => (
           <div key={`assignee-${index}-${member.name}`} className={`flex items-center gap-3`}>
             <img
-              src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${member.avatar || member.name}`}
+              src={dicebearAvatar(member.avatar || member.name)}
               className="w-8 h-8 rounded-full"
               alt={member.name}
             />

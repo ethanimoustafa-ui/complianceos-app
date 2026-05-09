@@ -8,6 +8,7 @@ import type { TeamMember, RegulatoryBodyId } from '@/types'
 import { useDepartmentStore } from '@/stores/department-store'
 import { useFrameworkConfigStore } from '@/stores/framework-config-store'
 import { EditableSelect } from '@/components/ui/editable-select'
+import { dicebearAvatar } from '@/lib/avatar'
 
 export interface ObservationFormFieldsProps {
   values: {
@@ -254,7 +255,7 @@ export const AssigneeField = memo(function AssigneeField({
               className={`flex items-center gap-2 px-3 py-1.5 bg-emerald-50 border border-emerald-200 rounded-full text-xs font-medium text-slate-700`}
             >
               <img
-                src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${member.avatar}`}
+                src={dicebearAvatar(member.avatar)}
                 className="w-5 h-5 rounded-full"
                 alt={member.name}
               />

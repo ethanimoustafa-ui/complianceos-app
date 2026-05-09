@@ -3,6 +3,7 @@
 import { memo } from 'react'
 import { useTranslation } from '@/i18n'
 import { formatLocalizedDateShort } from '@/lib/time-utils'
+import { dicebearAvatar } from '@/lib/avatar'
 import type { ObservationTimelineEntry } from '@/types'
 
 export interface ActivityTimelineProps {
@@ -50,7 +51,7 @@ export const ActivityTimeline = memo(function ActivityTimeline({
                 {event.userAvatar ? (
                   <div className="relative group">
                     <img
-                      src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${event.userAvatar}`}
+                      src={dicebearAvatar(event.userAvatar)}
                       className="w-4 h-4 rounded-full cursor-pointer hover:ring-2 hover:ring-emerald-300 transition-all"
                       alt={event.userName || 'User'}
                     />
