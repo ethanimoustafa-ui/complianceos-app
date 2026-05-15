@@ -19,13 +19,16 @@
     "html2canvas": "^1.4.1",
     "jspdf": "^4.2.0",
     "jszip": "^3.10.1",
-    "next": "16.1.2",
+    "next": "^16.2.6",
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "react-hook-form": "^7.71.1",
     "tailwind-merge": "^3.4.0",
     "zod": "^4.3.5",
     "zustand": "^5.0.10"
+  },
+  "overrides": {
+    "postcss": "^8.5.10"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
@@ -34,7 +37,7 @@
     "@types/react-dom": "^19",
     "docx": "^9.6.1",
     "eslint": "^9",
-    "eslint-config-next": "16.1.2",
+    "eslint-config-next": "^16.2.6",
     "tailwindcss": "^4",
     "tsx": "^4.21.0",
     "typescript": "^5"
