@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo } from 'react'
+import { useEffect, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { Icon } from '@iconify/react'
 import { cn } from '@/lib/utils'
@@ -49,11 +49,27 @@ export function EventDrawer({ selectedDayKey, items, calendarType, onClose }: Ev
   const router = useRouter()
   const calendarEvents = useCalendarStore((s) => s.events)
   const updateEvent = useCalendarStore((s) => s.updateEvent)
+  // Delete is optimistic: the store removes the row locally + fires the
+  // DELETE request, rolling back if it fails. We surface failures via a
+  // simple alert() because the EventDrawer has no toast slot of its own.
+  const deleteEvent = useCalendarStore((s) => s.deleteEvent)
+  const calendarError = useCalendarStore((s) => s.error)
+  const clearCalendarError = useCalendarStore((s) => s.clearError)
 
   const dayItems = useMemo(() => {
     if (!selectedDayKey) return []
     return items.filter(i => i.date === selectedDayKey)
   }, [items, selectedDayKey])
+
+  // Surface calendar-store errors (e.g. failed DELETE after optimistic remove)
+  // as a quick alert and clear the flag so the next failure surfaces too.
+  useEffect(() => {
+    if (calendarError) {
+      // eslint-disable-next-line no-alert
+      alert(calendarError)
+      clearCalendarError()
+    }
+  }, [calendarError, clearCalendarError])
 
   const stats = useMemo(() => {
     const total = dayItems.length
@@ -149,26 +165,54 @@ export function EventDrawer({ selectedDayKey, items, calendarType, onClose }: Ev
                       const calEvent = calendarEvents.find(e => e.id === calEventId)
                       const isCompleted = calEvent?.completed
 
+                      const handleDelete = () => {
+                        // Optimistic remove + background DELETE — `useCalendarStore.deleteEvent`
+                        // rolls back if the network call fails and surfaces the
+                        // error via `error`. We pick it up in the effect below
+                        // and pop an alert().
+                        deleteEvent(calEventId)
+                      }
+
+                      const deleteBtn = (
+                        <button
+                          onClick={handleDelete}
+                          aria-label="Delete event"
+                          title={t('common.delete' as TranslationKey)}
+                          className={cn(
+                            'mt-1 shrink-0 px-3 text-xs font-bold py-2 rounded-lg border transition-colors cursor-pointer flex items-center justify-center gap-2',
+                            'bg-white text-rose-600 border-rose-200 hover:bg-rose-50 hover:border-rose-300'
+                          )}
+                        >
+                          <Icon icon="lucide:trash-2" className="text-sm" />
+                        </button>
+                      )
+
                       if (isCompleted) {
                         return (
-                          <div className={cn('mt-1 flex items-center justify-center gap-2 py-2 text-xs font-bold text-emerald-600')}>
-                            <Icon icon="lucide:check-circle-2" className="text-base" />
-                            <span>{t('calendar.markAsComplete' as TranslationKey)}</span>
+                          <div className="mt-1 flex items-center gap-2">
+                            <div className={cn('flex-1 flex items-center justify-center gap-2 py-2 text-xs font-bold text-emerald-600')}>
+                              <Icon icon="lucide:check-circle-2" className="text-base" />
+                              <span>{t('calendar.markAsComplete' as TranslationKey)}</span>
+                            </div>
+                            {deleteBtn}
                           </div>
                         )
                       }
 
                       return (
-                        <button
-                          onClick={() => updateEvent(calEventId, { completed: true, completedAt: new Date().toISOString() })}
-                          className={cn(
-                            'mt-1 w-full text-xs font-bold py-2 rounded-lg border transition-colors cursor-pointer flex items-center justify-center gap-2',
-                            'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100 hover:border-emerald-300'
-                          )}
-                        >
-                          <Icon icon="lucide:check-circle-2" className="text-sm" />
-                          {t('calendar.markAsComplete' as TranslationKey)}
-                        </button>
+                        <div className="mt-1 flex items-center gap-2">
+                          <button
+                            onClick={() => updateEvent(calEventId, { completed: true, completedAt: new Date().toISOString() })}
+                            className={cn(
+                              'flex-1 text-xs font-bold py-2 rounded-lg border transition-colors cursor-pointer flex items-center justify-center gap-2',
+                              'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100 hover:border-emerald-300'
+                            )}
+                          >
+                            <Icon icon="lucide:check-circle-2" className="text-sm" />
+                            {t('calendar.markAsComplete' as TranslationKey)}
+                          </button>
+                          {deleteBtn}
+                        </div>
                       )
                     })()}
                   </div>

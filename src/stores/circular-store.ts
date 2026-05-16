@@ -177,7 +177,10 @@ function toCreatePayload(
     business_owner_department: data.businessOwnerDepartment || undefined,
     assigned_to: data.assignedTo || undefined,
     progress: data.progress ?? 0,
-    issuance_date: data.issuanceDate,
+    // Empty-string from optional date input must be elided so the Zod schema's
+    // `.optional().default(today)` kicks in. Sending '' fails the DateString
+    // `min(1)` check on the route handler (400 Validation failed).
+    issuance_date: data.issuanceDate || undefined,
     due_date: data.dueDate,
     cap_status: data.capStatus ?? 'not-started',
     cap_due_date: data.capDueDate || undefined,
