@@ -104,12 +104,13 @@ export async function countDepartmentReferences(
   supabase: SupabaseClient,
   departmentId: string,
 ): Promise<{ total: number; byTable: Record<string, number> }> {
+  // NOTE: only tables that ACTUALLY carry a department_id column are queried.
+  // `observations.department` is `text` (stores a department `key`, not uuid)
+  // so we can't direct-eq against a uuid here. `risks`, `policies`, `circulars`
+  // do not have a department FK in the current schema. Adding those FKs is a
+  // larger migration deferred to a future wave.
   const tables: Array<{ table: string; col: string }> = [
     { table: 'profiles', col: 'department_id' },
-    { table: 'observations', col: 'department_id' },
-    { table: 'risks', col: 'department_id' },
-    { table: 'policies', col: 'business_owner_id' },
-    { table: 'circulars', col: 'business_owner_id' },
     { table: 'framework_config', col: 'department_id' },
     { table: 'compliance_evaluations', col: 'department_id' },
   ]

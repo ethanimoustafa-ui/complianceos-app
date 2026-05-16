@@ -10,6 +10,13 @@
 // directly. The four method helpers (`get`, `post`, `patch`, `delete`) are the
 // canonical entrypoints for every Zustand store migrated in Phase 5.
 //
+// 401 recovery: when a /api/* call returns 401 the client transparently
+// attempts ONE session refresh via supabase-js, then retries the request.
+// If the refresh also fails the caller is redirected to /sign-in. This
+// prevents the "Authentication required" unhandled rejection users see when
+// their access token expires while the tab is open or after a Supabase
+// session is force-invalidated.
+//
 // See `.planning/09-store-pattern.md` for the store migration recipe.
 
 export type ApiSuccess<T> = { data: T }
@@ -63,13 +70,67 @@ interface FetchInit extends Omit<RequestInit, 'body'> {
 }
 
 /**
+ * Attempt a single Supabase session refresh from the browser. Returns true
+ * if the refresh succeeded and a fresh session is now available. We import
+ * lazily to keep apiFetch usable from non-React contexts (and to avoid
+ * pulling supabase-js into early bundles).
+ */
+async function tryRefreshSession(): Promise<boolean> {
+  if (typeof window === 'undefined') return false
+  try {
+    const { createClient } = await import('@/lib/supabase/client')
+    const supabase = createClient()
+    const { data, error } = await supabase.auth.refreshSession()
+    return !error && !!data.session
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Hard sign-out helper. Clears any in-memory session and bounces the user
+ * to `/sign-in?next=<current-path>` so they can re-authenticate. We do NOT
+ * call this from server-side callers — only from the browser.
+ */
+async function forceReauth(): Promise<void> {
+  if (typeof window === 'undefined') return
+  try {
+    const { createClient } = await import('@/lib/supabase/client')
+    const supabase = createClient()
+    await supabase.auth.signOut()
+  } catch {
+    // Ignore — we're redirecting anyway.
+  }
+  const next = window.location.pathname + window.location.search
+  // Avoid a redirect loop if we're already on /sign-in.
+  if (window.location.pathname.startsWith('/sign-in')) return
+  window.location.replace(`/sign-in?next=${encodeURIComponent(next)}`)
+}
+
+interface FetchAttemptOptions {
+  /** When true, skip the 401 refresh-and-retry recovery (set by the retry call). */
+  isRetry?: boolean
+}
+
+/**
  * Typed `fetch` wrapper.
  *
  *   const data = await apiFetch<Audit>('/audits/abc', { method: 'GET' })
  *
  * Throws `ApiClientError` on non-2xx or envelope errors. Returns `T` on success.
+ *
+ * On a 401 the wrapper transparently attempts a session refresh and retries
+ * the request ONCE. If the refresh fails, the user is redirected to /sign-in.
  */
 export async function apiFetch<T>(path: string, init: FetchInit = {}): Promise<T> {
+  return apiFetchInternal<T>(path, init, {})
+}
+
+async function apiFetchInternal<T>(
+  path: string,
+  init: FetchInit,
+  attempt: FetchAttemptOptions,
+): Promise<T> {
   const { params, body, headers, method = 'GET', ...rest } = init
 
   const url = `/api${path}${buildQuery(params)}`
@@ -94,6 +155,22 @@ export async function apiFetch<T>(path: string, init: FetchInit = {}): Promise<T
       e instanceof Error ? e.message : 'Network request failed',
       0,
     )
+  }
+
+  // 401 recovery — try refreshing the session and replay the request once.
+  // Skip server-side contexts where there's no browser to redirect.
+  if (res.status === 401 && typeof window !== 'undefined') {
+    if (!attempt.isRetry) {
+      const refreshed = await tryRefreshSession()
+      if (refreshed) {
+        return apiFetchInternal<T>(path, init, { isRetry: true })
+      }
+    }
+    // Either the refresh failed, or we already retried and got 401 again
+    // (cached stale session in supabase-js memory). Either way the user has
+    // to re-authenticate. forceReauth() redirects in the background; we still
+    // throw below so any awaiting caller fails fast.
+    void forceReauth()
   }
 
   // 204 No Content has no body to parse.

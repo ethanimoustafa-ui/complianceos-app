@@ -1,4 +1,4 @@
-// User log store — Phase 5 server-state migration.
+﻿// User log store — Phase 5 server-state migration.
 //
 // Two complementary write paths exist here, both intentional:
 //
@@ -39,7 +39,8 @@ async function mirrorAuthEventToSupabase(entry: {
       module: 'auth',
       details: entry.target ?? null,
       ip_address: null,
-      metadata: entry.metadata ?? null,
+      // metadata column is NOT NULL DEFAULT '{}'::jsonb — never send null.
+      metadata: entry.metadata ?? {},
     })
   } catch (err) {
     console.warn('[user-log-store] mirror to supabase failed', err)

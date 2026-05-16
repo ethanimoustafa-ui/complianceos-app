@@ -1,16 +1,19 @@
 // Input gatherer for the server-side scoring engines.
 //
-// Given a `{ period, framework_id?, department_id? }` selector, queries
-// Supabase in parallel for every source slice the compliance / dashboard
-// engines consume and returns a `ComplianceEngineInput` + the auxiliary
-// slices the dashboard-health engine needs on top (letters, pinned
-// framework configs, target score).
+// Given a `{ period, framework_id?, department_id? }` selector, returns a
+// `ComplianceEngineInput` + the auxiliary slices the dashboard-health engine
+// needs on top (letters, pinned framework configs, target score).
 //
-// Performance notes (free-tier conscious):
-//   - All independent queries run in parallel via `Promise.all`.
+// Performance (Phase 11 / Agent P):
+//   - PRIMARY: single `compute_compliance_inputs()` RPC (migration 027) that
+//     returns one JSONB envelope with all 10 source slices. One round-trip
+//     instead of ten.
+//   - FALLBACK: legacy 10-query Promise.all path — used when the RPC isn't
+//     present or errors. Keeps the app working during migration rollout.
 //   - Each select pulls ONLY the columns the engine reads.
 //   - Period boundaries are filtered in SQL via `.gte()/.lte()` on
-//     `created_at` instead of post-filtering in JS.
+//     `created_at` instead of post-filtering in JS (also applied inside the
+//     RPC).
 
 import type { SupabaseClient } from '@supabase/supabase-js'
 import {
@@ -133,18 +136,81 @@ export interface GatheredInputs {
 
 // ---------- main entrypoint ---------------------------------------------------
 
-export async function gatherScoringInputs(
-  supabase: SupabaseClient,
-  selector: GatherSelector,
-): Promise<GatheredInputs> {
-  const period = getPeriodConfig(selector.period)
-  const startISO = period.startDate.toISOString()
-  const endISO = period.endDate.toISOString()
-  const fwFilter = selector.framework_id && selector.framework_id !== 'overall'
-    ? selector.framework_id
-    : null
+interface RpcEnvelope {
+  audits?: AuditRow[]
+  observations?: ObservationRow[]
+  risks?: RiskRow[]
+  policies?: PolicyRow[]
+  trainings?: CourseRow[]
+  circulars?: CircularRow[]
+  letters?: LetterRow[]
+  frameworks?: FrameworkRow[]
+  settings?: ComplianceSettingsRow | null
+  framework_pins?: FrameworkPinRow[]
+}
 
-  // Fire every independent query in parallel.
+interface SliceArrays {
+  audits: AuditRow[]
+  observations: ObservationRow[]
+  risks: RiskRow[]
+  policies: PolicyRow[]
+  trainings: CourseRow[]
+  circulars: CircularRow[]
+  letters: LetterRow[]
+  frameworks: FrameworkRow[]
+  settings: ComplianceSettingsRow | null
+  pins: FrameworkPinRow[]
+}
+
+/**
+ * Fast path: single RPC round-trip via `compute_compliance_inputs()`
+ * (migration 027). Returns null if the RPC is unavailable / errors so the
+ * caller can fall back to the legacy 10-query path.
+ */
+async function fetchViaRpc(
+  supabase: SupabaseClient,
+  startISO: string,
+  endISO: string,
+  fwFilter: string | null,
+  departmentId: string | null,
+): Promise<SliceArrays | null> {
+  const { data, error } = await supabase.rpc('compute_compliance_inputs', {
+    p_period_start: startISO,
+    p_period_end: endISO,
+    p_framework_id: fwFilter,
+    p_department_id: departmentId,
+  })
+  if (error || !data) {
+    if (error) {
+      // eslint-disable-next-line no-console
+      console.warn('[scoring] compute_compliance_inputs RPC failed; falling back to multi-select path', error.message)
+    }
+    return null
+  }
+  const env = data as RpcEnvelope
+  return {
+    audits: env.audits ?? [],
+    observations: env.observations ?? [],
+    risks: env.risks ?? [],
+    policies: env.policies ?? [],
+    trainings: env.trainings ?? [],
+    circulars: env.circulars ?? [],
+    letters: env.letters ?? [],
+    frameworks: env.frameworks ?? [],
+    settings: env.settings ?? null,
+    pins: env.framework_pins ?? [],
+  }
+}
+
+/**
+ * Fallback path: legacy 10-query Promise.all. Used only when the RPC isn't
+ * present or returns an error.
+ */
+async function fetchViaSelects(
+  supabase: SupabaseClient,
+  startISO: string,
+  endISO: string,
+): Promise<SliceArrays> {
   const [
     auditsRes,
     observationsRes,
@@ -194,7 +260,7 @@ export async function gatherScoringInputs(
       .gte('created_at', startISO)
       .lte('created_at', endISO),
     supabase
-      .from('sama_letters')
+      .from('letters')
       .select('id, status, response_deadline, framework_ids')
       .is('deleted_at', null),
     supabase
@@ -211,13 +277,47 @@ export async function gatherScoringInputs(
       .order('position', { ascending: true }),
   ])
 
-  // Bubble up any DB error as a Promise rejection — the route handler maps it
-  // to a 500 via `handle()`.
   for (const r of [auditsRes, observationsRes, risksRes, policiesRes, coursesRes, circularsRes, lettersRes, frameworksRes, pinsRes]) {
     if (r.error) throw r.error
   }
 
-  const audits: AuditSlice[] = ((auditsRes.data ?? []) as AuditRow[]).map((r) => ({
+  return {
+    audits: (auditsRes.data ?? []) as AuditRow[],
+    observations: (observationsRes.data ?? []) as ObservationRow[],
+    risks: (risksRes.data ?? []) as RiskRow[],
+    policies: (policiesRes.data ?? []) as PolicyRow[],
+    trainings: (coursesRes.data ?? []) as CourseRow[],
+    circulars: (circularsRes.data ?? []) as CircularRow[],
+    letters: (lettersRes.data ?? []) as LetterRow[],
+    frameworks: (frameworksRes.data ?? []) as FrameworkRow[],
+    settings: (settingsRes.data ?? null) as ComplianceSettingsRow | null,
+    pins: (pinsRes.data ?? []) as FrameworkPinRow[],
+  }
+}
+
+export async function gatherScoringInputs(
+  supabase: SupabaseClient,
+  selector: GatherSelector,
+): Promise<GatheredInputs> {
+  const period = getPeriodConfig(selector.period)
+  const startISO = period.startDate.toISOString()
+  const endISO = period.endDate.toISOString()
+  // Sentinel + uuid validation: `framework_id` arrives here as either a real
+  // framework uuid, the `'overall'` aggregate-mode discriminator, or the
+  // `'dashboard-health'` synthetic cache key used by /api/compliance/dashboard-health.
+  // Only a real uuid is safe to pass to the SQL function (its param is `uuid`),
+  // so coerce every non-uuid sentinel to null.
+  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+  const fwFilter = selector.framework_id && UUID_RE.test(selector.framework_id)
+    ? selector.framework_id
+    : null
+
+  // PRIMARY: single RPC round-trip. FALLBACK: 10-query Promise.all.
+  const slices =
+    (await fetchViaRpc(supabase, startISO, endISO, fwFilter, selector.department_id ?? null)) ??
+    (await fetchViaSelects(supabase, startISO, endISO))
+
+  const audits: AuditSlice[] = (slices.audits as AuditRow[]).map((r) => ({
     id: r.id,
     type: r.type,
     status: r.status,
@@ -230,7 +330,7 @@ export async function gatherScoringInputs(
     frameworkIds: r.framework_ids ?? [],
   }))
 
-  const observations: ObservationSlice[] = ((observationsRes.data ?? []) as ObservationRow[]).map((r) => ({
+  const observations: ObservationSlice[] = (slices.observations as ObservationRow[]).map((r) => ({
     id: r.id,
     source: r.source,
     severity: r.severity,
@@ -240,7 +340,7 @@ export async function gatherScoringInputs(
     frameworkIds: r.framework_ids ?? [],
   }))
 
-  const risks: RiskSlice[] = ((risksRes.data ?? []) as RiskRow[]).map((r) => ({
+  const risks: RiskSlice[] = (slices.risks as RiskRow[]).map((r) => ({
     id: r.id,
     likelihood: r.likelihood as 1 | 2 | 3 | 4 | 5,
     impact: r.impact as 1 | 2 | 3 | 4 | 5,
@@ -249,7 +349,7 @@ export async function gatherScoringInputs(
     frameworkIds: r.framework_ids ?? [],
   }))
 
-  const policies: PolicySlice[] = ((policiesRes.data ?? []) as PolicyRow[]).map((r) => ({
+  const policies: PolicySlice[] = (slices.policies as PolicyRow[]).map((r) => ({
     id: r.id,
     status: r.status,
     nextReviewDate: r.next_review_date ?? '',
@@ -257,7 +357,7 @@ export async function gatherScoringInputs(
     frameworkIds: r.framework_ids ?? [],
   }))
 
-  const trainings: TrainingSlice[] = ((coursesRes.data ?? []) as CourseRow[]).map((r) => ({
+  const trainings: TrainingSlice[] = (slices.trainings as CourseRow[]).map((r) => ({
     id: r.id,
     completionRate: r.assigned_count > 0 ? Math.round((r.completed_count / r.assigned_count) * 100) : 0,
     status: 'active',
@@ -265,7 +365,7 @@ export async function gatherScoringInputs(
     frameworkIds: r.framework_ids ?? [],
   }))
 
-  const circulars: CircularSlice[] = ((circularsRes.data ?? []) as CircularRow[]).map((r) => ({
+  const circulars: CircularSlice[] = (slices.circulars as CircularRow[]).map((r) => ({
     id: r.id,
     priority: r.priority,
     status: r.status,
@@ -274,16 +374,16 @@ export async function gatherScoringInputs(
     createdAt: r.created_at,
   }))
 
-  const letters: LetterSlice[] = ((lettersRes.data ?? []) as LetterRow[]).map((r) => ({
+  const letters: LetterSlice[] = (slices.letters as LetterRow[]).map((r) => ({
     id: r.id,
     status: r.status,
     responseDeadline: r.response_deadline ?? undefined,
     frameworkIds: r.framework_ids ?? [],
   }))
 
-  const frameworks = (frameworksRes.data ?? []) as FrameworkRow[]
-  const settings = (settingsRes.data ?? null) as ComplianceSettingsRow | null
-  const pins = (pinsRes.data ?? []) as FrameworkPinRow[]
+  const frameworks = slices.frameworks as FrameworkRow[]
+  const settings = slices.settings
+  const pins = slices.pins as FrameworkPinRow[]
 
   // Default weights match the migration 004 default if no row exists.
   const componentWeights: ComponentWeights = settings?.weights ?? {

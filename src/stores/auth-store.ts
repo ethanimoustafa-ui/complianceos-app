@@ -136,7 +136,8 @@ async function recordActivity(
       module,
       details: null,
       ip_address: null,
-      metadata: null,
+      // metadata column is NOT NULL DEFAULT '{}'::jsonb — send {} not null.
+      metadata: {},
     })
   } catch (err) {
     // Activity logging is best-effort — never block auth on it.
