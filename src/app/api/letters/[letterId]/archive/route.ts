@@ -1,6 +1,6 @@
-// POST /api/letters/[letterId]/archive
+﻿// POST /api/letters/[letterId]/archive
 //
-// NOTE: the current `sama_letters` schema has no `archived` column (unlike
+// NOTE: the current `letters` schema has no `archived` column (unlike
 // `correspondence` which does). Until a column is added, archive is recorded
 // as a timeline + audit-log event only. The route is exposed for API parity
 // with the frontend; consumers should not assume listing filters by archive.
@@ -28,8 +28,8 @@ export async function POST(_req: NextRequest, { params }: Params) {
       writeAudit({
         actor_id: user.id,
         actor_name: profile.name ?? profile.email ?? user.id,
-        action: 'sama_letter.archive',
-        entity_type: 'sama_letter',
+        action: 'letter.archive',
+        entity_type: 'letter',
         entity_id: letterId,
         supabase,
       }),
@@ -42,7 +42,7 @@ export async function POST(_req: NextRequest, { params }: Params) {
       ),
     ])
 
-    revalidateAll([cacheTags.samaLetters(), cacheTags.samaLetters(letterId)])
+    revalidateAll([cacheTags.letters(), cacheTags.letters(letterId)])
     return ok({ id: letterId, archived: true })
   } catch (e) {
     return handle(e)

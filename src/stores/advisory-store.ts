@@ -22,6 +22,7 @@ import type {
   AdvisoryPriority,
 } from '@/types'
 import { api, ApiClientError } from '@/lib/api-client'
+import { newTempId } from '@/lib/optimistic'
 
 // ---------- API row shapes (snake_case from Route Handlers) -----------------
 
@@ -246,25 +247,66 @@ export const useAdvisoryStore = create<AdvisoryState>()((set, get) => ({
   },
 
   create: async (data) => {
-    set({ isMutating: true, error: null })
+    // OPTIMISTIC: insert temp row immediately, swap with server row on success.
+    const tempId = newTempId('temp-adv')
+    const now = new Date().toISOString()
+    const optimistic: AdvisoryRequest = {
+      ...(data as Omit<AdvisoryRequest, 'id' | 'ref' | 'createdAt' | 'updatedAt'>),
+      id: tempId,
+      ref: '',
+      notes: [],
+      createdAt: now,
+      updatedAt: now,
+    } as AdvisoryRequest
+    set((state) => ({
+      advisoryRequests: [optimistic, ...state.advisoryRequests],
+      byId: { ...state.byId, [tempId]: optimistic },
+      isMutating: true,
+      error: null,
+    }))
     try {
       const row = await api.post<AdvisoryApiRow>('/advisory', toCreatePayload(data))
       const created = mapRow(row)
-      set((state) => ({
-        advisoryRequests: [created, ...state.advisoryRequests],
-        byId: { ...state.byId, [created.id]: created },
-        isMutating: false,
-      }))
+      set((state) => {
+        const { [tempId]: _drop, ...restById } = state.byId
+        return {
+          advisoryRequests: state.advisoryRequests.map((a) => (a.id === tempId ? created : a)),
+          byId: { ...restById, [created.id]: created },
+          isMutating: false,
+        }
+      })
       void get().fetchAll()
       return created
     } catch (e) {
-      set({ error: errorMessage(e, 'Failed to create advisory request'), isMutating: false })
+      set((state) => {
+        const { [tempId]: _drop, ...rest } = state.byId
+        return {
+          advisoryRequests: state.advisoryRequests.filter((a) => a.id !== tempId),
+          byId: rest,
+          error: errorMessage(e, 'Failed to create advisory request'),
+          isMutating: false,
+        }
+      })
       throw e
     }
   },
 
   update: async (id, data) => {
-    set({ isMutating: true, error: null })
+    // OPTIMISTIC: snapshot, apply patch, restore on failure.
+    const snapshot = get().byId[id]
+    if (snapshot) {
+      const optimistic: AdvisoryRequest = { ...snapshot, ...data, updatedAt: new Date().toISOString() }
+      set((state) => ({
+        advisoryRequests: state.advisoryRequests.map((a) => (a.id === id ? optimistic : a)),
+        byId: { ...state.byId, [id]: optimistic },
+        selectedRequest:
+          state.selectedRequest?.id === id ? optimistic : state.selectedRequest,
+        isMutating: true,
+        error: null,
+      }))
+    } else {
+      set({ isMutating: true, error: null })
+    }
     try {
       const row = await api.patch<AdvisoryApiRow>(`/advisory/${id}`, toUpdatePayload(data))
       const previous = get().byId[id]
@@ -278,66 +320,102 @@ export const useAdvisoryStore = create<AdvisoryState>()((set, get) => ({
       }))
       return updated
     } catch (e) {
-      set({ error: errorMessage(e, 'Failed to update advisory request'), isMutating: false })
+      if (snapshot) {
+        set((state) => ({
+          advisoryRequests: state.advisoryRequests.map((a) => (a.id === id ? snapshot : a)),
+          byId: { ...state.byId, [id]: snapshot },
+          selectedRequest:
+            state.selectedRequest?.id === id ? snapshot : state.selectedRequest,
+          error: errorMessage(e, 'Failed to update advisory request'),
+          isMutating: false,
+        }))
+      } else {
+        set({ error: errorMessage(e, 'Failed to update advisory request'), isMutating: false })
+      }
       throw e
     }
   },
 
   delete: async (id) => {
-    set({ isMutating: true, error: null })
+    // OPTIMISTIC: remove immediately, restore on failure.
+    const snapshot = get().byId[id]
+    const prevIndex = get().advisoryRequests.findIndex((a) => a.id === id)
+    set((state) => {
+      const { [id]: _removed, ...rest } = state.byId
+      return {
+        advisoryRequests: state.advisoryRequests.filter((a) => a.id !== id),
+        byId: rest,
+        selectedRequest:
+          state.selectedRequest?.id === id ? null : state.selectedRequest,
+        isMutating: true,
+        error: null,
+      }
+    })
     try {
       await api.delete(`/advisory/${id}`)
-      set((state) => {
-        const { [id]: _removed, ...rest } = state.byId
-        return {
-          advisoryRequests: state.advisoryRequests.filter((a) => a.id !== id),
-          byId: rest,
-          selectedRequest:
-            state.selectedRequest?.id === id ? null : state.selectedRequest,
-          isMutating: false,
-        }
-      })
+      set({ isMutating: false })
     } catch (e) {
-      set({ error: errorMessage(e, 'Failed to delete advisory request'), isMutating: false })
+      if (snapshot) {
+        set((state) => {
+          const list = [...state.advisoryRequests]
+          const insertAt = prevIndex >= 0 && prevIndex <= list.length ? prevIndex : list.length
+          list.splice(insertAt, 0, snapshot)
+          return {
+            advisoryRequests: list,
+            byId: { ...state.byId, [id]: snapshot },
+            error: errorMessage(e, 'Failed to delete advisory request'),
+            isMutating: false,
+          }
+        })
+      } else {
+        set({ error: errorMessage(e, 'Failed to delete advisory request'), isMutating: false })
+      }
       throw e
     }
   },
 
   addNote: async (id, note) => {
-    // No dedicated notes endpoint in Phase 4 — perform a local-only append so
-    // the UI responds. Phase 5+ should add `/api/advisory/[id]/notes` (POST)
-    // and wire it here.
-    const newNote: AdvisoryNote = {
-      id: crypto.randomUUID(),
-      author: note.author,
-      content: note.content,
-      timestamp: new Date().toISOString(),
-    }
-    set((state) => ({
-      advisoryRequests: state.advisoryRequests.map((r) =>
-        r.id === id
-          ? { ...r, notes: [...r.notes, newNote], updatedAt: new Date().toISOString() }
-          : r,
-      ),
-      byId: state.byId[id]
-        ? {
-            ...state.byId,
-            [id]: {
-              ...state.byId[id],
-              notes: [...state.byId[id].notes, newNote],
-              updatedAt: new Date().toISOString(),
-            },
-          }
-        : state.byId,
-      selectedRequest:
-        state.selectedRequest?.id === id
+    // Fix-3 wave: notes now persist via `POST /api/advisory/[id]` which
+    // inserts into `advisory_notes`. The POST handler is co-located on the
+    // existing detail route file (the wave's supervisor forbade creating new
+    // Route Handler files). When a dedicated `/notes` sub-route is added in
+    // a later wave the endpoint here can switch without touching callers.
+    set({ isMutating: true, error: null })
+    try {
+      const row = await api.post<AdvisoryNoteApiRow>(`/advisory/${id}`, {
+        author: note.author,
+        content: note.content,
+      })
+      const created = mapNote(row)
+      const nowIso = new Date().toISOString()
+      set((state) => ({
+        advisoryRequests: state.advisoryRequests.map((r) =>
+          r.id === id ? { ...r, notes: [...r.notes, created], updatedAt: nowIso } : r,
+        ),
+        byId: state.byId[id]
           ? {
-              ...state.selectedRequest,
-              notes: [...state.selectedRequest.notes, newNote],
-              updatedAt: new Date().toISOString(),
+              ...state.byId,
+              [id]: {
+                ...state.byId[id],
+                notes: [...state.byId[id].notes, created],
+                updatedAt: nowIso,
+              },
             }
-          : state.selectedRequest,
-    }))
+          : state.byId,
+        selectedRequest:
+          state.selectedRequest?.id === id
+            ? {
+                ...state.selectedRequest,
+                notes: [...state.selectedRequest.notes, created],
+                updatedAt: nowIso,
+              }
+            : state.selectedRequest,
+        isMutating: false,
+      }))
+    } catch (e) {
+      set({ error: errorMessage(e, 'Failed to add note'), isMutating: false })
+      throw e
+    }
   },
 
   updateStatus: async (id, status) => {

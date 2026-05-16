@@ -1,12 +1,12 @@
-'use client'
+﻿'use client'
 
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { Icon } from '@iconify/react'
 import { cn } from '@/lib/utils'
 import { useTranslation } from '@/i18n'
-import { useSAMALetterStore } from '@/stores/sama-letter-store'
-import { useSAMATemplateStore } from '@/stores/sama-template-store'
-import { useSAMALetterTypeStore } from '@/stores/sama-letter-type-store'
+import { useLetterStore } from '@/stores/letter-store'
+import { useLetterTemplateStore } from '@/stores/letter-template-store'
+import { useLetterTypeStore } from '@/stores/letter-type-store'
 import { useFrameworkSubCategoryStore } from '@/stores/framework-sub-category-store'
 import { useAuthStore } from '@/stores/auth-store'
 import { EditableSelect } from '@/components/ui/editable-select'
@@ -20,7 +20,7 @@ import {
   autoPromoteTypedTokens,
 } from '@/lib/letter-placeholders'
 import type {
-  SAMALetterType,
+  LetterType,
   Attachment,
   LetterTemplate,
   CircularAuthority,
@@ -40,16 +40,16 @@ export function CreateLetterForm({
   onSuccess,
   template,
 }: {
-  selectedType: SAMALetterType
-  onTypeChange: (type: SAMALetterType) => void
+  selectedType: LetterType
+  onTypeChange: (type: LetterType) => void
   onClose: () => void
   onSuccess: () => void
   template?: LetterTemplate
 }) {
   const { t, isRTL } = useTranslation()
-  const store = useSAMALetterStore()
-  const templateStore = useSAMATemplateStore()
-  const letterTypeStore = useSAMALetterTypeStore()
+  const store = useLetterStore()
+  const templateStore = useLetterTemplateStore()
+  const letterTypeStore = useLetterTypeStore()
   const { user } = useAuthStore()
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [priority, setPriority] = useState<'standard' | 'urgent'>('standard')
@@ -59,16 +59,16 @@ export function CreateLetterForm({
   const getLetterTypeLabel = useCallback((id: string, lang: 'en' | 'ar'): string => {
     const item = letterTypeStore.types.find((tt) => tt.id === id)
     if (lang === 'ar') {
-      if (id === 'non-objection') return t('samaLetters.nonObjection')
-      if (id === 'inquiry')       return t('samaLetters.inquiry')
-      if (id === 'submission')    return t('samaLetters.submission')
-      if (id === 'notification')  return t('samaLetters.notification')
+      if (id === 'non-objection') return t('letters.nonObjection')
+      if (id === 'inquiry')       return t('letters.inquiry')
+      if (id === 'submission')    return t('letters.submission')
+      if (id === 'notification')  return t('letters.notification')
       return item?.labelAr || item?.label || id
     }
-    if (id === 'non-objection') return t('samaLetters.nonObjection')
-    if (id === 'inquiry')       return t('samaLetters.inquiry')
-    if (id === 'submission')    return t('samaLetters.submission')
-    if (id === 'notification')  return t('samaLetters.notification')
+    if (id === 'non-objection') return t('letters.nonObjection')
+    if (id === 'inquiry')       return t('letters.inquiry')
+    if (id === 'submission')    return t('letters.submission')
+    if (id === 'notification')  return t('letters.notification')
     return item?.label || id
   }, [letterTypeStore.types, t])
   const [subjectEn, setSubjectEn] = useState('')
@@ -111,7 +111,7 @@ export function CreateLetterForm({
 
   // Templates filtered by the currently-selected letter type so picking
   // "Inquiry" only surfaces inquiry-type templates. Sourced live from
-  // useSAMATemplateStore so user-created templates appear here as well.
+  // useLetterTemplateStore so user-created templates appear here as well.
   // Sorted by lastModified desc to match Template Registry ordering.
   // BUG-R3-04: do NOT gate on `status === 'Active'` — `TemplateEditForm`
   // creates new templates with default status `'Draft'`. Showing every
@@ -169,7 +169,8 @@ export function CreateLetterForm({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedType])
 
-  const reference = store.getNextReference(selectedType)
+  // Reference is generated server-side on POST /api/letters. The persisted
+  // value comes back on `create()`'s response — see `handleSubmit`/`handleSaveDraft`.
   const createdBy = user?.name || 'Current User'
 
   const handleDraftAttach = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -204,12 +205,11 @@ export function CreateLetterForm({
     // editing renders inline chips. The flat `renderTemplate(...)` substitution
     // happens later when the letter status transitions to `sent`.
     return {
-      reference,
       authority,
       type: selectedType,
       subCategory: subCategory as import('@/types').SAMASubCategory,
       samaDepartment: samaDepartment as import('@/types').SAMADepartment,
-      subject: subjectEn || `(Draft ${reference})`,
+      subject: subjectEn || t('letters.draftOfficialCorrespondence'),
       subjectAr: subjectAr || undefined,
       body: bodyEn,
       bodyAr: bodyAr || undefined,
@@ -227,8 +227,8 @@ export function CreateLetterForm({
       recipientNameAr:      template?.defaultRecipientNameAr || recipientDefaults.ar.name,
       recipientOrgAr:       template?.defaultRecipientOrgAr  || recipientDefaults.ar.org,
       recipientCityAr:      template?.defaultRecipientCityAr || recipientDefaults.ar.city,
-      approvalChain: [] as import('@/types').SAMALetterApprovalStep[],
-      timeline: [buildTimelineEvent(t('samaLetters.letterCreatedDraft'))],
+      approvalChain: [] as import('@/types').LetterApprovalStep[],
+      timeline: [buildTimelineEvent(t('letters.letterCreatedDraft'))],
       attachments: draftAttachments,
       relatedObservations: [] as string[],
       // Carry the placeholder defs + values forward so the draft editor
@@ -267,11 +267,13 @@ export function CreateLetterForm({
       <div className={`flex justify-between items-start mb-8`}>
         <div>
           <h2 className="text-2xl font-bold text-slate-900 font-display">
-            {t('samaLetters.draftOfficialCorrespondence')}
+            {t('letters.draftOfficialCorrespondence')}
           </h2>
           <p className="text-sm text-slate-500 mt-1">
-            {t('samaLetters.referenceAssigned')}:{' '}
-            <span className="font-mono font-bold text-emerald-600">{reference}</span>
+            {t('letters.referenceAssigned')}:{' '}
+            <span className="font-mono font-bold text-emerald-600">
+              {t('letters.referenceAutoGenerated')}
+            </span>
           </p>
         </div>
         <button
@@ -285,7 +287,7 @@ export function CreateLetterForm({
       {/* Authority spans full width at the top so both columns below stay balanced (2 rows each) */}
       <div className="mb-6">
         <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-2">
-          {t('samaLetters.authorityField')}
+          {t('letters.authorityField')}
         </label>
         <DynamicAuthoritySelect
           value={authority}
@@ -298,7 +300,7 @@ export function CreateLetterForm({
         <div className="space-y-4">
           <div>
             <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-2">
-              {t('samaLetters.letterType')}
+              {t('letters.letterType')}
             </label>
             <EditableSelect
               value={selectedType || null}
@@ -309,7 +311,7 @@ export function CreateLetterForm({
                 labelAr: getLetterTypeLabel(tt.id, 'ar'),
                 isDefault: tt.isDefault,
               }))}
-              placeholder={t('samaLetters.letterType')}
+              placeholder={t('letters.letterType')}
               onAdd={(label, labelAr) => letterTypeStore.add(label, labelAr)}
               onEdit={(id, label, labelAr) =>
                 letterTypeStore.update(id, { label, labelAr: labelAr ?? label })
@@ -320,12 +322,12 @@ export function CreateLetterForm({
           </div>
           <div>
             <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-2">
-              {t('samaLetters.chooseTemplate')}
+              {t('letters.chooseTemplate')}
             </label>
             <EditableSelect
               locked
               items={[
-                { id: '', label: t('samaLetters.noTemplateBlank') },
+                { id: '', label: t('letters.noTemplateBlank') },
                 ...filteredTemplates.map((tpl) => ({
                   id: tpl.id,
                   label: tpl.name,
@@ -339,19 +341,19 @@ export function CreateLetterForm({
                   applyTemplate(tpl)
                 }
               }}
-              placeholder={t('samaLetters.noTemplateBlank')}
+              placeholder={t('letters.noTemplateBlank')}
               isRTL={isRTL}
             />
 
             {filteredTemplates.length === 0 && (
               <p className="text-[10px] text-slate-400 mt-1">
-                {t('samaLetters.noTemplatesForType')}
+                {t('letters.noTemplatesForType')}
               </p>
             )}
           </div>
           <div>
             <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-2">
-              {t('samaLetters.subCategory')}
+              {t('letters.subCategory')}
             </label>
             {/* Authority-aware per round-3 §5: the picker reads sub-categories
                 scoped to the currently selected authority/framework. Adds and
@@ -368,8 +370,8 @@ export function CreateLetterForm({
               }))}
               placeholder={
                 authority
-                  ? t('samaLetters.subCategory')
-                  : t('samaLetters.selectAuthorityFirst')
+                  ? t('letters.subCategory')
+                  : t('letters.selectAuthorityFirst')
               }
               onAdd={async (label, labelAr) => {
                 if (!authority) return undefined
@@ -393,7 +395,7 @@ export function CreateLetterForm({
         <div className="space-y-4">
           <div>
             <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-2">
-              {t('samaLetters.targetDepartment')}
+              {t('letters.targetDepartment')}
             </label>
             <EditableAuthorityDeptField
               authority={authority}
@@ -450,12 +452,12 @@ export function CreateLetterForm({
               <Icon icon={completion.complete ? 'lucide:check-circle-2' : 'lucide:alert-circle'} />
               <span>
                 {completion.complete
-                  ? t('samaLetters.placeholdersAllFilled')
-                  : t('samaLetters.placeholdersPending').replace('{count}', String(completion.missing.length))}
+                  ? t('letters.placeholdersAllFilled')
+                  : t('letters.placeholdersPending').replace('{count}', String(completion.missing.length))}
               </span>
             </div>
             <span className="text-[10px] text-slate-500">
-              {t('samaLetters.placeholdersHint')}
+              {t('letters.placeholdersHint')}
             </span>
           </div>
         )
@@ -466,7 +468,7 @@ export function CreateLetterForm({
         {/* English Side */}
         <div>
           <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-2">
-            {t('samaLetters.subjectEnglish')}
+            {t('letters.subjectEnglish')}
           </label>
           <div className="mb-4">
             <LetterSubjectEditor
@@ -478,11 +480,11 @@ export function CreateLetterForm({
                 setPlaceholderValues((prev) => ({ ...prev, [key]: v }))
               }
               dir="ltr"
-              placeholder={t('samaLetters.enterEnglishSubject')}
+              placeholder={t('letters.enterEnglishSubject')}
             />
           </div>
           <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-2">
-            {t('samaLetters.contentEnglish')}
+            {t('letters.contentEnglish')}
           </label>
           <LetterBodyEditor
             value={bodyEn}
@@ -494,7 +496,7 @@ export function CreateLetterForm({
             }
             rows={6}
             dir="ltr"
-            placeholder={t('samaLetters.typeMessageHere')}
+            placeholder={t('letters.typeMessageHere')}
           />
         </div>
 
@@ -504,7 +506,7 @@ export function CreateLetterForm({
             className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-2"
             style={{ fontFamily: 'Inter, sans-serif' }}
           >
-            {t('samaLetters.subjectArabic')}
+            {t('letters.subjectArabic')}
           </label>
           <div className="mb-4">
             <LetterSubjectEditor
@@ -518,14 +520,14 @@ export function CreateLetterForm({
               dir="rtl"
               fontFamily="'Amiri', serif"
               textSize="text-lg"
-              placeholder={t('samaLetters.enterArabicSubject')}
+              placeholder={t('letters.enterArabicSubject')}
             />
           </div>
           <label
             className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-2"
             style={{ fontFamily: 'Inter, sans-serif' }}
           >
-            {t('samaLetters.contentArabic')}
+            {t('letters.contentArabic')}
           </label>
           <LetterBodyEditor
             value={bodyAr}
@@ -539,7 +541,7 @@ export function CreateLetterForm({
             dir="rtl"
             fontFamily="'Amiri', serif"
             textSize="text-lg"
-            placeholder={t('samaLetters.typeMessageHere')}
+            placeholder={t('letters.typeMessageHere')}
           />
         </div>
       </div>
@@ -548,14 +550,14 @@ export function CreateLetterForm({
         <input ref={createAttachFileRef} type="file" multiple className="hidden" onChange={handleDraftAttach} />
         <button onClick={() => createAttachFileRef.current?.click()} className={`flex items-center gap-2 text-sm font-bold text-slate-500 hover:text-slate-900 transition-colors cursor-pointer`}>
           <Icon icon="lucide:paperclip" />
-          {t('samaLetters.manageAttachments')} ({draftAttachments.length})
+          {t('letters.manageAttachments')} ({draftAttachments.length})
         </button>
         <div className={`flex gap-3`}>
           <button
             onClick={handleSaveDraft}
             className="px-6 py-3 bg-slate-100 text-slate-600 rounded-xl text-sm font-bold hover:bg-slate-200 transition-colors cursor-pointer"
           >
-            {t('samaLetters.saveAsDraft')}
+            {t('letters.saveAsDraft')}
           </button>
           <button
             onClick={handleSubmit}
@@ -565,10 +567,10 @@ export function CreateLetterForm({
             {isSubmitting ? (
               <>
                 <Icon icon="lucide:loader-2" className="animate-spin" />
-                {t('samaLetters.processing')}
+                {t('letters.processing')}
               </>
             ) : (
-              t('samaLetters.sendForApproval')
+              t('letters.sendForApproval')
             )}
           </button>
         </div>

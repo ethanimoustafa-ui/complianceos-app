@@ -1,4 +1,4 @@
-// /api/letters/[letterId]/placeholders
+﻿// /api/letters/[letterId]/placeholders
 //   GET   → effective list = letter.placeholder_defs (or template_defs if
 //           letter has none), merged with current letter.placeholder_values.
 //   PATCH → bulk-update placeholder_values, render shadow rendered fields.
@@ -13,7 +13,6 @@ import { writeAudit } from '@/lib/api/audit'
 import { UpdatePlaceholdersSchema } from '@/lib/api/schemas/letters'
 import {
   assertLetterExists,
-  insertLetterTimeline,
   renderLetterFields,
 } from '@/lib/api/services/letters'
 
@@ -28,7 +27,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
     const { supabase } = await requireUser()
 
     const { data, error } = await supabase
-      .from('sama_letters')
+      .from('letters')
       .select('id, placeholder_defs, placeholder_values, subject, subject_ar, body, body_ar')
       .eq('id', letterId)
       .is('deleted_at', null)
@@ -42,7 +41,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
         values: (data as { placeholder_values: unknown }).placeholder_values ?? {},
       },
       {
-        cache: { sMaxAge: 60, tags: [cacheTags.samaLetterPlaceholders(letterId)] },
+        cache: { sMaxAge: 60, tags: [cacheTags.letterPlaceholders(letterId)] },
       },
     )
   } catch (e) {
@@ -60,7 +59,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     // Pull source text to render preview values; render is informational —
     // canonical templated body remains in DB.
     const { data: src } = await supabase
-      .from('sama_letters')
+      .from('letters')
       .select('subject, subject_ar, body, body_ar')
       .eq('id', letterId)
       .maybeSingle<{
@@ -80,7 +79,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     )
 
     const { data, error } = await supabase
-      .from('sama_letters')
+      .from('letters')
       .update({ placeholder_values: body.placeholder_values })
       .eq('id', letterId)
       .is('deleted_at', null)
@@ -88,28 +87,23 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       .single()
     if (error || !data) throw error ?? NotFound('Update returned no row')
 
-    await Promise.all([
-      writeAudit({
-        actor_id: user.id,
-        actor_name: profile.name ?? profile.email ?? user.id,
-        action: 'sama_letter.placeholders.update',
-        entity_type: 'sama_letter',
-        entity_id: letterId,
-        metadata: { keys: Object.keys(body.placeholder_values) },
-        supabase,
-      }),
-      insertLetterTimeline(
-        supabase,
-        letterId,
-        'Placeholders updated',
-        profile.name ?? profile.email ?? user.id,
-        'completed',
-      ),
-    ])
+    // Placeholder updates fire on every keystroke in the editor — recording
+    // them in the timeline drowned out workflow milestones. We keep the audit
+    // log entry (server-side observability) but skip the timeline write.
+    // (Fix-3 wave.)
+    await writeAudit({
+      actor_id: user.id,
+      actor_name: profile.name ?? profile.email ?? user.id,
+      action: 'letter.placeholders.update',
+      entity_type: 'letter',
+      entity_id: letterId,
+      metadata: { keys: Object.keys(body.placeholder_values) },
+      supabase,
+    })
 
     revalidateAll([
-      cacheTags.samaLetters(letterId),
-      cacheTags.samaLetterPlaceholders(letterId),
+      cacheTags.letters(letterId),
+      cacheTags.letterPlaceholders(letterId),
     ])
     return ok(data)
   } catch (e) {

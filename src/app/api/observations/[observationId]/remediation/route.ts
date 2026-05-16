@@ -21,9 +21,9 @@ type Params = { params: Promise<{ observationId: string }> }
 
 export async function GET(_req: NextRequest, { params }: Params) {
   try {
-    const { observationId } = await params
+    const { observationId: observationIdParam } = await params
     const { supabase } = await requireUser()
-    await assertObservationExists(supabase, observationId)
+    const observationId = await assertObservationExists(supabase, observationIdParam)
 
     const { data, error } = await supabase
       .from('remediation_plans')
@@ -42,9 +42,9 @@ export async function GET(_req: NextRequest, { params }: Params) {
 
 export async function POST(req: NextRequest, { params }: Params) {
   try {
-    const { observationId } = await params
+    const { observationId: observationIdParam } = await params
     const { supabase, user, profile } = await requirePerm('observation:edit')
-    await assertObservationExists(supabase, observationId)
+    const observationId = await assertObservationExists(supabase, observationIdParam)
     const input = await parseJson(req, CreateRemediationPlanSchema)
 
     const { data, error } = await supabase

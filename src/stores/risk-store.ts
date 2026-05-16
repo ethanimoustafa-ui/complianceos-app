@@ -33,6 +33,7 @@ import type {
 import { api, ApiClientError } from '@/lib/api-client'
 import { computeNextReview } from '@/lib/review-schedule'
 import { requirePermission } from '@/lib/rbac-store-gate'
+import { newTempId } from '@/lib/optimistic'
 
 // ---------- helpers ---------------------------------------------------------
 
@@ -304,35 +305,76 @@ export const useRiskStore = create<RiskState>()((set, get) => ({
 
   create: async (data) => {
     requirePermission('Manage Audit Findings', { storeName: 'risk', actionName: 'create' })
-    set({ isMutating: true, error: null })
+    // OPTIMISTIC: insert temp row immediately. Replace with server row on
+    // success; roll back on failure.
+    const tempId = newTempId('temp-risk')
+    const now = new Date().toISOString()
+    const seedHistory = [{
+      id: crypto.randomUUID(),
+      timestamp: now,
+      user: data.owner?.name ?? '',
+      action: 'created' as const,
+      notes: 'Risk created',
+    }]
+    const optimistic: Risk = {
+      ...(data as Omit<Risk, 'id' | 'riskScore' | 'createdAt' | 'updatedAt' | 'history'>),
+      id: tempId,
+      riskScore: 0,
+      history: seedHistory,
+      createdAt: now,
+      updatedAt: now,
+    } as Risk
+    set((s) => ({
+      risks: [optimistic, ...s.risks],
+      byId: { ...s.byId, [tempId]: optimistic },
+      isMutating: true,
+      error: null,
+    }))
     try {
       const row = await api.post<RiskApiRow>('/risks', toCreatePayload(data))
       const created = mapRow(row)
       // Inject the seed history entry locally for parity with the legacy store.
-      const now = new Date().toISOString()
-      created.history = [{
-        id: crypto.randomUUID(),
-        timestamp: now,
-        user: data.owner?.name ?? '',
-        action: 'created',
-        notes: 'Risk created',
-      }]
-      set((s) => ({
-        risks: [created, ...s.risks],
-        byId: { ...s.byId, [created.id]: created },
-        isMutating: false,
-      }))
+      created.history = seedHistory
+      set((s) => {
+        const { [tempId]: _drop, ...restById } = s.byId
+        return {
+          risks: s.risks.map((r) => (r.id === tempId ? created : r)),
+          byId: { ...restById, [created.id]: created },
+          isMutating: false,
+        }
+      })
       void get().fetchAll()
       return created
     } catch (e) {
-      set({ error: errorMessage(e, 'Failed to create risk'), isMutating: false })
+      set((s) => {
+        const { [tempId]: _drop, ...rest } = s.byId
+        return {
+          risks: s.risks.filter((r) => r.id !== tempId),
+          byId: rest,
+          error: errorMessage(e, 'Failed to create risk'),
+          isMutating: false,
+        }
+      })
       throw e
     }
   },
 
   update: async (id, data) => {
     requirePermission('Manage Audit Findings', { storeName: 'risk', actionName: 'update', id })
-    set({ isMutating: true, error: null })
+    // OPTIMISTIC: snapshot, apply patch, restore on failure.
+    const snapshot = get().byId[id]
+    if (snapshot) {
+      const optimistic: Risk = { ...snapshot, ...data, updatedAt: new Date().toISOString() }
+      set((s) => ({
+        risks: s.risks.map((r) => (r.id === id ? optimistic : r)),
+        byId: { ...s.byId, [id]: optimistic },
+        selectedRisk: s.selectedRisk?.id === id ? optimistic : s.selectedRisk,
+        isMutating: true,
+        error: null,
+      }))
+    } else {
+      set({ isMutating: true, error: null })
+    }
     try {
       const row = await api.patch<RiskApiRow>(`/risks/${id}`, toUpdatePayload(data))
       const previous = get().byId[id]
@@ -345,27 +387,55 @@ export const useRiskStore = create<RiskState>()((set, get) => ({
       }))
       return updated
     } catch (e) {
-      set({ error: errorMessage(e, 'Failed to update risk'), isMutating: false })
+      if (snapshot) {
+        set((s) => ({
+          risks: s.risks.map((r) => (r.id === id ? snapshot : r)),
+          byId: { ...s.byId, [id]: snapshot },
+          selectedRisk: s.selectedRisk?.id === id ? snapshot : s.selectedRisk,
+          error: errorMessage(e, 'Failed to update risk'),
+          isMutating: false,
+        }))
+      } else {
+        set({ error: errorMessage(e, 'Failed to update risk'), isMutating: false })
+      }
       throw e
     }
   },
 
   delete: async (id) => {
     requirePermission('Manage Audit Findings', { storeName: 'risk', actionName: 'delete', id })
-    set({ isMutating: true, error: null })
+    // OPTIMISTIC: remove immediately. Restore on failure.
+    const snapshot = get().byId[id]
+    const prevIndex = get().risks.findIndex((r) => r.id === id)
+    set((s) => {
+      const { [id]: _drop, ...rest } = s.byId
+      return {
+        risks: s.risks.filter((r) => r.id !== id),
+        byId: rest,
+        selectedRisk: s.selectedRisk?.id === id ? null : s.selectedRisk,
+        isMutating: true,
+        error: null,
+      }
+    })
     try {
       await api.delete(`/risks/${id}`)
-      set((s) => {
-        const { [id]: _drop, ...rest } = s.byId
-        return {
-          risks: s.risks.filter((r) => r.id !== id),
-          byId: rest,
-          selectedRisk: s.selectedRisk?.id === id ? null : s.selectedRisk,
-          isMutating: false,
-        }
-      })
+      set({ isMutating: false })
     } catch (e) {
-      set({ error: errorMessage(e, 'Failed to delete risk'), isMutating: false })
+      if (snapshot) {
+        set((s) => {
+          const list = [...s.risks]
+          const insertAt = prevIndex >= 0 && prevIndex <= list.length ? prevIndex : list.length
+          list.splice(insertAt, 0, snapshot)
+          return {
+            risks: list,
+            byId: { ...s.byId, [id]: snapshot },
+            error: errorMessage(e, 'Failed to delete risk'),
+            isMutating: false,
+          }
+        })
+      } else {
+        set({ error: errorMessage(e, 'Failed to delete risk'), isMutating: false })
+      }
       throw e
     }
   },

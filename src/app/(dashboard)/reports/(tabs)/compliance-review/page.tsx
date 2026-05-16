@@ -9,6 +9,7 @@ import { useTranslation, type TranslationKey } from '@/i18n'
 import { useCircularStore } from '@/stores/circular-store'
 import { usePolicyStore } from '@/stores/policy-store'
 import { useDepartmentStore } from '@/stores/department-store'
+import { useObservationStore } from '@/stores/observation-store'
 import {
   useComplianceEvaluationStore,
   type ComplianceVerdict,
@@ -51,13 +52,54 @@ export default function ComplianceReviewPage() {
   const { circulars } = useCircularStore()
   const { policies } = usePolicyStore()
   const { departments } = useDepartmentStore()
+  const { observations } = useObservationStore()
   const { evaluations, setVerdict } = useComplianceEvaluationStore()
   const user = useAuthStore((s) => s.user)
   const evaluatorName = user?.name ?? t('complianceReview.evaluatorFallback')
 
+  // Hydrate server-state on mount (Fix-1). The page derives the overall
+  // compliance score from circulars, policies, departments and evaluations —
+  // all four must be hydrated for the KPI to be non-zero after reload.
+  const fetchCirculars = useCircularStore((s) => s.fetchAll)
+  const fetchPolicies = usePolicyStore((s) => s.fetchAll)
+  const fetchDepartments = useDepartmentStore((s) => s.fetchAll)
+  const fetchObservations = useObservationStore((s) => s.fetchAll)
+  const fetchEvaluations = useComplianceEvaluationStore((s) => s.fetchAll)
+  useEffect(() => {
+    void fetchCirculars()
+    void fetchPolicies()
+    void fetchDepartments()
+    void fetchObservations()
+    void fetchEvaluations()
+  }, [fetchCirculars, fetchPolicies, fetchDepartments, fetchObservations, fetchEvaluations])
+
   const [activeDeptId, setActiveDeptId] = useState<string>(departments[0]?.id ?? '')
   const [search, setSearch] = useState('')
   const [currentPage, setCurrentPage] = useState(1)
+
+  // Per-department observation counts. `observations.department` is a free-text
+  // column that historically stores either the department `key` (e.g. "cyber")
+  // or a name variant (e.g. "Compliance" or "compliance"). We match
+  // case-insensitively against both the dept's `key` and `name` (name_en)
+  // so a department like "Cybersecurity" (key "cyber") still picks up rows
+  // saved as `"cyber"`. Risks and policies have no observable text/uuid
+  // department FK populated in the wild, so they are NOT folded into this
+  // map; per the charter we only reconcile observations here.
+  const observationsByDept = useMemo(() => {
+    const map: Record<string, number> = {}
+    for (const dept of departments) {
+      const target = new Set<string>()
+      if (dept.key) target.add(dept.key.toLowerCase())
+      if (dept.name) target.add(dept.name.toLowerCase())
+      let count = 0
+      for (const o of observations) {
+        const v = o.department
+        if (v && target.has(String(v).toLowerCase())) count++
+      }
+      map[dept.id] = count
+    }
+    return map
+  }, [departments, observations])
 
   // Build per-department applicable items (rules by name match, policies by id match)
   const itemsByDept = useMemo(() => {
@@ -86,9 +128,10 @@ export default function ComplianceReviewPage() {
     return reviewScore.byDepartment.map((breakdown) => {
       const dept = departments.find((d) => d.id === breakdown.departmentId)!
       const items = itemsByDept[dept.id] ?? []
-      return { dept, items, ...breakdown }
+      const observationCount = observationsByDept[dept.id] ?? 0
+      return { dept, items, observationCount, ...breakdown }
     })
-  }, [reviewScore, departments, itemsByDept])
+  }, [reviewScore, departments, itemsByDept, observationsByDept])
 
   const overallScore = reviewScore.overallByRecords
   const overallEvaluated = reviewScore.totalEvaluatedItems
@@ -263,6 +306,13 @@ export default function ComplianceReviewPage() {
                     <span className="flex items-center gap-1">
                       <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
                       {d.naCount}
+                    </span>
+                    <span
+                      className="flex items-center gap-1"
+                      title={t('complianceReview.observationsLabel')}
+                    >
+                      <Icon icon="lucide:eye" className="text-blue-500 text-[10px]" />
+                      {d.observationCount}
                     </span>
                     <span className="ms-auto text-[10px] text-slate-400">
                       {d.total} {d.total === 1 ? t('complianceReview.item') : t('complianceReview.items')}

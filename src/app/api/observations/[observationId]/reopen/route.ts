@@ -18,17 +18,19 @@ type Params = { params: Promise<{ observationId: string }> }
 
 export async function POST(_req: NextRequest, { params }: Params) {
   try {
-    const { observationId } = await params
+    const { observationId: observationIdParam } = await params
     const { supabase, user, profile } = await requirePerm('observation:edit')
 
+    const idCol = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(observationIdParam) ? 'id' : 'reference'
     const { data: current, error: readErr } = await supabase
       .from('observations')
       .select('id, status')
-      .eq('id', observationId)
+      .eq(idCol, observationIdParam)
       .is('deleted_at', null)
       .maybeSingle<{ id: string; status: string }>()
     if (readErr) throw readErr
-    if (!current) throw NotFound(`Observation ${observationId} not found`)
+    if (!current) throw NotFound(`Observation ${observationIdParam} not found`)
+    const observationId = current.id
     if (current.status !== 'closed' && current.status !== 'resolved') {
       throw Conflict(`Cannot reopen observation in status ${current.status}`)
     }

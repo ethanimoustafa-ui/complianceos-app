@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useState, useEffect, useCallback, useMemo, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
@@ -45,6 +45,12 @@ function RegulatoryUpdatesRulesPageContent() {
   const { t, isRTL } = useTranslation()
   const { circulars, selectedCircular, setSelected } = useCircularStore()
   const searchParams = useSearchParams()
+
+  // Hydrate server-state on mount (Fix-1).
+  const fetchCirculars = useCircularStore((s) => s.fetchAll)
+  useEffect(() => {
+    void fetchCirculars()
+  }, [fetchCirculars])
 
   const [searchQuery, setSearchQuery] = useState('')
   const [authorityFilter, setAuthorityFilter] = useState<CircularAuthority | 'all'>('all')
@@ -118,7 +124,7 @@ function RegulatoryUpdatesRulesPageContent() {
           <div className="hidden lg:flex gap-2">
             <Link href="/correspondence/letters" className={`px-3 py-1.5 text-xs font-bold text-slate-600 bg-slate-50 hover:bg-slate-100 rounded-lg border border-slate-200 flex items-center gap-2`}>
               <Icon icon="lucide:mail" className="text-emerald-500" />
-              {t('samaLetters.tabLetters')}
+              {t('letters.tabLetters')}
             </Link>
             <span className={`px-3 py-1.5 text-xs font-bold text-emerald-700 bg-emerald-50 rounded-lg border border-emerald-100 flex items-center gap-2`}>
               <Icon icon="lucide:refresh-cw" className="text-emerald-600" />

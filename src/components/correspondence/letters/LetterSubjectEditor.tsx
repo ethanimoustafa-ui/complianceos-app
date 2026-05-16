@@ -1,8 +1,8 @@
-'use client'
+﻿'use client'
 
 import { useMemo } from 'react'
 import { cn } from '@/lib/utils'
-import { PlaceholderChip } from '@/components/correspondence/sama-letters/PlaceholderChip'
+import { PlaceholderChip } from '@/components/correspondence/letter-placeholders/PlaceholderChip'
 import type { PlaceholderDef, PlaceholderValue } from '@/types'
 
 // Subject input variant: reuses LetterBodyEditor styled as a single-line

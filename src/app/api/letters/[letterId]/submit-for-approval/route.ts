@@ -1,4 +1,4 @@
-// POST /api/letters/[letterId]/submit-for-approval —
+﻿// POST /api/letters/[letterId]/submit-for-approval —
 //   draft → pending-approval. Computes response_deadline by type.
 
 import type { NextRequest } from 'next/server'
@@ -24,7 +24,7 @@ export async function POST(_req: NextRequest, { params }: Params) {
     const { supabase, user, profile } = await requirePerm('edit')
 
     const { data: current, error: readErr } = await supabase
-      .from('sama_letters')
+      .from('letters')
       .select('id, status, type, response_deadline')
       .eq('id', letterId)
       .is('deleted_at', null)
@@ -41,7 +41,7 @@ export async function POST(_req: NextRequest, { params }: Params) {
     const response_deadline = current.response_deadline ?? computeResponseDeadline(current.type)
 
     const { data, error } = await supabase
-      .from('sama_letters')
+      .from('letters')
       .update({ status: 'pending-approval', response_deadline })
       .eq('id', letterId)
       .select(LETTER_LIST_COLUMNS)
@@ -52,8 +52,8 @@ export async function POST(_req: NextRequest, { params }: Params) {
       writeAudit({
         actor_id: user.id,
         actor_name: profile.name ?? profile.email ?? user.id,
-        action: 'sama_letter.submit_for_approval',
-        entity_type: 'sama_letter',
+        action: 'letter.submit_for_approval',
+        entity_type: 'letter',
         entity_id: letterId,
         metadata: { response_deadline },
         supabase,
@@ -67,7 +67,7 @@ export async function POST(_req: NextRequest, { params }: Params) {
       ),
     ])
 
-    revalidateAll([cacheTags.samaLetters(), cacheTags.samaLetters(letterId)])
+    revalidateAll([cacheTags.letters(), cacheTags.letters(letterId)])
     return ok(data)
   } catch (e) {
     return handle(e)

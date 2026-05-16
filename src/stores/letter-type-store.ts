@@ -1,4 +1,4 @@
-// SAMA letter type lookup store — Phase 5 server-state migration.
+﻿// Letter type lookup store — Phase 5 server-state migration.
 //
 // Read `.planning/09-store-pattern.md` before editing.
 // Endpoints: GET/POST /api/letter-types, PATCH/DELETE /api/letter-types/[typeId]
@@ -25,7 +25,7 @@ interface LetterTypeApiRow {
 // `key` (string) separately. We surface `id` (uuid), `label`, `labelAr` and
 // `isDefault` to match the legacy interface, and additionally carry `key` so
 // the persisted letter rows (which reference `letter_types.key`) keep matching.
-export interface SAMALetterTypeItem {
+export interface LetterTypeItem {
   id: string
   key: string
   label: string
@@ -33,7 +33,7 @@ export interface SAMALetterTypeItem {
   isDefault?: boolean
 }
 
-function mapRow(row: LetterTypeApiRow): SAMALetterTypeItem {
+function mapRow(row: LetterTypeApiRow): LetterTypeItem {
   return {
     id: row.id,
     key: row.key,
@@ -52,9 +52,9 @@ function errorMessage(e: unknown, fallback: string): string {
 const slugify = (s: string): string =>
   s.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
 
-interface SAMALetterTypeState {
-  types: SAMALetterTypeItem[]
-  byId: Record<string, SAMALetterTypeItem>
+interface LetterTypeState {
+  types: LetterTypeItem[]
+  byId: Record<string, LetterTypeItem>
 
   // First-fetch detector: `isLoading && types.length === 0` → render skeleton.
   // Refetches keep stale data visible while `isLoading` is true.
@@ -65,12 +65,12 @@ interface SAMALetterTypeState {
 
   fetchAll: () => Promise<void>
   add: (label: string, labelAr?: string) => Promise<string>
-  update: (id: string, patch: Partial<Omit<SAMALetterTypeItem, 'id'>>) => Promise<void>
+  update: (id: string, patch: Partial<Omit<LetterTypeItem, 'id'>>) => Promise<void>
   remove: (id: string) => Promise<void>
   clearError: () => void
 }
 
-export const useSAMALetterTypeStore = create<SAMALetterTypeState>()((set, get) => ({
+export const useLetterTypeStore = create<LetterTypeState>()((set, get) => ({
   types: [],
   byId: {},
   isLoading: false,
@@ -83,7 +83,7 @@ export const useSAMALetterTypeStore = create<SAMALetterTypeState>()((set, get) =
     try {
       const rows = await api.get<LetterTypeApiRow[]>('/letter-types')
       const types = rows.map(mapRow)
-      const byId: Record<string, SAMALetterTypeItem> = {}
+      const byId: Record<string, LetterTypeItem> = {}
       for (const t of types) byId[t.id] = t
       set({ types, byId, isLoading: false, lastFetched: Date.now() })
     } catch (e) {

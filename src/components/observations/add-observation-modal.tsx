@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, memo, useCallback } from 'react'
+import { useState, memo, useCallback, useEffect } from 'react'
 import { Icon } from '@iconify/react'
 import { Modal } from '@/components/ui/modal'
 import { Button } from '@/components/ui/button'
@@ -8,6 +8,7 @@ import { FileUpload, UploadedFile } from '@/components/ui/file-upload'
 import { ObservationSource, ObservationSeverity } from './observation-types'
 import { useObservationStore } from '@/stores/observation-store'
 import { useTeamStore } from '@/stores/team-store'
+import { useDepartmentStore } from '@/stores/department-store'
 import { useTranslation } from '@/i18n'
 import type { TeamMember, RegulatoryBodyId } from '@/types'
 import { FrameworkTagSelector } from '@/components/ui/framework-tag-selector'
@@ -57,6 +58,18 @@ export const AddObservationModal = memo(function AddObservationModal({ isOpen, o
   const { getNextReference } = useObservationStore()
   const { members } = useTeamStore()
   const activeMembers = members.filter(m => m.status === 'active')
+
+  // Hydrate department list when the modal opens — the `DepartmentField`
+  // pulls from `useDepartmentStore`, which starts cold on first render. Without
+  // this fetch the dropdown renders "No options" even though /api/settings/departments
+  // returns 12 active rows.
+  const fetchDepartments = useDepartmentStore((s) => s.fetchAll)
+  const departmentsLoaded = useDepartmentStore((s) => s.lastFetched != null)
+  useEffect(() => {
+    if (isOpen && !departmentsLoaded) {
+      void fetchDepartments()
+    }
+  }, [isOpen, departmentsLoaded, fetchDepartments])
 
   const [formData, setFormData] = useState<ObservationFormData>({
     source: 'sama',

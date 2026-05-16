@@ -331,11 +331,17 @@ export const usePolicyStore = create<PolicyStoreState>()((set, get) => ({
         const created = mapRow(row, optimistic)
         // The server may return a different stable id — surface it on the
         // optimistic row so subsequent calls (PATCH/DELETE) hit the same id.
-        set((s) => ({
-          policies: s.policies.map((p) => (p.id === id ? created : p)),
-          byId: { ...s.byId, [created.id]: created },
-          isMutating: false,
-        }))
+        set((s) => {
+          const { [id]: _drop, ...restById } = s.byId
+          return {
+            policies: s.policies.map((p) => (p.id === id ? created : p)),
+            byId: { ...restById, [created.id]: created },
+            isMutating: false,
+          }
+        })
+        // Reconcile with server so any computed fields (workflow steps,
+        // activity log, etc.) authored by the route handler land in state.
+        void get().fetchAll()
       } catch (e) {
         // Roll back optimistic insert.
         set((s) => {
@@ -377,7 +383,14 @@ export const usePolicyStore = create<PolicyStoreState>()((set, get) => ({
           isMutating: false,
         }))
       } catch (e) {
-        set({ error: errorMessage(e, 'Failed to update policy'), isMutating: false })
+        // Roll back the optimistic patch to the previous server-known state.
+        set((s) => ({
+          policies: s.policies.map((p) => (p.id === id ? previous : p)),
+          byId: { ...s.byId, [id]: previous },
+          selectedPolicy: s.selectedPolicy?.id === id ? previous : s.selectedPolicy,
+          error: errorMessage(e, 'Failed to update policy'),
+          isMutating: false,
+        }))
       }
     })()
   },

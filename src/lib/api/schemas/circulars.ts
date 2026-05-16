@@ -9,7 +9,11 @@ const DateString = z
   .min(1)
   .refine((s) => !Number.isNaN(Date.parse(s)), { message: 'Invalid date' })
 
-const Authority = z.enum(['sama', 'cma', 'ia', 'zatca', 'misa', 'safiu'])
+// Authority is a framework slug. We don't enforce a closed enum here because
+// the user can add custom frameworks via Settings → Frameworks (e.g. sharia,
+// nca-ecc, citc, pdpl, iso-27001, etc.). Validation is open-string + a check
+// constraint at the DB layer if needed.
+const Authority = z.string().min(1).max(100)
 const Priority = z.enum(['critical', 'high', 'medium', 'low'])
 const Status = z.enum(['pending', 'in-progress', 'completed', 'overdue'])
 const Applicability = z.enum(['applicable', 'not-applicable', 'pending'])
@@ -27,7 +31,10 @@ export const CreateCircularSchema = z.object({
   business_owner_department_id: Uuid.optional(),
   assigned_to: Uuid.optional(),
   progress: z.number().int().min(0).max(100).default(0),
-  issuance_date: DateString,
+  // issuance_date: if the form leaves it blank, default to today server-side.
+  // This matches the UI which doesn't enforce it as required (only due_date +
+  // cap_deadline are required per the modal's pre-submit check).
+  issuance_date: DateString.optional().default(() => new Date().toISOString().slice(0, 10)),
   due_date: DateString,
   cap_status: z.string().max(100).default('not-started'),
   cap_due_date: DateString.optional(),

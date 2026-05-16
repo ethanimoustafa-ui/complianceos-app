@@ -18,9 +18,9 @@ type Params = { params: Promise<{ observationId: string; attachmentId: string }>
 
 export async function DELETE(_req: NextRequest, { params }: Params) {
   try {
-    const { observationId, attachmentId } = await params
+    const { observationId: observationIdParam, attachmentId } = await params
     const { supabase, user, profile } = await requirePerm('observation:edit')
-    await assertObservationExists(supabase, observationId)
+    const observationId = await assertObservationExists(supabase, observationIdParam)
 
     const { error } = await supabase
       .from('observation_documents')

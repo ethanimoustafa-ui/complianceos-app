@@ -271,13 +271,18 @@ export const useTrainingStore = create<TrainingState>()((set, get) => ({
   fetchCourses: async () => {
     set({ isLoading: true, error: null })
     try {
+      // _ts cache-buster forces the browser to revalidate the GET against the
+      // origin. The Route Handler sets `s-maxage=60, stale-while-revalidate=300`,
+      // which otherwise lets the browser serve a stale list right after a POST
+      // (the server-side `revalidateTag` only invalidates the Next data cache,
+      // not the HTTP response cache). See `lib/api/cache.ts`.
       const result = await api.get<{
         items: TrainingCourseApiRow[]
         page: number
         pageSize: number
         total: number
         totalPages: number
-      }>('/training/courses', { pageSize: 100 })
+      }>('/training/courses', { pageSize: 100, _ts: Date.now() })
       set({
         courses: result.items.map(mapCourseRow),
         isLoading: false,
@@ -291,13 +296,14 @@ export const useTrainingStore = create<TrainingState>()((set, get) => ({
   fetchEmployees: async () => {
     set({ isLoading: true, error: null })
     try {
+      // See `fetchCourses` for the rationale on the `_ts` cache-buster.
       const result = await api.get<{
         items: TrainingEmployeeApiRow[]
         page: number
         pageSize: number
         total: number
         totalPages: number
-      }>('/training/employees', { pageSize: 100 })
+      }>('/training/employees', { pageSize: 100, _ts: Date.now() })
       const previousById = new Map(get().employees.map((e) => [e.id, e]))
       set({
         employees: result.items.map((row) => mapEmployeeRow(row, previousById.get(row.id))),
@@ -310,21 +316,33 @@ export const useTrainingStore = create<TrainingState>()((set, get) => ({
   },
 
   addEmployee: (employee) => {
-    // Optimistic insert; fire-and-forget POST. Refetch on success to capture
-    // server-issued id + derived progress.
+    // Optimistic insert; fire-and-forget POST. On success, swap the optimistic
+    // row for the server row (so it carries a real uuid + derived progress).
+    // On failure, roll back the optimistic insert.
+    const optimisticId = employee.id
     set((s) => ({ employees: [...s.employees, employee], isMutating: true, error: null }))
     void (async () => {
       try {
-        await api.post('/training/employees', {
+        const row = await api.post<TrainingEmployeeApiRow>('/training/employees', {
           name: employee.name,
           email: employee.email,
           department: employee.department || undefined,
           is_saudi: employee.isSaudi,
         })
-        await get().fetchEmployees()
-        set({ isMutating: false })
+        const mapped = mapEmployeeRow(row, employee)
+        set((s) => ({
+          employees: s.employees.map((e) => (e.id === optimisticId ? mapped : e)),
+          isMutating: false,
+        }))
+        // Background refresh to capture any server-derived fields.
+        void get().fetchEmployees()
       } catch (e) {
-        set({ error: errorMessage(e, 'Failed to add training employee'), isMutating: false })
+        // Roll back the optimistic insert so reload-survival matches what's on the server.
+        set((s) => ({
+          employees: s.employees.filter((e) => e.id !== optimisticId),
+          error: errorMessage(e, 'Failed to add training employee'),
+          isMutating: false,
+        }))
       }
     })()
   },
@@ -416,20 +434,31 @@ export const useTrainingStore = create<TrainingState>()((set, get) => ({
   },
 
   addCourse: (course) => {
+    // Optimistic insert with a client-generated id. On success, swap the
+    // optimistic row for the server row so the persisted uuid drives any
+    // subsequent assign / update / delete calls. On failure, roll back.
+    const optimisticId = course.id
     set((s) => ({ courses: [...s.courses, course], isMutating: true, error: null }))
     void (async () => {
       try {
-        await api.post('/training/courses', {
+        const row = await api.post<TrainingCourseApiRow>('/training/courses', {
           name: course.name,
           category: course.category,
           description: course.description,
           due_date: course.dueDate || undefined,
           framework_ids: course.frameworkIds ?? [],
         })
-        await get().fetchCourses()
-        set({ isMutating: false })
+        const mapped = mapCourseRow(row)
+        set((s) => ({
+          courses: s.courses.map((c) => (c.id === optimisticId ? mapped : c)),
+          isMutating: false,
+        }))
       } catch (e) {
-        set({ error: errorMessage(e, 'Failed to add training course'), isMutating: false })
+        set((s) => ({
+          courses: s.courses.filter((c) => c.id !== optimisticId),
+          error: errorMessage(e, 'Failed to add training course'),
+          isMutating: false,
+        }))
       }
     })()
   },

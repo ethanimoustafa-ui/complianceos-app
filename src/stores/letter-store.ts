@@ -1,4 +1,4 @@
-// SAMA letters store — Phase 5 server-state migration.
+﻿// Letters store — Phase 5 server-state migration.
 //
 // Read `.planning/09-store-pattern.md` before editing.
 // Endpoints:
@@ -13,9 +13,8 @@
 // IMPORTANT BEHAVIOUR CHANGES vs. legacy seeded store:
 //   - Reference numbers (e.g. NOB-2024-082) are now SERVER-side. `create()`
 //     no longer composes one; it sends the create payload and stores the
-//     reference from the response. `getNextReference()` is retained as a
-//     no-op compat shim that throws — call sites should be updated to read
-//     `letter.reference` off the create() return value instead.
+//     reference from the response. `getNextReference()` has been removed —
+//     call sites read `letter.reference` from the `create()` return value.
 //   - Approval workflow (`submitForApproval`, `approveStep`, `rejectStep`,
 //     `send`, `markResponseReceived`) hits the dedicated route handlers and
 //     refetches the row to pick up server-computed fields
@@ -30,10 +29,10 @@
 
 import { create } from 'zustand'
 import type {
-  SAMALetter,
-  SAMALetterType,
-  SAMALetterApprovalStep,
-  SAMALetterTimelineEvent,
+  Letter,
+  LetterType,
+  LetterApprovalStep,
+  LetterTimelineEvent,
   CircularAuthority,
   PaginationState,
   SortState,
@@ -43,11 +42,15 @@ import type {
 } from '@/types'
 import { api, ApiClientError } from '@/lib/api-client'
 import { requirePermission } from '@/lib/rbac-store-gate'
+import { newTempId } from '@/lib/optimistic'
 import { useUserLogStore } from '@/stores/user-log-store'
+import { supabase as supabaseClient } from '@/lib/supabase/client'
 
-interface SAMALetterFilters {
-  type?: SAMALetterType[]
-  status?: SAMALetter['status'][]
+const LETTER_ATTACHMENTS_BUCKET = 'sama_letter_attachments'
+
+interface LetterFilters {
+  type?: LetterType[]
+  status?: Letter['status'][]
   authority?: CircularAuthority[]
   dateRange?: { from: string; to: string }
   search?: string
@@ -130,10 +133,10 @@ interface TimelineApiRow {
 
 // ---------- mappers ---------------------------------------------------------
 
-function mapApprovalStep(row: ApprovalStepApiRow): SAMALetterApprovalStep {
+function mapApprovalStep(row: ApprovalStepApiRow): LetterApprovalStep {
   return {
     step: row.step as 1 | 2 | 3,
-    role: row.role as SAMALetterApprovalStep['role'],
+    role: row.role as LetterApprovalStep['role'],
     status: row.status,
     assignedTo: row.assigned_to ?? undefined,
     approvedAt: row.approved_at ?? undefined,
@@ -142,7 +145,7 @@ function mapApprovalStep(row: ApprovalStepApiRow): SAMALetterApprovalStep {
   }
 }
 
-function mapTimelineEvent(row: TimelineApiRow): SAMALetterTimelineEvent {
+function mapTimelineEvent(row: TimelineApiRow): LetterTimelineEvent {
   return {
     id: row.id,
     title: row.title,
@@ -150,7 +153,7 @@ function mapTimelineEvent(row: TimelineApiRow): SAMALetterTimelineEvent {
     user: row.user_name ?? undefined,
     status: (row.status === 'completed' || row.status === 'active' || row.status === 'pending'
       ? row.status
-      : 'completed') as SAMALetterTimelineEvent['status'],
+      : 'completed') as LetterTimelineEvent['status'],
   }
 }
 
@@ -166,19 +169,19 @@ function mapAttachment(row: AttachmentApiRow): Attachment {
   }
 }
 
-function mapRow(row: LetterApiRow, previous?: SAMALetter): SAMALetter {
+function mapRow(row: LetterApiRow, previous?: Letter): Letter {
   return {
     id: row.id,
     reference: row.reference,
     authority: row.authority as CircularAuthority,
-    type: row.type as SAMALetterType,
+    type: row.type as LetterType,
     subCategory: row.sub_category ?? previous?.subCategory ?? undefined,
     samaDepartment: row.sama_department ?? previous?.samaDepartment ?? undefined,
     subject: row.subject,
     subjectAr: row.subject_ar ?? previous?.subjectAr ?? undefined,
     body: row.body ?? previous?.body ?? '',
     bodyAr: row.body_ar ?? previous?.bodyAr ?? undefined,
-    status: row.status as SAMALetter['status'],
+    status: row.status as Letter['status'],
     priority: row.priority,
     createdBy: row.created_by ?? previous?.createdBy ?? '',
     assignedTo: row.assigned_to ?? previous?.assignedTo ?? undefined,
@@ -216,7 +219,7 @@ function mapRow(row: LetterApiRow, previous?: SAMALetter): SAMALetter {
 }
 
 function toCreatePayload(
-  data: Omit<SAMALetter, 'id' | 'reference' | 'createdAt' | 'updatedAt'> & {
+  data: Omit<Letter, 'id' | 'reference' | 'createdAt' | 'updatedAt'> & {
     templateId?: string
   },
 ): Record<string, unknown> {
@@ -249,7 +252,7 @@ function toCreatePayload(
   }
 }
 
-function toUpdatePayload(patch: Partial<SAMALetter>): Record<string, unknown> {
+function toUpdatePayload(patch: Partial<Letter>): Record<string, unknown> {
   const out: Record<string, unknown> = {}
   if (patch.authority !== undefined) out.authority = patch.authority
   if (patch.type !== undefined) out.type = patch.type
@@ -292,11 +295,11 @@ function errorMessage(e: unknown, fallback: string): string {
 
 // ---------- store ----------------------------------------------------------
 
-interface SAMALetterState {
-  letters: SAMALetter[]
-  byId: Record<string, SAMALetter>
-  selectedLetter: SAMALetter | null
-  filters: SAMALetterFilters
+interface LetterState {
+  letters: Letter[]
+  byId: Record<string, Letter>
+  selectedLetter: Letter | null
+  filters: LetterFilters
   pagination: PaginationState
   sort: SortState
 
@@ -310,22 +313,22 @@ interface SAMALetterState {
   fetchAll: (opts?: {
     page?: number
     pageSize?: number
-    filters?: Partial<SAMALetterFilters>
+    filters?: Partial<LetterFilters>
   }) => Promise<void>
-  fetchById: (id: string) => Promise<SAMALetter | null>
-  /**
-   * @deprecated Server generates the reference on POST. Call sites should
-   * read `letter.reference` off the result of `create()` instead. Kept as a
-   * compat shim that throws to make stale callers fail loudly.
-   */
-  getNextReference: (type: SAMALetterType) => string
+  fetchById: (id: string) => Promise<Letter | null>
+  // Removed: `getNextReference()` — the server assigns the reference on POST.
+  // Read `letter.reference` from the result of `create()` instead.
   create: (
-    data: Omit<SAMALetter, 'id' | 'reference' | 'createdAt' | 'updatedAt'> & {
+    data: Omit<Letter, 'id' | 'reference' | 'createdAt' | 'updatedAt'> & {
       templateId?: string
     },
-  ) => Promise<SAMALetter>
-  update: (id: string, data: Partial<SAMALetter>) => Promise<void>
+  ) => Promise<Letter>
+  update: (id: string, data: Partial<Letter>) => Promise<void>
   delete: (id: string) => Promise<void>
+
+  // Attachment upload — uploads file bytes to Supabase Storage, then registers
+  // the metadata row via POST /api/letters/[id]/attachments.
+  uploadAttachment: (letterId: string, file: File) => Promise<Attachment>
 
   // Workflow transitions
   submitForApproval: (id: string) => Promise<void>
@@ -334,9 +337,9 @@ interface SAMALetterState {
   send: (id: string) => Promise<void>
   markResponseReceived: (id: string) => Promise<void>
 
-  setFilters: (filters: SAMALetterFilters) => void
+  setFilters: (filters: LetterFilters) => void
   clearFilters: () => void
-  setSelected: (letter: SAMALetter | null) => void
+  setSelected: (letter: Letter | null) => void
   setSort: (sort: SortState) => void
   setPage: (page: number) => void
   setPageSize: (pageSize: number) => void
@@ -355,7 +358,7 @@ const INITIAL_SORT: SortState = {
   direction: 'desc',
 }
 
-export const useSAMALetterStore = create<SAMALetterState>()((set, get) => ({
+export const useLetterStore = create<LetterState>()((set, get) => ({
   letters: [],
   byId: {},
   selectedLetter: null,
@@ -391,7 +394,7 @@ export const useSAMALetterStore = create<SAMALetterState>()((set, get) => ({
       })
       const previousById = get().byId
       const letters = result.items.map((row) => mapRow(row, previousById[row.id]))
-      const byId: Record<string, SAMALetter> = {}
+      const byId: Record<string, Letter> = {}
       for (const l of letters) byId[l.id] = l
       set({
         letters,
@@ -434,34 +437,75 @@ export const useSAMALetterStore = create<SAMALetterState>()((set, get) => ({
     }
   },
 
-  // Compat shim — server now generates references on POST. Throwing here
-  // surfaces stale callers loudly during testing.
-  getNextReference: (_type) => {
-    throw new Error(
-      'getNextReference() has moved server-side. Read `letter.reference` from the result of `create()` instead.',
-    )
-  },
+  // Removed: `getNextReference()` shim — references are generated server-side
+  // on POST /api/letters. Consumers read `letter.reference` from `create()`'s
+  // returned `Letter`.
 
   create: async (data) => {
-    set({ isMutating: true, error: null })
+    // OPTIMISTIC: insert a temp letter immediately, swap with server row on
+    // success, roll back on failure.
+    const tempId = newTempId('temp-letter')
+    const now = new Date().toISOString()
+    const optimistic: Letter = {
+      ...(data as Omit<Letter, 'id' | 'reference' | 'createdAt' | 'updatedAt'>),
+      id: tempId,
+      reference: '',
+      approvalChain: [],
+      timeline: [],
+      attachments: [],
+      relatedObservations: [],
+      createdAt: now,
+      updatedAt: now,
+    } as Letter
+    set((state) => ({
+      letters: [optimistic, ...state.letters],
+      byId: { ...state.byId, [tempId]: optimistic },
+      isMutating: true,
+      error: null,
+    }))
     try {
       const row = await api.post<LetterApiRow>('/letters', toCreatePayload(data))
       const created = mapRow(row)
-      set((state) => ({
-        letters: [created, ...state.letters],
-        byId: { ...state.byId, [created.id]: created },
-        isMutating: false,
-      }))
+      set((state) => {
+        const { [tempId]: _drop, ...restById } = state.byId
+        return {
+          letters: state.letters.map((l) => (l.id === tempId ? created : l)),
+          byId: { ...restById, [created.id]: created },
+          isMutating: false,
+        }
+      })
       void get().fetchAll()
       return created
     } catch (e) {
-      set({ error: errorMessage(e, 'Failed to create letter'), isMutating: false })
+      set((state) => {
+        const { [tempId]: _drop, ...rest } = state.byId
+        return {
+          letters: state.letters.filter((l) => l.id !== tempId),
+          byId: rest,
+          error: errorMessage(e, 'Failed to create letter'),
+          isMutating: false,
+        }
+      })
       throw e
     }
   },
 
   update: async (id, data) => {
-    set({ isMutating: true, error: null })
+    // OPTIMISTIC: snapshot, apply patch locally, restore on failure.
+    const snapshot = get().byId[id]
+    if (snapshot) {
+      const optimistic: Letter = { ...snapshot, ...data, updatedAt: new Date().toISOString() }
+      set((state) => ({
+        letters: state.letters.map((l) => (l.id === id ? optimistic : l)),
+        byId: { ...state.byId, [id]: optimistic },
+        selectedLetter:
+          state.selectedLetter?.id === id ? optimistic : state.selectedLetter,
+        isMutating: true,
+        error: null,
+      }))
+    } else {
+      set({ isMutating: true, error: null })
+    }
     try {
       const row = await api.patch<LetterApiRow>(`/letters/${id}`, toUpdatePayload(data))
       const previous = get().byId[id]
@@ -474,34 +518,121 @@ export const useSAMALetterStore = create<SAMALetterState>()((set, get) => ({
         isMutating: false,
       }))
     } catch (e) {
-      set({ error: errorMessage(e, 'Failed to update letter'), isMutating: false })
+      if (snapshot) {
+        set((state) => ({
+          letters: state.letters.map((l) => (l.id === id ? snapshot : l)),
+          byId: { ...state.byId, [id]: snapshot },
+          selectedLetter:
+            state.selectedLetter?.id === id ? snapshot : state.selectedLetter,
+          error: errorMessage(e, 'Failed to update letter'),
+          isMutating: false,
+        }))
+      } else {
+        set({ error: errorMessage(e, 'Failed to update letter'), isMutating: false })
+      }
       throw e
     }
   },
 
   delete: async (id) => {
-    set({ isMutating: true, error: null })
+    // OPTIMISTIC: remove immediately. Restore on failure.
+    const snapshot = get().byId[id]
+    const prevIndex = get().letters.findIndex((l) => l.id === id)
+    set((state) => {
+      const { [id]: _drop, ...rest } = state.byId
+      return {
+        letters: state.letters.filter((l) => l.id !== id),
+        byId: rest,
+        selectedLetter:
+          state.selectedLetter?.id === id ? null : state.selectedLetter,
+        isMutating: true,
+        error: null,
+      }
+    })
     try {
       await api.delete(`/letters/${id}`)
+      set({ isMutating: false })
+    } catch (e) {
+      if (snapshot) {
+        set((state) => {
+          const list = [...state.letters]
+          const insertAt = prevIndex >= 0 && prevIndex <= list.length ? prevIndex : list.length
+          list.splice(insertAt, 0, snapshot)
+          return {
+            letters: list,
+            byId: { ...state.byId, [id]: snapshot },
+            error: errorMessage(e, 'Failed to delete letter'),
+            isMutating: false,
+          }
+        })
+      } else {
+        set({ error: errorMessage(e, 'Failed to delete letter'), isMutating: false })
+      }
+      throw e
+    }
+  },
+
+  uploadAttachment: async (letterId, file) => {
+    requirePermission('Approve SAMA Letters', {
+      storeName: 'letter',
+      actionName: 'uploadAttachment',
+      id: letterId,
+    })
+    set({ isMutating: true, error: null })
+    try {
+      // 1) Upload file bytes to the private `sama_letter_attachments` bucket.
+      //    Path layout: `<letterId>/<timestamp>-<sanitized name>`.
+      const safeName = file.name.replace(/[^A-Za-z0-9._-]/g, '_')
+      const storagePath = `${letterId}/${Date.now()}-${safeName}`
+      const { error: uploadError } = await supabaseClient.storage
+        .from(LETTER_ATTACHMENTS_BUCKET)
+        .upload(storagePath, file, {
+          cacheControl: '3600',
+          upsert: false,
+          contentType: file.type || 'application/octet-stream',
+        })
+      if (uploadError) throw uploadError
+
+      // 2) Register the metadata row via the Route Handler — this enforces
+      //    RBAC ('edit' permission) and writes the audit-log entry.
+      const row = await api.post<AttachmentApiRow>(
+        `/letters/${letterId}/attachments`,
+        {
+          name: file.name,
+          storage_path: storagePath,
+          type: file.type || undefined,
+          size: file.size,
+        },
+      )
+      const attachment = mapAttachment(row)
+
+      // 3) Reflect the new attachment in store state (no refetch needed —
+      //    we have the canonical row from the POST response).
       set((state) => {
-        const { [id]: _drop, ...rest } = state.byId
+        const existing = state.byId[letterId]
+        if (!existing) return { isMutating: false }
+        const updated: Letter = {
+          ...existing,
+          attachments: [attachment, ...existing.attachments],
+        }
         return {
-          letters: state.letters.filter((l) => l.id !== id),
-          byId: rest,
+          letters: state.letters.map((l) => (l.id === letterId ? updated : l)),
+          byId: { ...state.byId, [letterId]: updated },
           selectedLetter:
-            state.selectedLetter?.id === id ? null : state.selectedLetter,
+            state.selectedLetter?.id === letterId ? updated : state.selectedLetter,
           isMutating: false,
         }
       })
+      return attachment
     } catch (e) {
-      set({ error: errorMessage(e, 'Failed to delete letter'), isMutating: false })
+      set({ error: errorMessage(e, 'Failed to upload attachment'), isMutating: false })
       throw e
     }
   },
 
   submitForApproval: async (id) => {
     requirePermission('Approve SAMA Letters', {
-      storeName: 'samaLetter',
+      storeName: 'letter',
       actionName: 'submitForApproval',
       id,
     })
@@ -530,7 +661,7 @@ export const useSAMALetterStore = create<SAMALetterState>()((set, get) => ({
 
   approveStep: async (id, step, notes) => {
     const user = requirePermission('Approve SAMA Letters', {
-      storeName: 'samaLetter',
+      storeName: 'letter',
       actionName: `approveStep:${step}`,
       id,
     })
@@ -570,7 +701,7 @@ export const useSAMALetterStore = create<SAMALetterState>()((set, get) => ({
 
   rejectStep: async (id, step, notes) => {
     requirePermission('Approve SAMA Letters', {
-      storeName: 'samaLetter',
+      storeName: 'letter',
       actionName: `rejectStep:${step}`,
       id,
     })
@@ -601,7 +732,7 @@ export const useSAMALetterStore = create<SAMALetterState>()((set, get) => ({
 
   send: async (id) => {
     const user = requirePermission('Approve SAMA Letters', {
-      storeName: 'samaLetter',
+      storeName: 'letter',
       actionName: 'send',
       id,
     })
@@ -631,7 +762,7 @@ export const useSAMALetterStore = create<SAMALetterState>()((set, get) => ({
 
   markResponseReceived: async (id) => {
     requirePermission('Approve SAMA Letters', {
-      storeName: 'samaLetter',
+      storeName: 'letter',
       actionName: 'markResponseReceived',
       id,
     })
@@ -659,7 +790,17 @@ export const useSAMALetterStore = create<SAMALetterState>()((set, get) => ({
 
   setFilters: (filters) => set({ filters }),
   clearFilters: () => set({ filters: {} }),
-  setSelected: (letter) => set({ selectedLetter: letter }),
+  setSelected: (letter) => {
+    set({ selectedLetter: letter })
+    // WAVE2-A: hydrate nested children (attachments, timeline, approval steps,
+    // related observations) by re-fetching the detail endpoint when a letter
+    // is selected. The list `fetchAll()` returns flat rows without these
+    // arrays, so after a refresh the detail view would otherwise render
+    // empty attachment/timeline sections even though the rows exist in DB.
+    if (letter?.id) {
+      void get().fetchById(letter.id)
+    }
+  },
   setSort: (sort) => set({ sort }),
   setPage: (page) => set((state) => ({ pagination: { ...state.pagination, page } })),
   setPageSize: (pageSize) =>

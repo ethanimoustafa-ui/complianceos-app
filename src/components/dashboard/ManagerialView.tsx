@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useMemo } from 'react'
 import { useRouter } from 'next/navigation'
@@ -7,7 +7,7 @@ import { Card } from '@/components/ui/card'
 import { Badge, getStatusVariant } from '@/components/ui/badge'
 import { useTranslation, type TranslationKey } from '@/i18n'
 import { useComplianceSettingsStore } from '@/stores/compliance-settings-store'
-import { useSAMALetterStore } from '@/stores/sama-letter-store'
+import { useLetterStore } from '@/stores/letter-store'
 import { usePolicyStore } from '@/stores/policy-store'
 import { useAuditStore } from '@/stores/audit-store'
 import { Button } from '@/components/ui/button'
@@ -37,7 +37,7 @@ export function ManagerialView({ metrics }: ManagerialViewProps) {
   }
 
   // Pending approvals — cross-store
-  const letters = useSAMALetterStore(s => s.letters)
+  const letters = useLetterStore(s => s.letters)
   const policies = usePolicyStore(s => s.policies)
   const audits = useAuditStore(s => s.audits)
 
@@ -46,7 +46,7 @@ export function ManagerialView({ metrics }: ManagerialViewProps) {
 
     for (const l of letters) {
       if (l.status === 'pending-approval') {
-        items.push({ id: l.id, type: 'SAMA Letter', typeKey: t('samaLetters.title'), title: l.subject, status: l.status, dueDate: l.responseDeadline, route: `/correspondence/letters?id=${l.id}` })
+        items.push({ id: l.id, type: 'SAMA Letter', typeKey: t('letters.title'), title: l.subject, status: l.status, dueDate: l.responseDeadline, route: `/correspondence/letters?id=${l.id}` })
       }
     }
     for (const p of policies) {
@@ -262,7 +262,7 @@ export function ManagerialView({ metrics }: ManagerialViewProps) {
               <div className="flex items-center justify-between">
                 <span className="text-sm text-slate-600">{t('dashboard.overdueLabel')}</span>
                 <div className="flex items-center gap-2">
-                  {metrics.samaLetters.overdueCount > 0 && <Badge variant="danger" size="sm">{metrics.samaLetters.overdueCount} {t('samaLetters.title')}</Badge>}
+                  {metrics.samaLetters.overdueCount > 0 && <Badge variant="danger" size="sm">{metrics.samaLetters.overdueCount} {t('letters.title')}</Badge>}
                   {metrics.audits.overdueCount > 0 && <Badge variant="danger" size="sm">{metrics.audits.overdueCount} {t('navigation.audits')}</Badge>}
                   {metrics.policies.overdue > 0 && <Badge variant="danger" size="sm">{metrics.policies.overdue} {t('navigation.regulatoryUpdates')}</Badge>}
                   {metrics.samaLetters.overdueCount === 0 && metrics.audits.overdueCount === 0 && metrics.policies.overdue === 0 && (

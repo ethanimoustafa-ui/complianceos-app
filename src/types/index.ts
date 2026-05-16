@@ -1,4 +1,4 @@
-// User types
+﻿// User types
 export interface User {
   id: string
   name: string
@@ -441,7 +441,7 @@ export type PlaceholderValue =
 export interface LetterTemplate {
   id: string
   name: string
-  type: SAMALetterType
+  type: LetterType
   icon: string
   color: string
   description: string
@@ -472,7 +472,7 @@ export interface LetterTemplate {
 }
 
 // SAMA Letters
-export type SAMALetterStatus =
+export type LetterStatus =
   | 'draft'
   | 'pending-approval'
   | 'approved'
@@ -481,10 +481,10 @@ export type SAMALetterStatus =
   | 'overdue'
 
 // Widened to opaque string id so users can add custom letter types via
-// useSAMALetterTypeStore. Default seeds match the legacy union values
+// useLetterTypeStore. Default seeds match the legacy union values
 // ('non-objection' | 'inquiry' | 'submission' | 'notification') so existing
 // letters and templates remain valid.
-export type SAMALetterType = string
+export type LetterType = string
 // Department id is now an opaque string scoped per authority (see src/lib/letter-authority.ts).
 // Existing SAMA dept IDs (banking-supervision, payment-systems, compliance-aml) remain valid.
 export type SAMADepartment = string
@@ -493,7 +493,7 @@ export type SAMADepartment = string
 // matching; users can add custom sub-categories via useSAMASubCategoryStore.
 export type SAMASubCategory = string
 
-export interface SAMALetterApprovalStep {
+export interface LetterApprovalStep {
   step: 1 | 2 | 3
   role: 'Compliance Officer' | 'Department Head' | 'CEO'
   status: 'pending' | 'approved' | 'rejected'
@@ -503,7 +503,7 @@ export interface SAMALetterApprovalStep {
   notes?: string
 }
 
-export interface SAMALetterTimelineEvent {
+export interface LetterTimelineEvent {
   id: string
   title: string
   date: string
@@ -511,23 +511,23 @@ export interface SAMALetterTimelineEvent {
   status: 'completed' | 'active' | 'pending'
 }
 
-export interface SAMALetter {
+export interface Letter {
   id: string
   reference: string
   authority: CircularAuthority
-  type: SAMALetterType
+  type: LetterType
   subCategory?: SAMASubCategory
   samaDepartment?: SAMADepartment
   subject: string
   subjectAr?: string
   body: string
   bodyAr?: string
-  status: SAMALetterStatus
+  status: LetterStatus
   priority: 'standard' | 'urgent'
   createdBy: string
   assignedTo?: string
-  approvalChain: SAMALetterApprovalStep[]
-  timeline: SAMALetterTimelineEvent[]
+  approvalChain: LetterApprovalStep[]
+  timeline: LetterTimelineEvent[]
   sentDate?: string
   responseDeadline?: string
   responseReceivedDate?: string
@@ -1260,6 +1260,13 @@ export interface Department {
   name: string
   nameAr: string
   isDefault: boolean
+  /**
+   * Stable identifier used as the value in free-text department columns
+   * (e.g. `observations.department`). Distinct from the display `name`,
+   * which can be renamed. Optional because legacy/unsynced rows may not have
+   * it; consumers should fall back to `name` for matching in such cases.
+   */
+  key?: string
 }
 
 export type DashboardView = 'executive' | 'managerial' | 'officer'

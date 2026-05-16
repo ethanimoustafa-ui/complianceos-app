@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { createPortal } from 'react-dom'
@@ -6,14 +6,16 @@ import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { Icon } from '@iconify/react'
 import { Modal } from '@/components/ui/modal'
+import { ListSkeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
 import { useTranslation } from '@/i18n'
 import { Gate } from '@/components/auth/gate'
-import { useSAMALetterStore } from '@/stores/sama-letter-store'
+import { useLetterStore } from '@/stores/letter-store'
 import { useAuthStore } from '@/stores/auth-store'
-import type { SAMALetter, SAMALetterType, SAMALetterStatus, Attachment, LetterTemplate, TemplateStatus, CircularAuthority } from '@/types'
-import { useSAMATemplateStore } from '@/stores/sama-template-store'
+import type { Letter, LetterType, LetterStatus, LetterTemplate, TemplateStatus, CircularAuthority } from '@/types'
+import { useLetterTemplateStore } from '@/stores/letter-template-store'
 import { formatBytes as fmtBytes } from '@/lib/format'
+import { formatRelativeTime } from '@/lib/time-utils'
 import { dicebearAvatar } from '@/lib/avatar'
 import { useTeamStore } from '@/stores/team-store'
 import { useFrameworkConfigStore } from '@/stores/framework-config-store'
@@ -26,10 +28,10 @@ import {
   getDepartmentEmail,
   getDefaultDepartmentId,
 } from '@/lib/letter-authority'
-import { useSAMALetterTypeStore } from '@/stores/sama-letter-type-store'
+import { useLetterTypeStore } from '@/stores/letter-type-store'
 import { EditableSelect } from '@/components/ui/editable-select'
-import { PlaceholderDefEditor } from '@/components/correspondence/sama-letters/PlaceholderDefEditor'
-import { InlineChipEditor } from '@/components/correspondence/sama-letters/InlineChipEditor'
+import { PlaceholderDefEditor } from '@/components/correspondence/letter-placeholders/PlaceholderDefEditor'
+import { InlineChipEditor } from '@/components/correspondence/letter-placeholders/InlineChipEditor'
 import {
   placeholderValuesComplete,
   autoPromoteTypedTokens,
@@ -53,12 +55,12 @@ import {
 } from '@/components/correspondence/letters'
 import type { LetterSortCol, LetterSortState } from '@/components/correspondence/letters'
 
-export default function SAMALettersPage() {
+export default function LettersPage() {
   const { t, isRTL } = useTranslation()
   const searchParams = useSearchParams()
-  const store = useSAMALetterStore()
-  const templateStore = useSAMATemplateStore()
-  const letterTypeStore = useSAMALetterTypeStore()
+  const store = useLetterStore()
+  const templateStore = useLetterTemplateStore()
+  const letterTypeStore = useLetterTypeStore()
   const { user } = useAuthStore()
   const currentUser = user?.name || 'Current User'
   const teamMembers = useTeamStore(s => s.members)
@@ -66,38 +68,58 @@ export default function SAMALettersPage() {
   const selectedLetter = store.selectedLetter
   const letterContentRef = useRef<HTMLDivElement>(null)
 
+  // Hydrate server-state on mount (Fix-1). Without this, reload wipes the
+  // letter list, templates, and lookup tables.
+  const fetchLetters = useLetterStore((s) => s.fetchAll)
+  const fetchTemplates = useLetterTemplateStore((s) => s.fetchAll)
+  const fetchLetterTypes = useLetterTypeStore((s) => s.fetchAll)
+  const fetchTeam = useTeamStore((s) => s.fetchAll)
+  useEffect(() => {
+    void fetchLetters()
+    void fetchTemplates()
+    void fetchLetterTypes()
+    void fetchTeam()
+  }, [fetchLetters, fetchTemplates, fetchLetterTypes, fetchTeam])
+
+  // Wave-2 Agent E: first-fetch skeleton. Once `lastFetched` is non-null we
+  // never show the skeleton again — refetches keep the list visible.
+  const lettersLoading = useLetterStore((s) => s.isLoading)
+  const lettersLastFetched = useLetterStore((s) => s.lastFetched)
+  const showLettersSkeleton =
+    lettersLoading && store.letters.length === 0 && lettersLastFetched === null
+
   // Helper to get translated template name and description based on template ID
   const getTranslatedTemplateName = useCallback((templateId: string, originalName: string) => {
     const nameMap: Record<string, string> = {
-      'tmpl-001': t('samaLetters.templateKeyFunctionAppointment'),
-      'tmpl-002': t('samaLetters.templateProductLaunchRequest'),
-      'tmpl-003': t('samaLetters.templateCircularClarification'),
-      'tmpl-004': t('samaLetters.templateRegulatoryInterpretation'),
-      'tmpl-005': t('samaLetters.templateQuarterlyAmlReport'),
-      'tmpl-006': t('samaLetters.templateAnnualComplianceReport'),
-      'tmpl-007': t('samaLetters.templateIncidentNotification'),
-      'tmpl-008': t('samaLetters.templateSystemOutageReport'),
+      'tmpl-001': t('letters.templateKeyFunctionAppointment'),
+      'tmpl-002': t('letters.templateProductLaunchRequest'),
+      'tmpl-003': t('letters.templateCircularClarification'),
+      'tmpl-004': t('letters.templateRegulatoryInterpretation'),
+      'tmpl-005': t('letters.templateQuarterlyAmlReport'),
+      'tmpl-006': t('letters.templateAnnualComplianceReport'),
+      'tmpl-007': t('letters.templateIncidentNotification'),
+      'tmpl-008': t('letters.templateSystemOutageReport'),
     }
     return nameMap[templateId] || originalName
   }, [t])
 
   const getTranslatedTemplateDescription = useCallback((templateId: string, originalDescription: string) => {
     const descMap: Record<string, string> = {
-      'tmpl-001': t('samaLetters.templateKeyFunctionDesc'),
-      'tmpl-002': t('samaLetters.templateProductLaunchDesc'),
-      'tmpl-003': t('samaLetters.templateCircularClarificationDesc'),
-      'tmpl-004': t('samaLetters.templateRegulatoryInterpretationDesc'),
-      'tmpl-005': t('samaLetters.templateQuarterlyAmlDesc'),
-      'tmpl-006': t('samaLetters.templateAnnualComplianceDesc'),
-      'tmpl-007': t('samaLetters.templateIncidentNotificationDesc'),
-      'tmpl-008': t('samaLetters.templateSystemOutageDesc'),
+      'tmpl-001': t('letters.templateKeyFunctionDesc'),
+      'tmpl-002': t('letters.templateProductLaunchDesc'),
+      'tmpl-003': t('letters.templateCircularClarificationDesc'),
+      'tmpl-004': t('letters.templateRegulatoryInterpretationDesc'),
+      'tmpl-005': t('letters.templateQuarterlyAmlDesc'),
+      'tmpl-006': t('letters.templateAnnualComplianceDesc'),
+      'tmpl-007': t('letters.templateIncidentNotificationDesc'),
+      'tmpl-008': t('letters.templateSystemOutageDesc'),
     }
     return descMap[templateId] || originalDescription
   }, [t])
 
   const [view, setView] = useState<'dashboard' | 'detail'>('dashboard')
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
-  const [selectedLetterType, setSelectedLetterType] = useState<SAMALetterType>('non-objection')
+  const [selectedLetterType, setSelectedLetterType] = useState<LetterType>('non-objection')
   const [toastMessage, setToastMessage] = useState<string | null>(null)
   const [language, setLanguage] = useState<'en' | 'ar'>(isRTL ? 'ar' : 'en')
   const [pendingSend, setPendingSend] = useState(false)
@@ -105,7 +127,7 @@ export default function SAMALettersPage() {
   // Template Management State
   const [isTemplateManagementOpen, setIsTemplateManagementOpen] = useState(false)
   const [templateSearch, setTemplateSearch] = useState('')
-  const [templateTypeFilter, setTemplateTypeFilter] = useState<SAMALetterType | 'All'>('All')
+  const [templateTypeFilter, setTemplateTypeFilter] = useState<LetterType | 'All'>('All')
   const [templateStatusFilter, setTemplateStatusFilter] = useState<TemplateStatus | 'All'>('All')
 
   // Template Actions State (templates sourced from persistent store)
@@ -204,7 +226,7 @@ export default function SAMALettersPage() {
     if (!sort) return filteredLetters
     const { col, dir } = sort
     const mul = dir === 'asc' ? 1 : -1
-    const statusOrder: Record<SAMALetterStatus, number> = {
+    const statusOrder: Record<LetterStatus, number> = {
       draft: 0, 'pending-approval': 1, approved: 2, sent: 3, 'response-received': 4, overdue: 5,
     }
     return [...filteredLetters].sort((a, b) => {
@@ -250,7 +272,7 @@ export default function SAMALettersPage() {
   const [editRecipientOrgAr, setEditRecipientOrgAr]   = useState('')
   const [editRecipientCityAr, setEditRecipientCityAr] = useState('')
   // Placeholder defs + values for draft-edit mode. The InlineChipEditor reads
-  // both; on field-level save we persist defs back to the SAMALetter.
+  // both; on field-level save we persist defs back to the Letter.
   const [editPlaceholderDefs, setEditPlaceholderDefs] = useState<PlaceholderDef[]>([])
   const [editPlaceholderValues, setEditPlaceholderValues] = useState<Record<string, PlaceholderValue | undefined>>({})
 
@@ -297,14 +319,14 @@ export default function SAMALettersPage() {
   }, [selectedLetter?.id])
 
   const isDraft = selectedLetter?.status === 'draft'
-  const saveField = (patch: Partial<SAMALetter>) => {
+  const saveField = (patch: Partial<Letter>) => {
     if (selectedLetter) store.update(selectedLetter.id, patch)
   }
 
   // Body/subject save path used by InlineChipEditor — also runs the
   // auto-promote pass so any newly-typed `{{token}}` becomes a real
   // placeholder def stored on the letter.
-  const saveDraftBody = (patch: Partial<Pick<SAMALetter, 'subject' | 'subjectAr' | 'body' | 'bodyAr'>>) => {
+  const saveDraftBody = (patch: Partial<Pick<Letter, 'subject' | 'subjectAr' | 'body' | 'bodyAr'>>) => {
     if (!selectedLetter) return
     const merged = {
       subject:   patch.subject   ?? editSubject,
@@ -331,22 +353,30 @@ export default function SAMALettersPage() {
   // Attachment upload
   const attachFileRef = useRef<HTMLInputElement>(null)
 
-  const handleAttachFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleAttachFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files
     if (!files || !selectedLetter) return
-    const newAttachments: Attachment[] = Array.from(files).map(f => ({
-      id: `att-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-      name: f.name,
-      url: URL.createObjectURL(f),
-      type: f.type || 'application/octet-stream',
-      size: f.size,
-      uploadedAt: new Date().toISOString(),
-      uploadedBy: user?.name || 'Unknown',
-    }))
-    store.update(selectedLetter.id, {
-      attachments: [...selectedLetter.attachments, ...newAttachments],
-    })
-    e.target.value = ''
+    const letterId = selectedLetter.id
+    // Sequentially upload each file. We could parallelise but uploads are
+    // typically small and serial keeps the UX (and any failure recovery)
+    // predictable. The store's uploadAttachment:
+    //   1) PUTs to Supabase Storage bucket `sama_letter_attachments`
+    //   2) POSTs metadata to /api/letters/[id]/attachments
+    //   3) Updates the store with the canonical row from the API response
+    // Refetch the letter at the end so the timeline reflects any server-side
+    // recomputation. (Fix-3 wave.)
+    try {
+      for (const f of Array.from(files)) {
+        await store.uploadAttachment(letterId, f)
+      }
+      showToast('Attachment uploaded')
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to upload attachment'
+      console.error('[letters] attachment upload failed:', err)
+      showToast(message)
+    } finally {
+      e.target.value = ''
+    }
   }
 
   // Filter templates based on search and filters
@@ -428,7 +458,7 @@ export default function SAMALettersPage() {
     setIsCreateModalOpen(true)
   }
 
-  const handleViewLetter = (letter: SAMALetter) => {
+  const handleViewLetter = (letter: Letter) => {
     store.setSelected(letter)
     setView('detail')
     window.scrollTo({ top: 0, behavior: 'smooth' })
@@ -448,7 +478,7 @@ export default function SAMALettersPage() {
     store.setSelected(null)
   }
 
-  const handleOpenCreateModal = (type: SAMALetterType = 'non-objection') => {
+  const handleOpenCreateModal = (type: LetterType = 'non-objection') => {
     setSelectedLetterType(type)
     setIsCreateModalOpen(true)
   }
@@ -538,7 +568,7 @@ export default function SAMALettersPage() {
 
   // Pure mail helper — opens mailto and marks the letter sent. Safe to call without a PDF download
   // (e.g. from the summary table where the letter content DOM is not rendered).
-  const openAuthorityMail = useCallback((letter: SAMALetter, lang: 'en' | 'ar') => {
+  const openAuthorityMail = useCallback((letter: Letter, lang: 'en' | 'ar') => {
     const toEmail = getDepartmentEmail(letter.authority, letter.samaDepartment) ?? ''
     const subjectText = getEmailSubjectFor(letter.type, lang)
     const letterSubj = lang === 'ar'
@@ -549,7 +579,7 @@ export default function SAMALettersPage() {
     const mailto = `mailto:${toEmail}?subject=${encodeURIComponent(emailSubject)}&body=${encodeURIComponent(emailBody)}`
     window.open(mailto, '_blank')
     store.send(letter.id)
-    showToast(t('samaLetters.pdfDownloadedAttachToEmail'))
+    showToast(t('letters.pdfDownloadedAttachToEmail'))
   }, [store, showToast, t])
 
   // Detail-view send: downloads PDF first, then opens mail using the letter's language toggle
@@ -578,12 +608,12 @@ export default function SAMALettersPage() {
 
   const formatBytes = (bytes: number): string => fmtBytes(bytes, bytes < 1024 * 1024 ? 0 : 1)
 
-  const getTypeLabel = (type: SAMALetterType): string => {
+  const getTypeLabel = (type: LetterType): string => {
     switch (type) {
-      case 'non-objection': return t('samaLetters.nonObjection')
-      case 'inquiry': return t('samaLetters.inquiry')
-      case 'submission': return t('samaLetters.submission')
-      case 'notification': return t('samaLetters.notification')
+      case 'non-objection': return t('letters.nonObjection')
+      case 'inquiry': return t('letters.inquiry')
+      case 'submission': return t('letters.submission')
+      case 'notification': return t('letters.notification')
       default: {
         // Custom letter type — pull label from the editable type store.
         const item = letterTypeStore.types.find((tt) => tt.id === type)
@@ -592,7 +622,7 @@ export default function SAMALettersPage() {
     }
   }
 
-  const getTypeBadgeColor = (type: SAMALetterType): string => {
+  const getTypeBadgeColor = (type: LetterType): string => {
     switch (type) {
       case 'non-objection': return 'bg-emerald-50 text-emerald-700'
       case 'inquiry': return 'bg-blue-50 text-blue-700'
@@ -602,7 +632,7 @@ export default function SAMALettersPage() {
     }
   }
 
-  const getStatusDisplay = (status: SAMALetter['status']) => {
+  const getStatusDisplay = (status: Letter['status']) => {
     switch (status) {
       case 'sent': return { color: 'text-blue-600', dotColor: 'bg-blue-600' }
       case 'draft': return { color: 'text-amber-600', dotColor: 'bg-amber-600' }
@@ -614,14 +644,14 @@ export default function SAMALettersPage() {
     }
   }
 
-  const getStatusLabel = (status: SAMALetter['status']): string => {
+  const getStatusLabel = (status: Letter['status']): string => {
     switch (status) {
-      case 'draft': return t('samaLetters.drafting')
-      case 'pending-approval': return t('samaLetters.pendingApproval')
-      case 'approved': return t('samaLetters.approvedForSending')
-      case 'sent': return t('samaLetters.statusSentToAuthority')
-      case 'response-received': return t('samaLetters.statusResponseReceived')
-      case 'overdue': return t('samaLetters.statusOverdue')
+      case 'draft': return t('letters.drafting')
+      case 'pending-approval': return t('letters.pendingApproval')
+      case 'approved': return t('letters.approvedForSending')
+      case 'sent': return t('letters.statusSentToAuthority')
+      case 'response-received': return t('letters.statusResponseReceived')
+      case 'overdue': return t('letters.statusOverdue')
       default: return status
     }
   }
@@ -655,9 +685,9 @@ export default function SAMALettersPage() {
             <Icon icon={isRTL ? 'lucide:arrow-right' : 'lucide:arrow-left'} className="text-base" />
           </Link>
           <div>
-            <h1 className="text-xl font-bold font-display text-slate-900">{t('samaLetters.pageTitleLetters')}</h1>
+            <h1 className="text-xl font-bold font-display text-slate-900">{t('letters.pageTitleLetters')}</h1>
             <p className="text-xs text-slate-500 font-medium tracking-wide uppercase">
-              {t('samaLetters.pageSubtitleLetters')}
+              {t('letters.pageSubtitleLetters')}
             </p>
           </div>
 
@@ -669,7 +699,7 @@ export default function SAMALettersPage() {
               className={`px-3 py-1.5 text-xs font-bold text-emerald-700 bg-emerald-50 rounded-lg transition-all border border-emerald-100 flex items-center gap-2`}
             >
               <Icon icon="lucide:mail" className="text-emerald-500" />
-              {t('samaLetters.tabLetters')}
+              {t('letters.tabLetters')}
             </Link>
             <Link
               href="/correspondence/regulatory-updates"
@@ -702,7 +732,7 @@ export default function SAMALettersPage() {
               className={`bg-emerald-600 text-white px-5 py-2.5 rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-emerald-700 transition-colors shadow-lg shadow-emerald-100 cursor-pointer`}
             >
               <Icon icon="lucide:plus" />
-              {t('samaLetters.draftNewLetter')}
+              {t('letters.draftNewLetter')}
             </button>
           </Gate>
         </div>
@@ -728,8 +758,8 @@ export default function SAMALettersPage() {
                   <Icon icon={isRTL ? 'lucide:chevron-right' : 'lucide:chevron-left'} className="text-xl" />
                 </button>
                 <div>
-                  <h2 className="text-2xl font-bold text-slate-900 font-display">{t('samaLetters.templateDatabank')}</h2>
-                  <p className="text-sm text-slate-500">{t('samaLetters.manageOrganizeTemplates')}</p>
+                  <h2 className="text-2xl font-bold text-slate-900 font-display">{t('letters.templateDatabank')}</h2>
+                  <p className="text-sm text-slate-500">{t('letters.manageOrganizeTemplates')}</p>
                 </div>
               </div>
               <Gate perm="Manage Letter Templates">
@@ -738,7 +768,7 @@ export default function SAMALettersPage() {
                   className={`bg-emerald-600 text-white px-5 py-2.5 rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-emerald-700 transition-colors shadow-lg shadow-emerald-100 cursor-pointer`}
                 >
                   <Icon icon="lucide:plus" />
-                  {t('samaLetters.createTemplate')}
+                  {t('letters.createTemplate')}
                 </button>
               </Gate>
             </div>
@@ -756,12 +786,12 @@ export default function SAMALettersPage() {
                     type="text"
                     value={templateSearch}
                     onChange={(e) => setTemplateSearch(e.target.value)}
-                    placeholder={t('samaLetters.searchTemplates')}
+                    placeholder={t('letters.searchTemplates')}
                     className={`w-full ${isRTL ? 'pr-10 pl-4' : 'pl-10 pr-4'} py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 outline-none`}
                   />
                 </div>
 
-                {/* Type Filter — BUG-R3-05: bound to useSAMALetterTypeStore so
+                {/* Type Filter — BUG-R3-05: bound to useLetterTypeStore so
                     user-added types appear here. A synthetic "All" item is
                     prepended (isDefault so it can't be deleted/edited). */}
                 <div className={`flex items-center gap-2`}>
@@ -769,9 +799,9 @@ export default function SAMALettersPage() {
                   <div className="min-w-[150px]">
                     <EditableSelect
                       value={templateTypeFilter}
-                      onChange={(id) => setTemplateTypeFilter(id as SAMALetterType | 'All')}
+                      onChange={(id) => setTemplateTypeFilter(id as LetterType | 'All')}
                       items={[
-                        { id: 'All', label: t('samaLetters.allTypes'), labelAr: t('samaLetters.allTypes'), isDefault: true },
+                        { id: 'All', label: t('letters.allTypes'), labelAr: t('letters.allTypes'), isDefault: true },
                         ...letterTypeStore.types.map((tt) => ({
                           id: tt.id,
                           label: tt.label,
@@ -800,7 +830,7 @@ export default function SAMALettersPage() {
                     <EditableSelect
                       locked
                       items={[
-                        { id: 'All', label: t('samaLetters.allStatus') },
+                        { id: 'All', label: t('letters.allStatus') },
                         { id: 'Active', label: t('common.active') },
                         { id: 'Draft', label: t('common.draft') },
                       ]}
@@ -813,7 +843,7 @@ export default function SAMALettersPage() {
 
                 {/* Results Count */}
                 <div className={`text-sm text-slate-500`}>
-                  <span className="font-bold text-slate-900">{filteredTemplates.length}</span> {t('samaLetters.templatesFound')}
+                  <span className="font-bold text-slate-900">{filteredTemplates.length}</span> {t('letters.templatesFound')}
                 </div>
               </div>
             </div>
@@ -824,12 +854,12 @@ export default function SAMALettersPage() {
                 <table className="w-full">
                   <thead className="bg-slate-50/50 text-slate-500 uppercase text-[10px] font-bold tracking-widest border-b border-slate-100">
                     <tr>
-                      <th className={`px-6 py-4`}>{t('samaLetters.templateName')}</th>
+                      <th className={`px-6 py-4`}>{t('letters.templateName')}</th>
                       <th className={`px-6 py-4`}>{t('common.type')}</th>
                       <th className={`px-6 py-4`}>{t('common.description')}</th>
                       <th className={`px-6 py-4`}>{t('common.status')}</th>
-                      <th className={`px-6 py-4`}>{t('samaLetters.lastModified')}</th>
-                      <th className="px-6 py-4 text-center">{t('samaLetters.usageCount')}</th>
+                      <th className={`px-6 py-4`}>{t('letters.lastModified')}</th>
+                      <th className="px-6 py-4 text-center">{t('letters.usageCount')}</th>
                       <th className={`px-6 py-4 ${isRTL ? 'text-left' : 'text-right'}`}>{t('common.actions')}</th>
                     </tr>
                   </thead>
@@ -841,7 +871,7 @@ export default function SAMALettersPage() {
                             <div className="w-12 h-12 bg-slate-100 rounded-full flex items-center justify-center">
                               <Icon icon="lucide:file-x" className="text-2xl text-slate-400" />
                             </div>
-                            <p className="text-sm text-slate-500">{t('samaLetters.noTemplatesFound')}</p>
+                            <p className="text-sm text-slate-500">{t('letters.noTemplatesFound')}</p>
                             <button
                               onClick={() => {
                                 setTemplateSearch('')
@@ -876,10 +906,10 @@ export default function SAMALettersPage() {
                           </td>
                           <td className="px-6 py-4">
                             <span className={`px-2 py-1 text-[10px] font-bold rounded-md ${getTypeBadgeColor(template.type)}`}>
-                              {template.type === 'non-objection' ? t('samaLetters.nonObjection') :
-                               template.type === 'inquiry' ? t('samaLetters.inquiry') :
-                               template.type === 'submission' ? t('samaLetters.submission') :
-                               t('samaLetters.notification')}
+                              {template.type === 'non-objection' ? t('letters.nonObjection') :
+                               template.type === 'inquiry' ? t('letters.inquiry') :
+                               template.type === 'submission' ? t('letters.submission') :
+                               t('letters.notification')}
                             </span>
                           </td>
                           <td className="px-6 py-4">
@@ -898,14 +928,14 @@ export default function SAMALettersPage() {
                           <td className="px-6 py-4 text-sm text-slate-400">{template.lastModified}</td>
                           <td className="px-6 py-4 text-center">
                             <span className="text-sm font-bold text-slate-900">{template.usageCount}</span>
-                            <span className={`text-xs text-slate-400 ${isRTL ? 'mr-1' : 'ml-1'}`}>{t('samaLetters.uses')}</span>
+                            <span className={`text-xs text-slate-400 ${isRTL ? 'mr-1' : 'ml-1'}`}>{t('letters.uses')}</span>
                           </td>
                           <td className="px-6 py-4">
                             <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                               <button
                                 onClick={() => handleUseTemplate(template)}
                                 className="p-1.5 hover:bg-emerald-100 rounded text-slate-400 hover:text-emerald-600 transition-colors cursor-pointer"
-                                title={t('samaLetters.useTemplate')}
+                                title={t('letters.useTemplate')}
                               >
                                 <Icon icon="lucide:arrow-right-circle" />
                               </button>
@@ -956,34 +986,34 @@ export default function SAMALettersPage() {
             {/* Stats Section */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-10">
               <StatCard
-                label={t('samaLetters.totalLettersYTD')}
+                label={t('letters.totalLettersYTD')}
                 value={String(totalYTD)}
-                subtext={t('samaLetters.fromPreviousYear')}
+                subtext={t('letters.fromPreviousYear')}
                 subtextIcon="lucide:trending-up"
                 subtextColor="emerald"
                 borderColor="emerald"
                 isRTL={isRTL}
               />
               <StatCard
-                label={t('samaLetters.sentThisQuarter')}
+                label={t('letters.sentThisQuarter')}
                 value={String(sentThisQ)}
-                subtext={t('samaLetters.lastSent')}
+                subtext={t('letters.lastSent')}
                 borderColor="blue"
                 isRTL={isRTL}
               />
               <StatCard
-                label={t('samaLetters.pendingDrafts')}
+                label={t('letters.pendingDrafts')}
                 value={String(pendingDrafts).padStart(2, '0')}
-                subtext={t('samaLetters.dueThisWeek')}
+                subtext={t('letters.dueThisWeek')}
                 subtextIcon="lucide:clock"
                 subtextColor="amber"
                 borderColor="amber"
                 isRTL={isRTL}
               />
               <StatCard
-                label={t('samaLetters.overdueReplies')}
+                label={t('letters.overdueReplies')}
                 value={String(overdueReplies).padStart(2, '0')}
-                subtext={t('samaLetters.criticalEscalation')}
+                subtext={t('letters.criticalEscalation')}
                 subtextColor="rose"
                 borderColor="rose"
                 isRTL={isRTL}
@@ -993,26 +1023,26 @@ export default function SAMALettersPage() {
             {/* Letter Templates */}
             <div className="mb-10">
               <div className={`flex items-baseline justify-between mb-6`}>
-                <h2 className="text-lg font-bold font-display text-slate-900">{t('samaLetters.letterTemplates')}</h2>
+                <h2 className="text-lg font-bold font-display text-slate-900">{t('letters.letterTemplates')}</h2>
                 <Gate perm="Manage Letter Templates">
                   <button
                     onClick={() => setIsTemplateManagementOpen(true)}
                     className="text-xs font-bold text-emerald-600 hover:underline cursor-pointer"
                   >
-                    {t('samaLetters.manageTemplates')} {isRTL ? '\u2190' : '\u2192'}
+                    {t('letters.manageTemplates')} {isRTL ? '\u2190' : '\u2192'}
                   </button>
                 </Gate>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 {templateTypeCards.map((template) => {
-                  const translatedDesc = template.type === 'non-objection' ? t('samaLetters.hiringKeyPositions') :
-                                         template.type === 'inquiry' ? t('samaLetters.seekingClarification') :
-                                         template.type === 'submission' ? t('samaLetters.filingPeriodicReports') :
-                                         t('samaLetters.reportingOutages')
-                  const translatedType = template.type === 'non-objection' ? t('samaLetters.nonObjection') :
-                                         template.type === 'inquiry' ? t('samaLetters.inquiry') :
-                                         template.type === 'submission' ? t('samaLetters.submission') :
-                                         t('samaLetters.notification')
+                  const translatedDesc = template.type === 'non-objection' ? t('letters.hiringKeyPositions') :
+                                         template.type === 'inquiry' ? t('letters.seekingClarification') :
+                                         template.type === 'submission' ? t('letters.filingPeriodicReports') :
+                                         t('letters.reportingOutages')
+                  const translatedType = template.type === 'non-objection' ? t('letters.nonObjection') :
+                                         template.type === 'inquiry' ? t('letters.inquiry') :
+                                         template.type === 'submission' ? t('letters.submission') :
+                                         t('letters.notification')
                   return (
                     <TemplateCard
                       key={template.type}
@@ -1039,7 +1069,7 @@ export default function SAMALettersPage() {
             {/* Recent Letters Table */}
             <div className="glass-card rounded-2xl overflow-hidden shadow-sm">
               <div className={`px-6 py-5 border-b border-slate-100 flex items-center justify-between bg-white/50`}>
-                <h2 className="font-bold text-slate-900">{t('samaLetters.recentCorrespondence')}</h2>
+                <h2 className="font-bold text-slate-900">{t('letters.recentCorrespondence')}</h2>
                 <div className={`flex gap-3`}>
                   <div className="relative">
                     <Icon
@@ -1050,7 +1080,7 @@ export default function SAMALettersPage() {
                       type="text"
                       value={letterSearch}
                       onChange={(e) => setLetterSearch(e.target.value)}
-                      placeholder={t('samaLetters.searchByNameRefAuthority')}
+                      placeholder={t('letters.searchByNameRefAuthority')}
                       className={`${isRTL ? 'pr-10 pl-4' : 'pl-10 pr-4'} py-2 bg-slate-100 rounded-lg text-xs focus:ring-2 focus:ring-emerald-500 outline-none w-72`}
                     />
                   </div>
@@ -1062,7 +1092,7 @@ export default function SAMALettersPage() {
                           ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'
                           : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                       }`}
-                      title={t('samaLetters.filtersTitle')}
+                      title={t('letters.filtersTitle')}
                     >
                       <Icon icon="lucide:filter" />
                       {(authorityFilter.size > 0 || dateFilter !== 'any') && (
@@ -1074,13 +1104,13 @@ export default function SAMALettersPage() {
                     {showFilterPopover && (
                       <div className={`absolute z-30 mt-2 ${isRTL ? 'left-0' : 'right-0'} w-72 bg-white border border-slate-200 rounded-xl shadow-xl p-4 space-y-4`}>
                         <div className="flex items-center justify-between">
-                          <h3 className="text-xs font-black uppercase tracking-widest text-slate-500">{t('samaLetters.filtersTitle')}</h3>
+                          <h3 className="text-xs font-black uppercase tracking-widest text-slate-500">{t('letters.filtersTitle')}</h3>
                           <button onClick={resetFilters} className="text-[10px] font-bold text-slate-400 hover:text-slate-700 cursor-pointer">
-                            {t('samaLetters.filterReset')}
+                            {t('letters.filterReset')}
                           </button>
                         </div>
                         <div>
-                          <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">{t('samaLetters.filterByAuthority')}</p>
+                          <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">{t('letters.filterByAuthority')}</p>
                           <div className="grid grid-cols-3 gap-1.5">
                             {storeFrameworks
                               .filter((f) => f.enabled && f.correspondenceBased)
@@ -1105,13 +1135,13 @@ export default function SAMALettersPage() {
                           </div>
                         </div>
                         <div>
-                          <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">{t('samaLetters.filterByDate')}</p>
+                          <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">{t('letters.filterByDate')}</p>
                           <div className="space-y-1">
                             {([
-                              ['any',  t('samaLetters.dateAnyTime')],
-                              ['30d',  t('samaLetters.dateLast30Days')],
-                              ['90d',  t('samaLetters.dateLast90Days')],
-                              ['365d', t('samaLetters.dateLast365Days')],
+                              ['any',  t('letters.dateAnyTime')],
+                              ['30d',  t('letters.dateLast30Days')],
+                              ['90d',  t('letters.dateLast90Days')],
+                              ['365d', t('letters.dateLast365Days')],
                             ] as const).map(([val, label]) => (
                               <button
                                 key={val}
@@ -1132,16 +1162,21 @@ export default function SAMALettersPage() {
                   </div>
                 </div>
               </div>
+              {showLettersSkeleton ? (
+                <div className="p-6">
+                  <ListSkeleton rows={5} columns={6} />
+                </div>
+              ) : (
               <div className="overflow-x-auto">
                 <table className={`w-full`}>
                   <thead className="bg-slate-50/50 text-slate-500 uppercase text-[10px] font-bold tracking-widest border-b border-slate-100">
                     <tr>
-                      <th className={`px-6 py-4`}><LetterSortHeader label={t('samaLetters.tableAuthority')} col="authority" sort={sort} onSort={handleLetterSort} onClear={() => setSort(null)} /></th>
-                      <th className={`px-6 py-4`}><LetterSortHeader label={t('samaLetters.reference')} col="reference" sort={sort} onSort={handleLetterSort} onClear={() => setSort(null)} /></th>
+                      <th className={`px-6 py-4`}><LetterSortHeader label={t('letters.tableAuthority')} col="authority" sort={sort} onSort={handleLetterSort} onClear={() => setSort(null)} /></th>
+                      <th className={`px-6 py-4`}><LetterSortHeader label={t('letters.reference')} col="reference" sort={sort} onSort={handleLetterSort} onClear={() => setSort(null)} /></th>
                       <th className={`px-6 py-4`}><LetterSortHeader label={t('common.type')} col="type" sort={sort} onSort={handleLetterSort} onClear={() => setSort(null)} /></th>
-                      <th className={`px-6 py-4`}><LetterSortHeader label={t('samaLetters.subject')} col="subject" sort={sort} onSort={handleLetterSort} onClear={() => setSort(null)} /></th>
+                      <th className={`px-6 py-4`}><LetterSortHeader label={t('letters.subject')} col="subject" sort={sort} onSort={handleLetterSort} onClear={() => setSort(null)} /></th>
                       <th className={`px-6 py-4`}><LetterSortHeader label={t('common.status')} col="status" sort={sort} onSort={handleLetterSort} onClear={() => setSort(null)} /></th>
-                      <th className={`px-6 py-4`}><LetterSortHeader label={t('samaLetters.lastModified')} col="updatedAt" sort={sort} onSort={handleLetterSort} onClear={() => setSort(null)} /></th>
+                      <th className={`px-6 py-4`}><LetterSortHeader label={t('letters.lastModified')} col="updatedAt" sort={sort} onSort={handleLetterSort} onClear={() => setSort(null)} /></th>
                       <th className={`px-6 py-4 ${isRTL ? 'text-left' : 'text-right'}`}>{t('common.actions')}</th>
                     </tr>
                   </thead>
@@ -1205,6 +1240,7 @@ export default function SAMALettersPage() {
                   </tbody>
                 </table>
               </div>
+              )}
             </div>
           </div>
         ) : (
@@ -1231,7 +1267,7 @@ export default function SAMALettersPage() {
                 {/* Print PDF — always available in detail view */}
                 <button onClick={handleDownloadPdf} className={`px-4 py-2 bg-white border border-slate-200 rounded-lg text-sm font-bold text-slate-700 flex items-center gap-2 hover:bg-slate-50 transition-colors cursor-pointer`}>
                   <Icon icon="lucide:printer" />
-                  {t('samaLetters.printPdf')}
+                  {t('letters.printPdf')}
                 </button>
                 {/* Status-specific primary actions */}
                 {selectedLetter?.status === 'draft' && (
@@ -1240,7 +1276,7 @@ export default function SAMALettersPage() {
                     className={`px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-emerald-700 transition-colors shadow-lg shadow-emerald-100 cursor-pointer`}
                   >
                     <Icon icon="lucide:send" />
-                    {t('samaLetters.submitForApproval')}
+                    {t('letters.submitForApproval')}
                   </button>
                 )}
                 {selectedLetter?.status === 'approved' && (
@@ -1249,7 +1285,7 @@ export default function SAMALettersPage() {
                     className={`px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-emerald-700 transition-colors shadow-lg shadow-emerald-100 cursor-pointer`}
                   >
                     <Icon icon="lucide:send" />
-                    {t('samaLetters.sendToSama')}
+                    {t('letters.sendToSama')}
                   </button>
                 )}
                 {(selectedLetter?.status === 'sent' || selectedLetter?.status === 'overdue') && (
@@ -1258,7 +1294,7 @@ export default function SAMALettersPage() {
                     className={`px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-emerald-700 transition-colors shadow-lg shadow-emerald-100 cursor-pointer`}
                   >
                     <Icon icon="lucide:check-circle" />
-                    {t('samaLetters.markResponseReceived')}
+                    {t('letters.markResponseReceived')}
                   </button>
                 )}
               </div>
@@ -1406,7 +1442,7 @@ export default function SAMALettersPage() {
                             <p key={i}>{para}</p>
                           ))
                         ) : (
-                          <p className="text-slate-400 italic">{t('samaLetters.typeMessageHere')}</p>
+                          <p className="text-slate-400 italic">{t('letters.typeMessageHere')}</p>
                         )}
                         <p className="pt-8">Yours sincerely,</p>
                         <div>
@@ -1546,7 +1582,7 @@ export default function SAMALettersPage() {
                             <p key={i}>{para}</p>
                           ))
                         ) : (
-                          <p className="text-slate-400 italic">{t('samaLetters.typeMessageHere')}</p>
+                          <p className="text-slate-400 italic">{t('letters.typeMessageHere')}</p>
                         )}
                         <p className="pt-8">وتقبلوا خالص التحية والتقدير،،</p>
                         <div>
@@ -1599,7 +1635,7 @@ export default function SAMALettersPage() {
                 {/* Metadata */}
                 <section className={`glass-card p-6 rounded-2xl`}>
                   <h4 className="text-xs font-black text-slate-500 uppercase tracking-widest mb-4">
-                    {t('samaLetters.metadata')}
+                    {t('letters.metadata')}
                   </h4>
                   <div className="space-y-4">
                     <div className={`flex justify-between items-center`}>
@@ -1609,11 +1645,11 @@ export default function SAMALettersPage() {
                       </span>
                     </div>
                     <div className={`flex justify-between items-center`}>
-                      <span className="text-xs text-slate-500">{t('samaLetters.authorityField')}</span>
+                      <span className="text-xs text-slate-500">{t('letters.authorityField')}</span>
                       {selectedLetter && renderAuthorityBadge(selectedLetter.authority, { showFull: true })}
                     </div>
                     <div className={`flex justify-between items-center`}>
-                      <span className="text-xs text-slate-500">{t('samaLetters.recipientDept')}</span>
+                      <span className="text-xs text-slate-500">{t('letters.recipientDept')}</span>
                       {editingMeta === 'samaDepartment' && selectedLetter ? (
                         <div className="min-w-[180px]">
                           <EditableSelect
@@ -1647,7 +1683,7 @@ export default function SAMALettersPage() {
                       )}
                     </div>
                     <div className={`flex justify-between items-center`}>
-                      <span className="text-xs text-slate-500">{t('samaLetters.createdBy')}</span>
+                      <span className="text-xs text-slate-500">{t('letters.createdBy')}</span>
                       <div className={`flex items-center gap-2`}>
                         <img
                           src={dicebearAvatar('Felix')}
@@ -1700,17 +1736,17 @@ export default function SAMALettersPage() {
                 {selectedLetter && selectedLetter.approvalChain.length > 0 && (
                   <section className={`glass-card p-6 rounded-2xl`}>
                     <h4 className="text-xs font-black text-slate-500 uppercase tracking-widest mb-4">
-                      {t('samaLetters.approvalChain')}
+                      {t('letters.approvalChain')}
                     </h4>
                     <div className="space-y-4">
                       {(() => {
                         const hasRejection = selectedLetter.approvalChain.some(s => s.status === 'rejected')
                         return selectedLetter.approvalChain.map((step) => {
                           const roleLabel = step.role === 'Compliance Officer'
-                            ? t('samaLetters.step1ComplianceOfficer')
+                            ? t('letters.step1ComplianceOfficer')
                             : step.role === 'Department Head'
-                            ? t('samaLetters.step2DepartmentHead')
-                            : t('samaLetters.step3CEO')
+                            ? t('letters.step2DepartmentHead')
+                            : t('letters.step3CEO')
                           const isFirstPending = selectedLetter.approvalChain.find(s => s.status === 'pending')?.step === step.step
                           // Downstream steps stay neutral when any rejection exists
                           const isActive = !hasRejection && step.status === 'pending' && isFirstPending
@@ -1735,14 +1771,14 @@ export default function SAMALettersPage() {
                                 <div className="flex-1 min-w-0">
                                   <p className="text-xs font-bold text-slate-900">{roleLabel}</p>
                                   {step.status === 'approved' && (
-                                    <p className="text-[10px] text-emerald-600">{t('samaLetters.stepApproved')} · {step.approvedAt}</p>
+                                    <p className="text-[10px] text-emerald-600">{t('letters.stepApproved')} · {step.approvedAt}</p>
                                   )}
                                   {step.status === 'rejected' && (
-                                    <p className="text-[10px] text-rose-600">{t('samaLetters.stepRejected')} · {step.rejectedAt}</p>
+                                    <p className="text-[10px] text-rose-600">{t('letters.stepRejected')} · {step.rejectedAt}</p>
                                   )}
                                   {step.status === 'pending' && (
                                     <p className="text-[10px] text-slate-400">
-                                      {isActive ? t('samaLetters.stepAwaitingApproval') : t('samaLetters.stepPending')}
+                                      {isActive ? t('letters.stepAwaitingApproval') : t('letters.stepPending')}
                                     </p>
                                   )}
                                 </div>
@@ -1791,8 +1827,8 @@ export default function SAMALettersPage() {
                             <Icon icon={completion.complete ? 'lucide:check-circle-2' : 'lucide:alert-circle'} />
                             <span>
                               {completion.complete
-                                ? t('samaLetters.placeholdersAllFilled')
-                                : t('samaLetters.placeholdersPending').replace('{count}', String(completion.missing.length))}
+                                ? t('letters.placeholdersAllFilled')
+                                : t('letters.placeholdersPending').replace('{count}', String(completion.missing.length))}
                             </span>
                           </div>
                           <PlaceholderDefEditor
@@ -1813,7 +1849,7 @@ export default function SAMALettersPage() {
                 {/* Attachments */}
                 <section className={`glass-card p-6 rounded-2xl`}>
                   <h4 className="text-xs font-black text-slate-500 uppercase tracking-widest mb-4">
-                    {t('samaLetters.attachments')} ({selectedLetter?.attachments?.length || 0})
+                    {t('letters.attachments')} ({selectedLetter?.attachments?.length || 0})
                   </h4>
                   <div className="space-y-3">
                     {selectedLetter?.attachments?.map((attachment) => (
@@ -1848,7 +1884,7 @@ export default function SAMALettersPage() {
                     <button
                       onClick={() => attachFileRef.current?.click()}
                       className="w-full py-2 border-2 border-dashed border-slate-200 rounded-xl text-[10px] font-bold text-slate-400 hover:border-emerald-300 hover:text-emerald-500 transition-all cursor-pointer">
-                      {t('samaLetters.addAttachment')}
+                      {t('letters.addAttachment')}
                     </button>
                   </div>
                 </section>
@@ -1856,7 +1892,7 @@ export default function SAMALettersPage() {
                 {/* Activity Timeline */}
                 <section className={`glass-card p-6 rounded-2xl`}>
                   <h4 className="text-xs font-black text-slate-500 uppercase tracking-widest mb-6">
-                    {t('samaLetters.activityTimeline')}
+                    {t('letters.activityTimeline')}
                   </h4>
                   <div className="space-y-6 relative before:absolute before:left-2 before:top-1 before:bottom-1 before:w-0.5 before:bg-slate-100">
                     {selectedLetter?.timeline?.map((event) => (
@@ -1874,7 +1910,8 @@ export default function SAMALettersPage() {
                           {translateTimelineTitle(event.title, t as (key: string) => string)}
                         </p>
                         <p className={`text-[10px] ${event.status === 'pending' ? 'text-slate-300' : 'text-slate-400'}`}>
-                          {event.date}{event.user && ` \u2022 ${event.user}`}
+                          {event.date ? formatRelativeTime(event.date, t as (k: string) => string) : ''}
+                          {` \u2022 ${event.user ?? 'Unknown user'}`}
                         </p>
                       </div>
                     ))}
@@ -1899,7 +1936,7 @@ export default function SAMALettersPage() {
           onSuccess={() => {
             setIsCreateModalOpen(false)
             setCreateFromTemplate(null)
-            showToast(t('samaLetters.letterSubmittedForApproval'))
+            showToast(t('letters.letterSubmittedForApproval'))
           }}
           template={createFromTemplate ?? undefined}
         />
@@ -1929,10 +1966,10 @@ export default function SAMALettersPage() {
                 <div>
                   <h2 className="text-xl font-bold text-slate-900 font-display">{getTranslatedTemplateName(selectedTemplate.id, selectedTemplate.name)}</h2>
                   <span className={`px-2 py-1 text-[10px] font-bold rounded-md ${getTypeBadgeColor(selectedTemplate.type)}`}>
-                    {selectedTemplate.type === 'non-objection' ? t('samaLetters.nonObjection') :
-                     selectedTemplate.type === 'inquiry' ? t('samaLetters.inquiry') :
-                     selectedTemplate.type === 'submission' ? t('samaLetters.submission') :
-                     t('samaLetters.notification')}
+                    {selectedTemplate.type === 'non-objection' ? t('letters.nonObjection') :
+                     selectedTemplate.type === 'inquiry' ? t('letters.inquiry') :
+                     selectedTemplate.type === 'submission' ? t('letters.submission') :
+                     t('letters.notification')}
                   </span>
                 </div>
               </div>
@@ -1971,22 +2008,22 @@ export default function SAMALettersPage() {
                 </div>
                 <div className="bg-slate-50 rounded-xl p-4">
                   <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-1">
-                    {t('samaLetters.usageCount')}
+                    {t('letters.usageCount')}
                   </label>
-                  <span className="text-sm font-bold text-slate-900">{selectedTemplate.usageCount} {t('samaLetters.timesUsed')}</span>
+                  <span className="text-sm font-bold text-slate-900">{selectedTemplate.usageCount} {t('letters.timesUsed')}</span>
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="bg-slate-50 rounded-xl p-4">
                   <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-1">
-                    {t('samaLetters.createdDate')}
+                    {t('letters.createdDate')}
                   </label>
                   <span className="text-sm text-slate-600">{selectedTemplate.createdDate}</span>
                 </div>
                 <div className="bg-slate-50 rounded-xl p-4">
                   <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-1">
-                    {t('samaLetters.lastModified')}
+                    {t('letters.lastModified')}
                   </label>
                   <span className="text-sm text-slate-600">{selectedTemplate.lastModified}</span>
                 </div>
@@ -2012,7 +2049,7 @@ export default function SAMALettersPage() {
                   className={`px-6 py-2.5 bg-emerald-600 text-white rounded-xl text-sm font-bold hover:bg-emerald-700 transition-colors shadow-lg shadow-emerald-100 flex items-center gap-2 cursor-pointer`}
                 >
                   <Icon icon="lucide:arrow-right-circle" />
-                  {t('samaLetters.useTemplate')}
+                  {t('letters.useTemplate')}
                 </button>
               )}
             </div>
@@ -2054,9 +2091,9 @@ export default function SAMALettersPage() {
               <Icon icon="lucide:alert-triangle" className="text-3xl text-rose-600" />
             </div>
           </div>
-          <h2 className="text-xl font-bold text-slate-900 text-center mb-2">{t('samaLetters.deleteTemplate')}</h2>
+          <h2 className="text-xl font-bold text-slate-900 text-center mb-2">{t('letters.deleteTemplate')}</h2>
           <p className="text-sm text-slate-500 text-center mb-6">
-            {t('samaLetters.deleteTemplateConfirm')} <strong>{selectedTemplate?.name}</strong>? {t('samaLetters.actionCannotBeUndone')}
+            {t('letters.deleteTemplateConfirm')} <strong>{selectedTemplate?.name}</strong>? {t('letters.actionCannotBeUndone')}
           </p>
           <div className={`flex gap-3`}>
             <button
@@ -2072,7 +2109,7 @@ export default function SAMALettersPage() {
               onClick={handleConfirmDelete}
               className="flex-1 px-4 py-2.5 bg-rose-600 text-white rounded-xl text-sm font-bold hover:bg-rose-700 transition-colors cursor-pointer"
             >
-              {t('samaLetters.deleteTemplate')}
+              {t('letters.deleteTemplate')}
             </button>
           </div>
         </div>
@@ -2105,19 +2142,19 @@ export default function SAMALettersPage() {
             {letter.status === 'draft' && (
               <button onClick={() => { store.submitForApproval(letter.id); setOpenMenuId(null); setMenuPosition(null) }}
                 className="w-full px-4 py-2 text-left text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-2 cursor-pointer">
-                <Icon icon="lucide:send" className="text-slate-400" /> {t('samaLetters.submitForApproval')}
+                <Icon icon="lucide:send" className="text-slate-400" /> {t('letters.submitForApproval')}
               </button>
             )}
             {letter.status === 'approved' && (
               <button onClick={(e) => { e.stopPropagation(); handleViewLetter(letter); setPendingSend(true); setOpenMenuId(null); setMenuPosition(null) }}
                 className="w-full px-4 py-2 text-left text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-2 cursor-pointer">
-                <Icon icon="lucide:send" className="text-emerald-500" /> {t('samaLetters.sendToSama')}
+                <Icon icon="lucide:send" className="text-emerald-500" /> {t('letters.sendToSama')}
               </button>
             )}
             {(letter.status === 'sent' || letter.status === 'overdue') && (
               <button onClick={() => { store.markResponseReceived(letter.id); setOpenMenuId(null); setMenuPosition(null) }}
                 className="w-full px-4 py-2 text-left text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-2 cursor-pointer">
-                <Icon icon="lucide:check-circle" className="text-emerald-500" /> {t('samaLetters.markResponseReceived')}
+                <Icon icon="lucide:check-circle" className="text-emerald-500" /> {t('letters.markResponseReceived')}
               </button>
             )}
             <div className="border-t border-slate-100 my-1" />

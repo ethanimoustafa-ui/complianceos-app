@@ -1,4 +1,4 @@
-// POST /api/letters/[letterId]/approve-step
+﻿// POST /api/letters/[letterId]/approve-step
 //   body: { step_index: 1|2|3, notes?: string }
 // Advances the 3-step approval chain. On final step → status `approved`.
 // Permission: `edit` (matches BACKEND-API-MAP §3.3 "Approve SAMA Letters").
@@ -30,7 +30,7 @@ export async function POST(req: NextRequest, { params }: Params) {
     const body = await parseJson(req, ApproveStepSchema)
 
     const { data: letter, error: lErr } = await supabase
-      .from('sama_letters')
+      .from('letters')
       .select('id, status')
       .eq('id', letterId)
       .is('deleted_at', null)
@@ -47,7 +47,7 @@ export async function POST(req: NextRequest, { params }: Params) {
 
     const now = new Date().toISOString()
     const { error: updErr } = await supabase
-      .from('sama_letter_approval_steps')
+      .from('letter_approval_steps')
       .update({ status: 'approved', approved_at: now, notes: body.notes ?? null })
       .eq('letter_id', letterId)
       .eq('step', body.step_index)
@@ -60,7 +60,7 @@ export async function POST(req: NextRequest, { params }: Params) {
     let letterAfter: Record<string, unknown> | null = null
     if (remainingPending.length === 0) {
       const { data, error } = await supabase
-        .from('sama_letters')
+        .from('letters')
         .update({ status: 'approved' })
         .eq('id', letterId)
         .select(LETTER_LIST_COLUMNS)
@@ -69,7 +69,7 @@ export async function POST(req: NextRequest, { params }: Params) {
       letterAfter = data as Record<string, unknown>
     } else {
       const { data } = await supabase
-        .from('sama_letters')
+        .from('letters')
         .select(LETTER_LIST_COLUMNS)
         .eq('id', letterId)
         .maybeSingle()
@@ -80,8 +80,8 @@ export async function POST(req: NextRequest, { params }: Params) {
       writeAudit({
         actor_id: user.id,
         actor_name: profile.name ?? profile.email ?? user.id,
-        action: 'sama_letter.approval_step_committed',
-        entity_type: 'sama_letter',
+        action: 'letter.approval_step_committed',
+        entity_type: 'letter',
         entity_id: letterId,
         metadata: { step: body.step_index, decision: 'approved' },
         supabase,
@@ -97,7 +97,7 @@ export async function POST(req: NextRequest, { params }: Params) {
       ),
     ])
 
-    revalidateAll([cacheTags.samaLetters(), cacheTags.samaLetters(letterId)])
+    revalidateAll([cacheTags.letters(), cacheTags.letters(letterId)])
     return ok(letterAfter)
   } catch (e) {
     return handle(e)

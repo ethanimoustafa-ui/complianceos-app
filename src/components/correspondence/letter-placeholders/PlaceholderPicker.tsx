@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useMemo, useState } from 'react'
 import { Icon } from '@iconify/react'
@@ -8,7 +8,7 @@ import { refKindLabel } from '@/lib/letter-placeholders'
 import { useTranslation } from '@/i18n'
 import { useObservationStore } from '@/stores/observation-store'
 import { useAuditStore } from '@/stores/audit-store'
-import { useSAMALetterStore } from '@/stores/sama-letter-store'
+import { useLetterStore } from '@/stores/letter-store'
 import { useCircularStore } from '@/stores/circular-store'
 import { usePolicyStore } from '@/stores/policy-store'
 
@@ -58,7 +58,7 @@ function ReferencePicker({
   const { t } = useTranslation()
   const observations = useObservationStore((s) => s.observations)
   const audits = useAuditStore((s) => s.audits)
-  const letters = useSAMALetterStore((s) => s.letters)
+  const letters = useLetterStore((s) => s.letters)
   const circulars = useCircularStore((s) => s.circulars)
   const policies = usePolicyStore((s) => s.policies)
 

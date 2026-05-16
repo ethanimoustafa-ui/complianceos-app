@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useMemo } from 'react'
 import { useAuditStore } from '@/stores/audit-store'
@@ -6,7 +6,7 @@ import { useObservationStore } from '@/stores/observation-store'
 import { useRiskStore } from '@/stores/risk-store'
 import { usePolicyStore } from '@/stores/policy-store'
 import { useTrainingStore } from '@/stores/training-store'
-import { useSAMALetterStore } from '@/stores/sama-letter-store'
+import { useLetterStore } from '@/stores/letter-store'
 import { useCorrespondenceStore } from '@/stores/correspondence-store'
 import { useCircularStore } from '@/stores/circular-store'
 import { useTeamStore } from '@/stores/team-store'
@@ -115,7 +115,7 @@ export function useDashboardMetrics(): DashboardMetrics {
   const observations = useObservationStore(s => s.observations)
   const risks = useRiskStore(s => s.risks)
   const policies = usePolicyStore(s => s.policies)
-  const letters = useSAMALetterStore(s => s.letters)
+  const letters = useLetterStore(s => s.letters)
   const correspondence = useCorrespondenceStore(s => s.correspondence)
   const circulars = useCircularStore(s => s.circulars)
   const teamMembers = useTeamStore(s => s.members)

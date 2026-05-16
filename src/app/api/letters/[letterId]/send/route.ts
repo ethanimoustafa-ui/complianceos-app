@@ -1,4 +1,4 @@
-// POST /api/letters/[letterId]/send — approved → sent. Stamps `sent_date`
+﻿// POST /api/letters/[letterId]/send — approved → sent. Stamps `sent_date`
 // and (re)computes `response_deadline` from now.
 
 import type { NextRequest } from 'next/server'
@@ -24,7 +24,7 @@ export async function POST(_req: NextRequest, { params }: Params) {
     const { supabase, user, profile } = await requirePerm('edit')
 
     const { data: current, error: readErr } = await supabase
-      .from('sama_letters')
+      .from('letters')
       .select('id, status, type')
       .eq('id', letterId)
       .is('deleted_at', null)
@@ -38,7 +38,7 @@ export async function POST(_req: NextRequest, { params }: Params) {
 
     const now = new Date()
     const { data, error } = await supabase
-      .from('sama_letters')
+      .from('letters')
       .update({
         status: 'sent',
         sent_date: now.toISOString(),
@@ -53,8 +53,8 @@ export async function POST(_req: NextRequest, { params }: Params) {
       writeAudit({
         actor_id: user.id,
         actor_name: profile.name ?? profile.email ?? user.id,
-        action: 'sama_letter.send',
-        entity_type: 'sama_letter',
+        action: 'letter.send',
+        entity_type: 'letter',
         entity_id: letterId,
         supabase,
       }),
@@ -67,7 +67,7 @@ export async function POST(_req: NextRequest, { params }: Params) {
       ),
     ])
 
-    revalidateAll([cacheTags.samaLetters(), cacheTags.samaLetters(letterId)])
+    revalidateAll([cacheTags.letters(), cacheTags.letters(letterId)])
     return ok(data)
   } catch (e) {
     return handle(e)

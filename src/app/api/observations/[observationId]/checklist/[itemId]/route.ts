@@ -21,9 +21,9 @@ type Params = { params: Promise<{ observationId: string; itemId: string }> }
 
 export async function PATCH(req: NextRequest, { params }: Params) {
   try {
-    const { observationId, itemId } = await params
+    const { observationId: observationIdParam, itemId } = await params
     const { supabase, user, profile } = await requirePerm('observation:edit')
-    await assertObservationExists(supabase, observationId)
+    const observationId = await assertObservationExists(supabase, observationIdParam)
     const patch = await parseJson(req, UpdateChecklistItemSchema)
 
     const update: Record<string, unknown> = {}
@@ -73,9 +73,9 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 
 export async function DELETE(_req: NextRequest, { params }: Params) {
   try {
-    const { observationId, itemId } = await params
+    const { observationId: observationIdParam, itemId } = await params
     const { supabase, user, profile } = await requirePerm('observation:edit')
-    await assertObservationExists(supabase, observationId)
+    const observationId = await assertObservationExists(supabase, observationIdParam)
 
     const { error } = await supabase
       .from('observation_checklist')

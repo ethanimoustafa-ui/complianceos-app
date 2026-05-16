@@ -10,6 +10,7 @@ import { MultiSelectFilter, FilterOption } from '@/components/ui/multi-select-fi
 import { cn } from '@/lib/utils'
 import { useTranslation } from '@/i18n'
 import { useAuditStore } from '@/stores/audit-store'
+import { ListSkeleton } from '@/components/ui/skeleton'
 import { AddAuditModal } from '@/components/reports/audits/add-audit-modal'
 import { EditAuditModal } from '@/components/reports/audits/edit-audit-modal'
 import { DeleteConfirmationDialog } from '@/components/ui/delete-confirmation-dialog'
@@ -107,6 +108,12 @@ export default function ReportsAuditsPage() {
 
   // Audit store connection
   const { audits: storeAudits, fetchAll: fetchAudits, delete: deleteAudit } = useAuditStore()
+
+  // Wave-2 Agent E: first-fetch skeleton.
+  const auditsLoading = useAuditStore((s) => s.isLoading)
+  const auditsLastFetched = useAuditStore((s) => s.lastFetched)
+  const showAuditsSkeleton =
+    auditsLoading && storeAudits.length === 0 && auditsLastFetched === null
 
   // Audit edit/delete state
   const [auditToEdit, setAuditToEdit] = useState<AuditType | null>(null)
@@ -431,6 +438,11 @@ export default function ReportsAuditsPage() {
                 {t('reports.showingOfAudits').replace('{count}', filteredAudits.length.toString()).replace('{total}', pageAudits.length.toString())}
               </span>
             </div>
+            {showAuditsSkeleton ? (
+              <div className="p-6">
+                <ListSkeleton rows={5} columns={6} />
+              </div>
+            ) : (
             <div className="overflow-x-auto overflow-y-visible">
               <table className={`w-full ${isRTL ? 'text-right' : 'text-left'}`}>
                 <thead>
@@ -579,6 +591,7 @@ export default function ReportsAuditsPage() {
                 </tbody>
               </table>
             </div>
+            )}
             <div className="p-6 border-t border-slate-100 flex items-center justify-between bg-slate-50/20">
               <p className="text-xs text-slate-500 font-medium">
                 {t('reports.showingAudits').replace('{count}', filteredAudits.length.toString())}

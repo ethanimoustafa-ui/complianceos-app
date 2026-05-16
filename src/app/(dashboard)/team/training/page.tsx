@@ -10,6 +10,7 @@ import { useTranslation } from '@/i18n'
 import type { TranslationKey } from '@/i18n'
 import { Gate } from '@/components/auth/gate'
 import { useTrainingStore } from '@/stores/training-store'
+import { ListSkeleton } from '@/components/ui/skeleton'
 import type { TrainingEmployee, TrainingCourse, CourseProgress } from '@/types'
 
 import { TrainingOverviewStats } from '@/components/team/training/training-overview-stats'
@@ -59,6 +60,25 @@ function TeamTrainingPageContent() {
   const updateOverviewStats = useTrainingStore((s) => s.updateOverviewStats)
   const importUploadData = useTrainingStore((s) => s.importUploadData)
   const recalculateDepartmentProgress = useTrainingStore((s) => s.recalculateDepartmentProgress)
+  const fetchCourses = useTrainingStore((s) => s.fetchCourses)
+  const fetchEmployees = useTrainingStore((s) => s.fetchEmployees)
+
+  // Hydrate server-state on mount. Without this the courses / employees lists
+  // come from a fresh Zustand store and reload wipes anything created in the
+  // current tab. See `training-store.ts` — Phase 5 server-state migration.
+  useEffect(() => {
+    void fetchCourses()
+    void fetchEmployees()
+  }, [fetchCourses, fetchEmployees])
+
+  // Wave-2 Agent E: first-fetch skeleton.
+  const trainingLoading = useTrainingStore((s) => s.isLoading)
+  const trainingLastFetched = useTrainingStore((s) => s.lastFetched)
+  const showTrainingSkeleton =
+    trainingLoading
+    && employees.length === 0
+    && courses.length === 0
+    && trainingLastFetched === null
 
   // UI state
   const [toastMessage, setToastMessage] = useState<string | null>(null)
@@ -232,16 +252,20 @@ function TeamTrainingPageContent() {
         </div>
 
         {/* Employee Table */}
-        <EmployeeTable
-          employees={employees}
-          onViewEmployee={handleViewEmployee}
-          onHrReminder={() => setIsHrReminderOpen(true)}
-          onExport={() => {
-            import('@/lib/export').then(({ exportTrainingDataLocalized }) => {
-              exportTrainingDataLocalized(employees, courses, 'training-data', t)
-            })
-          }}
-        />
+        {showTrainingSkeleton ? (
+          <ListSkeleton rows={5} columns={5} className="bg-white rounded-2xl p-6 border border-slate-100" />
+        ) : (
+          <EmployeeTable
+            employees={employees}
+            onViewEmployee={handleViewEmployee}
+            onHrReminder={() => setIsHrReminderOpen(true)}
+            onExport={() => {
+              import('@/lib/export').then(({ exportTrainingDataLocalized }) => {
+                exportTrainingDataLocalized(employees, courses, 'training-data', t)
+              })
+            }}
+          />
+        )}
       </div>
 
       {/* Modals */}

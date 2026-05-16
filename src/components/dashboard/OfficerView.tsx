@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useMemo } from 'react'
 import { useRouter } from 'next/navigation'
@@ -9,7 +9,7 @@ import { useTranslation } from '@/i18n'
 import { useObservationStore } from '@/stores/observation-store'
 import { useAuditStore } from '@/stores/audit-store'
 import { usePolicyStore } from '@/stores/policy-store'
-import { useSAMALetterStore } from '@/stores/sama-letter-store'
+import { useLetterStore } from '@/stores/letter-store'
 import { useNotificationStore } from '@/stores/notification-store'
 import { useComplianceSettingsStore } from '@/stores/compliance-settings-store'
 import { useWorkload } from '@/hooks/useWorkload'
@@ -43,7 +43,7 @@ export function OfficerView({ metrics }: OfficerViewProps) {
   const observations = useObservationStore(s => s.observations)
   const audits = useAuditStore(s => s.audits)
   const policies = usePolicyStore(s => s.policies)
-  const letters = useSAMALetterStore(s => s.letters)
+  const letters = useLetterStore(s => s.letters)
   const notifications = useNotificationStore(s => s.notifications)
 
   // My items
@@ -102,7 +102,7 @@ export function OfficerView({ metrics }: OfficerViewProps) {
       if (l.status !== 'pending-approval') continue
       for (const step of l.approvalChain) {
         if (step.status === 'pending' && (step.assignedTo === userId || step.assignedTo === userName)) {
-          items.push({ id: l.id, title: `${l.subject} — Step ${step.step} (${step.role})`, type: t('samaLetters.title'), route: `/correspondence/letters?id=${l.id}` })
+          items.push({ id: l.id, title: `${l.subject} — Step ${step.step} (${step.role})`, type: t('letters.title'), route: `/correspondence/letters?id=${l.id}` })
         }
       }
     }

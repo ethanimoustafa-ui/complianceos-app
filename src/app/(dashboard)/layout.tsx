@@ -2,6 +2,7 @@
 
 import { Sidebar } from '@/components/layout/sidebar'
 import { RBACToastHost } from '@/components/auth/rbac-toast'
+import { LookupHydrator } from '@/components/layout/lookup-hydrator'
 
 // Auth gating is enforced by the root `middleware.ts` against the Supabase
 // session cookie — unauthenticated requests are redirected to /sign-in before
@@ -14,6 +15,7 @@ export default function DashboardLayout({
 }) {
   return (
     <div className="min-h-screen bg-slate-50 flex overflow-hidden">
+      <LookupHydrator />
       <Sidebar />
       <main className="flex-1 flex flex-col overflow-hidden hide-scrollbar">
         {children}

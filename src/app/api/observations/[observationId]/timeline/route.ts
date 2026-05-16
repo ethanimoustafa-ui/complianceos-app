@@ -18,9 +18,9 @@ type Params = { params: Promise<{ observationId: string }> }
 
 export async function GET(req: NextRequest, { params }: Params) {
   try {
-    const { observationId } = await params
+    const { observationId: observationIdParam } = await params
     const { supabase } = await requireUser()
-    await assertObservationExists(supabase, observationId)
+    const observationId = await assertObservationExists(supabase, observationIdParam)
     const { page, pageSize } = parsePagination(req.nextUrl.searchParams)
 
     const [from, to] = rangeFor(page, pageSize)

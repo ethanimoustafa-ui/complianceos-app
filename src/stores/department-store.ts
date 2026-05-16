@@ -26,6 +26,7 @@ function mapRow(row: DepartmentApiRow): Department {
     name: row.name_en,
     nameAr: row.name_ar,
     isDefault: row.is_default,
+    key: row.key ?? undefined,
   }
 }
 
@@ -92,7 +93,8 @@ export const useDepartmentStore = create<DepartmentState>()((set, get) => ({
     // `.id` (EditableSelect) get a stable string back synchronously. We
     // replace the temp row with the real server row once the POST returns.
     const tempId = `tmp-${slugify(name) || Date.now()}`
-    const optimistic: Department = { id: tempId, name, nameAr, isDefault: false }
+    const slug = slugify(name) || `dept-${Date.now()}`
+    const optimistic: Department = { id: tempId, name, nameAr, isDefault: false, key: slug }
     set((s) => ({
       departments: [...s.departments, optimistic],
       byId: { ...s.byId, [tempId]: optimistic },
@@ -102,7 +104,7 @@ export const useDepartmentStore = create<DepartmentState>()((set, get) => ({
     ;(async () => {
       try {
         const row = await api.post<DepartmentApiRow>('/settings/departments', {
-          key: slugify(name) || `dept-${Date.now()}`,
+          key: slug,
           name_en: name,
           name_ar: nameAr,
         })

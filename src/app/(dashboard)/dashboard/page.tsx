@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useState, useEffect, useCallback } from 'react'
 import { Header } from '@/components/layout/header'
@@ -10,6 +10,15 @@ import { ManagerialView } from '@/components/dashboard/ManagerialView'
 import { OfficerView } from '@/components/dashboard/OfficerView'
 import { generateDashboardPdf } from '@/lib/dashboard-pdf'
 import type { DashboardView } from '@/types'
+import { useAuditStore } from '@/stores/audit-store'
+import { useObservationStore } from '@/stores/observation-store'
+import { useRiskStore } from '@/stores/risk-store'
+import { usePolicyStore } from '@/stores/policy-store'
+import { useTrainingStore } from '@/stores/training-store'
+import { useLetterStore } from '@/stores/letter-store'
+import { useCorrespondenceStore } from '@/stores/correspondence-store'
+import { useCircularStore } from '@/stores/circular-store'
+import { useTeamStore } from '@/stores/team-store'
 
 
 const viewConfig: Record<DashboardView, { titleKey: string; subtitleKey: string }> = {
@@ -22,6 +31,45 @@ export default function DashboardPage() {
   const { t } = useTranslation()
   const dashboardView = useUserPreferencesStore(s => s.dashboardView)
   const metrics = useDashboardMetrics()
+
+  // Hydrate every store the dashboard aggregates (Fix-1). Without this, all
+  // KPI cards render zeros on a fresh load until the user clicks elsewhere.
+  const fetchAudits = useAuditStore((s) => s.fetchAll)
+  const fetchObservations = useObservationStore((s) => s.fetchAll)
+  const fetchRisks = useRiskStore((s) => s.fetchAll)
+  const fetchPolicies = usePolicyStore((s) => s.fetchAll)
+  const fetchTrainings = useTrainingStore((s) => s.fetchAll)
+  const fetchEmployees = useTrainingStore((s) => s.fetchEmployees)
+  const fetchCourses = useTrainingStore((s) => s.fetchCourses)
+  const fetchLetters = useLetterStore((s) => s.fetchAll)
+  const fetchCorrespondence = useCorrespondenceStore((s) => s.fetchAll)
+  const fetchCirculars = useCircularStore((s) => s.fetchAll)
+  const fetchTeam = useTeamStore((s) => s.fetchAll)
+  useEffect(() => {
+    void fetchAudits()
+    void fetchObservations()
+    void fetchRisks()
+    void fetchPolicies()
+    void fetchTrainings()
+    void fetchEmployees()
+    void fetchCourses()
+    void fetchLetters()
+    void fetchCorrespondence()
+    void fetchCirculars()
+    void fetchTeam()
+  }, [
+    fetchAudits,
+    fetchObservations,
+    fetchRisks,
+    fetchPolicies,
+    fetchTrainings,
+    fetchEmployees,
+    fetchCourses,
+    fetchLetters,
+    fetchCorrespondence,
+    fetchCirculars,
+    fetchTeam,
+  ])
 
   const [showFadeIn, setShowFadeIn] = useState(false)
 

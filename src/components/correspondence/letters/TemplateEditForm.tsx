@@ -1,11 +1,11 @@
-'use client'
+﻿'use client'
 
 import { useState, useEffect, useRef } from 'react'
 import { Icon } from '@iconify/react'
 import { useTranslation } from '@/i18n'
-import { useSAMALetterTypeStore } from '@/stores/sama-letter-type-store'
+import { useLetterTypeStore } from '@/stores/letter-type-store'
 import { EditableSelect } from '@/components/ui/editable-select'
-import { PlaceholderDefEditor } from '@/components/correspondence/sama-letters/PlaceholderDefEditor'
+import { PlaceholderDefEditor } from '@/components/correspondence/letter-placeholders/PlaceholderDefEditor'
 import { getDefaultDepartmentId } from '@/lib/letter-authority'
 import { reconcilePlaceholderDefs } from '@/lib/letter-placeholders'
 import type {
@@ -29,13 +29,13 @@ export function TemplateEditForm({
   onSave: (data: Partial<LetterTemplate>) => void
 }) {
   const { t, isRTL } = useTranslation()
-  const letterTypeStore = useSAMALetterTypeStore()
+  const letterTypeStore = useLetterTypeStore()
   const [activeTab, setActiveTab] = useState<'basic' | 'content' | 'signer' | 'recipient'>('basic')
   const [name, setName] = useState(template?.name || '')
   // BUG-R3-05: `setType` widened to `string` (option (a)). The Letter Type
-  // picker is now an EditableSelect bound to `useSAMALetterTypeStore`, so the
+  // picker is now an EditableSelect bound to `useLetterTypeStore`, so the
   // saved id can be a user-added type ("internal-memo") that doesn't fit the
-  // legacy literal union. `SAMALetterType` is already widened to `string` in
+  // legacy literal union. `LetterType` is already widened to `string` in
   // `src/types/index.ts`, so this is a no-op widening for the local setter.
   const [type, setType] = useState<string>(template?.type || 'non-objection')
   const [description, setDescription] = useState(template?.description || '')
@@ -138,10 +138,10 @@ export function TemplateEditForm({
   }
 
   const tabs = [
-    { id: 'basic' as const,     label: t('samaLetters.templateTabBasic') },
-    { id: 'content' as const,   label: t('samaLetters.templateTabContent') },
-    { id: 'signer' as const,    label: t('samaLetters.templateTabSigner') },
-    { id: 'recipient' as const, label: t('samaLetters.templateTabRecipient') },
+    { id: 'basic' as const,     label: t('letters.templateTabBasic') },
+    { id: 'content' as const,   label: t('letters.templateTabContent') },
+    { id: 'signer' as const,    label: t('letters.templateTabSigner') },
+    { id: 'recipient' as const, label: t('letters.templateTabRecipient') },
   ]
 
   return (
@@ -149,10 +149,10 @@ export function TemplateEditForm({
       <div className={`flex justify-between items-start mb-6`}>
         <div>
           <h2 className="text-2xl font-bold text-slate-900 font-display">
-            {isCreateMode ? t('samaLetters.createNewTemplate') : t('samaLetters.editTemplate')}
+            {isCreateMode ? t('letters.createNewTemplate') : t('letters.editTemplate')}
           </h2>
           <p className="text-sm text-slate-500 mt-1">
-            {isCreateMode ? t('samaLetters.addNewTemplateToDatabank') : `${t('samaLetters.editing')}: ${template?.name}`}
+            {isCreateMode ? t('letters.addNewTemplateToDatabank') : `${t('letters.editing')}: ${template?.name}`}
           </p>
         </div>
         <button
@@ -185,22 +185,22 @@ export function TemplateEditForm({
         <div className="space-y-6">
           <div>
             <label className={`text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-2`}>
-              {t('samaLetters.templateName')}
+              {t('letters.templateName')}
             </label>
             <input
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder={t('samaLetters.enterTemplateName')}
+              placeholder={t('letters.enterTemplateName')}
               className={`w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-sm font-medium focus:ring-2 focus:ring-emerald-500 outline-none`}
             />
           </div>
 
           <div>
             <label className={`text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-2`}>
-              {t('samaLetters.letterType')}
+              {t('letters.letterType')}
             </label>
-            {/* BUG-R3-05: bound to useSAMALetterTypeStore so user-added types
+            {/* BUG-R3-05: bound to useLetterTypeStore so user-added types
                 from the Draft modal also surface here (and admins can manage
                 types from this surface too). The saved value is the type id
                 (e.g. 'inquiry' or a user-added 'internal-memo'), not the label. */}
@@ -213,7 +213,7 @@ export function TemplateEditForm({
                 labelAr: tt.labelAr,
                 isDefault: tt.isDefault,
               }))}
-              placeholder={t('samaLetters.letterType')}
+              placeholder={t('letters.letterType')}
               onAdd={(label, labelAr) => letterTypeStore.add(label, labelAr)}
               onEdit={(id, label, labelAr) =>
                 letterTypeStore.update(id, { label, labelAr: labelAr ?? label })
@@ -230,7 +230,7 @@ export function TemplateEditForm({
             <textarea
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder={t('samaLetters.describeTemplatePurpose')}
+              placeholder={t('letters.describeTemplatePurpose')}
               rows={3}
               className={`w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-sm font-medium focus:ring-2 focus:ring-emerald-500 outline-none resize-none`}
             />
@@ -290,7 +290,7 @@ export function TemplateEditForm({
             <h3 className="text-xs font-black uppercase text-slate-400 tracking-widest">English</h3>
             <div>
               <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-2">
-                {t('samaLetters.templateDefaultSubjectEn')}
+                {t('letters.templateDefaultSubjectEn')}
               </label>
               <input
                 type="text"
@@ -302,7 +302,7 @@ export function TemplateEditForm({
             </div>
             <div>
               <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-2">
-                {t('samaLetters.templateDefaultBodyEn')}
+                {t('letters.templateDefaultBodyEn')}
               </label>
               <textarea
                 value={defaultBodyEn}
@@ -318,7 +318,7 @@ export function TemplateEditForm({
             <h3 className="text-xs font-black uppercase text-slate-400 tracking-widest" style={{ fontFamily: 'Inter, sans-serif' }}>العربية</h3>
             <div>
               <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-2" style={{ fontFamily: 'Inter, sans-serif' }}>
-                {t('samaLetters.templateDefaultSubjectAr')}
+                {t('letters.templateDefaultSubjectAr')}
               </label>
               <input
                 type="text"
@@ -331,7 +331,7 @@ export function TemplateEditForm({
             </div>
             <div>
               <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-2" style={{ fontFamily: 'Inter, sans-serif' }}>
-                {t('samaLetters.templateDefaultBodyAr')}
+                {t('letters.templateDefaultBodyAr')}
               </label>
               <textarea
                 value={defaultBodyAr}
@@ -365,7 +365,7 @@ export function TemplateEditForm({
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-2">
-                {t('samaLetters.templateSignerNameEn')}
+                {t('letters.templateSignerNameEn')}
               </label>
               <input
                 type="text"
@@ -377,7 +377,7 @@ export function TemplateEditForm({
             </div>
             <div>
               <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-2">
-                {t('samaLetters.templateSignerTitleEn')}
+                {t('letters.templateSignerTitleEn')}
               </label>
               <input
                 type="text"
@@ -389,7 +389,7 @@ export function TemplateEditForm({
             </div>
             <div>
               <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-2">
-                {t('samaLetters.templateSignerNameAr')}
+                {t('letters.templateSignerNameAr')}
               </label>
               <input
                 type="text"
@@ -403,7 +403,7 @@ export function TemplateEditForm({
             </div>
             <div>
               <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-2">
-                {t('samaLetters.templateSignerTitleAr')}
+                {t('letters.templateSignerTitleAr')}
               </label>
               <input
                 type="text"
@@ -420,7 +420,7 @@ export function TemplateEditForm({
           {/* Signature Image */}
           <div>
             <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-3">
-              {t('samaLetters.uploadSignatureImage')}
+              {t('letters.uploadSignatureImage')}
             </label>
             <input
               ref={sigImgRef}
@@ -445,7 +445,7 @@ export function TemplateEditForm({
                     className="px-4 py-2 bg-slate-100 text-slate-700 rounded-lg text-xs font-bold hover:bg-slate-200 transition-colors cursor-pointer flex items-center gap-2"
                   >
                     <Icon icon="lucide:image" />
-                    {t('samaLetters.changeSignatureImage')}
+                    {t('letters.changeSignatureImage')}
                   </button>
                   <button
                     type="button"
@@ -464,8 +464,8 @@ export function TemplateEditForm({
                 className="flex flex-col items-center justify-center w-full h-28 border-2 border-dashed border-slate-200 rounded-xl text-slate-400 hover:border-emerald-300 hover:text-emerald-500 transition-all cursor-pointer gap-2"
               >
                 <Icon icon="lucide:image-plus" className="text-2xl" />
-                <span className="text-xs font-bold">{t('samaLetters.uploadSignatureImage')}</span>
-                <span className="text-[10px]">{t('samaLetters.signatureImageHint')}</span>
+                <span className="text-xs font-bold">{t('letters.uploadSignatureImage')}</span>
+                <span className="text-[10px]">{t('letters.signatureImageHint')}</span>
               </button>
             )}
           </div>
@@ -478,7 +478,7 @@ export function TemplateEditForm({
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className={`text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-2`}>
-                {t('samaLetters.authorityField')}
+                {t('letters.authorityField')}
               </label>
               <DynamicAuthoritySelect
                 value={defaultAuthority}
@@ -488,7 +488,7 @@ export function TemplateEditForm({
             </div>
             <div>
               <label className={`text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-2`}>
-                {t('samaLetters.targetDepartment')}
+                {t('letters.targetDepartment')}
               </label>
               <EditableAuthorityDeptField
                 authority={defaultAuthority}
@@ -503,7 +503,7 @@ export function TemplateEditForm({
               <h3 className="text-xs font-black uppercase text-slate-400 tracking-widest">English</h3>
               <div>
                 <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-2">
-                  {t('samaLetters.templateRecipientNameEn')}
+                  {t('letters.templateRecipientNameEn')}
                 </label>
                 <input
                   type="text"
@@ -515,7 +515,7 @@ export function TemplateEditForm({
               </div>
               <div>
                 <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-2">
-                  {t('samaLetters.templateRecipientOrgEn')}
+                  {t('letters.templateRecipientOrgEn')}
                 </label>
                 <input
                   type="text"
@@ -527,7 +527,7 @@ export function TemplateEditForm({
               </div>
               <div>
                 <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-2">
-                  {t('samaLetters.templateRecipientCityEn')}
+                  {t('letters.templateRecipientCityEn')}
                 </label>
                 <input
                   type="text"
@@ -542,7 +542,7 @@ export function TemplateEditForm({
               <h3 className="text-xs font-black uppercase text-slate-400 tracking-widest" style={{ fontFamily: 'Inter, sans-serif' }}>العربية</h3>
               <div>
                 <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-2" style={{ fontFamily: 'Inter, sans-serif' }}>
-                  {t('samaLetters.templateRecipientNameAr')}
+                  {t('letters.templateRecipientNameAr')}
                 </label>
                 <input
                   type="text"
@@ -555,7 +555,7 @@ export function TemplateEditForm({
               </div>
               <div>
                 <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-2" style={{ fontFamily: 'Inter, sans-serif' }}>
-                  {t('samaLetters.templateRecipientOrgAr')}
+                  {t('letters.templateRecipientOrgAr')}
                 </label>
                 <input
                   type="text"
@@ -568,7 +568,7 @@ export function TemplateEditForm({
               </div>
               <div>
                 <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-2" style={{ fontFamily: 'Inter, sans-serif' }}>
-                  {t('samaLetters.templateRecipientCityAr')}
+                  {t('letters.templateRecipientCityAr')}
                 </label>
                 <input
                   type="text"
@@ -599,12 +599,12 @@ export function TemplateEditForm({
           {isSaving ? (
             <>
               <Icon icon="lucide:loader-2" className="animate-spin" />
-              {t('samaLetters.saving')}
+              {t('letters.saving')}
             </>
           ) : (
             <>
               <Icon icon="lucide:check" />
-              {isCreateMode ? t('samaLetters.createTemplate') : t('common.saveChanges')}
+              {isCreateMode ? t('letters.createTemplate') : t('common.saveChanges')}
             </>
           )}
         </button>

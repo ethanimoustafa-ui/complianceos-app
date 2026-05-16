@@ -1,4 +1,4 @@
-// SAMA letters service helpers.
+﻿// SAMA letters service helpers.
 //
 // - Reference-number generation (per authority, per type, per year).
 // - Approval-step state machine (3-step chain).
@@ -22,8 +22,8 @@ export const LETTER_TEMPLATE_COLUMNS =
 // ---------- type → reference prefix + response window -----------------------
 
 /**
- * Reference-number prefixes per letter type. Matches the front-end mapping in
- * `useSAMALetterStore.getNextReference()`.
+ * Reference-number prefixes per letter type. Server is the sole producer of
+ * letter references — generation happens via `nextLetterReference()` below.
  */
 export const REFERENCE_PREFIX_BY_TYPE: Record<string, string> = {
   'non-objection': 'NOB',
@@ -63,7 +63,7 @@ export async function assertLetterExists(
   letterId: string,
 ): Promise<string> {
   const { data, error } = await supabase
-    .from('sama_letters')
+    .from('letters')
     .select('id')
     .eq('id', letterId)
     .is('deleted_at', null)
@@ -82,7 +82,7 @@ export async function assertLetterExists(
  *
  * Implemented as: SELECT the current max suffix for this bucket, increment by
  * one. Race-condition mitigation: we retry the INSERT up to 3 times on unique
- * violation of `sama_letters.reference`. The caller (POST /api/letters) is
+ * violation of `letters.reference`. The caller (POST /api/letters) is
  * responsible for catching the returned reference and feeding it into the
  * insert. There is no `reference_sequences` table in current schema; if/when
  * one is added a SELECT … FOR UPDATE on a row in that table would be more
@@ -98,7 +98,7 @@ export async function nextLetterReference(
   const prefix = `${authority.toUpperCase()}-${referencePrefix(type)}-${year}-`
 
   const { data, error } = await supabase
-    .from('sama_letters')
+    .from('letters')
     .select('reference')
     .ilike('reference', `${prefix}%`)
     .order('reference', { ascending: false })
@@ -196,7 +196,7 @@ export async function getApprovalSteps(
   letterId: string,
 ): Promise<ApprovalStepRow[]> {
   const { data, error } = await supabase
-    .from('sama_letter_approval_steps')
+    .from('letter_approval_steps')
     .select('id, letter_id, step, role, status, assigned_to, approved_at, rejected_at, notes')
     .eq('letter_id', letterId)
     .order('step', { ascending: true })
@@ -226,7 +226,7 @@ export async function insertLetterTimeline(
   status: string = 'completed',
 ): Promise<void> {
   const { error } = await supabase
-    .from('sama_letter_timeline')
+    .from('letter_timeline')
     .insert({ letter_id: letterId, title, user_name: userName, status })
   if (error) {
     // eslint-disable-next-line no-console

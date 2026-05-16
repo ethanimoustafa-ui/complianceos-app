@@ -1,4 +1,4 @@
-// /api/letter-templates — list + create SAMA letter templates.
+﻿// /api/letter-templates — list + create SAMA letter templates.
 
 import type { NextRequest } from 'next/server'
 import { requirePerm, requireUser } from '@/lib/api/auth'
@@ -20,7 +20,7 @@ export async function GET(req: NextRequest) {
     const type = req.nextUrl.searchParams.get('type') ?? undefined
 
     let query = supabase
-      .from('sama_letter_templates')
+      .from('letter_templates')
       .select(LETTER_TEMPLATE_COLUMNS)
       .eq('status', status)
     if (type) query = query.eq('type', type)
@@ -31,7 +31,7 @@ export async function GET(req: NextRequest) {
       cache: {
         sMaxAge: 300,
         staleWhileRevalidate: 600,
-        tags: [cacheTags.samaLetterTemplates()],
+        tags: [cacheTags.letterTemplates()],
       },
     })
   } catch (e) {
@@ -45,7 +45,7 @@ export async function POST(req: NextRequest) {
     const input = await parseJson(req, CreateLetterTemplateSchema)
 
     const { data, error } = await supabase
-      .from('sama_letter_templates')
+      .from('letter_templates')
       .insert({
         name: input.name,
         type: input.type,
@@ -79,14 +79,14 @@ export async function POST(req: NextRequest) {
     await writeAudit({
       actor_id: user.id,
       actor_name: profile.name ?? profile.email ?? user.id,
-      action: 'sama_letter_template.create',
-      entity_type: 'sama_letter_template',
+      action: 'letter_template.create',
+      entity_type: 'letter_template',
       entity_id: created.id,
       metadata: { name: input.name, type: input.type },
       supabase,
     })
 
-    revalidate(cacheTags.samaLetterTemplates())
+    revalidate(cacheTags.letterTemplates())
     return ok(data, { status: 201 })
   } catch (e) {
     return handle(e)

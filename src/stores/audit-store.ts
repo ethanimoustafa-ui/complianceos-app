@@ -33,6 +33,7 @@ import { api, ApiClientError } from '@/lib/api-client'
 import { useAuditLogStore } from './audit-log-store'
 import { useAuthStore } from './auth-store'
 import { requirePermission } from '@/lib/rbac-store-gate'
+import { newTempId } from '@/lib/optimistic'
 
 // ---------- API row shapes (snake_case from Route Handlers) -----------------
 
@@ -88,6 +89,33 @@ function stubAssignee(assigneeId: string | null): User {
   }
 }
 
+// Normalize free-form / legacy category strings to the canonical filter
+// vocabulary used by /reports/audits (`security_compliance`,
+// `regulatory_compliance`, etc.). Without this, rows seeded with display
+// strings like `it-security-audit` or `regulatory-audit` are silently dropped
+// by the page's default category filter set. Unrecognized values fall back to
+// `regulatory_compliance` so they remain visible.
+function normalizeAuditCategory(raw: string | null | undefined): AuditCategory | undefined {
+  if (!raw) return undefined
+  const v = raw.toLowerCase()
+  if (
+    v === 'security_compliance' ||
+    v === 'financial_compliance' ||
+    v === 'regulatory_compliance' ||
+    v === 'operational_compliance' ||
+    v === 'hr_compliance' ||
+    v === 'sharia_compliance'
+  ) {
+    return v as AuditCategory
+  }
+  if (v.includes('security') || v.includes('cyber') || v.includes('it')) return 'security_compliance' as AuditCategory
+  if (v.includes('financial') || v.includes('finance')) return 'financial_compliance' as AuditCategory
+  if (v.includes('sharia')) return 'sharia_compliance' as AuditCategory
+  if (v.includes('hr') || v.includes('human')) return 'hr_compliance' as AuditCategory
+  if (v.includes('operational') || v.includes('operations')) return 'operational_compliance' as AuditCategory
+  return 'regulatory_compliance' as AuditCategory
+}
+
 function mapAuditRow(row: AuditApiRow, previous?: Audit): Audit {
   return {
     id: row.id,
@@ -101,7 +129,7 @@ function mapAuditRow(row: AuditApiRow, previous?: Audit): Audit {
     team: previous?.team,
     comments: previous?.comments,
     description: row.description ?? previous?.description,
-    category: (row.category ?? previous?.category) as AuditCategory | undefined,
+    category: normalizeAuditCategory(row.category) ?? previous?.category,
     frequency: (row.frequency ?? previous?.frequency) as AuditFrequency | undefined,
     priority: (row.priority ?? previous?.priority) as AuditPriority | undefined,
     closedOverdue: row.closed_overdue ?? previous?.closedOverdue,
@@ -353,18 +381,32 @@ export const useAuditStore = create<AuditState>()((set, get) => ({
 
   create: async (data) => {
     requirePermission('Manage Audit Findings', { storeName: 'audit', actionName: 'create' })
-    set({ isMutating: true, error: null })
+    // OPTIMISTIC: insert a temp row immediately, swap with server row on success.
+    const tempId = newTempId('temp-audit')
+    const now = new Date().toISOString()
+    const optimistic: Audit = {
+      ...(data as Omit<Audit, 'id' | 'createdAt' | 'updatedAt'>),
+      id: tempId,
+      createdAt: now,
+      updatedAt: now,
+    } as Audit
+    set((state) => ({
+      audits: [optimistic, ...state.audits],
+      byId: { ...state.byId, [tempId]: optimistic },
+      isMutating: true,
+      error: null,
+    }))
     try {
       const row = await api.post<AuditApiRow>('/audits', toCreatePayload(data))
       const created = mapAuditRow(row)
-      // Mutate-then-confirm: patch local state immediately so the UI updates
-      // without a full refetch. A background refetch keeps pagination accurate
-      // when the new row should appear inside the current page.
-      set((state) => ({
-        audits: [created, ...state.audits],
-        byId: { ...state.byId, [created.id]: created },
-        isMutating: false,
-      }))
+      set((state) => {
+        const { [tempId]: _drop, ...restById } = state.byId
+        return {
+          audits: state.audits.map((a) => (a.id === tempId ? created : a)),
+          byId: { ...restById, [created.id]: created },
+          isMutating: false,
+        }
+      })
 
       const user = getCurrentUser()
       useAuditLogStore.getState().addLog({
@@ -382,14 +424,36 @@ export const useAuditStore = create<AuditState>()((set, get) => ({
       void get().fetchAll()
       return created
     } catch (e) {
-      set({ error: errorMessage(e, 'Failed to create audit'), isMutating: false })
+      // Roll back the optimistic insert.
+      set((state) => {
+        const { [tempId]: _drop, ...rest } = state.byId
+        return {
+          audits: state.audits.filter((a) => a.id !== tempId),
+          byId: rest,
+          error: errorMessage(e, 'Failed to create audit'),
+          isMutating: false,
+        }
+      })
       throw e
     }
   },
 
   update: async (id, data) => {
     requirePermission('Manage Audit Findings', { storeName: 'audit', actionName: 'update', id })
-    set({ isMutating: true, error: null })
+    // OPTIMISTIC: snapshot, apply patch, restore on failure.
+    const snapshot = get().byId[id]
+    if (snapshot) {
+      const optimistic: Audit = { ...snapshot, ...data, updatedAt: new Date().toISOString() }
+      set((state) => ({
+        audits: state.audits.map((a) => (a.id === id ? optimistic : a)),
+        byId: { ...state.byId, [id]: optimistic },
+        selectedAudit: state.selectedAudit?.id === id ? optimistic : state.selectedAudit,
+        isMutating: true,
+        error: null,
+      }))
+    } else {
+      set({ isMutating: true, error: null })
+    }
     try {
       const row = await api.patch<AuditApiRow>(`/audits/${id}`, toUpdatePayload(data))
       const previous = get().byId[id]
@@ -416,7 +480,17 @@ export const useAuditStore = create<AuditState>()((set, get) => ({
 
       return updated
     } catch (e) {
-      set({ error: errorMessage(e, 'Failed to update audit'), isMutating: false })
+      if (snapshot) {
+        set((state) => ({
+          audits: state.audits.map((a) => (a.id === id ? snapshot : a)),
+          byId: { ...state.byId, [id]: snapshot },
+          selectedAudit: state.selectedAudit?.id === id ? snapshot : state.selectedAudit,
+          error: errorMessage(e, 'Failed to update audit'),
+          isMutating: false,
+        }))
+      } else {
+        set({ error: errorMessage(e, 'Failed to update audit'), isMutating: false })
+      }
       throw e
     }
   },
@@ -424,20 +498,21 @@ export const useAuditStore = create<AuditState>()((set, get) => ({
   delete: async (id) => {
     requirePermission('Manage Audit Findings', { storeName: 'audit', actionName: 'delete', id })
     const auditToDelete = get().byId[id]
-    set({ isMutating: true, error: null })
+    const prevIndex = get().audits.findIndex((a) => a.id === id)
+    // OPTIMISTIC: remove immediately, restore on failure.
+    set((state) => {
+      const { [id]: _removed, ...rest } = state.byId
+      return {
+        audits: state.audits.filter((a) => a.id !== id),
+        byId: rest,
+        selectedAudit: state.selectedAudit?.id === id ? null : state.selectedAudit,
+        isMutating: true,
+        error: null,
+      }
+    })
     try {
       await api.delete(`/audits/${id}`)
-
-      set((state) => {
-        const { [id]: _removed, ...rest } = state.byId
-        return {
-          audits: state.audits.filter((a) => a.id !== id),
-          byId: rest,
-          selectedAudit: state.selectedAudit?.id === id ? null : state.selectedAudit,
-          isMutating: false,
-        }
-      })
-
+      set({ isMutating: false })
       if (auditToDelete) {
         const user = getCurrentUser()
         useAuditLogStore.getState().addLog({
@@ -452,7 +527,21 @@ export const useAuditStore = create<AuditState>()((set, get) => ({
         })
       }
     } catch (e) {
-      set({ error: errorMessage(e, 'Failed to delete audit'), isMutating: false })
+      if (auditToDelete) {
+        set((state) => {
+          const list = [...state.audits]
+          const insertAt = prevIndex >= 0 && prevIndex <= list.length ? prevIndex : list.length
+          list.splice(insertAt, 0, auditToDelete)
+          return {
+            audits: list,
+            byId: { ...state.byId, [id]: auditToDelete },
+            error: errorMessage(e, 'Failed to delete audit'),
+            isMutating: false,
+          }
+        })
+      } else {
+        set({ error: errorMessage(e, 'Failed to delete audit'), isMutating: false })
+      }
       throw e
     }
   },

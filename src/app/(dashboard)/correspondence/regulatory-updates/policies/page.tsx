@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useSearchParams } from 'next/navigation'
@@ -12,6 +12,7 @@ import { useTranslation } from '@/i18n'
 import { cn } from '@/lib/utils'
 import { NoResultsEmptyState } from '@/components/ui/empty-state'
 import { usePolicyStore } from '@/stores/policy-store'
+import { CardSkeleton } from '@/components/ui/skeleton'
 import { RegDocCard } from '@/components/correspondence/regulatory-updates/RegDocCard'
 import { RegDocFilterBar } from '@/components/correspondence/regulatory-updates/RegDocFilterBar'
 import { StatCard } from '@/components/correspondence/regulatory-updates/rules/StatCard'
@@ -125,7 +126,19 @@ export default function RegulatoryUpdatesPoliciesPage() {
   const {
     policies, selectedPolicy, create, update,
     setSelected, reviewAlerts, checkAndUpdateStatuses,
+    fetchAll: fetchAllPolicies,
   } = usePolicyStore()
+
+  // Hydrate from the API on mount — otherwise the page renders the empty
+  // initial Zustand state and never sees server-side rows (reload-survival
+  // bug). Pulled in by Fix-B; mirrors the pattern in /reports/audits.
+  useEffect(() => { fetchAllPolicies() }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Wave-2 Agent E: first-fetch skeleton.
+  const policiesLoading = usePolicyStore((s) => s.isLoading)
+  const policiesLastFetched = usePolicyStore((s) => s.lastFetched)
+  const showPoliciesSkeleton =
+    policiesLoading && policies.length === 0 && policiesLastFetched === null
   const { user: currentUser } = useAuthStore()
   const teamMembers = useTeamStore(s => s.members)
   // Editable policy categories
@@ -177,7 +190,16 @@ export default function RegulatoryUpdatesPoliciesPage() {
   const [newlyCreatedIds, setNewlyCreatedIds] = useState<string[]>([])
 
   // ── Template picker ─────────────────────────────────────────────────
-  const { templates: policyTemplates, incrementUsage: incrementPolicyTemplateUsage } = usePolicyTemplateStore()
+  const {
+    templates: policyTemplates,
+    incrementUsage: incrementPolicyTemplateUsage,
+    fetchAll: fetchAllPolicyTemplates,
+  } = usePolicyTemplateStore()
+  const fetchAllPolicyCategories = usePolicyCategoryStore((s) => s.fetchAll)
+  useEffect(() => {
+    fetchAllPolicyTemplates()
+    fetchAllPolicyCategories()
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
   const [selectedPolicyTemplateId, setSelectedPolicyTemplateId] = useState('')
 
   function handlePolicyTemplateSelect(templateId: string) {
@@ -440,7 +462,7 @@ export default function RegulatoryUpdatesPoliciesPage() {
           <div className="hidden lg:flex gap-2">
             <Link href="/correspondence/letters" className={`px-3 py-1.5 text-xs font-bold text-slate-600 bg-slate-50 hover:bg-slate-100 rounded-lg border border-slate-200 flex items-center gap-2`}>
               <Icon icon="lucide:mail" className="text-emerald-500" />
-              {t('samaLetters.tabLetters')}
+              {t('letters.tabLetters')}
             </Link>
             <span className={`px-3 py-1.5 text-xs font-bold text-emerald-700 bg-emerald-50 rounded-lg border border-emerald-100 flex items-center gap-2`}>
               <Icon icon="lucide:refresh-cw" className="text-emerald-600" />
@@ -539,7 +561,9 @@ export default function RegulatoryUpdatesPoliciesPage() {
         />
 
         {/* Policy Cards */}
-        {filteredPolicies.length === 0 ? (
+        {showPoliciesSkeleton ? (
+          <CardSkeleton count={4} className="grid-cols-1" />
+        ) : filteredPolicies.length === 0 ? (
           <NoResultsEmptyState
             onClearFilters={() => {
               setPolicySearchQuery('')

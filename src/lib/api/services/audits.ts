@@ -77,7 +77,7 @@ export async function getAuditDetail(
   ])
 
   // Observations have no direct FK to audits in current schema (linked via
-  // sama_letter_observations / observation_team). Counted as 0 until that
+  // letter_observations / observation_team). Counted as 0 until that
   // relationship is added — Stage B can extend.
   return {
     ...audit,

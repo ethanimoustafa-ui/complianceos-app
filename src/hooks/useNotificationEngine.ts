@@ -1,8 +1,8 @@
-import { useMemo, useEffect, useRef } from 'react'
+﻿import { useMemo, useEffect, useRef } from 'react'
 import { useAuditStore } from '@/stores/audit-store'
 import { usePolicyStore } from '@/stores/policy-store'
 import { useObservationStore } from '@/stores/observation-store'
-import { useSAMALetterStore } from '@/stores/sama-letter-store'
+import { useLetterStore } from '@/stores/letter-store'
 import { useCircularStore } from '@/stores/circular-store'
 import { useTrainingStore } from '@/stores/training-store'
 import { useRiskStore } from '@/stores/risk-store'
@@ -53,7 +53,7 @@ export function useNotificationEngine() {
   const audits = useAuditStore(s => s.audits)
   const policies = usePolicyStore(s => s.policies)
   const observations = useObservationStore(s => s.observations)
-  const letters = useSAMALetterStore(s => s.letters)
+  const letters = useLetterStore(s => s.letters)
   const circulars = useCircularStore(s => s.circulars)
   const employees = useTrainingStore(s => s.employees)
   const risks = useRiskStore(s => s.risks)

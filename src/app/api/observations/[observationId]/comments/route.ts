@@ -24,9 +24,9 @@ type Params = { params: Promise<{ observationId: string }> }
 
 export async function POST(req: NextRequest, { params }: Params) {
   try {
-    const { observationId } = await params
+    const { observationId: observationIdParam } = await params
     const { supabase, user, profile } = await requirePerm('observation:comment')
-    await assertObservationExists(supabase, observationId)
+    const observationId = await assertObservationExists(supabase, observationIdParam)
     const input = await parseJson(req, CreateObservationCommentSchema)
 
     const { data, error } = await supabase

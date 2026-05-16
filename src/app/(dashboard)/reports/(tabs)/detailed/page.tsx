@@ -11,6 +11,7 @@ import { cn } from '@/lib/utils'
 import { useTranslation } from '@/i18n'
 import { useAuditLogStore, type AuditLog as AuditLogFromStore } from '@/stores/audit-log-store'
 import { exportAuditLogsLocalized, exportSingleLog } from '@/lib/export'
+import { formatAuditAction } from '@/lib/audit-log-format'
 import type { TranslationKey } from '@/i18n'
 import { EditableSelect } from '@/components/ui/editable-select'
 import { dicebearAvatar } from '@/lib/avatar'
@@ -59,6 +60,12 @@ export default function ReportsDetailedPage() {
   // Stores
   const { logs: storeLogs } = useAuditLogStore()
 
+  // Hydrate server-state on mount (Fix-1).
+  const fetchAuditLogs = useAuditLogStore((s) => s.fetchAll)
+  useEffect(() => {
+    void fetchAuditLogs()
+  }, [fetchAuditLogs])
+
   // State
   const [periodFilter, setPeriodFilter] = useState('12months')
   const [showFilterDropdown, setShowFilterDropdown] = useState(false)
@@ -71,21 +78,36 @@ export default function ReportsDetailedPage() {
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc')
   const [logPage, setLogPage] = useState(1)
 
-  // Transform store logs
+  // Transform store logs.
+  // Wave 2 / Agent D — when the server stored only a raw canonical action key
+  // (`observation.checklist.create`, …) the store falls back to that raw
+  // string for `description`. Run it through `formatAuditAction()` so the UI
+  // shows a localized phrase ("Added checklist item") instead of the key.
   const auditLogs: AuditLog[] = useMemo(() => {
-    return storeLogs.map((log: AuditLogFromStore) => ({
-      id: log.id,
-      timestamp: new Date(log.timestamp),
-      user: log.user,
-      action: log.action,
-      audit: log.audit,
-      auditId: log.auditId,
-      description: log.description,
-      status: log.status,
-      duration: log.duration,
-      context: log.context,
-    }))
-  }, [storeLogs])
+    return storeLogs.map((log: AuditLogFromStore) => {
+      // If `description` still equals the raw action key, the server didn't
+      // attach a metadata.description — format on the fly. Otherwise (e.g.
+      // optimistic client-side rows from addLog) trust what the caller set.
+      const rawAction = log.rawAction ?? ''
+      const isRawKey =
+        rawAction.length > 0 && log.description === rawAction
+      const description = isRawKey
+        ? formatAuditAction(rawAction, log.metadata ?? null, t)
+        : log.description
+      return {
+        id: log.id,
+        timestamp: new Date(log.timestamp),
+        user: log.user,
+        action: log.action,
+        audit: log.audit,
+        auditId: log.auditId,
+        description,
+        status: log.status,
+        duration: log.duration,
+        context: log.context,
+      }
+    })
+  }, [storeLogs, t])
 
   // Labels
   const filterLabels: Record<string, string> = {

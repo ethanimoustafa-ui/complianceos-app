@@ -1,4 +1,4 @@
-// /api/letters/[letterId] — detail / patch / soft-delete.
+﻿// /api/letters/[letterId] — detail / patch / soft-delete.
 
 import type { NextRequest } from 'next/server'
 import { requirePerm, requireUser } from '@/lib/api/auth'
@@ -12,7 +12,6 @@ import {
   LETTER_DETAIL_COLUMNS,
   assertLetterExists,
   getApprovalSteps,
-  insertLetterTimeline,
 } from '@/lib/api/services/letters'
 
 export const runtime = 'nodejs'
@@ -26,7 +25,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
     const { supabase } = await requireUser()
 
     const { data: letter, error } = await supabase
-      .from('sama_letters')
+      .from('letters')
       .select(LETTER_DETAIL_COLUMNS)
       .eq('id', letterId)
       .is('deleted_at', null)
@@ -37,17 +36,17 @@ export async function GET(_req: NextRequest, { params }: Params) {
     const [steps, attachments, timeline, observations] = await Promise.all([
       getApprovalSteps(supabase, letterId),
       supabase
-        .from('sama_letter_attachments')
+        .from('letter_attachments')
         .select('id, letter_id, name, storage_path, type, size, uploaded_at, uploaded_by')
         .eq('letter_id', letterId)
         .order('uploaded_at', { ascending: false }),
       supabase
-        .from('sama_letter_timeline')
+        .from('letter_timeline')
         .select('id, letter_id, title, date, user_name, status')
         .eq('letter_id', letterId)
         .order('date', { ascending: false }),
       supabase
-        .from('sama_letter_observations')
+        .from('letter_observations')
         .select('observation_id')
         .eq('letter_id', letterId),
     ])
@@ -63,7 +62,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
         ),
       },
       {
-        cache: { sMaxAge: 60, staleWhileRevalidate: 300, tags: [cacheTags.samaLetters(letterId)] },
+        cache: { sMaxAge: 60, staleWhileRevalidate: 300, tags: [cacheTags.letters(letterId)] },
       },
     )
   } catch (e) {
@@ -86,7 +85,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     if (Object.keys(update).length === 0) {
       // No-op patch; just return current row.
       const { data } = await supabase
-        .from('sama_letters')
+        .from('letters')
         .select(LETTER_DETAIL_COLUMNS)
         .eq('id', letterId)
         .maybeSingle()
@@ -94,7 +93,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     }
 
     const { data, error } = await supabase
-      .from('sama_letters')
+      .from('letters')
       .update(update)
       .eq('id', letterId)
       .is('deleted_at', null)
@@ -102,26 +101,23 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       .single()
     if (error || !data) throw error ?? NotFound('Update returned no row')
 
-    await Promise.all([
-      writeAudit({
-        actor_id: user.id,
-        actor_name: profile.name ?? profile.email ?? user.id,
-        action: 'sama_letter.update',
-        entity_type: 'sama_letter',
-        entity_id: letterId,
-        metadata: { fields: Object.keys(update) },
-        supabase,
-      }),
-      insertLetterTimeline(
-        supabase,
-        letterId,
-        'Letter updated',
-        profile.name ?? profile.email ?? user.id,
-        'completed',
-      ),
-    ])
+    // NOTE: We intentionally do NOT write to letter_timeline on every
+    // PATCH. The letter editor auto-saves drafts on each keystroke, which
+    // previously generated a timeline event per field change. Timeline writes
+    // are now restricted to discrete workflow milestones: submit-for-approval,
+    // approve-step, reject-step, send, mark-response-received, archive,
+    // unarchive. (Fix-3 wave.)
+    await writeAudit({
+      actor_id: user.id,
+      actor_name: profile.name ?? profile.email ?? user.id,
+      action: 'letter.update',
+      entity_type: 'letter',
+      entity_id: letterId,
+      metadata: { fields: Object.keys(update) },
+      supabase,
+    })
 
-    revalidateAll([cacheTags.samaLetters(), cacheTags.samaLetters(letterId)])
+    revalidateAll([cacheTags.letters(), cacheTags.letters(letterId)])
     return ok(data)
   } catch (e) {
     return handle(e)
@@ -135,7 +131,7 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
     await assertLetterExists(supabase, letterId)
 
     const { error } = await supabase
-      .from('sama_letters')
+      .from('letters')
       .update({ deleted_at: new Date().toISOString() })
       .eq('id', letterId)
       .is('deleted_at', null)
@@ -144,13 +140,13 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
     await writeAudit({
       actor_id: user.id,
       actor_name: profile.name ?? profile.email ?? user.id,
-      action: 'sama_letter.delete',
-      entity_type: 'sama_letter',
+      action: 'letter.delete',
+      entity_type: 'letter',
       entity_id: letterId,
       supabase,
     })
 
-    revalidateAll([cacheTags.samaLetters(), cacheTags.samaLetters(letterId)])
+    revalidateAll([cacheTags.letters(), cacheTags.letters(letterId)])
     return ok({ id: letterId, deleted: true })
   } catch (e) {
     return handle(e)

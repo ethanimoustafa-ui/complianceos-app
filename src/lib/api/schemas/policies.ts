@@ -21,8 +21,11 @@ const PolicyStatus = z.enum([
   'overdue',
   'requires-review',
 ])
-const PolicyCategory = z.enum(['compliance', 'it', 'operations', 'risk', 'hr', 'finance'])
-const PolicyApprovalTier = z.enum(['board', 'management', 'sharia', 'agm'])
+// PolicyCategory and PolicyApprovalTier are open strings — users add custom
+// categories via Settings → Policy Categories, and approval tiers vary by
+// organization. Validation is non-empty + length-bound only.
+const PolicyCategory = z.string().min(1).max(100)
+const PolicyApprovalTier = z.string().min(1).max(100)
 const WorkflowStepStatus = z.enum(['completed', 'current', 'pending'])
 const WorkflowStepState = z.enum(['pending-approval', 'awaiting-response', 'awaiting-manager'])
 

@@ -1,6 +1,6 @@
-// Zod schemas for the SAMA letters resource family (and its templates/types/
+﻿// Zod schemas for the SAMA letters resource family (and its templates/types/
 // sub-categories/authority-departments lookups). The same family generalises
-// to other authorities (CMA, IA) via `sama_letters.authority` FK to frameworks.
+// to other authorities (CMA, IA) via `letters.authority` FK to frameworks.
 
 import { z } from 'zod'
 

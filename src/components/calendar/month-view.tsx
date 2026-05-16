@@ -110,9 +110,14 @@ export function MonthView({ currentDate, itemsByDate, selectedDayKey, selectedSo
 
             {holiday && <span className="text-[8px] font-bold text-red-600 mt-1">{holiday}</span>}
 
-            {/* Show first 2 items */}
+            {/* Show first 2 items. `title=` gives native hover tooltips so
+                truncated titles stay discoverable. */}
             {filteredItems.slice(0, 2).map(item => (
-              <div key={item.id} className="mt-1.5 bg-white/80 p-1.5 rounded-lg border border-slate-200/50 shadow-sm">
+              <div
+                key={item.id}
+                title={item.title}
+                className="mt-1.5 bg-white/80 p-1.5 rounded-lg border border-slate-200/50 shadow-sm"
+              >
                 <p className="text-[10px] font-bold text-slate-700 truncate">{item.title}</p>
                 <span className={cn('inline-block mt-0.5 text-[8px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded text-white', SOURCE_COLORS[item.sourceType].badge)}>
                   {item.sourceType.split('-')[0]}

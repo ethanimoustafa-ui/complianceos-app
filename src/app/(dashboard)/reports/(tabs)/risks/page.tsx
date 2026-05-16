@@ -12,6 +12,7 @@ import { DeleteConfirmationDialog } from '@/components/ui/delete-confirmation-di
 import { cn } from '@/lib/utils'
 import { useTranslation } from '@/i18n'
 import { useRiskStore } from '@/stores/risk-store'
+import { ListSkeleton } from '@/components/ui/skeleton'
 import { useTeamStore } from '@/stores/team-store'
 import { useDepartmentStore } from '@/stores/department-store'
 import { useAuthStore } from '@/stores/auth-store'
@@ -154,6 +155,23 @@ export default function ReportsRisksPage() {
   const addRiskCategory = useRiskCategoryStore((s) => s.add)
   const editRiskCategory = useRiskCategoryStore((s) => s.update)
   const removeRiskCategory = useRiskCategoryStore((s) => s.remove)
+
+  // Hydrate server-state on mount (Fix-1).
+  const fetchRisks = useRiskStore((s) => s.fetchAll)
+  // Wave-2 Agent E: first-fetch skeleton.
+  const risksLoading = useRiskStore((s) => s.isLoading)
+  const risksLastFetched = useRiskStore((s) => s.lastFetched)
+  const showRisksSkeleton =
+    risksLoading && storeRisks.length === 0 && risksLastFetched === null
+  const fetchTeam = useTeamStore((s) => s.fetchAll)
+  const fetchDepartments = useDepartmentStore((s) => s.fetchAll)
+  const fetchRiskCategories = useRiskCategoryStore((s) => s.fetchAll)
+  useEffect(() => {
+    void fetchRisks()
+    void fetchTeam()
+    void fetchDepartments()
+    void fetchRiskCategories()
+  }, [fetchRisks, fetchTeam, fetchDepartments, fetchRiskCategories])
 
   // Likelihood/Impact labels are calculation-bound (1..5 drive the risk score)
   // and must not be user-editable. Render directly from the canonical i18n
@@ -662,6 +680,11 @@ export default function ReportsRisksPage() {
             </div>
           </CardHeader>
           <CardContent className="p-0">
+            {showRisksSkeleton ? (
+              <div className="p-6">
+                <ListSkeleton rows={5} columns={6} />
+              </div>
+            ) : (
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead className="bg-slate-50 border-y border-slate-100">
@@ -725,6 +748,7 @@ export default function ReportsRisksPage() {
                 </tbody>
               </table>
             </div>
+            )}
             {sortedRisks.length > RISKS_PER_PAGE && (
               <div className="flex items-center justify-between px-6 py-4 border-t border-slate-100">
                 <span className="text-xs text-slate-500" dir="ltr">{(riskPage - 1) * RISKS_PER_PAGE + 1}–{Math.min(riskPage * RISKS_PER_PAGE, sortedRisks.length)} / {sortedRisks.length}</span>
@@ -789,13 +813,17 @@ export default function ReportsRisksPage() {
                 if (!storeRisk) return null
                 const wfStatus = storeRisk.mitigationWorkflowStatus ?? 'pending-assignment'
                 const wfMeta: Record<string, { bg: string; text: string; label: string }> = {
+                  'not-started':        { bg: 'bg-slate-100', text: 'text-slate-600', label: 'Not started' },
                   'pending-assignment': { bg: 'bg-slate-100', text: 'text-slate-600', label: 'Pending assignment' },
                   'sent-to-department': { bg: 'bg-blue-100', text: 'text-blue-700', label: 'Sent to department' },
                   'plan-proposed':      { bg: 'bg-violet-100', text: 'text-violet-700', label: 'Plan proposed' },
+                  'plan-accepted':      { bg: 'bg-cyan-100', text: 'text-cyan-700', label: 'Plan accepted' },
                   'in-progress':        { bg: 'bg-amber-100', text: 'text-amber-700', label: 'In progress' },
                   'mitigated':          { bg: 'bg-emerald-100', text: 'text-emerald-700', label: 'Mitigated' },
+                  'overdue':            { bg: 'bg-rose-100', text: 'text-rose-700', label: 'Overdue' },
                 }
-                const meta = wfMeta[wfStatus]
+                // Defensive fallback: never crash on an unknown workflow status.
+                const meta = wfMeta[wfStatus] ?? { bg: 'bg-slate-100', text: 'text-slate-600', label: wfStatus }
                 const canSend = !!storeRisk.intendedDepartmentId && !!storeRisk.mitigationDeadline && wfStatus === 'pending-assignment'
                 return (
                   <div className="p-4 bg-white rounded-xl border border-slate-200">

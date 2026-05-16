@@ -1,4 +1,4 @@
-import type { SAMALetterType, CircularAuthority } from '@/types'
+﻿import type { LetterType, CircularAuthority } from '@/types'
 import {
   getAuthorityRecipientDefaults,
   getDepartmentLabel,
@@ -10,7 +10,7 @@ export type LetterSortState = { col: LetterSortCol; dir: 'asc' | 'desc' } | null
 
 // Email subject templates per letter type and language (authority-agnostic).
 // Falls back to the generic 'notification' entry for custom types added via
-// useSAMALetterTypeStore.
+// useLetterTypeStore.
 export const LETTER_EMAIL_SUBJECTS: Record<string, { en: string; ar: string }> = {
   'non-objection': { en: 'Non-Objection Request',    ar: 'طلب عدم ممانعة' },
   'inquiry':       { en: 'Regulatory Inquiry',        ar: 'استفسار تنظيمي' },
@@ -18,11 +18,11 @@ export const LETTER_EMAIL_SUBJECTS: Record<string, { en: string; ar: string }> =
   'notification':  { en: 'Regulatory Notification',  ar: 'إخطار تنظيمي' },
 }
 
-export const getEmailSubjectFor = (type: SAMALetterType, lang: 'en' | 'ar'): string => {
+export const getEmailSubjectFor = (type: LetterType, lang: 'en' | 'ar'): string => {
   return (LETTER_EMAIL_SUBJECTS[type] ?? LETTER_EMAIL_SUBJECTS['notification'])[lang]
 }
 
-export function buildLetterEmailBody(type: SAMALetterType, lang: 'en' | 'ar', reference: string, subject: string): string {
+export function buildLetterEmailBody(type: LetterType, lang: 'en' | 'ar', reference: string, subject: string): string {
   if (lang === 'ar') {
     const intros: Record<string, string> = {
       'non-objection': `السادة الكرام،\n\nأتقدم بموجب هذا الخطاب بطلب عدم ممانعة بالرجوع إلى المرجع ${reference} بشأن: ${subject}. نرفق طيه الوثائق الداعمة للدراسة والاعتماد. ونبقى رهن الإشارة لتزويدكم بأي معلومات إضافية.`,
@@ -58,31 +58,31 @@ export function getRecipientDefaults(
 
 // Helper to get display templates for the dashboard cards
 export const templateTypeCards: Array<{
-  type: SAMALetterType
+  type: LetterType
   icon: string
   color: string
   description: string
 }> = [
   {
-    type: 'non-objection' as SAMALetterType,
+    type: 'non-objection' as LetterType,
     icon: 'lucide:user-check',
     color: 'emerald',
     description: 'Hiring key positions or launching new products.',
   },
   {
-    type: 'inquiry' as SAMALetterType,
+    type: 'inquiry' as LetterType,
     icon: 'lucide:help-circle',
     color: 'blue',
     description: 'Seeking clarification on rules and circulars.',
   },
   {
-    type: 'submission' as SAMALetterType,
+    type: 'submission' as LetterType,
     icon: 'lucide:file-up',
     color: 'amber',
     description: 'Filing periodic reports and compliance data.',
   },
   {
-    type: 'notification' as SAMALetterType,
+    type: 'notification' as LetterType,
     icon: 'lucide:alert-triangle',
     color: 'rose',
     description: 'Reporting outages, breaches, or structural changes.',

@@ -1,4 +1,4 @@
-// POST /api/letters/[letterId]/unarchive — see ./archive/route.ts note.
+﻿// POST /api/letters/[letterId]/unarchive — see ./archive/route.ts note.
 
 import type { NextRequest } from 'next/server'
 import { requirePerm } from '@/lib/api/auth'
@@ -23,8 +23,8 @@ export async function POST(_req: NextRequest, { params }: Params) {
       writeAudit({
         actor_id: user.id,
         actor_name: profile.name ?? profile.email ?? user.id,
-        action: 'sama_letter.unarchive',
-        entity_type: 'sama_letter',
+        action: 'letter.unarchive',
+        entity_type: 'letter',
         entity_id: letterId,
         supabase,
       }),
@@ -37,7 +37,7 @@ export async function POST(_req: NextRequest, { params }: Params) {
       ),
     ])
 
-    revalidateAll([cacheTags.samaLetters(), cacheTags.samaLetters(letterId)])
+    revalidateAll([cacheTags.letters(), cacheTags.letters(letterId)])
     return ok({ id: letterId, archived: false })
   } catch (e) {
     return handle(e)

@@ -57,7 +57,7 @@ export async function GET(req: NextRequest) {
     }
 
     // audit_id filter: observations are linked to audits via
-    // sama_letter_observations / observation_team currently. There is no
+    // letter_observations / observation_team currently. There is no
     // direct FK. Filtering by audit_id is a no-op until that link exists.
     // We accept the param without breaking — return all matching rows.
     if (q.audit_id) {

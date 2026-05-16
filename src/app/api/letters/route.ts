@@ -1,4 +1,4 @@
-// /api/letters — list + create SAMA (and other-authority) letters.
+﻿// /api/letters — list + create SAMA (and other-authority) letters.
 
 import type { NextRequest } from 'next/server'
 import { requirePerm, requireUser } from '@/lib/api/auth'
@@ -29,7 +29,7 @@ export async function GET(req: NextRequest) {
     )
 
     let query = supabase
-      .from('sama_letters')
+      .from('letters')
       .select(LETTER_LIST_COLUMNS, { count: 'exact' })
       .is('deleted_at', null)
 
@@ -43,27 +43,27 @@ export async function GET(req: NextRequest) {
     if (q.assigned_to) query = query.eq('assigned_to', q.assigned_to)
     if (q.q) query = query.ilike('subject', `%${q.q}%`)
 
-    // The schema does not include an `archived` column on sama_letters; archived
+    // The schema does not include an `archived` column on letters; archived
     // letters are modelled via `status` (e.g. response-received + manual
     // archive). We accept the filter for API parity but apply it as a no-op
     // unless a future column is added. Leaving as a no-op keeps the surface
     // forward-compatible.
 
-    // has_attachments — derive via an inner-join with sama_letter_attachments.
+    // has_attachments — derive via an inner-join with letter_attachments.
     if (q.has_attachments === 'true') {
       const { data: ids } = await supabase
-        .from('sama_letter_attachments')
+        .from('letter_attachments')
         .select('letter_id')
       const set = new Set(((ids ?? []) as { letter_id: string }[]).map((r) => r.letter_id))
       if (set.size === 0) {
         return ok(paginate([], q.page, q.pageSize, 0), {
-          cache: { sMaxAge: 60, staleWhileRevalidate: 300, tags: [cacheTags.samaLetters()] },
+          cache: { sMaxAge: 60, staleWhileRevalidate: 300, tags: [cacheTags.letters()] },
         })
       }
       query = query.in('id', Array.from(set))
     } else if (q.has_attachments === 'false') {
       const { data: ids } = await supabase
-        .from('sama_letter_attachments')
+        .from('letter_attachments')
         .select('letter_id')
       const set = new Set(((ids ?? []) as { letter_id: string }[]).map((r) => r.letter_id))
       if (set.size > 0) {
@@ -78,7 +78,7 @@ export async function GET(req: NextRequest) {
     if (error) throw error
 
     return ok(paginate(data ?? [], q.page, q.pageSize, count ?? 0), {
-      cache: { sMaxAge: 60, staleWhileRevalidate: 300, tags: [cacheTags.samaLetters()] },
+      cache: { sMaxAge: 60, staleWhileRevalidate: 300, tags: [cacheTags.letters()] },
     })
   } catch (e) {
     return handle(e)
@@ -96,7 +96,7 @@ export async function POST(req: NextRequest) {
     for (let attempt = 0; attempt < 3; attempt++) {
       const reference = await nextLetterReference(supabase, input.authority, input.type)
       const { data, error } = await supabase
-        .from('sama_letters')
+        .from('letters')
         .insert({
           reference,
           authority: input.authority,
@@ -143,13 +143,13 @@ export async function POST(req: NextRequest) {
     // Bump template usage_count when a template was used.
     if (input.template_id) {
       const { data: tpl } = await supabase
-        .from('sama_letter_templates')
+        .from('letter_templates')
         .select('usage_count')
         .eq('id', input.template_id)
         .maybeSingle<{ usage_count: number }>()
       const next = (tpl?.usage_count ?? 0) + 1
       await supabase
-        .from('sama_letter_templates')
+        .from('letter_templates')
         .update({ usage_count: next })
         .eq('id', input.template_id)
     }
@@ -158,8 +158,8 @@ export async function POST(req: NextRequest) {
       writeAudit({
         actor_id: user.id,
         actor_name: profile.name ?? profile.email ?? user.id,
-        action: 'sama_letter.create',
-        entity_type: 'sama_letter',
+        action: 'letter.create',
+        entity_type: 'letter',
         entity_id: created.id,
         metadata: { reference: created.reference, type: input.type, authority: input.authority },
         supabase,
@@ -173,7 +173,7 @@ export async function POST(req: NextRequest) {
       ),
     ])
 
-    revalidate(cacheTags.samaLetters())
+    revalidate(cacheTags.letters())
     return ok(inserted, { status: 201 })
   } catch (e) {
     return handle(e)

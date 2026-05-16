@@ -1,11 +1,11 @@
-'use client'
+﻿'use client'
 
 import { Icon } from '@iconify/react'
 import { Card } from '@/components/ui/card'
 import { useTranslation } from '@/i18n'
 import type { TranslationKey } from '@/i18n'
 import { usePolicyStore } from '@/stores/policy-store'
-import { useSAMALetterStore } from '@/stores/sama-letter-store'
+import { useLetterStore } from '@/stores/letter-store'
 
 function StatCard({
   icon,
@@ -71,7 +71,7 @@ export function DirectoryStatCards({ totalMembers, adminCount, assignedTasks }: 
     p.workflowTimeline?.some(s => s.status === 'current' && s.actionType === 'notify-manager' && s.stepState === 'awaiting-manager')
   )
   // Only Department Head (step 2) counts as managerial approval
-  const pendingLetterList = useSAMALetterStore((s) => s.letters).filter((l) =>
+  const pendingLetterList = useLetterStore((s) => s.letters).filter((l) =>
     l.status === 'pending-approval' &&
     l.approvalChain?.some(s => s.role === 'Department Head' && s.status === 'pending')
   )

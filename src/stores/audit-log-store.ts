@@ -22,11 +22,21 @@ export interface AuditLog {
   timestamp: string
   user: { name: string; avatar: string }
   action: ActionType
+  /**
+   * Raw canonical action key from the server (`observation.checklist.create`,
+   * `letter.attachment.upload`, …). Use this with `formatAuditAction()` to
+   * render a localized human phrase. The legacy `action` field above is the
+   * coerced UI bucket (`'created' | 'updated' | …`). Optional because legacy
+   * client-side `addLog()` callers (audit-store, audit-task-store) don't set
+   * it — they already supply a fully-formed `description`.
+   */
+  rawAction?: string
   audit: string
   auditId: string
   description: string
   descriptionKey?: string
   descriptionParams?: Record<string, string>
+  metadata?: Record<string, unknown>
   status: LogStatus
   duration?: string
   context?: string
@@ -89,11 +99,18 @@ function mapStatus(status: string | null): LogStatus {
 }
 
 function mapRow(row: AuditLogApiRow): AuditLog {
+  // `description` is rendered directly in the detailed-reports table. When the
+  // route handler attaches a `metadata.description` it wins; otherwise we
+  // surface the raw action key so the row's *consumer* can run it through
+  // `formatAuditAction()` to get a localized human phrase. Storing the raw
+  // key here (rather than humanising in-store) keeps the i18n boundary at the
+  // render layer — Arabic users see Arabic, English users see English.
   return {
     id: String(row.id),
     timestamp: row.timestamp,
     user: { name: row.user_name ?? '', avatar: '' },
     action: mapAction(row.action),
+    rawAction: row.action,
     audit: typeof row.metadata?.audit_title === 'string' ? (row.metadata.audit_title as string) : '',
     auditId: row.target_type === 'audit' && row.target_id ? row.target_id : (
       typeof row.metadata?.audit_id === 'string' ? (row.metadata.audit_id as string) : ''
@@ -103,6 +120,7 @@ function mapRow(row: AuditLogApiRow): AuditLog {
       : row.action,
     descriptionKey: row.details_key ?? undefined,
     descriptionParams: row.details_params ?? undefined,
+    metadata: (row.metadata as Record<string, unknown> | null) ?? undefined,
     status: mapStatus(row.status),
     context: typeof row.metadata?.context === 'string' ? (row.metadata.context as string) : undefined,
   }

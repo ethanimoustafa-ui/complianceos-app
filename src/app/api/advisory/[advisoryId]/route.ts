@@ -7,7 +7,7 @@ import { ok } from '@/lib/api/response'
 import { parseJson } from '@/lib/api/validate'
 import { cacheTags, revalidateAll } from '@/lib/api/cache'
 import { writeAudit } from '@/lib/api/audit'
-import { UpdateAdvisorySchema } from '@/lib/api/schemas/advisory'
+import { UpdateAdvisorySchema, CreateAdvisoryNoteSchema } from '@/lib/api/schemas/advisory'
 import {
   ADVISORY_DETAIL_COLUMNS,
   assertAdvisoryExists,
@@ -83,6 +83,50 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 
     revalidateAll([cacheTags.advisory(), cacheTags.advisory(advisoryId)])
     return ok(data)
+  } catch (e) {
+    return handle(e)
+  }
+}
+
+/**
+ * POST /api/advisory/[advisoryId]
+ *
+ * Append a note to the advisory_notes table. The supervisor's Fix-3 wave
+ * directive forbids creating new Route Handler *files*; this POST method is
+ * therefore co-located on the existing detail route. If/when a dedicated
+ * /notes sub-route is added in a later wave, the store can switch endpoints
+ * without UI changes. (Fix-3 wave.)
+ */
+export async function POST(req: NextRequest, { params }: Params) {
+  try {
+    const { advisoryId } = await params
+    const { supabase, user, profile } = await requirePerm('edit')
+    await assertAdvisoryExists(supabase, advisoryId)
+    const input = await parseJson(req, CreateAdvisoryNoteSchema)
+
+    const { data, error } = await supabase
+      .from('advisory_notes')
+      .insert({
+        request_id: advisoryId,
+        author: input.author,
+        content: input.content,
+      })
+      .select('id, request_id, author, content, created_at')
+      .single()
+    if (error || !data) throw error ?? NotFound('Insert returned no row')
+
+    await writeAudit({
+      actor_id: user.id,
+      actor_name: profile.name ?? profile.email ?? user.id,
+      action: 'advisory.note.add',
+      entity_type: 'advisory_note',
+      entity_id: (data as { id: string }).id,
+      metadata: { advisory_id: advisoryId },
+      supabase,
+    })
+
+    revalidateAll([cacheTags.advisory(), cacheTags.advisory(advisoryId)])
+    return ok(data, { status: 201 })
   } catch (e) {
     return handle(e)
   }

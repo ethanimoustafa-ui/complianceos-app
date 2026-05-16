@@ -1,4 +1,4 @@
-// GET /api/letters/[letterId]/timeline — read-only timeline feed.
+﻿// GET /api/letters/[letterId]/timeline — read-only timeline feed.
 
 import type { NextRequest } from 'next/server'
 import { requireUser } from '@/lib/api/auth'
@@ -19,14 +19,14 @@ export async function GET(_req: NextRequest, { params }: Params) {
     await assertLetterExists(supabase, letterId)
 
     const { data, error } = await supabase
-      .from('sama_letter_timeline')
+      .from('letter_timeline')
       .select('id, letter_id, title, date, user_name, status')
       .eq('letter_id', letterId)
       .order('date', { ascending: false })
     if (error) throw error
 
     return ok(data ?? [], {
-      cache: { sMaxAge: 30, tags: [cacheTags.samaLetterTimeline(letterId)] },
+      cache: { sMaxAge: 30, tags: [cacheTags.letterTimeline(letterId)] },
     })
   } catch (e) {
     return handle(e)

@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { usePathname, useSearchParams } from 'next/navigation'
@@ -11,7 +11,7 @@ import { useTranslation } from '@/i18n'
 import type { TranslationKey } from '@/i18n'
 import { useCorrespondenceStore } from '@/stores/correspondence-store'
 import { useCircularStore } from '@/stores/circular-store'
-import { useSAMALetterStore } from '@/stores/sama-letter-store'
+import { useLetterStore } from '@/stores/letter-store'
 import { useRiskStore } from '@/stores/risk-store'
 import { useTeamStore } from '@/stores/team-store'
 import { useObservationStore } from '@/stores/observation-store'
@@ -78,7 +78,7 @@ export default function CorrespondenceFeedPage() {
   const riskStore = useRiskStore()
   const teamStore = useTeamStore()
   const observationStore = useObservationStore()
-  const samaLetterStore = useSAMALetterStore()
+  const letterStore = useLetterStore()
   const policyStore = usePolicyStore()
   const trainingStore = useTrainingStore()
   const authStore = useAuthStore()
@@ -90,6 +90,42 @@ export default function CorrespondenceFeedPage() {
   const addCorrespondenceType = useCorrespondenceTypeStore((s) => s.add)
   const updateCorrespondenceType = useCorrespondenceTypeStore((s) => s.update)
   const removeCorrespondenceType = useCorrespondenceTypeStore((s) => s.remove)
+
+  // Hydrate server-state on mount — refreshing the page must repopulate the
+  // many Zustand slices this feed aggregates (Fix-1).
+  const fetchCorrespondence = useCorrespondenceStore((s) => s.fetchAll)
+  const fetchCirculars = useCircularStore((s) => s.fetchAll)
+  const fetchLetters = useLetterStore((s) => s.fetchAll)
+  const fetchRisks = useRiskStore((s) => s.fetchAll)
+  const fetchTeam = useTeamStore((s) => s.fetchAll)
+  const fetchObservations = useObservationStore((s) => s.fetchAll)
+  const fetchPolicies = usePolicyStore((s) => s.fetchAll)
+  const fetchEmployees = useTrainingStore((s) => s.fetchEmployees)
+  const fetchCourses = useTrainingStore((s) => s.fetchCourses)
+  const fetchCorrespondenceTypes = useCorrespondenceTypeStore((s) => s.fetchAll)
+  useEffect(() => {
+    void fetchCorrespondence()
+    void fetchCirculars()
+    void fetchLetters()
+    void fetchRisks()
+    void fetchTeam()
+    void fetchObservations()
+    void fetchPolicies()
+    void fetchEmployees()
+    void fetchCourses()
+    void fetchCorrespondenceTypes()
+  }, [
+    fetchCorrespondence,
+    fetchCirculars,
+    fetchLetters,
+    fetchRisks,
+    fetchTeam,
+    fetchObservations,
+    fetchPolicies,
+    fetchEmployees,
+    fetchCourses,
+    fetchCorrespondenceTypes,
+  ])
 
   // Modal states
   const [isNewCorrespondenceOpen, setIsNewCorrespondenceOpen] = useState(false)
@@ -220,7 +256,7 @@ export default function CorrespondenceFeedPage() {
       }))
 
     // Letters (responseDeadline) — kept legacy `source: 'sama-letter'` for routing back-compat
-    samaLetterStore.letters
+    letterStore.letters
       .filter(l => l.responseDeadline && new Date(l.responseDeadline) > now && l.status !== 'response-received')
       .forEach(l => items.push({
         id: l.id, name: l.subject, subtitle: l.type,
@@ -237,7 +273,7 @@ export default function CorrespondenceFeedPage() {
       }))
 
     return items.sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime()).slice(0, 3)
-  }, [circularStore.circulars, samaLetterStore.letters, observationStore.observations])
+  }, [circularStore.circulars, letterStore.letters, observationStore.observations])
 
   // Next policy review
   const nextPolicyReview = useMemo(() => {
@@ -340,7 +376,7 @@ export default function CorrespondenceFeedPage() {
           <div className="hidden lg:flex gap-2">
             <Link href="/correspondence/letters" className={`px-3 py-1.5 text-xs font-bold text-slate-600 bg-slate-50 hover:bg-slate-100 rounded-lg border border-slate-200 flex items-center gap-2`}>
               <Icon icon="lucide:mail" className="text-emerald-500" />
-              {t('samaLetters.tabLetters' as TranslationKey)}
+              {t('letters.tabLetters' as TranslationKey)}
             </Link>
             <Link href="/correspondence/regulatory-updates" className={`px-3 py-1.5 text-xs font-bold text-slate-600 bg-slate-50 hover:bg-slate-100 rounded-lg border border-slate-200 flex items-center gap-2`}>
               <Icon icon="lucide:refresh-cw" className="text-blue-500" />

@@ -61,9 +61,28 @@ export const ObservationDetailModal = memo(function ObservationDetailModal({
   const [localChecklist, setLocalChecklist] = useState<LocalChecklistItem[]>([])
   const [localComments, setLocalComments] = useState<LocalComment[]>([])
 
-  const { addComment, editComment, deleteComment, addChecklistItem, editChecklistItem, toggleChecklistItem, removeChecklistItem, transferLeadership, reviewRemediationPlan, addDocument, requestClosure, reviewClosure, selectedObservation: storeObservation } = useObservationStore()
+  const { addComment, editComment, deleteComment, addChecklistItem, editChecklistItem, toggleChecklistItem, removeChecklistItem, transferLeadership, reviewRemediationPlan, addDocument, requestClosure, reviewClosure, fetchById, selectedObservation: storeObservation } = useObservationStore()
   const user = useAuthStore((state) => state.user)
   const { members } = useTeamStore()
+
+  // WAVE2-A: when the modal opens, hydrate the observation's nested children
+  // (checklist, updates/comments, documents, remediation plan, closure
+  // request/review, timeline) from the server. List `fetchAll()` doesn't
+  // return these fields — without this fetch the modal renders empty arrays
+  // and the user sees "no items" after every refresh even though the rows
+  // exist in the database.
+  const [isHydrating, setIsHydrating] = useState(false)
+  useEffect(() => {
+    if (!isOpen || !observation?.id) return
+    let cancelled = false
+    setIsHydrating(true)
+    void fetchById(observation.id).finally(() => {
+      if (!cancelled) setIsHydrating(false)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [isOpen, observation?.id, fetchById])
 
   // Modal states
   const [showTransferModal, setShowTransferModal] = useState(false)

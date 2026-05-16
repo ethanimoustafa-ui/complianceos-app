@@ -1,9 +1,9 @@
-'use client'
+﻿'use client'
 
 import { useMemo } from 'react'
 import { Icon } from '@iconify/react'
 import { cn } from '@/lib/utils'
-import { PlaceholderChip } from '@/components/correspondence/sama-letters/PlaceholderChip'
+import { PlaceholderChip } from '@/components/correspondence/letter-placeholders/PlaceholderChip'
 import type { PlaceholderDef, PlaceholderValue } from '@/types'
 
 // Hybrid editor: editable textarea backed by `{{token}}` plus a live preview

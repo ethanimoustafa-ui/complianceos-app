@@ -1,20 +1,20 @@
-// SAMA letter template store — Phase 5 server-state migration.
+﻿// Letter template store — Phase 5 server-state migration.
 //
 // Read `.planning/09-store-pattern.md` before editing.
 // Endpoints: GET/POST /api/letter-templates,
 //            PATCH/DELETE /api/letter-templates/[templateId]
 //
-// Templates seed compose-time defaults for new SAMA letters. Usage tracking is
-// now server-side: `POST /api/letters` increments `sama_letter_templates.usage_count`
+// Templates seed compose-time defaults for new letters. Usage tracking is
+// now server-side: `POST /api/letters` increments `letter_templates.usage_count`
 // when the `template_id` field is provided in the body. The legacy
 // `incrementUsage()` action is preserved as a refetch shim so call-sites that
-// fired it after `createSAMALetter()` keep their UI in sync with the server.
+// fired it after `createLetter()` keep their UI in sync with the server.
 //
 // SKELETON-LOADING NOTE: render a skeleton when
 // `isLoading && templates.length === 0` (first fetch).
 
 import { create } from 'zustand'
-import type { LetterTemplate, SAMALetterType } from '@/types'
+import type { LetterTemplate, LetterType } from '@/types'
 import { api, ApiClientError } from '@/lib/api-client'
 
 const typeColors: Record<string, string> = {
@@ -74,7 +74,7 @@ function mapRow(row: LetterTemplateApiRow): LetterTemplate {
   return {
     id: row.id,
     name: row.name,
-    type: row.type as SAMALetterType,
+    type: row.type as LetterType,
     icon: row.icon ?? typeIcons[row.type] ?? 'lucide:file-text',
     color: row.color ?? typeColors[row.type] ?? 'slate',
     description: row.description ?? '',
@@ -168,7 +168,7 @@ function errorMessage(e: unknown, fallback: string): string {
   return fallback
 }
 
-interface SAMATemplateState {
+interface LetterTemplateState {
   templates: LetterTemplate[]
   byId: Record<string, LetterTemplate>
 
@@ -194,7 +194,7 @@ interface SAMATemplateState {
   clearError: () => void
 }
 
-export const useSAMATemplateStore = create<SAMATemplateState>()((set, get) => ({
+export const useLetterTemplateStore = create<LetterTemplateState>()((set, get) => ({
   templates: [],
   byId: {},
   isLoading: false,

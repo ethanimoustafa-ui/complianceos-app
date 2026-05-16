@@ -25,18 +25,26 @@ export const REMEDIATION_PLAN_COLUMNS =
 
 // --- assertions --------------------------------------------------------------
 
+// UUID v4-ish detector. The store maps `observation.id` to `reference || id`,
+// so this helper may receive either a real `uuid` or a human reference like
+// `OBS-2026-0001`. We probe the right column accordingly, and always return
+// the canonical UUID so callers can use it as the `observation_id` FK target
+// in child-table inserts.
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
 export async function assertObservationExists(
   supabase: SupabaseClient,
-  observationId: string,
+  observationIdOrReference: string,
 ): Promise<string> {
+  const column = UUID_RE.test(observationIdOrReference) ? 'id' : 'reference'
   const { data, error } = await supabase
     .from('observations')
     .select('id')
-    .eq('id', observationId)
+    .eq(column, observationIdOrReference)
     .is('deleted_at', null)
     .maybeSingle<{ id: string }>()
   if (error) throw error
-  if (!data) throw NotFound(`Observation ${observationId} not found`)
+  if (!data) throw NotFound(`Observation ${observationIdOrReference} not found`)
   return data.id
 }
 
@@ -70,6 +78,15 @@ export interface ObservationDetail {
     uploaded_at: string
     uploaded_by: string | null
   }>
+  updates: Array<{
+    id: string
+    observation_id: string
+    author_id: string
+    text: string
+    is_edited: boolean
+    edited_at: string | null
+    created_at: string
+  }>
   remediation_plans: unknown[]
   closure_request: unknown
   closure_review: unknown
@@ -77,18 +94,20 @@ export interface ObservationDetail {
 
 export async function getObservationDetail(
   supabase: SupabaseClient,
-  observationId: string,
+  observationIdOrReference: string,
 ): Promise<ObservationDetail> {
+  const column = UUID_RE.test(observationIdOrReference) ? 'id' : 'reference'
   const { data: obs, error } = await supabase
     .from('observations')
     .select(OBSERVATION_DETAIL_COLUMNS)
-    .eq('id', observationId)
+    .eq(column, observationIdOrReference)
     .is('deleted_at', null)
     .maybeSingle<Omit<ObservationDetail, 'assignees' | 'checklist' | 'documents' | 'remediation_plans' | 'closure_request' | 'closure_review'>>()
   if (error) throw error
-  if (!obs) throw NotFound(`Observation ${observationId} not found`)
+  if (!obs) throw NotFound(`Observation ${observationIdOrReference} not found`)
+  const observationId = obs.id
 
-  const [assignees, checklist, documents, plans, closureReq, closureRev] = await Promise.all([
+  const [assignees, checklist, documents, updates, plans, closureReq, closureRev] = await Promise.all([
     supabase
       .from('observation_assignees')
       .select('id, user_id, name, role')
@@ -103,6 +122,11 @@ export async function getObservationDetail(
       .select(OBSERVATION_DOCUMENT_COLUMNS)
       .eq('observation_id', observationId)
       .order('uploaded_at', { ascending: false }),
+    supabase
+      .from('observation_updates')
+      .select('id, observation_id, author_id, text, is_edited, edited_at, created_at')
+      .eq('observation_id', observationId)
+      .order('created_at', { ascending: true }),
     supabase
       .from('remediation_plans')
       .select(REMEDIATION_PLAN_COLUMNS)
@@ -125,6 +149,7 @@ export async function getObservationDetail(
     assignees: (assignees.data as ObservationDetail['assignees']) ?? [],
     checklist: (checklist.data as ObservationDetail['checklist']) ?? [],
     documents: (documents.data as ObservationDetail['documents']) ?? [],
+    updates: (updates.data as ObservationDetail['updates']) ?? [],
     remediation_plans: plans.data ?? [],
     closure_request: closureReq.data ?? null,
     closure_review: closureRev.data ?? null,

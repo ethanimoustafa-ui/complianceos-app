@@ -27,6 +27,16 @@ export type CreateAdvisoryInput = z.infer<typeof CreateAdvisorySchema>
 export const UpdateAdvisorySchema = CreateAdvisorySchema.partial()
 export type UpdateAdvisoryInput = z.infer<typeof UpdateAdvisorySchema>
 
+/**
+ * Schema for creating an advisory note attached to an advisory_request. The
+ * request_id is path-parameterised by the Route Handler. (Fix-3 wave.)
+ */
+export const CreateAdvisoryNoteSchema = z.object({
+  author: z.string().min(1).max(200),
+  content: z.string().min(1).max(50_000),
+})
+export type CreateAdvisoryNoteInput = z.infer<typeof CreateAdvisoryNoteSchema>
+
 export const ListAdvisoryQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(10),

@@ -104,6 +104,12 @@ export default function TeamDirectoryPage() {
   // Store data
   const members = useTeamStore((s) => s.members)
   const storeUpdate = useTeamStore((s) => s.update)
+  const fetchTeam = useTeamStore((s) => s.fetchAll)
+
+  // Hydrate server-state on mount (Fix-1).
+  useEffect(() => {
+    void fetchTeam()
+  }, [fetchTeam])
 
   // UI state — store only the ID so the member is derived from the store (Fix 3)
   const [selectedMemberId, setSelectedMemberId] = useState<string | null>(null)

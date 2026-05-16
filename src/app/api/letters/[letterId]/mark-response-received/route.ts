@@ -1,4 +1,4 @@
-// POST /api/letters/[letterId]/mark-response-received — sent → response-received.
+﻿// POST /api/letters/[letterId]/mark-response-received — sent → response-received.
 
 import type { NextRequest } from 'next/server'
 import { requirePerm } from '@/lib/api/auth'
@@ -22,7 +22,7 @@ export async function POST(_req: NextRequest, { params }: Params) {
     const { supabase, user, profile } = await requirePerm('edit')
 
     const { data: current, error: readErr } = await supabase
-      .from('sama_letters')
+      .from('letters')
       .select('id, status')
       .eq('id', letterId)
       .is('deleted_at', null)
@@ -37,7 +37,7 @@ export async function POST(_req: NextRequest, { params }: Params) {
     }
 
     const { data, error } = await supabase
-      .from('sama_letters')
+      .from('letters')
       .update({
         status: 'response-received',
         response_received_date: new Date().toISOString(),
@@ -51,8 +51,8 @@ export async function POST(_req: NextRequest, { params }: Params) {
       writeAudit({
         actor_id: user.id,
         actor_name: profile.name ?? profile.email ?? user.id,
-        action: 'sama_letter.response_received',
-        entity_type: 'sama_letter',
+        action: 'letter.response_received',
+        entity_type: 'letter',
         entity_id: letterId,
         supabase,
       }),
@@ -65,7 +65,7 @@ export async function POST(_req: NextRequest, { params }: Params) {
       ),
     ])
 
-    revalidateAll([cacheTags.samaLetters(), cacheTags.samaLetters(letterId)])
+    revalidateAll([cacheTags.letters(), cacheTags.letters(letterId)])
     return ok(data)
   } catch (e) {
     return handle(e)

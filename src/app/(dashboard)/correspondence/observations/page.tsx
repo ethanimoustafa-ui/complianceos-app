@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useState, useMemo, useEffect } from 'react'
 import { useSearchParams } from 'next/navigation'
@@ -10,6 +10,7 @@ import { exportObservations } from '@/lib/export'
 import { Gate } from '@/components/auth/gate'
 import { DeleteConfirmationDialog } from '@/components/ui/delete-confirmation-dialog'
 import { useObservationStore } from '@/stores/observation-store'
+import { ListSkeleton } from '@/components/ui/skeleton'
 import { useAuthStore } from '@/stores/auth-store'
 import { ObservationStats } from '@/components/observations/observation-stats'
 import type { ObservationStatsData } from '@/components/observations/observation-stats'
@@ -42,6 +43,20 @@ export default function ObservationsPage() {
 
   // Get current user for creator assignment
   const user = useAuthStore((state) => state.user)
+
+  // First-fetch detector (Wave-2 Agent E): show skeleton while the very first
+  // GET is in flight and the list is still empty. Refetches keep stale data
+  // visible (so the user never sees a flash of empty).
+  const isLoading = useObservationStore((s) => s.isLoading)
+  const lastFetched = useObservationStore((s) => s.lastFetched)
+  const showSkeleton = isLoading && observations.length === 0 && lastFetched === null
+
+  // Hydrate server-state on mount (Fix-1). Without this the observation list
+  // is empty after a page reload because Zustand starts cold.
+  const fetchObservations = useObservationStore((s) => s.fetchAll)
+  useEffect(() => {
+    void fetchObservations()
+  }, [fetchObservations])
 
   // State for modals
   const [selectedObservation, setSelectedObservation] = useState<Observation | null>(null)
@@ -291,7 +306,7 @@ export default function ObservationsPage() {
               className={`px-3 py-1.5 text-xs font-bold text-slate-600 bg-slate-50 hover:bg-slate-100 rounded-lg transition-all border border-slate-200 flex items-center gap-2`}
             >
               <Icon icon="lucide:mail" className="text-emerald-500" />
-              {t('samaLetters.tabLetters')}
+              {t('letters.tabLetters')}
             </Link>
             <Link
               href="/correspondence/regulatory-updates"
@@ -356,19 +371,23 @@ export default function ObservationsPage() {
             onSubmissionDueDateChange={setSubmissionDueDateFilter}
           />
 
-          <ObservationTable
-            observations={filteredObservations}
-            onRowClick={handleRowClick}
-            currentPage={currentPage}
-            totalItems={filteredObservations.length}
-            onPageChange={setCurrentPage}
-            itemsPerPage={itemsPerPage}
-            onClearFilters={handleClearFilters}
-            onAddObservation={() => setIsAddModalOpen(true)}
-            onEdit={handleEditObservation}
-            onDelete={handleDeleteClick}
-            hasFilters={hasActiveFilters}
-          />
+          {showSkeleton ? (
+            <ListSkeleton rows={5} columns={5} className="mt-4" />
+          ) : (
+            <ObservationTable
+              observations={filteredObservations}
+              onRowClick={handleRowClick}
+              currentPage={currentPage}
+              totalItems={filteredObservations.length}
+              onPageChange={setCurrentPage}
+              itemsPerPage={itemsPerPage}
+              onClearFilters={handleClearFilters}
+              onAddObservation={() => setIsAddModalOpen(true)}
+              onEdit={handleEditObservation}
+              onDelete={handleDeleteClick}
+              hasFilters={hasActiveFilters}
+            />
+          )}
         </div>
       </div>
 

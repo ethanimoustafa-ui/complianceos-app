@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import React, { useState, useMemo, useEffect } from 'react'
 import { usePathname } from 'next/navigation'
@@ -18,6 +18,7 @@ import type { TeamMember } from '@/types'
 import { Gate } from '@/components/auth/gate'
 import { dicebearAvatar } from '@/lib/avatar'
 import { paginate } from '@/lib/pagination'
+import { formatAuditAction } from '@/lib/audit-log-format'
 
 // Helper Components
 function UserActionBadge({ action, label }: { action: UserLog['action']; label: string }) {
@@ -91,6 +92,14 @@ export default function TeamLogsPage() {
   const userLogs = useUserLogStore((s) => s.logs)
   const members = useTeamStore((s) => s.members)
   const storeUpdate = useTeamStore((s) => s.update)
+  const fetchUserLogs = useUserLogStore((s) => s.fetchLogs)
+  const fetchTeam = useTeamStore((s) => s.fetchAll)
+
+  // Hydrate server-state on mount (Fix-1).
+  useEffect(() => {
+    void fetchUserLogs()
+    void fetchTeam()
+  }, [fetchUserLogs, fetchTeam])
 
   // Translated action labels. Phase 6 adds raw English fallbacks for the
   // RBAC/auth events; Phase 7 will replace these with proper i18n keys.
@@ -125,8 +134,25 @@ export default function TeamLogsPage() {
     info: t('team.info'),
   }
 
+  // Wave 2 / Agent D — describe a log row in a human phrase even when the
+  // server stored only a canonical action key (`observation.checklist.create`).
+  // First try the legacy i18n `detailsKey`; if `t()` returns the key unchanged
+  // (lookup miss) fall back to `formatAuditAction(action, …)`.
+  const describeLog = (log: UserLog): string => {
+    const key = log.detailsKey
+    if (key) {
+      const translated = t(key as Parameters<typeof t>[0])
+      if (translated !== key) return translated
+    }
+    return formatAuditAction(
+      log.action,
+      (log.metadata as Record<string, unknown> | null) ?? null,
+      t,
+    )
+  }
+
   const filteredLogs = userLogs.filter((log) => {
-    const translatedDetails = t(log.detailsKey as Parameters<typeof t>[0])
+    const translatedDetails = describeLog(log)
     const matchSearch = !logSearch ||
       log.user.toLowerCase().includes(logSearch.toLowerCase()) ||
       translatedDetails.toLowerCase().includes(logSearch.toLowerCase()) ||
@@ -387,7 +413,7 @@ export default function TeamLogsPage() {
                         </div>
                       </td>
                       <td className="px-6 py-4 text-xs text-slate-500 max-w-xs truncate">
-                        {t(log.detailsKey as Parameters<typeof t>[0])}
+                        {describeLog(log)}
                       </td>
                       <td className="px-6 py-4">
                         <LogStatusIndicator status={log.status} label={statusTranslations[log.status]} />
@@ -431,7 +457,7 @@ export default function TeamLogsPage() {
                             </div>
                             <div className="mt-4 pt-4 border-t border-slate-100">
                               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">{t('team.fullContext')}</p>
-                              <p className="text-sm text-slate-700 leading-relaxed">{t(log.detailsKey as Parameters<typeof t>[0])}</p>
+                              <p className="text-sm text-slate-700 leading-relaxed">{describeLog(log)}</p>
                               <p className="text-xs text-slate-500 mt-2">{t('team.ipAddress')}: {log.ipAddress}</p>
                             </div>
                             <div className="flex gap-3 mt-4 pt-4 border-t border-slate-100">

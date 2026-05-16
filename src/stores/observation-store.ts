@@ -32,6 +32,7 @@ import type {
 } from '@/types'
 import { api, ApiClientError } from '@/lib/api-client'
 import { requirePermission } from '@/lib/rbac-store-gate'
+import { newTempId } from '@/lib/optimistic'
 
 interface ChecklistItem {
   id: string
@@ -302,17 +303,153 @@ export const useObservationStore = create<ObservationState>()((set, get) => ({
   },
 
   fetchById: async (id) => {
+    // WAVE2-A: GET /api/observations/[id] returns the row PLUS nested
+    // children (`checklist`, `documents`, `updates`, `assignees`, `remediation_plans`,
+    // `closure_request`, `closure_review`). The legacy mapper only handled the
+    // top-level columns, which left every modal child-resource empty after
+    // refresh. Capture the nested arrays here so the modal can read them from
+    // the store directly.
     set({ isLoading: true, error: null })
     try {
-      const row = await api.get<ObservationApiRow>(`/observations/${id}`)
+      const row = await api.get<ObservationApiRow & {
+        checklist?: Array<{ id: string; text: string; completed: boolean; sort_order?: number }>
+        documents?: Array<{ id: string; name: string; type: string }>
+        updates?: Array<{
+          id: string
+          author_id: string
+          text: string
+          is_edited: boolean
+          edited_at: string | null
+          created_at: string
+        }>
+        assignees?: Array<{ id: string; user_id: string | null; name: string; role: string | null }>
+        remediation_plans?: Array<{
+          id: string
+          title: string
+          description: string
+          due_date: string
+          status: string
+          submitted_at: string | null
+          submitted_by: string | null
+          reviewed_at: string | null
+          reviewed_by: string | null
+          review_notes: string | null
+          created_at: string
+        }>
+        closure_request?: {
+          requested_at: string
+          requested_by: string
+          notes: string | null
+        } | null
+        closure_review?: {
+          reviewed_at: string
+          reviewed_by: string
+          approved: boolean
+          notes: string | null
+        } | null
+      }>(`/observations/${id}`)
       const previous = get().byId[id]
-      const observation = mapRow(row, previous)
+      const observation = mapRow(row, previous) as ObservationWithComments
+      // Hydrate nested children from the detail response.
+      if (row.checklist) {
+        observation.checklist = row.checklist.map((c) => ({
+          id: c.id,
+          text: c.text,
+          completed: c.completed,
+        }))
+      }
+      if (row.documents) {
+        observation.documents = row.documents.map((d) => ({
+          id: d.id,
+          name: d.name,
+          type: (d.type === 'pdf' || d.type === 'image' || d.type === 'doc'
+            ? d.type
+            : 'doc') as 'pdf' | 'image' | 'doc',
+        }))
+      }
+      if (row.updates) {
+        // Build the Comment[] view the modal reads via `storeObservation.comments`.
+        // The author field on Comment is typed as the full User; we only have an id +
+        // best-effort name from the assignee list, so we cast through unknown.
+        observation.comments = row.updates.map((u) => {
+          const authorName = previous?.assignees?.find((a) => a.id === u.author_id)?.name ?? 'User'
+          return {
+            id: u.id,
+            content: u.text,
+            author: {
+              id: u.author_id,
+              name: authorName,
+              avatar: authorName,
+            } as unknown as Comment['author'],
+            createdAt: u.created_at,
+          }
+        })
+        // Also map into observation.updates so legacy paths keep working.
+        observation.updates = row.updates.map((u) => {
+          const authorName = previous?.assignees?.find((a) => a.id === u.author_id)?.name ?? 'User'
+          return {
+            id: u.id,
+            authorId: u.author_id,
+            author: { name: authorName, avatar: authorName },
+            text: u.text,
+            createdAt: u.created_at,
+            isEdited: u.is_edited ?? false,
+            editedAt: u.edited_at ?? undefined,
+          }
+        })
+      }
+      if (row.assignees) {
+        observation.assignees = row.assignees.map((a) => ({
+          id: a.user_id ?? a.id,
+          name: a.name,
+          avatar: a.name,
+          role: a.role ?? '',
+        }))
+      }
+      if (row.remediation_plans && row.remediation_plans.length > 0) {
+        const latest = row.remediation_plans[0]
+        observation.remediationPlan = {
+          id: latest.id,
+          title: latest.title,
+          description: latest.description,
+          dueDate: latest.due_date,
+          status: latest.status as RemediationPlan['status'],
+          submittedAt: latest.submitted_at ?? undefined,
+          submittedBy: latest.submitted_by ?? undefined,
+          reviewedAt: latest.reviewed_at ?? undefined,
+          reviewedBy: latest.reviewed_by ?? undefined,
+          reviewNotes: latest.review_notes ?? undefined,
+          createdAt: latest.created_at,
+          documents: previous?.remediationPlan?.documents ?? [],
+        }
+      }
+      if (row.closure_request) {
+        observation.closureRequest = {
+          requestedAt: row.closure_request.requested_at,
+          requestedBy: row.closure_request.requested_by,
+          requestedByName: previous?.closureRequest?.requestedByName ?? '',
+          notes: row.closure_request.notes ?? undefined,
+        }
+      }
+      if (row.closure_review) {
+        observation.closureReview = {
+          reviewedAt: row.closure_review.reviewed_at,
+          reviewedBy: row.closure_review.reviewed_by,
+          reviewedByName: previous?.closureReview?.reviewedByName ?? '',
+          approved: row.closure_review.approved,
+          notes: row.closure_review.notes ?? undefined,
+        }
+      }
+      // Also fetch the timeline so the activity feed renders.
+      const timeline = await get().fetchTimeline(id)
+      observation.timeline = timeline.length > 0 ? timeline : (previous?.timeline ?? [])
+
       set((s) => ({
         byId: { ...s.byId, [id]: observation },
         observations: s.observations.some((o) => o.id === id)
           ? s.observations.map((o) => (o.id === id ? observation : o))
           : s.observations,
-        selectedObservation: observation as ObservationWithComments,
+        selectedObservation: observation,
         isLoading: false,
         lastFetched: Date.now(),
       }))
@@ -342,41 +479,91 @@ export const useObservationStore = create<ObservationState>()((set, get) => ({
 
   create: async (data, creator) => {
     requirePermission('Manage Audit Findings', { storeName: 'observation', actionName: 'create' })
-    set({ isMutating: true, error: null })
+    const reference = data.reference || get().getNextReference()
+    // Auto-add creator as assignee in the local mirror so the UI shows it.
+    const assignees = [...(data.assignees || [])]
+    if (creator && !assignees.some((a) => a.id === creator.id)) {
+      assignees.unshift({
+        id: creator.id,
+        name: creator.name,
+        avatar: creator.avatar || creator.name,
+        role: creator.role,
+      })
+    }
+    // OPTIMISTIC: insert a temp row immediately so the table refreshes without
+    // waiting for the server round-trip. On success we swap it for the real
+    // row; on failure we roll it back and surface the error.
+    const tempId = newTempId('temp-obs')
+    const now = new Date().toISOString()
+    const optimistic: Observation = {
+      ...(data as Omit<Observation, 'id' | 'createdAt' | 'updatedAt'>),
+      id: tempId,
+      reference,
+      assignees,
+      creatorId: creator?.id,
+      leaderId: data.leaderId ?? creator?.id,
+      documents: data.documents || [],
+      createdAt: now,
+      updatedAt: now,
+    } as Observation
+    set((s) => ({
+      observations: [optimistic, ...s.observations],
+      byId: { ...s.byId, [tempId]: optimistic },
+      isMutating: true,
+      error: null,
+    }))
     try {
-      const reference = data.reference || get().getNextReference()
-      // Auto-add creator as assignee in the local mirror so the UI shows it.
-      const assignees = [...(data.assignees || [])]
-      if (creator && !assignees.some((a) => a.id === creator.id)) {
-        assignees.unshift({
-          id: creator.id,
-          name: creator.name,
-          avatar: creator.avatar || creator.name,
-          role: creator.role,
-        })
-      }
       const row = await api.post<ObservationApiRow>('/observations', toCreatePayload({ ...data, reference }, reference))
       const created = mapRow(row)
       created.assignees = assignees
       created.documents = data.documents || []
       created.creatorId = creator?.id
       created.leaderId = created.leaderId ?? creator?.id
-      set((s) => ({
-        observations: [created, ...s.observations],
-        byId: { ...s.byId, [created.id]: created },
-        isMutating: false,
-      }))
+      set((s) => {
+        const { [tempId]: _drop, ...restById } = s.byId
+        return {
+          observations: s.observations.map((o) => (o.id === tempId ? created : o)),
+          byId: { ...restById, [created.id]: created },
+          isMutating: false,
+        }
+      })
       void get().fetchAll()
       return created
     } catch (e) {
-      set({ error: errorMessage(e, 'Failed to create observation'), isMutating: false })
+      // Roll back the optimistic insert.
+      set((s) => {
+        const { [tempId]: _drop, ...rest } = s.byId
+        return {
+          observations: s.observations.filter((o) => o.id !== tempId),
+          byId: rest,
+          error: errorMessage(e, 'Failed to create observation'),
+          isMutating: false,
+        }
+      })
       throw e
     }
   },
 
   update: async (id, data, editor) => {
     requirePermission('Manage Audit Findings', { storeName: 'observation', actionName: 'update', id })
-    set({ isMutating: true, error: null })
+    // OPTIMISTIC: snapshot, apply patch locally, then call the API in the
+    // background. On failure restore the snapshot.
+    const snapshot = get().byId[id]
+    if (snapshot) {
+      const localPatch = { ...snapshot, ...data, updatedAt: new Date().toISOString() } as Observation
+      set((s) => ({
+        observations: s.observations.map((o) => (o.id === id ? localPatch : o)),
+        byId: { ...s.byId, [id]: localPatch },
+        selectedObservation:
+          s.selectedObservation?.id === id
+            ? ({ ...s.selectedObservation, ...localPatch } as ObservationWithComments)
+            : s.selectedObservation,
+        isMutating: true,
+        error: null,
+      }))
+    } else {
+      set({ isMutating: true, error: null })
+    }
     try {
       const payload = toUpdatePayload(data)
       // Some fields the legacy code patched (assignees, remediationPlan,
@@ -443,27 +630,60 @@ export const useObservationStore = create<ObservationState>()((set, get) => ({
 
       return updated
     } catch (e) {
-      set({ error: errorMessage(e, 'Failed to update observation'), isMutating: false })
+      // Roll back to the pre-patch snapshot if we captured one.
+      if (snapshot) {
+        set((s) => ({
+          observations: s.observations.map((o) => (o.id === id ? snapshot : o)),
+          byId: { ...s.byId, [id]: snapshot },
+          selectedObservation:
+            s.selectedObservation?.id === id
+              ? ({ ...s.selectedObservation, ...snapshot } as ObservationWithComments)
+              : s.selectedObservation,
+          error: errorMessage(e, 'Failed to update observation'),
+          isMutating: false,
+        }))
+      } else {
+        set({ error: errorMessage(e, 'Failed to update observation'), isMutating: false })
+      }
       throw e
     }
   },
 
   delete: async (id) => {
     requirePermission('Manage Audit Findings', { storeName: 'observation', actionName: 'delete', id })
-    set({ isMutating: true, error: null })
+    // OPTIMISTIC: snapshot then remove immediately. Restore on failure.
+    const snapshot = get().byId[id]
+    const prevIndex = get().observations.findIndex((o) => o.id === id)
+    set((s) => {
+      const { [id]: _drop, ...rest } = s.byId
+      return {
+        observations: s.observations.filter((o) => o.id !== id),
+        byId: rest,
+        selectedObservation: s.selectedObservation?.id === id ? null : s.selectedObservation,
+        isMutating: true,
+        error: null,
+      }
+    })
     try {
       await api.delete(`/observations/${id}`)
-      set((s) => {
-        const { [id]: _drop, ...rest } = s.byId
-        return {
-          observations: s.observations.filter((o) => o.id !== id),
-          byId: rest,
-          selectedObservation: s.selectedObservation?.id === id ? null : s.selectedObservation,
-          isMutating: false,
-        }
-      })
+      set({ isMutating: false })
     } catch (e) {
-      set({ error: errorMessage(e, 'Failed to delete observation'), isMutating: false })
+      // Restore the deleted observation in its prior position.
+      if (snapshot) {
+        set((s) => {
+          const list = [...s.observations]
+          const insertAt = prevIndex >= 0 && prevIndex <= list.length ? prevIndex : list.length
+          list.splice(insertAt, 0, snapshot)
+          return {
+            observations: list,
+            byId: { ...s.byId, [id]: snapshot },
+            error: errorMessage(e, 'Failed to delete observation'),
+            isMutating: false,
+          }
+        })
+      } else {
+        set({ error: errorMessage(e, 'Failed to delete observation'), isMutating: false })
+      }
       throw e
     }
   },

@@ -1,14 +1,15 @@
-import { useMemo } from 'react'
+﻿import { useEffect, useMemo } from 'react'
 import { useAuditStore } from '@/stores/audit-store'
 import { useObservationStore } from '@/stores/observation-store'
 import { usePolicyStore } from '@/stores/policy-store'
-import { useSAMALetterStore } from '@/stores/sama-letter-store'
+import { useLetterStore } from '@/stores/letter-store'
 import { useCircularStore } from '@/stores/circular-store'
 import { useTrainingStore } from '@/stores/training-store'
 import { useCorrespondenceStore } from '@/stores/correspondence-store'
 import { useAdvisoryStore } from '@/stores/advisory-store'
 import { useRiskStore } from '@/stores/risk-store'
 import { useCalendarStore } from '@/stores/calendar-store'
+import { useCalendarEventTypeStore } from '@/stores/calendar-event-type-store'
 import type { UnifiedCalendarItem, CalendarSourceType } from '@/types'
 import { formatDateKey } from '@/components/calendar/calendar-utils'
 
@@ -23,13 +24,25 @@ export function useCalendarEvents() {
   const audits = useAuditStore((s) => s.audits)
   const observations = useObservationStore((s) => s.observations)
   const policies = usePolicyStore((s) => s.policies)
-  const letters = useSAMALetterStore((s) => s.letters)
+  const letters = useLetterStore((s) => s.letters)
   const circulars = useCircularStore((s) => s.circulars)
   const employees = useTrainingStore((s) => s.employees)
   const correspondence = useCorrespondenceStore((s) => s.correspondence)
   const advisoryRequests = useAdvisoryStore((s) => s.advisoryRequests)
   const risks = useRiskStore((s) => s.risks)
   const calendarEvents = useCalendarStore((s) => s.events)
+  const fetchCalendarEvents = useCalendarStore((s) => s.fetchAll)
+  const fetchCalendarEventTypes = useCalendarEventTypeStore((s) => s.fetchAll)
+
+  // Hydrate the user-created `calendar_events` collection and its `event_types`
+  // lookup on mount. Without this, freshly-signed-in users (or anyone after a
+  // page reload) see an empty list because the store starts cold. Server
+  // mutations already round-trip via `/api/calendar/*`; this just keeps the
+  // local mirror in sync with the server source of truth.
+  useEffect(() => {
+    void fetchCalendarEvents()
+    void fetchCalendarEventTypes()
+  }, [fetchCalendarEvents, fetchCalendarEventTypes])
 
   const items = useMemo(() => {
     const result: UnifiedCalendarItem[] = []

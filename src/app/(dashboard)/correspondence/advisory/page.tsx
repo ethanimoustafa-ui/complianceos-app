@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { usePathname, useSearchParams } from 'next/navigation'
@@ -10,6 +10,7 @@ import { cn } from '@/lib/utils'
 import { useTranslation } from '@/i18n'
 import type { TranslationKey } from '@/i18n'
 import { useAdvisoryStore } from '@/stores/advisory-store'
+import { CardSkeleton } from '@/components/ui/skeleton'
 import { useTeamStore } from '@/stores/team-store'
 import { useAuthStore } from '@/stores/auth-store'
 import { exportAdvisoryLocalized } from '@/lib/export'
@@ -53,6 +54,23 @@ export default function AdvisoryPage() {
   const addDepartment = useDepartmentStore((s) => s.addDepartment)
   const updateDepartment = useDepartmentStore((s) => s.updateDepartment)
   const removeDepartment = useDepartmentStore((s) => s.removeDepartment)
+
+  // Wave-2 Agent E: first-fetch skeleton.
+  const advisoryLoading = useAdvisoryStore((s) => s.isLoading)
+  const advisoryLastFetched = useAdvisoryStore((s) => s.lastFetched)
+  const showAdvisorySkeleton =
+    advisoryLoading && advisoryStore.advisoryRequests.length === 0 && advisoryLastFetched === null
+
+  // Hydrate server-state on mount — without this, refreshing the page
+  // shows an empty list because Zustand starts cold (Fix-1).
+  const fetchAdvisory = useAdvisoryStore((s) => s.fetchAll)
+  const fetchTeam = useTeamStore((s) => s.fetchAll)
+  const fetchDepartments = useDepartmentStore((s) => s.fetchAll)
+  useEffect(() => {
+    void fetchAdvisory()
+    void fetchTeam()
+    void fetchDepartments()
+  }, [fetchAdvisory, fetchTeam, fetchDepartments])
 
   const [toastMessage, setToastMessage] = useState<string | null>(null)
 
@@ -195,6 +213,10 @@ export default function AdvisoryPage() {
   const handleViewAdvisory = (advisory: AdvisoryRequest) => {
     setSelectedAdvisory(advisory)
     setIsAdvisoryDetailOpen(true)
+    // Hydrate notes / discussion thread from the server when opening the modal.
+    void useAdvisoryStore.getState().fetchById(advisory.id).then((fresh) => {
+      if (fresh) setSelectedAdvisory(fresh)
+    }).catch(() => { /* best-effort hydrate */ })
   }
 
   return (
@@ -209,7 +231,7 @@ export default function AdvisoryPage() {
           <div className="hidden lg:flex gap-2">
             <Link href="/correspondence/letters" className={`px-3 py-1.5 text-xs font-bold text-slate-600 bg-slate-50 hover:bg-slate-100 rounded-lg border border-slate-200 flex items-center gap-2`}>
               <Icon icon="lucide:mail" className="text-emerald-500" />
-              {t('samaLetters.tabLetters' as TranslationKey)}
+              {t('letters.tabLetters' as TranslationKey)}
             </Link>
             <Link href="/correspondence/regulatory-updates" className={`px-3 py-1.5 text-xs font-bold text-slate-600 bg-slate-50 hover:bg-slate-100 rounded-lg border border-slate-200 flex items-center gap-2`}>
               <Icon icon="lucide:refresh-cw" className="text-blue-500" />
@@ -379,7 +401,8 @@ export default function AdvisoryPage() {
 
           {/* Advisory Requests List */}
           <div className="space-y-4">
-            {paginatedAdvisory.map((advisory) => {
+            {showAdvisorySkeleton && <CardSkeleton count={4} />}
+            {!showAdvisorySkeleton && paginatedAdvisory.map((advisory) => {
               const statusConfig = advisoryStatusConfig[advisory.status]
               const priorityConfig = advisoryPriorityConfig[advisory.priority]
               return (

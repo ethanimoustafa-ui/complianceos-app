@@ -1,4 +1,4 @@
-// DELETE /api/letters/[letterId]/attachments/[attachmentId]
+﻿// DELETE /api/letters/[letterId]/attachments/[attachmentId]
 
 import type { NextRequest } from 'next/server'
 import { requirePerm } from '@/lib/api/auth'
@@ -6,10 +6,7 @@ import { handle } from '@/lib/api/errors'
 import { ok } from '@/lib/api/response'
 import { cacheTags, revalidateAll } from '@/lib/api/cache'
 import { writeAudit } from '@/lib/api/audit'
-import {
-  assertLetterExists,
-  insertLetterTimeline,
-} from '@/lib/api/services/letters'
+import { assertLetterExists } from '@/lib/api/services/letters'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -23,34 +20,27 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
     await assertLetterExists(supabase, letterId)
 
     const { error } = await supabase
-      .from('sama_letter_attachments')
+      .from('letter_attachments')
       .delete()
       .eq('id', attachmentId)
       .eq('letter_id', letterId)
     if (error) throw error
 
-    await Promise.all([
-      writeAudit({
-        actor_id: user.id,
-        actor_name: profile.name ?? profile.email ?? user.id,
-        action: 'sama_letter.attachment.delete',
-        entity_type: 'sama_letter_attachment',
-        entity_id: attachmentId,
-        metadata: { letter_id: letterId },
-        supabase,
-      }),
-      insertLetterTimeline(
-        supabase,
-        letterId,
-        'Attachment deleted',
-        profile.name ?? profile.email ?? user.id,
-        'completed',
-      ),
-    ])
+    // Audit log only — attachment lifecycle is too noisy for the workflow
+    // timeline. (Fix-3 wave.)
+    await writeAudit({
+      actor_id: user.id,
+      actor_name: profile.name ?? profile.email ?? user.id,
+      action: 'letter.attachment.delete',
+      entity_type: 'letter_attachment',
+      entity_id: attachmentId,
+      metadata: { letter_id: letterId },
+      supabase,
+    })
 
     revalidateAll([
-      cacheTags.samaLetters(letterId),
-      cacheTags.samaLetterAttachments(letterId),
+      cacheTags.letters(letterId),
+      cacheTags.letterAttachments(letterId),
     ])
     return ok({ id: attachmentId, deleted: true })
   } catch (e) {

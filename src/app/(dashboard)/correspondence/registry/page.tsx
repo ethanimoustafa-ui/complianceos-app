@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Icon } from '@iconify/react'
@@ -42,6 +42,14 @@ export default function RegistryPage() {
   const { circulars, setSelected: setSelectedCircular } = useCircularStore()
   const { policies, setSelected: setSelectedPolicy } = usePolicyStore()
   const router = useRouter()
+
+  // Hydrate server-state on mount (Fix-1).
+  const fetchCirculars = useCircularStore((s) => s.fetchAll)
+  const fetchPolicies = usePolicyStore((s) => s.fetchAll)
+  useEffect(() => {
+    void fetchCirculars()
+    void fetchPolicies()
+  }, [fetchCirculars, fetchPolicies])
 
   // Registry view filters
   const [searchTerm, setSearchTerm] = useState('')

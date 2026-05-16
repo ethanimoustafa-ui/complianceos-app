@@ -39,9 +39,9 @@ export async function GET(_req: NextRequest, { params }: Params) {
 
 export async function PATCH(req: NextRequest, { params }: Params) {
   try {
-    const { observationId } = await params
+    const { observationId: observationIdParam } = await params
     const { supabase, user, profile } = await requirePerm('observation:edit')
-    await assertObservationExists(supabase, observationId)
+    const observationId = await assertObservationExists(supabase, observationIdParam)
     const patch = await parseJson(req, UpdateObservationSchema)
 
     const update: Record<string, unknown> = {}
@@ -93,9 +93,9 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 
 export async function DELETE(_req: NextRequest, { params }: Params) {
   try {
-    const { observationId } = await params
+    const { observationId: observationIdParam } = await params
     const { supabase, user, profile } = await requirePerm('observation:delete')
-    await assertObservationExists(supabase, observationId)
+    const observationId = await assertObservationExists(supabase, observationIdParam)
 
     const { error } = await supabase
       .from('observations')

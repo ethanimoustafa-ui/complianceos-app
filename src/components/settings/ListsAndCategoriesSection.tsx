@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 // "Lists & Categories" — bulk management surface for every editable dropdown
 // store the app exposes. Each section is a table with EN/AR labels, default
@@ -24,7 +24,7 @@ import { EditableSelect } from '@/components/ui/editable-select'
 
 // ── Stores actually used to count usage ──────────────────────────────────────
 import { Gate } from '@/components/auth/gate'
-import { useSAMALetterStore } from '@/stores/sama-letter-store'
+import { useLetterStore } from '@/stores/letter-store'
 import { useCalendarStore } from '@/stores/calendar-store'
 import { useAdvisoryStore } from '@/stores/advisory-store'
 import { usePolicyStore } from '@/stores/policy-store'
@@ -35,7 +35,7 @@ import { useRiskStore } from '@/stores/risk-store'
 // ── My stores ────────────────────────────────────────────────────────────────
 import { useFrameworkSubCategoryStore } from '@/stores/framework-sub-category-store'
 import { useFrameworkConfigStore } from '@/stores/framework-config-store'
-import { useSAMALetterTypeStore } from '@/stores/sama-letter-type-store'
+import { useLetterTypeStore } from '@/stores/letter-type-store'
 import { usePolicyCategoryStore } from '@/stores/policy-category-store'
 import { useTrainingCategoryStore } from '@/stores/training-category-store'
 import { useAuditCategoryStore } from '@/stores/audit-category-store'
@@ -364,7 +364,7 @@ interface FrameworkSubCategoryLauncherProps {
 function FrameworkSubCategoryLauncher({ isRTL, t }: FrameworkSubCategoryLauncherProps) {
   const frameworkConfig = useFrameworkConfigStore()
   const subCategoryStore = useFrameworkSubCategoryStore()
-  const letters = useSAMALetterStore((s) => s.letters)
+  const letters = useLetterStore((s) => s.letters)
 
   const [openFrameworkId, setOpenFrameworkId] = useState<string | null>(null)
 
@@ -505,14 +505,14 @@ export function ListsAndCategoriesSection() {
   const { t, isRTL } = useTranslation()
 
   // ── My stores
-  const letterType = useSAMALetterTypeStore()
+  const letterType = useLetterTypeStore()
   const policyCat = usePolicyCategoryStore()
   const trainingCat = useTrainingCategoryStore()
   const auditCat = useAuditCategoryStore()
   const riskCat = useRiskCategoryStore()
 
   // ── Counter sources
-  const letters = useSAMALetterStore((s) => s.letters)
+  const letters = useLetterStore((s) => s.letters)
   const calendarEvents = useCalendarStore((s) => s.events)
   const advisory = useAdvisoryStore((s) => s.advisoryRequests)
   const policies = usePolicyStore((s) => s.policies)

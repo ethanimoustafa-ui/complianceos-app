@@ -1,4 +1,4 @@
-// /api/letter-templates/[templateId] — PATCH / DELETE letter template.
+﻿// /api/letter-templates/[templateId] — PATCH / DELETE letter template.
 
 import type { NextRequest } from 'next/server'
 import { requirePerm } from '@/lib/api/auth'
@@ -25,7 +25,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     for (const [k, v] of Object.entries(patch)) if (v !== undefined) update[k] = v
 
     const { data, error } = await supabase
-      .from('sama_letter_templates')
+      .from('letter_templates')
       .update(update)
       .eq('id', templateId)
       .select(LETTER_TEMPLATE_COLUMNS)
@@ -35,14 +35,14 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     await writeAudit({
       actor_id: user.id,
       actor_name: profile.name ?? profile.email ?? user.id,
-      action: 'sama_letter_template.update',
-      entity_type: 'sama_letter_template',
+      action: 'letter_template.update',
+      entity_type: 'letter_template',
       entity_id: templateId,
       metadata: { fields: Object.keys(update) },
       supabase,
     })
 
-    revalidate(cacheTags.samaLetterTemplates())
+    revalidate(cacheTags.letterTemplates())
     return ok(data)
   } catch (e) {
     return handle(e)
@@ -55,7 +55,7 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
     const { supabase, user, profile } = await requirePerm('settings:edit')
 
     const { error } = await supabase
-      .from('sama_letter_templates')
+      .from('letter_templates')
       .delete()
       .eq('id', templateId)
     if (error) throw error
@@ -63,13 +63,13 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
     await writeAudit({
       actor_id: user.id,
       actor_name: profile.name ?? profile.email ?? user.id,
-      action: 'sama_letter_template.delete',
-      entity_type: 'sama_letter_template',
+      action: 'letter_template.delete',
+      entity_type: 'letter_template',
       entity_id: templateId,
       supabase,
     })
 
-    revalidate(cacheTags.samaLetterTemplates())
+    revalidate(cacheTags.letterTemplates())
     return ok({ id: templateId, deleted: true })
   } catch (e) {
     return handle(e)

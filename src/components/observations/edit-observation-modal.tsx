@@ -10,6 +10,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { cn } from '@/lib/utils'
 import { useTeamStore } from '@/stores/team-store'
+import { useDepartmentStore } from '@/stores/department-store'
 import { useFrameworkConfigStore } from '@/stores/framework-config-store'
 import { useTranslation } from '@/i18n'
 import type { TeamMember, RegulatoryBodyId } from '@/types'
@@ -86,6 +87,15 @@ export const EditObservationModal = memo(function EditObservationModal({
   const [frameworkIds, setFrameworkIds] = useState<RegulatoryBodyId[]>([])
   const { members } = useTeamStore()
   const activeMembers = useMemo(() => members.filter(m => m.status === 'active'), [members])
+
+  // Hydrate department list when the modal opens — same reason as the add modal.
+  const fetchDepartments = useDepartmentStore((s) => s.fetchAll)
+  const departmentsLoaded = useDepartmentStore((s) => s.lastFetched != null)
+  useEffect(() => {
+    if (isOpen && !departmentsLoaded) {
+      void fetchDepartments()
+    }
+  }, [isOpen, departmentsLoaded, fetchDepartments])
 
   const {
     control,

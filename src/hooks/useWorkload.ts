@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useMemo } from 'react'
 import { useObservationStore } from '@/stores/observation-store'
@@ -6,7 +6,7 @@ import { useAuditStore } from '@/stores/audit-store'
 import { usePolicyStore } from '@/stores/policy-store'
 import { useCorrespondenceStore } from '@/stores/correspondence-store'
 import { useAdvisoryStore } from '@/stores/advisory-store'
-import { useSAMALetterStore } from '@/stores/sama-letter-store'
+import { useLetterStore } from '@/stores/letter-store'
 import { useRiskStore } from '@/stores/risk-store'
 import { useCircularStore } from '@/stores/circular-store'
 
@@ -39,7 +39,7 @@ function computeWorkload(
   policies: ReturnType<typeof usePolicyStore.getState>['policies'],
   correspondence: ReturnType<typeof useCorrespondenceStore.getState>['correspondence'],
   advisoryRequests: ReturnType<typeof useAdvisoryStore.getState>['advisoryRequests'],
-  samaLetters: ReturnType<typeof useSAMALetterStore.getState>['letters'],
+  samaLetters: ReturnType<typeof useLetterStore.getState>['letters'],
   risks: ReturnType<typeof useRiskStore.getState>['risks'],
   circulars: ReturnType<typeof useCircularStore.getState>['circulars'],
   member?: { burnoutSince?: string; assignments?: { title: string; dueDate: string; progress?: number }[] },
@@ -144,7 +144,7 @@ export function useWorkload(memberId: string, member?: { burnoutSince?: string; 
   const policies = usePolicyStore(s => s.policies)
   const correspondence = useCorrespondenceStore(s => s.correspondence)
   const advisoryRequests = useAdvisoryStore(s => s.advisoryRequests)
-  const samaLetters = useSAMALetterStore(s => s.letters)
+  const samaLetters = useLetterStore(s => s.letters)
   const risks = useRiskStore(s => s.risks)
   const circulars = useCircularStore(s => s.circulars)
 
@@ -160,7 +160,7 @@ export function useTeamWorkloads(members: Array<{ id: string; name: string; burn
   const policies = usePolicyStore(s => s.policies)
   const correspondence = useCorrespondenceStore(s => s.correspondence)
   const advisoryRequests = useAdvisoryStore(s => s.advisoryRequests)
-  const samaLetters = useSAMALetterStore(s => s.letters)
+  const samaLetters = useLetterStore(s => s.letters)
   const risks = useRiskStore(s => s.risks)
   const circulars = useCircularStore(s => s.circulars)
 

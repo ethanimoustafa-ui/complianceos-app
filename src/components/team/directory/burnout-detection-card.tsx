@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useState } from 'react'
 import { Icon } from '@iconify/react'
@@ -13,7 +13,7 @@ import { useAuditStore } from '@/stores/audit-store'
 import { usePolicyStore } from '@/stores/policy-store'
 import { useCorrespondenceStore } from '@/stores/correspondence-store'
 import { useAdvisoryStore } from '@/stores/advisory-store'
-import { useSAMALetterStore } from '@/stores/sama-letter-store'
+import { useLetterStore } from '@/stores/letter-store'
 import { useRiskStore } from '@/stores/risk-store'
 import { useCircularStore } from '@/stores/circular-store'
 import { useDepartmentStore } from '@/stores/department-store'
@@ -98,7 +98,7 @@ function reassignItem(item: WorkloadItem, fromMemberName: string, toMember: { id
       break
     }
     case 'sama-letter': {
-      const store = useSAMALetterStore.getState()
+      const store = useLetterStore.getState()
       store.update(item.id, { assignedTo: toMember.name })
       break
     }

@@ -1,4 +1,4 @@
-// POST /api/letters/[letterId]/reject-step
+﻿// POST /api/letters/[letterId]/reject-step
 //   body: { step_index: 1|2|3, reason: string }
 // Rejects the current step → letter status `rejected` (modelled as `draft`
 // per current enum which lacks an explicit `rejected` state; rejection rolls
@@ -31,7 +31,7 @@ export async function POST(req: NextRequest, { params }: Params) {
     const body = await parseJson(req, RejectStepSchema)
 
     const { data: letter, error: lErr } = await supabase
-      .from('sama_letters')
+      .from('letters')
       .select('id, status')
       .eq('id', letterId)
       .is('deleted_at', null)
@@ -47,7 +47,7 @@ export async function POST(req: NextRequest, { params }: Params) {
 
     const now = new Date().toISOString()
     const { error: updErr } = await supabase
-      .from('sama_letter_approval_steps')
+      .from('letter_approval_steps')
       .update({ status: 'rejected', rejected_at: now, notes: body.reason })
       .eq('letter_id', letterId)
       .eq('step', body.step_index)
@@ -58,14 +58,14 @@ export async function POST(req: NextRequest, { params }: Params) {
     // is untouched). The earlier-approved steps are reset to pending so the
     // chain restarts cleanly.
     const { error: resetErr } = await supabase
-      .from('sama_letter_approval_steps')
+      .from('letter_approval_steps')
       .update({ status: 'pending', approved_at: null, rejected_at: null, notes: null })
       .eq('letter_id', letterId)
       .lt('step', body.step_index)
     if (resetErr) throw resetErr
 
     const { data, error } = await supabase
-      .from('sama_letters')
+      .from('letters')
       .update({ status: 'draft' })
       .eq('id', letterId)
       .select(LETTER_LIST_COLUMNS)
@@ -76,8 +76,8 @@ export async function POST(req: NextRequest, { params }: Params) {
       writeAudit({
         actor_id: user.id,
         actor_name: profile.name ?? profile.email ?? user.id,
-        action: 'sama_letter.approval_step_committed',
-        entity_type: 'sama_letter',
+        action: 'letter.approval_step_committed',
+        entity_type: 'letter',
         entity_id: letterId,
         metadata: { step: body.step_index, decision: 'rejected', reason: body.reason },
         supabase,
@@ -91,7 +91,7 @@ export async function POST(req: NextRequest, { params }: Params) {
       ),
     ])
 
-    revalidateAll([cacheTags.samaLetters(), cacheTags.samaLetters(letterId)])
+    revalidateAll([cacheTags.letters(), cacheTags.letters(letterId)])
     return ok(data)
   } catch (e) {
     return handle(e)

@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useState, useMemo } from 'react'
 import { Icon } from '@iconify/react'
@@ -7,10 +7,10 @@ import { Modal } from '@/components/ui/modal'
 import { Button } from '@/components/ui/button'
 import { useTranslation } from '@/i18n'
 import type { TranslationKey } from '@/i18n'
-import type { PolicyWorkflowStep, PolicyEvidence, PolicyAttachment, SAMALetterApprovalStep } from '@/types'
+import type { PolicyWorkflowStep, PolicyEvidence, PolicyAttachment, LetterApprovalStep } from '@/types'
 import { RoleGuard } from '@/components/auth/role-guard'
 import { usePolicyStore } from '@/stores/policy-store'
-import { useSAMALetterStore } from '@/stores/sama-letter-store'
+import { useLetterStore } from '@/stores/letter-store'
 import { useAuthStore } from '@/stores/auth-store'
 import Link from 'next/link'
 
@@ -26,7 +26,7 @@ interface ApprovalItem {
   workflowTimeline?: PolicyWorkflowStep[]
   evidence?: PolicyEvidence[]
   attachments?: PolicyAttachment[]
-  approvalChain?: SAMALetterApprovalStep[]
+  approvalChain?: LetterApprovalStep[]
 }
 
 export function PendingApprovalsCard() {
@@ -35,9 +35,9 @@ export function PendingApprovalsCard() {
   const policies = usePolicyStore((s) => s.policies)
   const policyApprove = usePolicyStore((s) => s.approve)
   const policyUpdate = usePolicyStore((s) => s.update)
-  const letters = useSAMALetterStore((s) => s.letters)
-  const approveLetterStep = useSAMALetterStore((s) => s.approveStep)
-  const rejectLetterStep = useSAMALetterStore((s) => s.rejectStep)
+  const letters = useLetterStore((s) => s.letters)
+  const approveLetterStep = useLetterStore((s) => s.approveStep)
+  const rejectLetterStep = useLetterStore((s) => s.rejectStep)
 
   const [page, setPage] = useState(0)
   const [selectedItem, setSelectedItem] = useState<ApprovalItem | null>(null)
