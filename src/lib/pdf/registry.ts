@@ -20,13 +20,15 @@ interface Face {
 }
 
 const FACES: Face[] = [
-  // Latin — Inter
-  { family: 'Inter', file: 'Inter-Regular.ttf', fontWeight: 400 },
-  { family: 'Inter', file: 'Inter-Medium.ttf',  fontWeight: 500 },
-  { family: 'Inter', file: 'Inter-Bold.ttf',    fontWeight: 700 },
-  // Arabic — Amiri
-  { family: 'Amiri', file: 'Amiri-Regular.ttf', fontWeight: 400 },
-  { family: 'Amiri', file: 'Amiri-Bold.ttf',    fontWeight: 700 },
+  // Latin — Inter (using 18pt optical size for body text rendering)
+  { family: 'Inter', file: 'static-inter/Inter_18pt-Regular.ttf', fontWeight: 400 },
+  { family: 'Inter', file: 'static-inter/Inter_18pt-Medium.ttf',  fontWeight: 500 },
+  { family: 'Inter', file: 'static-inter/Inter_18pt-Bold.ttf',    fontWeight: 700 },
+  // Arabic — Amiri (Regular + Bold + their italic variants)
+  { family: 'Amiri', file: 'static-amiri/Amiri-Regular.ttf',    fontWeight: 400 },
+  { family: 'Amiri', file: 'static-amiri/Amiri-Bold.ttf',       fontWeight: 700 },
+  { family: 'Amiri', file: 'static-amiri/Amiri-Italic.ttf',     fontWeight: 400, fontStyle: 'italic' },
+  { family: 'Amiri', file: 'static-amiri/Amiri-BoldItalic.ttf', fontWeight: 700, fontStyle: 'italic' },
 ]
 
 /**

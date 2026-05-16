@@ -64,7 +64,7 @@
 | Branch | `main` |
 | Test admin (local) | `admin@complianceos.local` / `ComplianceOS!2026` (id `c5a105da-4b42-4152-abbc-af517e8c70cc`, role `org_admin`) |
 | `SUPABASE_SERVICE_ROLE_KEY` | **BLANK in .env.local** — user must paste from Studio → Project Settings → API → service_role |
-| TTF fonts for PDF | NOT yet placed in `public/fonts/` — `README.md` there lists the 5 files needed (Amiri Regular/Bold + Inter Regular/Medium/Bold) |
+| TTF fonts for PDF | Present at `public/fonts/static-amiri/` (4 Amiri TTFs) and `public/fonts/static-inter/` (full Inter family, 18/24/28pt × all weights). Registry uses `Inter_18pt-{Regular,Medium,Bold}` + `Amiri-{Regular,Bold,Italic,BoldItalic}` |
 
 ---
 
@@ -207,7 +207,7 @@ The 🔴 + 🟡 items above split cleanly into 3 disjoint workstreams. **Spawn t
 - **Don't change RLS policies on append-only timelines** without understanding the `REVOKE UPDATE/DELETE` + trigger pattern (§5 gotcha #7).
 - **Don't add `tenant_id`** — see §3 constraint #1.
 - **Don't replace `@react-pdf/renderer`** with anything heavier — see §3 constraint #9.
-- **Don't commit `.env.local`, `.env*`, `node_modules/`, `test-results/`, `playwright-report/`, `.next/`, `.vercel/`, `*.tsbuildinfo`, `public/fonts/*.ttf`.** `.gitignore` covers these.
+- **Don't commit `.env.local`, `.env*`, `node_modules/`, `test-results/`, `playwright-report/`, `.next/`, `.vercel/`, `*.tsbuildinfo`.** `.gitignore` covers these. The `public/fonts/static-amiri/` and `public/fonts/static-inter/` directories are intentionally tracked — they ship with the repo (OFL-licensed, see `public/fonts/README.md`).
 - **Don't `git push --force`** to main. Always inspect `git status` + `git remote -v` before pushing.
 - **Don't try to delete the old Supabase project (`pamfhghrjfizlbhdfycu`)** via MCP — it's on a different account and not reachable. User deletes it manually from Studio.
 

@@ -58,7 +58,10 @@ next-env.d.ts
 /blob-report
 /playwright/.cache
 
-# PDF fonts — user-downloaded TTFs; README.md in public/fonts/ stays committed
+# PDF fonts — exclude any stray TTFs/OTFs dropped at the top level of
+# public/fonts/. The README.md there + the curated subdirectories
+# (public/fonts/static-amiri/, public/fonts/static-inter/) are tracked.
+# These globs are deliberately non-recursive so subdir TTFs ship with the repo.
 public/fonts/*.ttf
 public/fonts/*.otf
 
