@@ -1,0 +1,124 @@
+ComplianceOS — Technical Concerns Raised by Talha Husnain
+Source: Proposal dated April 20, 2026, Section 1.1 "Five pushbacks" and Section 1.3 "One risk on the record now"
+
+---
+
+1. SELF-HOSTED GOTRUE IS THE WRONG AUTH CHOICE
+
+GoTrue is the auth component of Supabase, forked from Netlify. It is designed as
+a building block of Supabase, not a standalone production auth service.
+
+For the feature surface the scope specifies (refresh token rotation with theft
+detection, TOTP MFA, session revocation, account lockout, audit hooks), the
+better defaults are:
+
+  - Ory Kratos: API-first, Apache-2.0 licensed, sub-second startup, production
+    references include OpenAI, Cisco, Klarna.
+  - Keycloak: RedHat-backed, enterprise-grade, SAMA auditors will recognize the
+    brand.
+  - Custom Express auth: last resort only.
+
+Recommendation: treat auth-product selection as a Discovery-week spike rather
+than a defaulted choice in the scope doc.
+
+---
+
+2. CONFIRM GCP DAMMAM COMMERCIAL PATH BEFORE M1
+
+Access to the GCP me-central2 (Dammam) region for KSA-based customers is only
+available through CNTXT, Google's exclusive reseller in the Kingdom. This is a
+contractual constraint, not a technical one.
+
+If the CNTXT contract is not in place when M1 begins, terraform apply is
+blocked. M1 cannot proceed until the commercial path is open.
+
+Viable alternatives if CNTXT procurement is slow:
+  - AWS me-central-2 (Riyadh region, live since January 2026, direct
+    procurement, no exclusive reseller).
+  - STC Cloud (SAMA-native, used by Saudi government and multinationals,
+    in-kingdom procurement).
+
+Recommendation: produce a one-page decision matrix comparing GCP via CNTXT, AWS
+me-central-2, and STC Cloud in Discovery, and finalize the cloud provider
+before M1 pricing locks.
+
+---
+
+3. USE ONE LATEX ENGINE, NOT TWO
+
+The current scope lists pdflatex for English templates and xelatex with
+polyglossia for Arabic. xelatex handles English equally well with native
+Unicode and OpenType font support.
+
+Maintaining two LaTeX pipelines means:
+  - Two preambles to keep in sync.
+  - Two font pipelines.
+  - Two CI caches.
+  - Two ways the rendering can silently diverge between languages.
+
+The compile-time delta is hundreds of milliseconds on on-demand reports, which
+does not matter for this use case.
+
+Recommendation: xelatex plus polyglossia for every template. One engine, one
+preamble, one tested path.
+
+---
+
+4. PORT THE SCORING ENGINE AS A MIGRATION, NOT A COPY
+
+If the frontend keeps its 585-line scoring engine and the server runs its own
+copy of the same logic, any user with browser dev tools can see the weights
+and thresholds driving every tenant's scores.
+
+  - Low risk in the single-tenant v1 deployment.
+  - Tenant-on-tenant confidentiality issue in the multi-tenant SaaS that the
+    scope targets at Scale.
+
+Recommendation: once the server port passes golden tests, the frontend stops
+computing scores and reads them from the API. One API call replaces one
+in-browser calculation.
+
+This should be an explicit M5 deliverable, not a frontend-team afterthought.
+
+Discovery question to answer: can the frontend team absorb this change during
+M5, or is frontend code frozen at that point?
+
+---
+
+5. AUDIT LOG SHOULD BE APPEND-ONLY AT THE DATABASE ROLE LEVEL
+
+The scope specifies that every mutation writes an audit_log row. It does not
+specify whether audit_log is tamper-proof.
+
+The question SAMA auditors ask is not "do you write audit logs" but "can
+anyone with database access modify or delete rows after the fact".
+
+Two-line mitigation in M3:
+  - Revoke UPDATE and DELETE on audit_log from the application role.
+  - INSERT only.
+  - Retention purges run under a separate admin role invoked by a scheduled
+    pg-boss job with its own audit trail.
+
+Recommendation: include the append-only role enforcement as part of the M3
+exit gate.
+
+---
+
+SEPARATE RISK FLAGGED IN SECTION 1.3: TIMELINE
+
+The scope moved from 6 weeks to 8 weeks for Build, and simultaneously added
+the full GCP infrastructure surface plus self-hosted auth on top of the
+application work. That is a net scope expansion, not a simple extension.
+
+8 weeks for the combined load (14 modules, full Terraform across three
+environments, self-hosted auth to the full feature surface, scoring engine
+port, bilingual PDF pipeline) is still tight for one engineer working full-time.
+
+Mitigation already present in the scope: milestone-pinned delivery. If M1
+runs long, calendar extends rather than ship incomplete work.
+
+Flagged to avoid being a surprise at M3.
+
+---
+
+END OF DOCUMENT

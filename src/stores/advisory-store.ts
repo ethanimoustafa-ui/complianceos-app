@@ -1,305 +1,365 @@
+// Advisory request store — Phase 5 server-state migration.
+//
+// Read `.planning/09-store-pattern.md` before editing.
+// Endpoints: GET/POST /api/advisory, GET/PATCH/DELETE /api/advisory/[advisoryId]
+//
+// Reference numbers (ADV-NNNN) are server-generated on POST.
+//
+// SKELETON-LOADING NOTE: render skeleton when
+// `isLoading && advisoryRequests.length === 0` (first fetch). After the first
+// fetch a refetch shows stale data with a subtle indicator while
+// `isLoading === true`.
+
 import { create } from 'zustand'
-import { persist } from 'zustand/middleware'
-import type { AdvisoryRequest, AdvisoryNote, AdvisoryFilters, AdvisoryStatus, PaginationState, SortState } from '@/types'
+import type {
+  AdvisoryRequest,
+  AdvisoryNote,
+  AdvisoryFilters,
+  AdvisoryStatus,
+  PaginationState,
+  SortState,
+  BusinessUnit,
+  AdvisoryPriority,
+} from '@/types'
+import { api, ApiClientError } from '@/lib/api-client'
+
+// ---------- API row shapes (snake_case from Route Handlers) -----------------
+
+interface AdvisoryApiRow {
+  id: string
+  ref: string
+  subject: string
+  description?: string
+  business_unit: string
+  status: string
+  priority: string
+  requested_by: string
+  requested_date: string
+  assigned_to: string | null
+  created_at: string
+  updated_at: string
+  // Present on detail responses:
+  notes?: AdvisoryNoteApiRow[]
+}
+
+interface AdvisoryNoteApiRow {
+  id: string
+  request_id: string
+  author: string
+  content: string
+  created_at: string
+}
+
+function mapNote(row: AdvisoryNoteApiRow): AdvisoryNote {
+  return {
+    id: row.id,
+    author: row.author,
+    content: row.content,
+    timestamp: row.created_at,
+  }
+}
+
+function mapRow(row: AdvisoryApiRow, previous?: AdvisoryRequest): AdvisoryRequest {
+  return {
+    id: row.id,
+    ref: row.ref,
+    subject: row.subject,
+    description: row.description ?? previous?.description ?? '',
+    businessUnit: row.business_unit as BusinessUnit,
+    status: row.status as AdvisoryStatus,
+    priority: row.priority as AdvisoryPriority,
+    requestedBy: row.requested_by,
+    requestedDate: row.requested_date,
+    assignedTo: row.assigned_to ?? undefined,
+    notes: row.notes ? row.notes.map(mapNote) : previous?.notes ?? [],
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  }
+}
+
+function toCreatePayload(
+  data: Omit<AdvisoryRequest, 'id' | 'ref' | 'notes' | 'createdAt' | 'updatedAt'>,
+): Record<string, unknown> {
+  return {
+    subject: data.subject,
+    description: data.description,
+    business_unit: data.businessUnit,
+    status: data.status,
+    priority: data.priority,
+    requested_by: data.requestedBy,
+    requested_date: data.requestedDate,
+    assigned_to: data.assignedTo || undefined,
+  }
+}
+
+function toUpdatePayload(patch: Partial<AdvisoryRequest>): Record<string, unknown> {
+  const out: Record<string, unknown> = {}
+  if (patch.subject !== undefined) out.subject = patch.subject
+  if (patch.description !== undefined) out.description = patch.description
+  if (patch.businessUnit !== undefined) out.business_unit = patch.businessUnit
+  if (patch.status !== undefined) out.status = patch.status
+  if (patch.priority !== undefined) out.priority = patch.priority
+  if (patch.requestedBy !== undefined) out.requested_by = patch.requestedBy
+  if (patch.requestedDate !== undefined) out.requested_date = patch.requestedDate
+  if (patch.assignedTo !== undefined) out.assigned_to = patch.assignedTo || undefined
+  return out
+}
+
+function errorMessage(e: unknown, fallback: string): string {
+  if (e instanceof ApiClientError) return e.message
+  if (e instanceof Error) return e.message
+  return fallback
+}
+
+// ---------- store ----------------------------------------------------------
 
 interface AdvisoryState {
   advisoryRequests: AdvisoryRequest[]
+  byId: Record<string, AdvisoryRequest>
   selectedRequest: AdvisoryRequest | null
   filters: AdvisoryFilters
   pagination: PaginationState
   sort: SortState
-  isLoading: boolean
-  error: string | null
 
-  // Actions
-  fetchAll: () => void
-  fetchById: (id: string) => AdvisoryRequest | null
-  create: (data: Omit<AdvisoryRequest, 'id' | 'ref' | 'notes' | 'createdAt' | 'updatedAt'>) => AdvisoryRequest
-  update: (id: string, data: Partial<AdvisoryRequest>) => AdvisoryRequest
-  delete: (id: string) => void
-  addNote: (id: string, note: { author: string; content: string }) => void
-  updateStatus: (id: string, status: AdvisoryStatus) => void
-  reassign: (id: string, newAssignee: string) => void
+  // First-fetch detector: `isLoading && advisoryRequests.length === 0`.
+  isLoading: boolean
+  isMutating: boolean
+  error: string | null
+  lastFetched: number | null
+
+  fetchAll: (opts?: {
+    page?: number
+    pageSize?: number
+    filters?: Partial<AdvisoryFilters>
+  }) => Promise<void>
+  fetchById: (id: string) => Promise<AdvisoryRequest | null>
+  create: (
+    data: Omit<AdvisoryRequest, 'id' | 'ref' | 'notes' | 'createdAt' | 'updatedAt'>,
+  ) => Promise<AdvisoryRequest>
+  update: (id: string, data: Partial<AdvisoryRequest>) => Promise<AdvisoryRequest>
+  delete: (id: string) => Promise<void>
+  addNote: (id: string, note: { author: string; content: string }) => Promise<void>
+  updateStatus: (id: string, status: AdvisoryStatus) => Promise<void>
+  reassign: (id: string, newAssignee: string) => Promise<void>
   setFilters: (filters: AdvisoryFilters) => void
   clearFilters: () => void
   setSelected: (request: AdvisoryRequest | null) => void
   setSort: (sort: SortState) => void
   setPage: (page: number) => void
   setPageSize: (pageSize: number) => void
-  getNextRef: () => string
+  clearError: () => void
 }
 
-const seedAdvisoryRequests: AdvisoryRequest[] = [
-  {
-    id: 'ADV-001',
-    ref: 'ADV-2024-001',
-    subject: 'Investment Product Compliance Query',
-    description: 'Need clarification on compliance requirements for new structured investment product targeting retail customers.',
-    businessUnit: 'corporate_banking',
-    status: 'in_progress',
-    priority: 'high',
-    requestedBy: 'Ahmed Al-Rashid',
-    requestedDate: '2024-10-15',
-    assignedTo: 'Sarah Connor',
-    notes: [
-      { id: 'N-001', author: 'Sarah Connor', content: 'Reviewed initial documentation. Scheduling meeting with product team.', timestamp: '2024-10-16T09:30:00.000Z' },
-      { id: 'N-002', author: 'Ahmed Al-Rashid', content: 'Product launch target is Q1 2025. Need preliminary assessment by end of month.', timestamp: '2024-10-16T14:15:00.000Z' },
-    ],
-    createdAt: '2024-10-15T08:00:00.000Z',
-    updatedAt: '2024-10-16T14:15:00.000Z',
+const INITIAL_PAGINATION: PaginationState = {
+  page: 1,
+  pageSize: 10,
+  total: 0,
+  totalPages: 1,
+}
+
+const INITIAL_SORT: SortState = {
+  field: 'requestedDate',
+  direction: 'desc',
+}
+
+export const useAdvisoryStore = create<AdvisoryState>()((set, get) => ({
+  advisoryRequests: [],
+  byId: {},
+  selectedRequest: null,
+  filters: {},
+  pagination: INITIAL_PAGINATION,
+  sort: INITIAL_SORT,
+  isLoading: false,
+  isMutating: false,
+  error: null,
+  lastFetched: null,
+
+  fetchAll: async (opts) => {
+    const current = get()
+    const page = opts?.page ?? current.pagination.page
+    const pageSize = opts?.pageSize ?? current.pagination.pageSize
+    const filters = opts?.filters ? { ...current.filters, ...opts.filters } : current.filters
+
+    set({ isLoading: true, error: null })
+    try {
+      const result = await api.get<{
+        items: AdvisoryApiRow[]
+        page: number
+        pageSize: number
+        total: number
+        totalPages: number
+      }>('/advisory', {
+        page,
+        pageSize,
+        status: filters.status?.[0],
+        priority: filters.priority?.[0],
+        business_unit: filters.businessUnit?.[0],
+        q: filters.search,
+      })
+
+      const previousById = get().byId
+      const advisoryRequests = result.items.map((row) =>
+        mapRow(row, previousById[row.id]),
+      )
+      const byId: Record<string, AdvisoryRequest> = {}
+      for (const a of advisoryRequests) byId[a.id] = a
+
+      set({
+        advisoryRequests,
+        byId,
+        pagination: {
+          page: result.page,
+          pageSize: result.pageSize,
+          total: result.total,
+          totalPages: result.totalPages,
+        },
+        filters,
+        isLoading: false,
+        lastFetched: Date.now(),
+      })
+    } catch (e) {
+      set({ error: errorMessage(e, 'Failed to fetch advisory requests'), isLoading: false })
+    }
   },
-  {
-    id: 'ADV-002',
-    ref: 'ADV-2024-002',
-    subject: 'AML Training Requirements',
-    description: 'Request for updated AML training curriculum review and approval for 2025 compliance training program.',
-    businessUnit: 'compliance',
-    status: 'completed',
-    priority: 'medium',
-    requestedBy: 'Fatima Hassan',
-    requestedDate: '2024-09-28',
-    assignedTo: 'Michael Scott',
-    notes: [
-      { id: 'N-003', author: 'Michael Scott', content: 'Training curriculum reviewed and approved. Meets all SAMA requirements.', timestamp: '2024-10-05T11:00:00.000Z' },
-      { id: 'N-004', author: 'Fatima Hassan', content: 'Thank you. Will proceed with rollout.', timestamp: '2024-10-05T15:30:00.000Z' },
-    ],
-    createdAt: '2024-09-28T08:00:00.000Z',
-    updatedAt: '2024-10-05T15:30:00.000Z',
+
+  fetchById: async (id) => {
+    set({ isLoading: true, error: null })
+    try {
+      const row = await api.get<AdvisoryApiRow>(`/advisory/${id}`)
+      const previous = get().byId[id]
+      const request = mapRow(row, previous)
+      set((state) => ({
+        byId: { ...state.byId, [id]: request },
+        advisoryRequests: state.advisoryRequests.some((a) => a.id === id)
+          ? state.advisoryRequests.map((a) => (a.id === id ? request : a))
+          : state.advisoryRequests,
+        selectedRequest: request,
+        isLoading: false,
+        lastFetched: Date.now(),
+      }))
+      return request
+    } catch (e) {
+      set({ error: errorMessage(e, 'Failed to fetch advisory request'), isLoading: false })
+      if (e instanceof ApiClientError && e.code === 'not_found') return null
+      return null
+    }
   },
-  {
-    id: 'ADV-003',
-    ref: 'ADV-2024-003',
-    subject: 'Data Retention Policy Question',
-    description: 'Clarification needed on data retention periods for customer transaction logs under new PDPL requirements.',
-    businessUnit: 'it',
-    status: 'pending',
-    priority: 'low',
-    requestedBy: 'Omar Khalil',
-    requestedDate: '2024-10-18',
-    notes: [],
-    createdAt: '2024-10-18T08:00:00.000Z',
-    updatedAt: '2024-10-18T08:00:00.000Z',
+
+  create: async (data) => {
+    set({ isMutating: true, error: null })
+    try {
+      const row = await api.post<AdvisoryApiRow>('/advisory', toCreatePayload(data))
+      const created = mapRow(row)
+      set((state) => ({
+        advisoryRequests: [created, ...state.advisoryRequests],
+        byId: { ...state.byId, [created.id]: created },
+        isMutating: false,
+      }))
+      void get().fetchAll()
+      return created
+    } catch (e) {
+      set({ error: errorMessage(e, 'Failed to create advisory request'), isMutating: false })
+      throw e
+    }
   },
-  {
-    id: 'ADV-004',
-    ref: 'ADV-2024-004',
-    subject: 'Third-Party Due Diligence',
-    description: 'Urgent review required for new fintech partnership. Need compliance assessment before contract signing.',
-    businessUnit: 'risk_management',
-    status: 'in_progress',
-    priority: 'high',
-    requestedBy: 'Layla Mahmoud',
-    requestedDate: '2024-10-14',
-    assignedTo: 'Sarah Connor',
-    notes: [
-      { id: 'N-005', author: 'Sarah Connor', content: 'Initial risk assessment completed. Awaiting additional documentation from vendor.', timestamp: '2024-10-15T16:45:00.000Z' },
-    ],
-    createdAt: '2024-10-14T08:00:00.000Z',
-    updatedAt: '2024-10-15T16:45:00.000Z',
+
+  update: async (id, data) => {
+    set({ isMutating: true, error: null })
+    try {
+      const row = await api.patch<AdvisoryApiRow>(`/advisory/${id}`, toUpdatePayload(data))
+      const previous = get().byId[id]
+      const updated = mapRow(row, previous)
+      set((state) => ({
+        advisoryRequests: state.advisoryRequests.map((a) => (a.id === id ? updated : a)),
+        byId: { ...state.byId, [id]: updated },
+        selectedRequest:
+          state.selectedRequest?.id === id ? updated : state.selectedRequest,
+        isMutating: false,
+      }))
+      return updated
+    } catch (e) {
+      set({ error: errorMessage(e, 'Failed to update advisory request'), isMutating: false })
+      throw e
+    }
   },
-  {
-    id: 'ADV-005',
-    ref: 'ADV-2024-005',
-    subject: 'Regulatory Reporting Timeline',
-    description: 'Need guidance on submission deadlines for Q4 regulatory reports to SAMA.',
-    businessUnit: 'finance',
-    status: 'pending',
-    priority: 'medium',
-    requestedBy: 'Khalid Al-Otaibi',
-    requestedDate: '2024-10-17',
-    notes: [],
-    createdAt: '2024-10-17T08:00:00.000Z',
-    updatedAt: '2024-10-17T08:00:00.000Z',
-  },
-]
 
-export const useAdvisoryStore = create<AdvisoryState>()(
-  persist(
-    (set, get) => ({
-      advisoryRequests: seedAdvisoryRequests,
-      selectedRequest: null,
-      filters: {},
-      pagination: {
-        page: 1,
-        pageSize: 10,
-        total: 0,
-        totalPages: 0,
-      },
-      sort: {
-        field: 'requestedDate',
-        direction: 'desc',
-      },
-      isLoading: false,
-      error: null,
-
-      fetchAll: () => {
-        // TODO: Replace with actual API call
-        const existing = get().advisoryRequests
-        set({
-          pagination: {
-            ...get().pagination,
-            total: existing.length,
-            totalPages: Math.ceil(existing.length / get().pagination.pageSize),
-          },
-        })
-      },
-
-      fetchById: (id) => {
-        // TODO: Replace with actual API call
-        return get().advisoryRequests.find(r => r.id === id) ?? null
-      },
-
-      create: (data) => {
-        // TODO: Replace with actual API call
-        const now = new Date().toISOString()
-        const ref = get().getNextRef()
-        const newRequest: AdvisoryRequest = {
-          ...data,
-          id: crypto.randomUUID(),
-          ref,
-          notes: [],
-          createdAt: now,
-          updatedAt: now,
-        }
-
-        set((state) => ({
-          advisoryRequests: [newRequest, ...state.advisoryRequests],
-        }))
-
-        return newRequest
-      },
-
-      update: (id: string, data: Partial<AdvisoryRequest>) => {
-        // TODO: Replace with actual API call
-        let updated: AdvisoryRequest | null = null
-
-        set((state) => ({
-          advisoryRequests: state.advisoryRequests.map((r) => {
-            if (r.id === id) {
-              updated = { ...r, ...data, updatedAt: new Date().toISOString() }
-              return updated
-            }
-            return r
-          }),
-          selectedRequest:
-            state.selectedRequest?.id === id
-              ? { ...state.selectedRequest, ...data, updatedAt: new Date().toISOString() }
-              : state.selectedRequest,
-        }))
-
-        if (!updated) throw new Error('Advisory request not found')
-        return updated
-      },
-
-      delete: (id: string) => {
-        // TODO: Replace with actual API call
-        set((state) => ({
-          advisoryRequests: state.advisoryRequests.filter((r) => r.id !== id),
+  delete: async (id) => {
+    set({ isMutating: true, error: null })
+    try {
+      await api.delete(`/advisory/${id}`)
+      set((state) => {
+        const { [id]: _removed, ...rest } = state.byId
+        return {
+          advisoryRequests: state.advisoryRequests.filter((a) => a.id !== id),
+          byId: rest,
           selectedRequest:
             state.selectedRequest?.id === id ? null : state.selectedRequest,
-        }))
-      },
-
-      addNote: (id: string, note: { author: string; content: string }) => {
-        // TODO: Replace with actual API call
-        const newNote: AdvisoryNote = {
-          id: crypto.randomUUID(),
-          author: note.author,
-          content: note.content,
-          timestamp: new Date().toISOString(),
+          isMutating: false,
         }
-
-        set((state) => ({
-          advisoryRequests: state.advisoryRequests.map((r) => {
-            if (r.id === id) {
-              return { ...r, notes: [...r.notes, newNote], updatedAt: new Date().toISOString() }
-            }
-            return r
-          }),
-          selectedRequest:
-            state.selectedRequest?.id === id
-              ? { ...state.selectedRequest, notes: [...state.selectedRequest.notes, newNote], updatedAt: new Date().toISOString() }
-              : state.selectedRequest,
-        }))
-      },
-
-      updateStatus: (id: string, status: AdvisoryStatus) => {
-        // TODO: Replace with actual API call
-        set((state) => ({
-          advisoryRequests: state.advisoryRequests.map((r) => {
-            if (r.id === id) {
-              return { ...r, status, updatedAt: new Date().toISOString() }
-            }
-            return r
-          }),
-          selectedRequest:
-            state.selectedRequest?.id === id
-              ? { ...state.selectedRequest, status, updatedAt: new Date().toISOString() }
-              : state.selectedRequest,
-        }))
-      },
-
-      reassign: (id: string, newAssignee: string) => {
-        // TODO: Replace with actual API call
-        set((state) => ({
-          advisoryRequests: state.advisoryRequests.map((r) => {
-            if (r.id === id) {
-              return { ...r, assignedTo: newAssignee, updatedAt: new Date().toISOString() }
-            }
-            return r
-          }),
-          selectedRequest:
-            state.selectedRequest?.id === id
-              ? { ...state.selectedRequest, assignedTo: newAssignee, updatedAt: new Date().toISOString() }
-              : state.selectedRequest,
-        }))
-      },
-
-      getNextRef: () => {
-        const year = new Date().getFullYear()
-        const existing = get().advisoryRequests
-          .map(r => r.ref.match(/^ADV-\d{4}-(\d+)$/))
-          .filter(Boolean)
-          .map(m => parseInt(m![1], 10))
-        const next = existing.length > 0 ? Math.max(...existing) + 1 : 1
-        return `ADV-${year}-${String(next).padStart(3, '0')}`
-      },
-
-      setFilters: (filters) => set({ filters }),
-      clearFilters: () => set({ filters: {} }),
-      setSelected: (request) => set({ selectedRequest: request }),
-      setSort: (sort) => set({ sort }),
-      setPage: (page) => set((state) => ({ pagination: { ...state.pagination, page } })),
-      setPageSize: (pageSize) =>
-        set((state) => ({
-          pagination: {
-            ...state.pagination,
-            pageSize,
-            totalPages: Math.ceil(state.pagination.total / pageSize),
-          },
-        })),
-    }),
-    {
-      name: 'advisory-storage',
-      version: 2,
-      partialize: (state) => ({
-        advisoryRequests: state.advisoryRequests,
-      }),
-      migrate: (persisted: unknown, version: number) => {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const state = persisted as any
-        if (version < 2 && state.advisoryRequests) {
-          const seenIds = new Set<string>()
-          state.advisoryRequests = state.advisoryRequests.map((a: { id: string }) => {
-            if (seenIds.has(a.id)) {
-              return { ...a, id: crypto.randomUUID() }
-            }
-            seenIds.add(a.id)
-            return a
-          })
-        }
-        return state
-      },
+      })
+    } catch (e) {
+      set({ error: errorMessage(e, 'Failed to delete advisory request'), isMutating: false })
+      throw e
     }
-  )
-)
+  },
+
+  addNote: async (id, note) => {
+    // No dedicated notes endpoint in Phase 4 — perform a local-only append so
+    // the UI responds. Phase 5+ should add `/api/advisory/[id]/notes` (POST)
+    // and wire it here.
+    const newNote: AdvisoryNote = {
+      id: crypto.randomUUID(),
+      author: note.author,
+      content: note.content,
+      timestamp: new Date().toISOString(),
+    }
+    set((state) => ({
+      advisoryRequests: state.advisoryRequests.map((r) =>
+        r.id === id
+          ? { ...r, notes: [...r.notes, newNote], updatedAt: new Date().toISOString() }
+          : r,
+      ),
+      byId: state.byId[id]
+        ? {
+            ...state.byId,
+            [id]: {
+              ...state.byId[id],
+              notes: [...state.byId[id].notes, newNote],
+              updatedAt: new Date().toISOString(),
+            },
+          }
+        : state.byId,
+      selectedRequest:
+        state.selectedRequest?.id === id
+          ? {
+              ...state.selectedRequest,
+              notes: [...state.selectedRequest.notes, newNote],
+              updatedAt: new Date().toISOString(),
+            }
+          : state.selectedRequest,
+    }))
+  },
+
+  updateStatus: async (id, status) => {
+    await get().update(id, { status })
+  },
+
+  reassign: async (id, newAssignee) => {
+    await get().update(id, { assignedTo: newAssignee })
+  },
+
+  setFilters: (filters) => set({ filters }),
+  clearFilters: () => set({ filters: {} }),
+  setSelected: (request) => set({ selectedRequest: request }),
+  setSort: (sort) => set({ sort }),
+  setPage: (page) => set((state) => ({ pagination: { ...state.pagination, page } })),
+  setPageSize: (pageSize) =>
+    set((state) => ({
+      pagination: {
+        ...state.pagination,
+        pageSize,
+        totalPages: pageSize > 0 ? Math.max(1, Math.ceil(state.pagination.total / pageSize)) : 1,
+      },
+    })),
+  clearError: () => set({ error: null }),
+}))

@@ -1,9 +1,14 @@
-import { create } from 'zustand'
-import { persist } from 'zustand/middleware'
-import { requirePermission } from '@/lib/rbac-store-gate'
+// Business unit store — Phase 5 server-state migration.
+//
+// Backed by `/api/settings/business-units` (list/create) + per-id PATCH/DELETE.
+// API rows use `name_en` / `name_ar` / `key`; legacy local shape is the
+// `BusinessUnitOption` interface (`id`, `label`, `labelAr`, `isDefault`).
+// Deletion is hard-delete server-side; system-defaults refuse, and rows in
+// use return 409.
 
-// Advisory business unit — id is opaque string. Seeds match the historical
-// `BusinessUnit` union literal; widened to `string` in `src/types/index.ts`.
+import { create } from 'zustand'
+import { api, ApiClientError } from '@/lib/api-client'
+
 export interface BusinessUnitOption {
   id: string
   label: string
@@ -11,63 +16,158 @@ export interface BusinessUnitOption {
   isDefault?: boolean
 }
 
-interface BusinessUnitState {
-  units: BusinessUnitOption[]
-  add: (label: string, labelAr?: string) => string
-  update: (id: string, patch: Partial<Omit<BusinessUnitOption, 'id'>>) => void
-  remove: (id: string) => void
+interface BusinessUnitApiRow {
+  id: string
+  key: string | null
+  name_en: string
+  name_ar: string
+  is_default: boolean
+  created_at: string
+  updated_at: string
 }
 
-const seeds: BusinessUnitOption[] = [
-  { id: 'corporate_banking', label: 'Corporate Banking', labelAr: 'الخدمات المصرفية للشركات', isDefault: true },
-  { id: 'compliance',        label: 'Compliance',         labelAr: 'الامتثال',                 isDefault: true },
-  { id: 'it',                label: 'IT',                 labelAr: 'تقنية المعلومات',         isDefault: true },
-  { id: 'risk_management',   label: 'Risk Management',    labelAr: 'إدارة المخاطر',           isDefault: true },
-  { id: 'finance',           label: 'Finance',            labelAr: 'المالية',                  isDefault: true },
-  { id: 'operations',        label: 'Operations',         labelAr: 'العمليات',                 isDefault: true },
-  { id: 'hr',                label: 'HR',                 labelAr: 'الموارد البشرية',         isDefault: true },
-]
+function mapRow(row: BusinessUnitApiRow): BusinessUnitOption {
+  return {
+    id: row.id,
+    label: row.name_en,
+    labelAr: row.name_ar,
+    isDefault: row.is_default,
+  }
+}
 
-const slugify = (s: string): string =>
-  s.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
+function slugify(s: string): string {
+  return s.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
+}
 
-export const useBusinessUnitStore = create<BusinessUnitState>()(
-  persist(
-    (set, get) => ({
-      units: seeds,
+function errorMessage(e: unknown, fallback: string): string {
+  if (e instanceof ApiClientError) return e.message
+  if (e instanceof Error) return e.message
+  return fallback
+}
 
-      add: (label, labelAr) => {
-        requirePermission('Configure Lists & Categories', { storeName: 'businessUnit', actionName: 'add' })
-        const baseId = slugify(label) || `bu-${Date.now()}`
-        const existingIds = new Set(get().units.map((u) => u.id))
-        let id = baseId
-        let n = 2
-        while (existingIds.has(id)) id = `${baseId}-${n++}`
-        set((s) => ({
-          units: [...s.units, { id, label, labelAr: labelAr ?? label }],
-        }))
-        return id
-      },
+interface BusinessUnitState {
+  units: BusinessUnitOption[]
+  byId: Record<string, BusinessUnitOption>
 
-      update: (id, patch) => {
-        requirePermission('Configure Lists & Categories', { storeName: 'businessUnit', actionName: 'update', id })
-        set((s) => ({
-          units: s.units.map((u) => (u.id === id ? { ...u, ...patch } : u)),
-        }))
-      },
+  // First-fetch rule: `isLoading && units.length === 0` → render skeleton.
+  isLoading: boolean
+  isMutating: boolean
+  error: string | null
+  lastFetched: number | null
 
-      remove: (id) => {
-        requirePermission('Configure Lists & Categories', { storeName: 'businessUnit', actionName: 'remove', id })
-        set((s) => ({
-          // Seeds are deletable — see SPRINT-FOLLOWUP-PLAN §2.3.
-          units: s.units.filter((u) => u.id !== id),
-        }))
-      },
-    }),
-    {
-      name: 'business-unit-storage',
-      version: 1,
-      partialize: (s) => ({ units: s.units }),
+  fetchAll(): Promise<void>
+  /** Optimistic add — see department-store for rationale. */
+  add(label: string, labelAr?: string): string
+  update(id: string, patch: Partial<Omit<BusinessUnitOption, 'id'>>): Promise<void>
+  remove(id: string): Promise<void>
+  clearError(): void
+}
+
+export const useBusinessUnitStore = create<BusinessUnitState>()((set) => ({
+  units: [],
+  byId: {},
+
+  isLoading: false,
+  isMutating: false,
+  error: null,
+  lastFetched: null,
+
+  fetchAll: async () => {
+    set({ isLoading: true, error: null })
+    try {
+      const rows = await api.get<BusinessUnitApiRow[]>('/settings/business-units')
+      const units = rows.map(mapRow)
+      const byId: Record<string, BusinessUnitOption> = {}
+      for (const u of units) byId[u.id] = u
+      set({ units, byId, isLoading: false, lastFetched: Date.now() })
+    } catch (e) {
+      set({ error: errorMessage(e, 'Failed to fetch business units'), isLoading: false })
     }
-  )
-)
+  },
+
+  add: (label, labelAr) => {
+    const tempId = `tmp-${slugify(label) || Date.now()}`
+    const optimistic: BusinessUnitOption = {
+      id: tempId,
+      label,
+      labelAr: labelAr ?? label,
+      isDefault: false,
+    }
+    set((s) => ({
+      units: [...s.units, optimistic],
+      byId: { ...s.byId, [tempId]: optimistic },
+      isMutating: true,
+      error: null,
+    }))
+    ;(async () => {
+      try {
+        const row = await api.post<BusinessUnitApiRow>('/settings/business-units', {
+          key: slugify(label) || `bu-${Date.now()}`,
+          name_en: label,
+          name_ar: labelAr ?? label,
+        })
+        const created = mapRow(row)
+        set((s) => {
+          const { [tempId]: _drop, ...rest } = s.byId
+          return {
+            units: s.units.map((u) => (u.id === tempId ? created : u)),
+            byId: { ...rest, [created.id]: created },
+            isMutating: false,
+          }
+        })
+      } catch (e) {
+        set((s) => {
+          const { [tempId]: _drop, ...rest } = s.byId
+          return {
+            units: s.units.filter((u) => u.id !== tempId),
+            byId: rest,
+            error: errorMessage(e, 'Failed to add business unit'),
+            isMutating: false,
+          }
+        })
+      }
+    })()
+    return tempId
+  },
+
+  update: async (id, patch) => {
+    set({ isMutating: true, error: null })
+    try {
+      const payload: Record<string, unknown> = {}
+      if (patch.label !== undefined) payload.name_en = patch.label
+      if (patch.labelAr !== undefined) payload.name_ar = patch.labelAr
+      const row = await api.patch<BusinessUnitApiRow>(`/settings/business-units/${id}`, payload)
+      const updated = mapRow(row)
+      set((s) => ({
+        units: s.units.map((u) => (u.id === id ? updated : u)),
+        byId: { ...s.byId, [id]: updated },
+        isMutating: false,
+      }))
+    } catch (e) {
+      set({ error: errorMessage(e, 'Failed to update business unit'), isMutating: false })
+      throw e
+    }
+  },
+
+  remove: async (id) => {
+    set({ isMutating: true, error: null })
+    try {
+      await api.delete(`/settings/business-units/${id}`)
+      set((s) => {
+        const { [id]: _drop, ...rest } = s.byId
+        return {
+          units: s.units.filter((u) => u.id !== id),
+          byId: rest,
+          isMutating: false,
+        }
+      })
+    } catch (e) {
+      // 409 with `details.byTable` references when in use; system-defaults
+      // raise their own 409. Both flow through `error`.
+      set({ error: errorMessage(e, 'Failed to delete business unit'), isMutating: false })
+      throw e
+    }
+  },
+
+  clearError: () => set({ error: null }),
+}))

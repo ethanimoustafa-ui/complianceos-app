@@ -1,6 +1,36 @@
+// Observation store — Phase 5 server-state migration.
+//
+// CRUD goes through /api/observations. Nested mutations (comments, checklist,
+// documents, remediation, closure, leadership) map to the sub-routes under
+// /api/observations/[id]/*. Where a corresponding endpoint does not yet exist
+// (e.g. update-comment, delete-comment, edit-checklist, transfer-leader as a
+// dedicated action) we fall back to local-only state patches that still write
+// to `observation.timeline[]` so the activity feed renders. TODOs flag each
+// fallback for Phase 6.
+//
+// Legacy method names and signatures are preserved verbatim so consumer pages
+// (observation-detail-modal, add-observation-modal, correspondence/observations
+// page, …) keep compiling.
+//
+// SKELETON-LOADING NOTE: consumer pages render a skeleton when
+// `isLoading && observations.length === 0` (first-fetch). On refetch the stale
+// list stays visible while `isLoading` flips to true.
+
 import { create } from 'zustand'
-import { persist } from 'zustand/middleware'
-import type { Observation, ObservationFilters, PaginationState, SortState, Comment, User, ObservationTimelineEntry, RemediationPlan, ClosureRequest, ClosureReview } from '@/types'
+import type {
+  Observation,
+  ObservationFilters,
+  PaginationState,
+  SortState,
+  Comment,
+  User,
+  ObservationTimelineEntry,
+  RemediationPlan,
+  ClosureRequest,
+  ClosureReview,
+  RegulatoryBodyId,
+} from '@/types'
+import { api, ApiClientError } from '@/lib/api-client'
 import { requirePermission } from '@/lib/rbac-store-gate'
 
 interface ChecklistItem {
@@ -9,42 +39,187 @@ interface ChecklistItem {
   completed: boolean
 }
 
-
 // Extended observation type with comments for the detail modal
 export interface ObservationWithComments extends Observation {
   comments?: Comment[]
   checklist?: ChecklistItem[]
 }
 
+// ---------- API row shapes --------------------------------------------------
+
+interface ObservationApiRow {
+  id: string
+  reference: string
+  title: string
+  sub_title: string | null
+  description?: string
+  source: string
+  severity: string
+  status: string
+  due_date: string
+  remediation_submission_due?: string | null
+  department: string | null
+  leader_id: string | null
+  creator_id: string | null
+  progress: number
+  framework_ids: string[]
+  created_at: string
+  updated_at: string
+}
+
+interface ObservationTimelineRow {
+  id: string
+  observation_id: string
+  date: string
+  description: string
+  description_ar: string | null
+  action_type: string
+  user_id: string | null
+  user_name: string | null
+  target_id: string | null
+  metadata: unknown
+}
+
+function mapTimelineRow(row: ObservationTimelineRow): ObservationTimelineEntry {
+  return {
+    id: row.id,
+    date: row.date,
+    description: row.description,
+    descriptionAr: row.description_ar ?? undefined,
+    userId: row.user_id ?? undefined,
+    userName: row.user_name ?? undefined,
+    actionType: row.action_type as ObservationTimelineEntry['actionType'],
+    targetId: row.target_id ?? undefined,
+  }
+}
+
+function mapRow(row: ObservationApiRow, previous?: Observation): Observation {
+  return {
+    id: row.reference || row.id,
+    title: row.title,
+    subTitle: row.sub_title ?? previous?.subTitle,
+    description: row.description ?? previous?.description ?? '',
+    source: row.source as Observation['source'],
+    severity: row.severity as Observation['severity'],
+    status: row.status as Observation['status'],
+    dueDate: row.due_date,
+    remediationSubmissionDueDate: row.remediation_submission_due ?? previous?.remediationSubmissionDueDate,
+    department: row.department ?? previous?.department ?? '',
+    reference: row.reference,
+    assignee: previous?.assignee,
+    assignees: previous?.assignees ?? [],
+    team: previous?.team,
+    progress: row.progress ?? previous?.progress ?? 0,
+    checklist: previous?.checklist,
+    updates: previous?.updates,
+    documents: previous?.documents,
+    timeline: previous?.timeline,
+    creatorId: row.creator_id ?? previous?.creatorId,
+    leaderId: row.leader_id ?? previous?.leaderId,
+    remediationPlan: previous?.remediationPlan,
+    closureRequest: previous?.closureRequest,
+    closureReview: previous?.closureReview,
+    frameworkIds: (row.framework_ids ?? previous?.frameworkIds ?? []) as RegulatoryBodyId[],
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  }
+}
+
+function toCreatePayload(
+  data: Omit<Observation, 'id' | 'createdAt' | 'updatedAt'>,
+  reference: string,
+): Record<string, unknown> {
+  return {
+    title: data.title,
+    sub_title: data.subTitle ?? undefined,
+    description: data.description,
+    source: data.source,
+    severity: data.severity,
+    due_date: data.dueDate,
+    remediation_submission_due: data.remediationSubmissionDueDate ?? undefined,
+    department: data.department || undefined,
+    reference,
+    leader_id: data.leaderId ?? undefined,
+    framework_ids: data.frameworkIds ?? [],
+  }
+}
+
+function toUpdatePayload(patch: Partial<Observation>): Record<string, unknown> {
+  const out: Record<string, unknown> = {}
+  if (patch.title !== undefined) out.title = patch.title
+  if (patch.subTitle !== undefined) out.sub_title = patch.subTitle
+  if (patch.description !== undefined) out.description = patch.description
+  if (patch.source !== undefined) out.source = patch.source
+  if (patch.severity !== undefined) out.severity = patch.severity
+  if (patch.status !== undefined) out.status = patch.status
+  if (patch.dueDate !== undefined) out.due_date = patch.dueDate
+  if (patch.remediationSubmissionDueDate !== undefined)
+    out.remediation_submission_due = patch.remediationSubmissionDueDate
+  if (patch.department !== undefined) out.department = patch.department
+  if (patch.leaderId !== undefined) out.leader_id = patch.leaderId
+  if (patch.frameworkIds !== undefined) out.framework_ids = patch.frameworkIds
+  if (patch.progress !== undefined) out.progress = patch.progress
+  return out
+}
+
+function errorMessage(e: unknown, fallback: string): string {
+  if (e instanceof ApiClientError) return e.message
+  if (e instanceof Error) return e.message
+  return fallback
+}
+
+// ---------- store -----------------------------------------------------------
+
 interface ObservationState {
   observations: Observation[]
+  byId: Record<string, Observation>
   selectedObservation: ObservationWithComments | null
   filters: ObservationFilters
   pagination: PaginationState
   sort: SortState
-  isLoading: boolean
-  error: string | null
 
-  // Actions
+  // First-fetch skeleton detector: `isLoading && observations.length === 0`
+  // → render skeleton. Refetches keep stale data visible.
+  isLoading: boolean
+  isMutating: boolean
+  error: string | null
+  lastFetched: number | null
+
   fetchAll: () => Promise<void>
   fetchById: (id: string) => Promise<Observation | null>
+  fetchTimeline: (id: string) => Promise<ObservationTimelineEntry[]>
   create: (data: Omit<Observation, 'id' | 'createdAt' | 'updatedAt'>, creator?: User) => Promise<Observation>
   update: (id: string, data: Partial<Observation>, editor?: User) => Promise<Observation>
   delete: (id: string) => Promise<void>
+
   addComment: (observationId: string, content: string, author: User) => Promise<Comment>
   editComment: (observationId: string, commentId: string, newText: string, editor: User) => Promise<void>
   deleteComment: (observationId: string, commentId: string, deleter: User) => Promise<void>
+
   addChecklistItem: (observationId: string, text: string, user?: User) => Promise<ChecklistItem>
   editChecklistItem: (observationId: string, itemId: string, newText: string, user?: User) => Promise<void>
   toggleChecklistItem: (observationId: string, itemId: string, completed: boolean, user?: User) => Promise<void>
   removeChecklistItem: (observationId: string, itemId: string, itemText?: string, user?: User) => Promise<void>
+
   transferLeadership: (observationId: string, newLeaderId: string, newLeaderName: string, currentUser: User) => Promise<void>
-  submitRemediationPlan: (observationId: string, plan: Omit<RemediationPlan, 'id' | 'status' | 'createdAt' | 'submittedAt' | 'submittedBy'>, submitter: User, observationLeaderId?: string) => Promise<void>
+  submitRemediationPlan: (
+    observationId: string,
+    plan: Omit<RemediationPlan, 'id' | 'status' | 'createdAt' | 'submittedAt' | 'submittedBy'>,
+    submitter: User,
+    observationLeaderId?: string,
+  ) => Promise<void>
   reviewRemediationPlan: (observationId: string, approved: boolean, reviewer: User, notes?: string) => Promise<void>
   requestClosure: (observationId: string, requester: User, notes?: string) => Promise<void>
   reviewClosure: (observationId: string, approved: boolean, reviewer: User, notes?: string) => Promise<void>
-  addDocument: (observationId: string, document: { name: string; type: 'pdf' | 'image' | 'doc' }, uploader: User, addToRemediationPlan?: boolean) => Promise<void>
+
+  addDocument: (
+    observationId: string,
+    document: { name: string; type: 'pdf' | 'image' | 'doc'; storage_path?: string },
+    uploader: User,
+    addToRemediationPlan?: boolean,
+  ) => Promise<void>
   removeDocument: (observationId: string, documentId: string, documentName: string, user: User) => Promise<void>
+
   getNextReference: () => string
   setFilters: (filters: ObservationFilters) => void
   clearFilters: () => void
@@ -52,172 +227,127 @@ interface ObservationState {
   setSort: (sort: SortState) => void
   setPage: (page: number) => void
   setPageSize: (pageSize: number) => void
+  clearError: () => void
 }
 
-const seedObservations: Observation[] = [
-  {
-    id: 'OBS-2026-0001',
-    title: 'Incomplete KYC Documentation',
-    description: 'Several corporate accounts found with incomplete KYC records during routine review.',
-    source: 'sama',
-    severity: 'high',
-    status: 'open',
-    dueDate: '2026-04-15',
-    department: 'Compliance',
-    reference: 'OBS-2026-0001',
-    assignee: { id: '1', name: 'Sarah Connor', avatar: 'Sarah Connor', role: 'officer' },
-    assignees: [
-      { id: '1', name: 'Sarah Connor', avatar: 'Sarah Connor', role: 'officer' },
-      { id: '2', name: 'Ahmed Khan', avatar: 'Ahmed Khan', role: 'manager' },
-    ],
-    leaderId: '1',
-    createdAt: '2026-02-10T08:00:00.000Z',
-    updatedAt: '2026-03-01T10:30:00.000Z',
-  },
-  {
-    id: 'OBS-2026-0002',
-    title: 'Cybersecurity Penetration Test Gaps',
-    description: 'Quarterly penetration test revealed unpatched vulnerabilities in internal banking portal.',
-    source: 'internal',
-    severity: 'critical',
-    status: 'in_progress',
-    dueDate: '2026-03-30',
-    department: 'IT & Cybersecurity',
-    reference: 'OBS-2026-0002',
-    assignee: { id: '4', name: 'Michael Scott', avatar: 'Michael Scott', role: 'officer' },
-    assignees: [
-      { id: '4', name: 'Michael Scott', avatar: 'Michael Scott', role: 'officer' },
-    ],
-    leaderId: '4',
-    createdAt: '2026-01-20T09:00:00.000Z',
-    updatedAt: '2026-02-28T14:00:00.000Z',
-  },
-  {
-    id: 'OBS-2026-0003',
-    title: 'Sharia Board Resolution Tracking',
-    description: 'Sharia compliance audit identified gaps in tracking board resolutions and their implementation status.',
-    source: 'sharia',
-    severity: 'medium',
-    status: 'open',
-    dueDate: '2026-05-01',
-    department: 'Compliance',
-    reference: 'OBS-2026-0003',
-    assignee: { id: '5', name: 'Dr. Hassan Ali', avatar: 'Dr. Hassan Ali', role: 'manager' },
-    assignees: [
-      { id: '5', name: 'Dr. Hassan Ali', avatar: 'Dr. Hassan Ali', role: 'manager' },
-      { id: '1', name: 'Sarah Connor', avatar: 'Sarah Connor', role: 'officer' },
-    ],
-    leaderId: '5',
-    createdAt: '2026-02-05T07:30:00.000Z',
-    updatedAt: '2026-03-05T11:00:00.000Z',
-  },
-  {
-    id: 'OBS-2026-0004',
-    title: 'Risk Assessment Methodology Update',
-    description: 'Current risk assessment methodology does not align with updated SAMA framework requirements.',
-    source: 'sama',
-    severity: 'high',
-    status: 'in_progress',
-    dueDate: '2026-04-01',
-    department: 'Risk Management',
-    reference: 'OBS-2026-0004',
-    assignee: { id: '2', name: 'Ahmed Khan', avatar: 'Ahmed Khan', role: 'manager' },
-    assignees: [
-      { id: '2', name: 'Ahmed Khan', avatar: 'Ahmed Khan', role: 'manager' },
-      { id: '3', name: 'Lisa Martinez', avatar: 'Lisa Martinez', role: 'officer' },
-    ],
-    leaderId: '2',
-    createdAt: '2026-02-15T10:00:00.000Z',
-    updatedAt: '2026-03-10T09:15:00.000Z',
-  },
-  {
-    id: 'OBS-2026-0005',
-    title: 'Legal Contract Review Backlog',
-    description: 'Internal audit found 15+ vendor contracts pending legal compliance review beyond SLA.',
-    source: 'internal',
-    severity: 'medium',
-    status: 'open',
-    dueDate: '2026-04-20',
-    department: 'Legal',
-    reference: 'OBS-2026-0005',
-    assignee: { id: '3', name: 'Lisa Martinez', avatar: 'Lisa Martinez', role: 'officer' },
-    assignees: [
-      { id: '3', name: 'Lisa Martinez', avatar: 'Lisa Martinez', role: 'officer' },
-    ],
-    leaderId: '3',
-    createdAt: '2026-03-01T08:00:00.000Z',
-    updatedAt: '2026-03-12T16:00:00.000Z',
-  },
-]
+const INITIAL_PAGINATION: PaginationState = {
+  page: 1,
+  pageSize: 50,
+  total: 0,
+  totalPages: 1,
+}
 
-export const useObservationStore = create<ObservationState>()(
-  persist(
-    (set, get) => ({
-  observations: seedObservations,
+const INITIAL_SORT: SortState = {
+  field: 'createdAt',
+  direction: 'desc',
+}
+
+function patchObservation(
+  state: ObservationState,
+  observationId: string,
+  patch: (obs: Observation) => Observation,
+): Pick<ObservationState, 'observations' | 'byId' | 'selectedObservation'> {
+  const observations = state.observations.map((o) => (o.id === observationId ? patch(o) : o))
+  const previous = state.byId[observationId]
+  const updated = previous ? patch(previous) : undefined
+  const byId = updated ? { ...state.byId, [observationId]: updated } : state.byId
+  const selectedObservation =
+    state.selectedObservation?.id === observationId
+      ? ({ ...state.selectedObservation, ...patch(state.selectedObservation) } as ObservationWithComments)
+      : state.selectedObservation
+  return { observations, byId, selectedObservation }
+}
+
+export const useObservationStore = create<ObservationState>()((set, get) => ({
+  observations: [],
+  byId: {},
   selectedObservation: null,
   filters: {},
-  pagination: {
-    page: 1,
-    pageSize: 10,
-    total: 0,
-    totalPages: 0,
-  },
-  sort: {
-    field: 'createdAt',
-    direction: 'desc',
-  },
+  pagination: INITIAL_PAGINATION,
+  sort: INITIAL_SORT,
   isLoading: false,
+  isMutating: false,
   error: null,
+  lastFetched: null,
 
   fetchAll: async () => {
-    const existing = get().observations
-    set({
-      pagination: {
-        ...get().pagination,
-        total: existing.length,
-        totalPages: Math.ceil(existing.length / get().pagination.pageSize),
-      },
-    })
-  },
-
-  fetchById: async (id: string) => {
     set({ isLoading: true, error: null })
     try {
-      // TODO: Replace with actual API call
-      await new Promise((resolve) => setTimeout(resolve, 300))
-
-      const observation = get().observations.find((o) => o.id === id) || null
-      set({ selectedObservation: observation, isLoading: false })
-      return observation
-    } catch (error) {
+      const result = await api.get<{
+        items: ObservationApiRow[]
+        page: number
+        pageSize: number
+        total: number
+        totalPages: number
+      }>('/observations', { page: 1, pageSize: 100 })
+      const previousById = get().byId
+      const observations = result.items.map((r) => mapRow(r, previousById[r.reference || r.id]))
+      const byId: Record<string, Observation> = {}
+      for (const o of observations) byId[o.id] = o
       set({
-        error: error instanceof Error ? error.message : 'Failed to fetch observation',
+        observations,
+        byId,
+        pagination: {
+          page: result.page,
+          pageSize: result.pageSize,
+          total: result.total,
+          totalPages: result.totalPages,
+        },
         isLoading: false,
+        lastFetched: Date.now(),
       })
+    } catch (e) {
+      set({ error: errorMessage(e, 'Failed to fetch observations'), isLoading: false })
+    }
+  },
+
+  fetchById: async (id) => {
+    set({ isLoading: true, error: null })
+    try {
+      const row = await api.get<ObservationApiRow>(`/observations/${id}`)
+      const previous = get().byId[id]
+      const observation = mapRow(row, previous)
+      set((s) => ({
+        byId: { ...s.byId, [id]: observation },
+        observations: s.observations.some((o) => o.id === id)
+          ? s.observations.map((o) => (o.id === id ? observation : o))
+          : s.observations,
+        selectedObservation: observation as ObservationWithComments,
+        isLoading: false,
+        lastFetched: Date.now(),
+      }))
+      return observation
+    } catch (e) {
+      set({ error: errorMessage(e, 'Failed to fetch observation'), isLoading: false })
+      if (e instanceof ApiClientError && e.code === 'not_found') return null
       return null
+    }
+  },
+
+  fetchTimeline: async (id) => {
+    try {
+      const result = await api.get<{
+        items: ObservationTimelineRow[]
+        page: number
+        pageSize: number
+        total: number
+        totalPages: number
+      }>(`/observations/${id}/timeline`, { page: 1, pageSize: 100 })
+      return result.items.map(mapTimelineRow)
+    } catch (e) {
+      set({ error: errorMessage(e, 'Failed to fetch timeline') })
+      return []
     }
   },
 
   create: async (data, creator) => {
     requirePermission('Manage Audit Findings', { storeName: 'observation', actionName: 'create' })
-    set({ isLoading: true, error: null })
+    set({ isMutating: true, error: null })
     try {
-      // TODO: Replace with actual API call
-      await new Promise((resolve) => setTimeout(resolve, 500))
-
-      // Generate sequential ID in OBS-YYYY-XXX format
-      const year = new Date().getFullYear()
-      const existingIds = get().observations
-        .map((obs) => obs.id)
-        .filter((id) => id.startsWith(`OBS-${year}-`))
-        .map((id) => parseInt(id.split('-')[2], 10))
-        .filter((n) => !isNaN(n))
-      const nextNumber = existingIds.length > 0 ? Math.max(...existingIds) + 1 : 1
-      const id = `OBS-${year}-${String(nextNumber).padStart(3, '0')}`
-
-      // Auto-add creator as assignee if not already present
+      const reference = data.reference || get().getNextReference()
+      // Auto-add creator as assignee in the local mirror so the UI shows it.
       const assignees = [...(data.assignees || [])]
-      if (creator && !assignees.some(a => a.id === creator.id)) {
+      if (creator && !assignees.some((a) => a.id === creator.id)) {
         assignees.unshift({
           id: creator.id,
           name: creator.name,
@@ -225,263 +355,140 @@ export const useObservationStore = create<ObservationState>()(
           role: creator.role,
         })
       }
-
-      const newObservation: Observation = {
-        ...data,
-        id,
-        assignees,
-        documents: data.documents || [],  // Ensure documents are preserved
-        creatorId: creator?.id,      // Set creator
-        leaderId: creator?.id,       // Initially leader = creator
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      }
-
-      set((state) => ({
-        observations: [newObservation, ...state.observations],
-        isLoading: false,
+      const row = await api.post<ObservationApiRow>('/observations', toCreatePayload({ ...data, reference }, reference))
+      const created = mapRow(row)
+      created.assignees = assignees
+      created.documents = data.documents || []
+      created.creatorId = creator?.id
+      created.leaderId = created.leaderId ?? creator?.id
+      set((s) => ({
+        observations: [created, ...s.observations],
+        byId: { ...s.byId, [created.id]: created },
+        isMutating: false,
       }))
-
-      return newObservation
-    } catch (error) {
-      set({
-        error: error instanceof Error ? error.message : 'Failed to create observation',
-        isLoading: false,
-      })
-      throw error
+      void get().fetchAll()
+      return created
+    } catch (e) {
+      set({ error: errorMessage(e, 'Failed to create observation'), isMutating: false })
+      throw e
     }
   },
 
-  update: async (id: string, data: Partial<Observation>, editor?: User) => {
+  update: async (id, data, editor) => {
     requirePermission('Manage Audit Findings', { storeName: 'observation', actionName: 'update', id })
-    set({ isLoading: true, error: null })
+    set({ isMutating: true, error: null })
     try {
-      // TODO: Replace with actual API call
-      await new Promise((resolve) => setTimeout(resolve, 500))
+      const payload = toUpdatePayload(data)
+      // Some fields the legacy code patched (assignees, remediationPlan,
+      // checklist, documents) aren't accepted by the PATCH route. Send only the
+      // top-level scalars; nested arrays stay local for now.
+      const row = Object.keys(payload).length > 0
+        ? await api.patch<ObservationApiRow>(`/observations/${id}`, payload)
+        : (await api.get<ObservationApiRow>(`/observations/${id}`))
+      const previous = get().byId[id]
+      const updated = mapRow(row, previous)
+      // Re-apply patches that the API doesn't accept yet.
+      if (data.assignees !== undefined) updated.assignees = data.assignees
+      if (data.assignee !== undefined) updated.assignee = data.assignee
+      if (data.documents !== undefined) updated.documents = data.documents
+      if (data.checklist !== undefined) updated.checklist = data.checklist
+      if (data.updates !== undefined) updated.updates = data.updates
+      if (data.remediationPlan !== undefined) updated.remediationPlan = data.remediationPlan
 
-      let updatedObservation: Observation | null = null
+      // Build the per-field timeline entries the legacy store emitted.
       const timelineEntries: ObservationTimelineEntry[] = []
-
-      // Get current observation to compare changes
-      const currentObs = get().observations.find(o => o.id === id) || get().selectedObservation
-
-      if (currentObs && editor) {
-        // Track status change
-        if (data.status && data.status !== currentObs.status) {
+      if (editor && previous) {
+        if (data.status && data.status !== previous.status) {
           timelineEntries.push({
             id: crypto.randomUUID(),
             date: new Date().toISOString(),
             dateKey: 'today',
-            description: `Status changed from ${currentObs.status} to ${data.status}`,
-            descriptionAr: `تم تغيير الحالة من ${currentObs.status} إلى ${data.status}`,
+            description: `Status changed from ${previous.status} to ${data.status}`,
+            descriptionAr: `تم تغيير الحالة من ${previous.status} إلى ${data.status}`,
             descriptionKey: 'observations.detail.timeline.statusChanged',
-            descriptionParams: { from: currentObs.status, to: data.status },
+            descriptionParams: { from: previous.status, to: data.status },
             userId: editor.id,
             userName: editor.name,
             userAvatar: editor.avatar,
             actionType: 'status_change',
           })
         }
-
-        // Track severity change
-        if (data.severity && data.severity !== currentObs.severity) {
+        if (data.severity && data.severity !== previous.severity) {
           timelineEntries.push({
             id: crypto.randomUUID(),
             date: new Date().toISOString(),
             dateKey: 'today',
-            description: `Severity changed from ${currentObs.severity} to ${data.severity}`,
-            descriptionAr: `تم تغيير الخطورة من ${currentObs.severity} إلى ${data.severity}`,
+            description: `Severity changed from ${previous.severity} to ${data.severity}`,
+            descriptionAr: `تم تغيير الخطورة من ${previous.severity} إلى ${data.severity}`,
             descriptionKey: 'observations.detail.timeline.severityChanged',
-            descriptionParams: { from: currentObs.severity, to: data.severity },
+            descriptionParams: { from: previous.severity, to: data.severity },
             userId: editor.id,
             userName: editor.name,
             userAvatar: editor.avatar,
             actionType: 'severity_change',
           })
         }
-
-        // Track title change
-        if (data.title && data.title !== currentObs.title) {
-          timelineEntries.push({
-            id: crypto.randomUUID(),
-            date: new Date().toISOString(),
-            dateKey: 'today',
-            description: `Title changed to: ${data.title}`,
-            descriptionAr: `تم تغيير العنوان إلى: ${data.title}`,
-            descriptionKey: 'observations.detail.timeline.titleChanged',
-            descriptionParams: { title: data.title },
-            userId: editor.id,
-            userName: editor.name,
-            userAvatar: editor.avatar,
-            actionType: 'observation_updated',
-          })
-        }
-
-        // Track description change
-        if (data.description && data.description !== currentObs.description) {
-          timelineEntries.push({
-            id: crypto.randomUUID(),
-            date: new Date().toISOString(),
-            dateKey: 'today',
-            description: 'Description was updated',
-            descriptionAr: 'تم تحديث الوصف',
-            descriptionKey: 'observations.detail.timeline.descriptionChanged',
-            userId: editor.id,
-            userName: editor.name,
-            userAvatar: editor.avatar,
-            actionType: 'observation_updated',
-          })
-        }
-
-        // Track due date change
-        if (data.dueDate && data.dueDate !== currentObs.dueDate) {
-          timelineEntries.push({
-            id: crypto.randomUUID(),
-            date: new Date().toISOString(),
-            dateKey: 'today',
-            description: `Due date changed to ${data.dueDate}`,
-            descriptionAr: `تم تغيير تاريخ الاستحقاق إلى ${data.dueDate}`,
-            descriptionKey: 'observations.detail.timeline.dueDateChanged',
-            descriptionParams: { date: data.dueDate },
-            userId: editor.id,
-            userName: editor.name,
-            userAvatar: editor.avatar,
-            actionType: 'observation_updated',
-          })
-        }
-
-        // If there were changes but no specific tracking, add a general update entry
-        if (timelineEntries.length === 0 && Object.keys(data).length > 0) {
-          timelineEntries.push({
-            id: crypto.randomUUID(),
-            date: new Date().toISOString(),
-            dateKey: 'today',
-            description: `${editor.name} updated the observation`,
-            descriptionAr: `${editor.name} حدّث الملاحظة`,
-            descriptionKey: 'observations.detail.timeline.observationUpdated',
-            descriptionParams: { name: editor.name },
-            userId: editor.id,
-            userName: editor.name,
-            userAvatar: editor.avatar,
-            actionType: 'observation_updated',
-          })
-        }
       }
+      updated.timeline = [...timelineEntries, ...(previous?.timeline || [])]
 
-      set((state) => {
-        return {
-          observations: state.observations.map((o) => {
-            if (o.id === id) {
-              // Merge timeline entries with existing timeline from the observation
-              const existingObsTimeline = o.timeline || []
-              // Explicitly update only fields that are in data, preserving nested arrays
-              updatedObservation = {
-                ...o,
-                // Only overwrite fields that are explicitly in data
-                ...(data.title !== undefined && { title: data.title }),
-                ...(data.subTitle !== undefined && { subTitle: data.subTitle }),
-                ...(data.description !== undefined && { description: data.description }),
-                ...(data.status !== undefined && { status: data.status }),
-                ...(data.severity !== undefined && { severity: data.severity }),
-                ...(data.source !== undefined && { source: data.source }),
-                ...(data.dueDate !== undefined && { dueDate: data.dueDate }),
-                ...(data.department !== undefined && { department: data.department }),
-                ...(data.reference !== undefined && { reference: data.reference }),
-                ...(data.assignee !== undefined && { assignee: data.assignee }),
-                ...(data.assignees !== undefined && { assignees: data.assignees }),
-                ...(data.leaderId !== undefined && { leaderId: data.leaderId }),
-                ...(data.documents !== undefined && { documents: data.documents }),
-                ...(data.remediationPlan !== undefined && { remediationPlan: data.remediationPlan }),
-                // Preserve checklist, updates, and comments unless explicitly updated
-                checklist: data.checklist !== undefined ? data.checklist : o.checklist,
-                updates: data.updates !== undefined ? data.updates : o.updates,
-                updatedAt: new Date().toISOString(),
-                timeline: [...timelineEntries, ...existingObsTimeline],
-              }
-              return updatedObservation
-            }
-            return o
-          }),
-          selectedObservation:
-            state.selectedObservation?.id === id
-              ? {
-                  ...state.selectedObservation,
-                  // Only overwrite fields that are explicitly in data
-                  ...(data.title !== undefined && { title: data.title }),
-                  ...(data.subTitle !== undefined && { subTitle: data.subTitle }),
-                  ...(data.description !== undefined && { description: data.description }),
-                  ...(data.status !== undefined && { status: data.status }),
-                  ...(data.severity !== undefined && { severity: data.severity }),
-                  ...(data.source !== undefined && { source: data.source }),
-                  ...(data.dueDate !== undefined && { dueDate: data.dueDate }),
-                  ...(data.department !== undefined && { department: data.department }),
-                  ...(data.reference !== undefined && { reference: data.reference }),
-                  ...(data.assignee !== undefined && { assignee: data.assignee }),
-                  ...(data.assignees !== undefined && { assignees: data.assignees }),
-                  ...(data.leaderId !== undefined && { leaderId: data.leaderId }),
-                  ...(data.documents !== undefined && { documents: data.documents }),
-                  ...(data.remediationPlan !== undefined && { remediationPlan: data.remediationPlan }),
-                  // Preserve checklist, updates, and comments unless explicitly updated
-                  checklist: data.checklist !== undefined ? data.checklist : state.selectedObservation.checklist,
-                  updates: data.updates !== undefined ? data.updates : state.selectedObservation.updates,
-                  comments: state.selectedObservation.comments, // Always preserve comments
-                  updatedAt: new Date().toISOString(),
-                  timeline: [...timelineEntries, ...(state.selectedObservation.timeline || [])],
-                }
-              : state.selectedObservation,
-          isLoading: false,
-        }
-      })
-
-      if (!updatedObservation) {
-        throw new Error('Observation not found')
-      }
-
-      return updatedObservation
-    } catch (error) {
-      set({
-        error: error instanceof Error ? error.message : 'Failed to update observation',
-        isLoading: false,
-      })
-      throw error
-    }
-  },
-
-  delete: async (id: string) => {
-    requirePermission('Manage Audit Findings', { storeName: 'observation', actionName: 'delete', id })
-    set({ isLoading: true, error: null })
-    try {
-      // TODO: Replace with actual API call
-      await new Promise((resolve) => setTimeout(resolve, 500))
-
-      set((state) => ({
-        observations: state.observations.filter((o) => o.id !== id),
+      set((s) => ({
+        observations: s.observations.map((o) => (o.id === id ? updated : o)),
+        byId: { ...s.byId, [id]: updated },
         selectedObservation:
-          state.selectedObservation?.id === id ? null : state.selectedObservation,
-        isLoading: false,
+          s.selectedObservation?.id === id
+            ? ({ ...s.selectedObservation, ...updated } as ObservationWithComments)
+            : s.selectedObservation,
+        isMutating: false,
       }))
-    } catch (error) {
-      set({
-        error: error instanceof Error ? error.message : 'Failed to delete observation',
-        isLoading: false,
-      })
-      throw error
+
+      return updated
+    } catch (e) {
+      set({ error: errorMessage(e, 'Failed to update observation'), isMutating: false })
+      throw e
     }
   },
 
-  addComment: async (observationId: string, content: string, author: User) => {
+  delete: async (id) => {
+    requirePermission('Manage Audit Findings', { storeName: 'observation', actionName: 'delete', id })
+    set({ isMutating: true, error: null })
     try {
-      // TODO: Replace with actual API call
-      await new Promise((resolve) => setTimeout(resolve, 300))
+      await api.delete(`/observations/${id}`)
+      set((s) => {
+        const { [id]: _drop, ...rest } = s.byId
+        return {
+          observations: s.observations.filter((o) => o.id !== id),
+          byId: rest,
+          selectedObservation: s.selectedObservation?.id === id ? null : s.selectedObservation,
+          isMutating: false,
+        }
+      })
+    } catch (e) {
+      set({ error: errorMessage(e, 'Failed to delete observation'), isMutating: false })
+      throw e
+    }
+  },
 
+  // ---- comments ----------------------------------------------------------
+  // POST /comments is wired. PATCH/DELETE per-comment endpoints don't exist
+  // yet — those edits stay local-only with a timeline entry.
+
+  addComment: async (observationId, content, author) => {
+    try {
+      const created = await api.post<{
+        id: string
+        observation_id: string
+        author_id: string
+        text: string
+        is_edited: boolean
+        edited_at: string | null
+        created_at: string
+      }>(`/observations/${observationId}/comments`, { text: content })
       const newComment: Comment = {
-        id: crypto.randomUUID(),
+        id: created.id,
         content,
         author,
-        createdAt: new Date().toISOString(),
+        createdAt: created.created_at,
       }
-
-      // Create timeline entry for the comment
       const timelineEntry: ObservationTimelineEntry = {
         id: crypto.randomUUID(),
         date: new Date().toISOString(),
@@ -495,43 +502,107 @@ export const useObservationStore = create<ObservationState>()(
         userAvatar: author.avatar,
         actionType: 'comment_add',
       }
-
       set((state) => {
-        // Update observations array with timeline entry
         const observations = state.observations.map((obs) =>
           obs.id === observationId
-            ? {
-                ...obs,
-                timeline: [timelineEntry, ...(obs.timeline || [])],
-              }
-            : obs
+            ? { ...obs, timeline: [timelineEntry, ...(obs.timeline || [])] }
+            : obs,
         )
-
-        // Update selected observation if it matches
         let selectedObservation = state.selectedObservation
         if (selectedObservation?.id === observationId) {
           const existingComments = selectedObservation.comments || []
-          const timeline = selectedObservation.timeline || []
           selectedObservation = {
             ...selectedObservation,
             comments: [...existingComments, newComment],
-            timeline: [timelineEntry, ...timeline],
+            timeline: [timelineEntry, ...(selectedObservation.timeline || [])],
           }
         }
-
-        return { observations, selectedObservation }
+        const previous = state.byId[observationId]
+        const byId = previous
+          ? { ...state.byId, [observationId]: { ...previous, timeline: [timelineEntry, ...(previous.timeline || [])] } }
+          : state.byId
+        return { observations, byId, selectedObservation }
       })
-
       return newComment
-    } catch (error) {
-      set({
-        error: error instanceof Error ? error.message : 'Failed to add comment',
-      })
-      throw error
+    } catch (e) {
+      set({ error: errorMessage(e, 'Failed to add comment') })
+      throw e
     }
   },
 
-  addChecklistItem: async (observationId: string, text: string, user?: User) => {
+  // TODO(Phase 6): wire PATCH /api/observations/[id]/comments/[commentId].
+  editComment: async (observationId, commentId, newText, editor) => {
+    const timelineEntry: ObservationTimelineEntry = {
+      id: crypto.randomUUID(),
+      date: new Date().toISOString(),
+      dateKey: 'today',
+      description: `${editor.name} edited a comment`,
+      descriptionAr: `عدّل ${editor.name} تعليقاً`,
+      descriptionKey: 'observations.detail.timeline.commentEdited',
+      descriptionParams: { name: editor.name },
+      userId: editor.id,
+      userName: editor.name,
+      userAvatar: editor.avatar,
+      actionType: 'comment_edit',
+      targetId: commentId,
+    }
+    set((state) => {
+      if (state.selectedObservation?.id === observationId) {
+        const updates = state.selectedObservation.updates?.map((update) =>
+          update.id === commentId
+            ? { ...update, text: newText, isEdited: true, editedAt: new Date().toISOString() }
+            : update,
+        )
+        return {
+          selectedObservation: {
+            ...state.selectedObservation,
+            updates,
+            timeline: [timelineEntry, ...(state.selectedObservation.timeline || [])],
+          },
+        }
+      }
+      return state
+    })
+  },
+
+  // TODO(Phase 6): wire DELETE /api/observations/[id]/comments/[commentId].
+  deleteComment: async (observationId, commentId, deleter) => {
+    const timelineEntry: ObservationTimelineEntry = {
+      id: crypto.randomUUID(),
+      date: new Date().toISOString(),
+      dateKey: 'today',
+      description: `${deleter.name} deleted a comment`,
+      descriptionAr: `حذف ${deleter.name} تعليقاً`,
+      descriptionKey: 'observations.detail.timeline.commentDeleted',
+      descriptionParams: { name: deleter.name },
+      userId: deleter.id,
+      userName: deleter.name,
+      userAvatar: deleter.avatar,
+      actionType: 'comment_delete',
+      targetId: commentId,
+    }
+    set((state) => {
+      if (state.selectedObservation?.id === observationId) {
+        const updates = state.selectedObservation.updates?.filter(
+          (update) => update.id !== commentId,
+        )
+        return {
+          selectedObservation: {
+            ...state.selectedObservation,
+            updates,
+            timeline: [timelineEntry, ...(state.selectedObservation.timeline || [])],
+          },
+        }
+      }
+      return state
+    })
+  },
+
+  // ---- checklist ---------------------------------------------------------
+  // POST and PATCH/DELETE per-item endpoints exist. We wire add and toggle to
+  // the server; edit and remove also call the API.
+
+  addChecklistItem: async (observationId, text, user) => {
     const newItem: ChecklistItem = { id: crypto.randomUUID(), text, completed: false }
     const timelineEntry: ObservationTimelineEntry = {
       id: crypto.randomUUID(),
@@ -547,40 +618,45 @@ export const useObservationStore = create<ObservationState>()(
       actionType: 'checklist_add',
       targetId: newItem.id,
     }
+    try {
+      const row = await api.post<{ id: string; text: string; completed: boolean; sort_order: number }>(
+        `/observations/${observationId}/checklist`,
+        { text },
+      )
+      newItem.id = row.id
+      newItem.completed = row.completed
+    } catch (e) {
+      set({ error: errorMessage(e, 'Failed to add checklist item') })
+    }
     set((state) => {
-      // Update observations array
       const observations = state.observations.map((obs) => {
-        if (obs.id === observationId) {
-          const checklist = obs.checklist || []
-          return { ...obs, checklist: [...checklist, newItem] }
-        }
-        return obs
+        if (obs.id !== observationId) return obs
+        const checklist = obs.checklist || []
+        return { ...obs, checklist: [...checklist, newItem] }
       })
-
-      // Update selectedObservation
       let selectedObservation = state.selectedObservation
       if (selectedObservation?.id === observationId) {
         const checklist = selectedObservation.checklist || []
-        const timeline = selectedObservation.timeline || []
         selectedObservation = {
           ...selectedObservation,
           checklist: [...checklist, newItem],
-          timeline: [timelineEntry, ...timeline],
+          timeline: [timelineEntry, ...(selectedObservation.timeline || [])],
         }
       }
-
-      return { observations, selectedObservation }
+      const previous = state.byId[observationId]
+      const byId = previous
+        ? { ...state.byId, [observationId]: { ...previous, checklist: [...(previous.checklist || []), newItem] } }
+        : state.byId
+      return { observations, byId, selectedObservation }
     })
     return newItem
   },
 
-  editChecklistItem: async (observationId: string, itemId: string, newText: string, user?: User) => {
+  editChecklistItem: async (observationId, itemId, newText, user) => {
     const state = get()
-    // Find old text for timeline
-    const item = state.selectedObservation?.checklist?.find(i => i.id === itemId)
-      || state.observations.find(o => o.id === observationId)?.checklist?.find(i => i.id === itemId)
+    const item = state.selectedObservation?.checklist?.find((i) => i.id === itemId)
+      || state.byId[observationId]?.checklist?.find((i) => i.id === itemId)
     const oldText = item?.text || ''
-
     const timelineEntry: ObservationTimelineEntry = {
       id: crypto.randomUUID(),
       date: new Date().toISOString(),
@@ -595,45 +671,38 @@ export const useObservationStore = create<ObservationState>()(
       actionType: 'checklist_edit',
       targetId: itemId,
     }
-
+    try {
+      await api.patch(`/observations/${observationId}/checklist/${itemId}`, { text: newText })
+    } catch (e) {
+      set({ error: errorMessage(e, 'Failed to edit checklist item') })
+    }
     set((state) => {
-      // Update observations array
       const observations = state.observations.map((obs) => {
-        if (obs.id === observationId) {
-          const checklist = obs.checklist?.map(item =>
-            item.id === itemId ? { ...item, text: newText } : item
-          )
-          return { ...obs, checklist }
-        }
-        return obs
+        if (obs.id !== observationId) return obs
+        const checklist = obs.checklist?.map((it) => (it.id === itemId ? { ...it, text: newText } : it))
+        return { ...obs, checklist }
       })
-
-      // Update selectedObservation
       let selectedObservation = state.selectedObservation
       if (selectedObservation?.id === observationId) {
-        const checklist = selectedObservation.checklist?.map(item =>
-          item.id === itemId ? { ...item, text: newText } : item
+        const checklist = selectedObservation.checklist?.map((it) =>
+          it.id === itemId ? { ...it, text: newText } : it,
         )
-        const timeline = selectedObservation.timeline || []
         selectedObservation = {
           ...selectedObservation,
           checklist,
-          timeline: [timelineEntry, ...timeline],
+          timeline: [timelineEntry, ...(selectedObservation.timeline || [])],
         }
       }
-
       return { observations, selectedObservation }
     })
   },
 
-  toggleChecklistItem: async (observationId: string, itemId: string, completed: boolean, user?: User) => {
+  toggleChecklistItem: async (observationId, itemId, completed, user) => {
     const currentState = get()
-    // Look in both selectedObservation AND observations array to find the item text
-    const obsFromArray = currentState.observations.find(o => o.id === observationId)
-    const item = currentState.selectedObservation?.checklist?.find(i => i.id === itemId)
-      || obsFromArray?.checklist?.find(i => i.id === itemId)
+    const obsFromArray = currentState.byId[observationId]
+    const item = currentState.selectedObservation?.checklist?.find((i) => i.id === itemId)
+      || obsFromArray?.checklist?.find((i) => i.id === itemId)
     const itemText = item?.text || 'item'
-
     const timelineEntry: ObservationTimelineEntry = {
       id: crypto.randomUUID(),
       date: new Date().toISOString(),
@@ -654,38 +723,33 @@ export const useObservationStore = create<ObservationState>()(
       actionType: 'checklist_update',
       targetId: itemId,
     }
-
+    try {
+      await api.patch(`/observations/${observationId}/checklist/${itemId}`, { completed })
+    } catch (e) {
+      set({ error: errorMessage(e, 'Failed to toggle checklist item') })
+    }
     set((state) => {
-      // Update observations array
       const observations = state.observations.map((obs) => {
-        if (obs.id === observationId) {
-          const checklist = obs.checklist?.map(i =>
-            i.id === itemId ? { ...i, completed } : i
-          )
-          return { ...obs, checklist }
-        }
-        return obs
+        if (obs.id !== observationId) return obs
+        const checklist = obs.checklist?.map((i) => (i.id === itemId ? { ...i, completed } : i))
+        return { ...obs, checklist }
       })
-
-      // Update selectedObservation
       let selectedObservation = state.selectedObservation
       if (selectedObservation?.id === observationId) {
-        const checklist = selectedObservation.checklist?.map(i =>
-          i.id === itemId ? { ...i, completed } : i
+        const checklist = selectedObservation.checklist?.map((i) =>
+          i.id === itemId ? { ...i, completed } : i,
         )
-        const timeline = selectedObservation.timeline || []
         selectedObservation = {
           ...selectedObservation,
           checklist,
-          timeline: [timelineEntry, ...timeline],
+          timeline: [timelineEntry, ...(selectedObservation.timeline || [])],
         }
       }
-
       return { observations, selectedObservation }
     })
   },
 
-  removeChecklistItem: async (observationId: string, itemId: string, itemText?: string, user?: User) => {
+  removeChecklistItem: async (observationId, itemId, itemText, user) => {
     const timelineEntry: ObservationTimelineEntry = {
       id: crypto.randomUUID(),
       date: new Date().toISOString(),
@@ -700,631 +764,468 @@ export const useObservationStore = create<ObservationState>()(
       actionType: 'checklist_delete',
       targetId: itemId,
     }
+    try {
+      await api.delete(`/observations/${observationId}/checklist/${itemId}`)
+    } catch (e) {
+      set({ error: errorMessage(e, 'Failed to remove checklist item') })
+    }
     set((state) => {
-      // Update observations array
       const observations = state.observations.map((obs) => {
-        if (obs.id === observationId) {
-          return {
-            ...obs,
-            checklist: obs.checklist?.filter((item) => item.id !== itemId),
-          }
-        }
-        return obs
+        if (obs.id !== observationId) return obs
+        return { ...obs, checklist: obs.checklist?.filter((item) => item.id !== itemId) }
       })
-
-      // Update selectedObservation
       let selectedObservation = state.selectedObservation
       if (selectedObservation?.id === observationId) {
-        const timeline = selectedObservation.timeline || []
         selectedObservation = {
           ...selectedObservation,
-          checklist: selectedObservation.checklist?.filter(
-            (item) => item.id !== itemId
-          ),
-          timeline: [timelineEntry, ...timeline],
+          checklist: selectedObservation.checklist?.filter((item) => item.id !== itemId),
+          timeline: [timelineEntry, ...(selectedObservation.timeline || [])],
         }
       }
-
       return { observations, selectedObservation }
     })
   },
 
-  editComment: async (observationId: string, commentId: string, newText: string, editor: User) => {
-    try {
-      await new Promise((resolve) => setTimeout(resolve, 300))
+  // ---- workflow (leadership / closure / remediation) --------------------
 
-      const timelineEntry: ObservationTimelineEntry = {
-        id: crypto.randomUUID(),
-        date: new Date().toISOString(),
-        dateKey: 'today',
-        description: `${editor.name} edited a comment`,
-        descriptionAr: `عدّل ${editor.name} تعليقاً`,
-        descriptionKey: 'observations.detail.timeline.commentEdited',
-        descriptionParams: { name: editor.name },
-        userId: editor.id,
-        userName: editor.name,
-        userAvatar: editor.avatar,
-        actionType: 'comment_edit',
-        targetId: commentId,
-      }
-
-      set((state) => {
-        if (state.selectedObservation?.id === observationId) {
-          const updates = state.selectedObservation.updates?.map((update) =>
-            update.id === commentId
-              ? { ...update, text: newText, isEdited: true, editedAt: new Date().toISOString() }
-              : update
-          )
-          const timeline = state.selectedObservation.timeline || []
-          return {
-            selectedObservation: {
-              ...state.selectedObservation,
-              updates,
-              timeline: [timelineEntry, ...timeline],
-            },
-          }
-        }
-        return state
-      })
-    } catch (error) {
-      set({
-        error: error instanceof Error ? error.message : 'Failed to edit comment',
-      })
-      throw error
-    }
-  },
-
-  deleteComment: async (observationId: string, commentId: string, deleter: User) => {
-    try {
-      await new Promise((resolve) => setTimeout(resolve, 300))
-
-      const timelineEntry: ObservationTimelineEntry = {
-        id: crypto.randomUUID(),
-        date: new Date().toISOString(),
-        dateKey: 'today',
-        description: `${deleter.name} deleted a comment`,
-        descriptionAr: `حذف ${deleter.name} تعليقاً`,
-        descriptionKey: 'observations.detail.timeline.commentDeleted',
-        descriptionParams: { name: deleter.name },
-        userId: deleter.id,
-        userName: deleter.name,
-        userAvatar: deleter.avatar,
-        actionType: 'comment_delete',
-        targetId: commentId,
-      }
-
-      set((state) => {
-        if (state.selectedObservation?.id === observationId) {
-          const updates = state.selectedObservation.updates?.filter(
-            (update) => update.id !== commentId
-          )
-          const timeline = state.selectedObservation.timeline || []
-          return {
-            selectedObservation: {
-              ...state.selectedObservation,
-              updates,
-              timeline: [timelineEntry, ...timeline],
-            },
-          }
-        }
-        return state
-      })
-    } catch (error) {
-      set({
-        error: error instanceof Error ? error.message : 'Failed to delete comment',
-      })
-      throw error
-    }
-  },
-
-  transferLeadership: async (observationId: string, newLeaderId: string, newLeaderName: string, currentUser: User) => {
-    // Phase 6 §8.2: `reassign` is gated as `Manage Audit Findings`.
+  transferLeadership: async (observationId, newLeaderId, newLeaderName, currentUser) => {
     requirePermission('Manage Audit Findings', { storeName: 'observation', actionName: 'transferLeadership', id: observationId })
+    const timelineEntry: ObservationTimelineEntry = {
+      id: crypto.randomUUID(),
+      date: new Date().toISOString(),
+      dateKey: 'today',
+      description: `${currentUser.name} transferred leadership to ${newLeaderName}`,
+      descriptionAr: `نقل ${currentUser.name} القيادة إلى ${newLeaderName}`,
+      descriptionKey: 'observations.detail.timeline.leaderTransferred',
+      descriptionParams: { from: currentUser.name, to: newLeaderName },
+      userId: currentUser.id,
+      userName: currentUser.name,
+      userAvatar: currentUser.avatar,
+      actionType: 'leader_transfer',
+    }
     try {
-      await new Promise((resolve) => setTimeout(resolve, 300))
-
-      const timelineEntry: ObservationTimelineEntry = {
-        id: crypto.randomUUID(),
-        date: new Date().toISOString(),
-        dateKey: 'today',
-        description: `${currentUser.name} transferred leadership to ${newLeaderName}`,
-        descriptionAr: `نقل ${currentUser.name} القيادة إلى ${newLeaderName}`,
-        descriptionKey: 'observations.detail.timeline.leaderTransferred',
-        descriptionParams: { from: currentUser.name, to: newLeaderName },
-        userId: currentUser.id,
-        userName: currentUser.name,
-        userAvatar: currentUser.avatar,
-        actionType: 'leader_transfer',
-      }
-
-      set((state) => {
-        // Get current checklist/documents from selectedObservation to sync to observations array
-        const currentChecklist = state.selectedObservation?.checklist
-        const currentDocuments = state.selectedObservation?.documents
-        const currentRemediationPlan = state.selectedObservation?.remediationPlan
-
-        // Update in observations array - also persist timeline entry and sync data from selectedObservation
-        const observations = state.observations.map((obs) =>
-          obs.id === observationId
-            ? {
-                ...obs,
-                leaderId: newLeaderId,
-                timeline: [timelineEntry, ...(obs.timeline || [])],
-                // Sync checklist/documents from selectedObservation to prevent data loss
-                checklist: currentChecklist || obs.checklist,
-                documents: currentDocuments || obs.documents,
-                remediationPlan: currentRemediationPlan || obs.remediationPlan,
-              }
-            : obs
-        )
-
-        // Update selected observation if it matches - explicitly preserve comments and checklist
-        const selectedObservation = state.selectedObservation?.id === observationId
+      await api.post(`/observations/${observationId}/assign`, { leader_id: newLeaderId })
+    } catch (e) {
+      set({ error: errorMessage(e, 'Failed to transfer leadership') })
+    }
+    set((state) => {
+      const currentChecklist = state.selectedObservation?.checklist
+      const currentDocuments = state.selectedObservation?.documents
+      const currentRemediationPlan = state.selectedObservation?.remediationPlan
+      const observations = state.observations.map((obs) =>
+        obs.id === observationId
           ? {
-              ...state.selectedObservation,
+              ...obs,
               leaderId: newLeaderId,
-              timeline: [timelineEntry, ...(state.selectedObservation.timeline || [])],
-              // Explicitly preserve these fields to prevent any data loss
-              comments: state.selectedObservation.comments,
-              checklist: state.selectedObservation.checklist,
-              documents: state.selectedObservation.documents,
-              remediationPlan: state.selectedObservation.remediationPlan,
+              timeline: [timelineEntry, ...(obs.timeline || [])],
+              checklist: currentChecklist || obs.checklist,
+              documents: currentDocuments || obs.documents,
+              remediationPlan: currentRemediationPlan || obs.remediationPlan,
             }
-          : state.selectedObservation
-
-        return { observations, selectedObservation }
-      })
-    } catch (error) {
-      set({
-        error: error instanceof Error ? error.message : 'Failed to transfer leadership',
-      })
-      throw error
-    }
-  },
-
-  submitRemediationPlan: async (observationId: string, plan, submitter: User, observationLeaderId?: string) => {
-    try {
-      await new Promise((resolve) => setTimeout(resolve, 300))
-
-      // Check if submitter is the observation leader for auto-approval
-      const isLeader = observationLeaderId && submitter.id === observationLeaderId
-      const planStatus = isLeader ? 'approved' : 'submitted'
-
-      const newPlan: RemediationPlan = {
-        ...plan,
-        id: crypto.randomUUID(),
-        status: planStatus,
-        submittedAt: new Date().toISOString(),
-        submittedBy: submitter.id,
-        createdAt: new Date().toISOString(),
-        // If auto-approved, also set review fields
-        ...(isLeader && {
-          reviewedAt: new Date().toISOString(),
-          reviewedBy: submitter.id,
-        }),
-      }
-
-      const timelineEntry: ObservationTimelineEntry = {
-        id: crypto.randomUUID(),
-        date: new Date().toISOString(),
-        dateKey: 'today',
-        description: isLeader
-          ? `${submitter.name} submitted and auto-approved remediation plan`
-          : `${submitter.name} submitted a remediation plan`,
-        descriptionAr: isLeader
-          ? `قدّم ${submitter.name} خطة المعالجة ووافق عليها تلقائياً`
-          : `قدّم ${submitter.name} خطة المعالجة`,
-        descriptionKey: isLeader
-          ? 'observations.detail.timeline.remediationAutoApproved'
-          : 'observations.detail.timeline.remediationSubmitted',
-        descriptionParams: { name: submitter.name },
-        userId: submitter.id,
-        userName: submitter.name,
-        userAvatar: submitter.avatar,
-        actionType: isLeader ? 'remediation_approved' : 'remediation_submitted',
-      }
-
-      set((state) => {
-        // Update in observations array - if auto-approved, also set status to in_progress
-        const observations = state.observations.map((obs) => {
-          if (obs.id !== observationId) return obs
-          const newStatus = isLeader && obs.status === 'open' ? 'in_progress' : obs.status
-          return { ...obs, remediationPlan: newPlan, status: newStatus }
-        })
-
-        // Update selected observation if it matches
-        let selectedObservation = state.selectedObservation
-        if (selectedObservation?.id === observationId) {
-          const newStatus = isLeader && selectedObservation.status === 'open' ? 'in_progress' : selectedObservation.status
-          selectedObservation = {
-            ...selectedObservation,
-            remediationPlan: newPlan,
-            status: newStatus,
-            timeline: [timelineEntry, ...(selectedObservation.timeline || [])],
+          : obs,
+      )
+      const previous = state.byId[observationId]
+      const byId = previous
+        ? { ...state.byId, [observationId]: { ...previous, leaderId: newLeaderId } }
+        : state.byId
+      const selectedObservation = state.selectedObservation?.id === observationId
+        ? {
+            ...state.selectedObservation,
+            leaderId: newLeaderId,
+            timeline: [timelineEntry, ...(state.selectedObservation.timeline || [])],
+            comments: state.selectedObservation.comments,
+            checklist: state.selectedObservation.checklist,
+            documents: state.selectedObservation.documents,
+            remediationPlan: state.selectedObservation.remediationPlan,
           }
-        }
-
-        return { observations, selectedObservation }
-      })
-    } catch (error) {
-      set({
-        error: error instanceof Error ? error.message : 'Failed to submit remediation plan',
-      })
-      throw error
-    }
+        : state.selectedObservation
+      return { observations, byId, selectedObservation }
+    })
   },
 
-  reviewRemediationPlan: async (observationId: string, approved: boolean, reviewer: User, notes?: string) => {
+  submitRemediationPlan: async (observationId, plan, submitter, observationLeaderId) => {
+    const isLeader = observationLeaderId && submitter.id === observationLeaderId
+    const planStatus = isLeader ? 'approved' : 'submitted'
+    let serverPlanId = crypto.randomUUID()
     try {
-      await new Promise((resolve) => setTimeout(resolve, 300))
-
-      const state = get()
-      const observation = state.observations.find((o) => o.id === observationId)
-      if (!observation?.remediationPlan) return
-
-      const updatedPlan: RemediationPlan = {
-        ...observation.remediationPlan,
-        status: approved ? 'approved' : 'rejected',
+      const row = await api.post<{ id: string }>(`/observations/${observationId}/remediation`, {
+        title: plan.title,
+        description: plan.description,
+        due_date: plan.dueDate,
+      })
+      serverPlanId = row.id
+    } catch (e) {
+      set({ error: errorMessage(e, 'Failed to submit remediation plan') })
+    }
+    const newPlan: RemediationPlan = {
+      ...plan,
+      id: serverPlanId,
+      status: planStatus,
+      submittedAt: new Date().toISOString(),
+      submittedBy: submitter.id,
+      createdAt: new Date().toISOString(),
+      ...(isLeader && {
         reviewedAt: new Date().toISOString(),
-        reviewedBy: reviewer.id,
-        reviewNotes: notes,
-      }
-
-      const timelineEntry: ObservationTimelineEntry = {
-        id: crypto.randomUUID(),
-        date: new Date().toISOString(),
-        dateKey: 'today',
-        description: approved
-          ? `${reviewer.name} approved the remediation plan`
-          : `${reviewer.name} rejected the remediation plan`,
-        descriptionAr: approved
-          ? `وافق ${reviewer.name} على خطة المعالجة`
-          : `رفض ${reviewer.name} خطة المعالجة`,
-        descriptionKey: approved
-          ? 'observations.detail.timeline.remediationApproved'
-          : 'observations.detail.timeline.remediationRejected',
-        descriptionParams: { name: reviewer.name },
-        userId: reviewer.id,
-        userName: reviewer.name,
-        userAvatar: reviewer.avatar,
-        actionType: approved ? 'remediation_approved' : 'remediation_rejected',
-      }
-
-      set((state) => {
-        // Update in observations array - also change status to in_progress if approved and was open
-        const observations = state.observations.map((obs) => {
-          if (obs.id !== observationId) return obs
-          const newStatus = approved && obs.status === 'open' ? 'in_progress' : obs.status
-          return { ...obs, remediationPlan: updatedPlan, status: newStatus }
-        })
-
-        // Update selected observation if it matches
-        let selectedObservation = state.selectedObservation
-        if (selectedObservation?.id === observationId) {
-          const newStatus = approved && selectedObservation.status === 'open' ? 'in_progress' : selectedObservation.status
-          selectedObservation = {
-            ...selectedObservation,
-            remediationPlan: updatedPlan,
-            status: newStatus,
-            timeline: [timelineEntry, ...(selectedObservation.timeline || [])],
-          }
-        }
-
-        return { observations, selectedObservation }
-      })
-    } catch (error) {
-      set({
-        error: error instanceof Error ? error.message : 'Failed to review remediation plan',
-      })
-      throw error
+        reviewedBy: submitter.id,
+      }),
     }
+    const timelineEntry: ObservationTimelineEntry = {
+      id: crypto.randomUUID(),
+      date: new Date().toISOString(),
+      dateKey: 'today',
+      description: isLeader
+        ? `${submitter.name} submitted and auto-approved remediation plan`
+        : `${submitter.name} submitted a remediation plan`,
+      descriptionAr: isLeader
+        ? `قدّم ${submitter.name} خطة المعالجة ووافق عليها تلقائياً`
+        : `قدّم ${submitter.name} خطة المعالجة`,
+      descriptionKey: isLeader
+        ? 'observations.detail.timeline.remediationAutoApproved'
+        : 'observations.detail.timeline.remediationSubmitted',
+      descriptionParams: { name: submitter.name },
+      userId: submitter.id,
+      userName: submitter.name,
+      userAvatar: submitter.avatar,
+      actionType: isLeader ? 'remediation_approved' : 'remediation_submitted',
+    }
+    set((state) => {
+      const observations = state.observations.map((obs) => {
+        if (obs.id !== observationId) return obs
+        const newStatus = isLeader && obs.status === 'open' ? 'in_progress' : obs.status
+        return { ...obs, remediationPlan: newPlan, status: newStatus }
+      })
+      let selectedObservation = state.selectedObservation
+      if (selectedObservation?.id === observationId) {
+        const newStatus = isLeader && selectedObservation.status === 'open' ? 'in_progress' : selectedObservation.status
+        selectedObservation = {
+          ...selectedObservation,
+          remediationPlan: newPlan,
+          status: newStatus,
+          timeline: [timelineEntry, ...(selectedObservation.timeline || [])],
+        }
+      }
+      return { observations, selectedObservation }
+    })
   },
 
-  requestClosure: async (observationId: string, requester: User, notes?: string) => {
+  // TODO(Phase 6): wire PATCH /api/observations/[id]/remediation/[planId] review endpoint.
+  reviewRemediationPlan: async (observationId, approved, reviewer, notes) => {
+    const observation = get().byId[observationId]
+    if (!observation?.remediationPlan) return
+    const updatedPlan: RemediationPlan = {
+      ...observation.remediationPlan,
+      status: approved ? 'approved' : 'rejected',
+      reviewedAt: new Date().toISOString(),
+      reviewedBy: reviewer.id,
+      reviewNotes: notes,
+    }
+    const timelineEntry: ObservationTimelineEntry = {
+      id: crypto.randomUUID(),
+      date: new Date().toISOString(),
+      dateKey: 'today',
+      description: approved
+        ? `${reviewer.name} approved the remediation plan`
+        : `${reviewer.name} rejected the remediation plan`,
+      descriptionAr: approved
+        ? `وافق ${reviewer.name} على خطة المعالجة`
+        : `رفض ${reviewer.name} خطة المعالجة`,
+      descriptionKey: approved
+        ? 'observations.detail.timeline.remediationApproved'
+        : 'observations.detail.timeline.remediationRejected',
+      descriptionParams: { name: reviewer.name },
+      userId: reviewer.id,
+      userName: reviewer.name,
+      userAvatar: reviewer.avatar,
+      actionType: approved ? 'remediation_approved' : 'remediation_rejected',
+    }
+    set((state) => {
+      const observations = state.observations.map((obs) => {
+        if (obs.id !== observationId) return obs
+        const newStatus = approved && obs.status === 'open' ? 'in_progress' : obs.status
+        return { ...obs, remediationPlan: updatedPlan, status: newStatus }
+      })
+      let selectedObservation = state.selectedObservation
+      if (selectedObservation?.id === observationId) {
+        const newStatus = approved && selectedObservation.status === 'open' ? 'in_progress' : selectedObservation.status
+        selectedObservation = {
+          ...selectedObservation,
+          remediationPlan: updatedPlan,
+          status: newStatus,
+          timeline: [timelineEntry, ...(selectedObservation.timeline || [])],
+        }
+      }
+      return { observations, selectedObservation }
+    })
+  },
+
+  requestClosure: async (observationId, requester, notes) => {
+    const closureRequest: ClosureRequest = {
+      requestedAt: new Date().toISOString(),
+      requestedBy: requester.id,
+      requestedByName: requester.name,
+      notes,
+    }
+    const timelineEntry: ObservationTimelineEntry = {
+      id: crypto.randomUUID(),
+      date: new Date().toISOString(),
+      dateKey: 'today',
+      description: `${requester.name} requested closure`,
+      descriptionAr: `طلب ${requester.name} إغلاق الملاحظة`,
+      descriptionKey: 'observations.detail.timeline.closureRequested',
+      descriptionParams: { name: requester.name },
+      userId: requester.id,
+      userName: requester.name,
+      userAvatar: requester.avatar,
+      actionType: 'status_change',
+    }
     try {
-      await new Promise((resolve) => setTimeout(resolve, 300))
-
-      const closureRequest: ClosureRequest = {
-        requestedAt: new Date().toISOString(),
-        requestedBy: requester.id,
-        requestedByName: requester.name,
-        notes,
-      }
-
-      const timelineEntry: ObservationTimelineEntry = {
-        id: crypto.randomUUID(),
-        date: new Date().toISOString(),
-        dateKey: 'today',
-        description: `${requester.name} requested closure`,
-        descriptionAr: `طلب ${requester.name} إغلاق الملاحظة`,
-        descriptionKey: 'observations.detail.timeline.closureRequested',
-        descriptionParams: { name: requester.name },
-        userId: requester.id,
-        userName: requester.name,
-        userAvatar: requester.avatar,
-        actionType: 'status_change',
-      }
-
-      set((state) => {
-        // Update in observations array - change status to 'resolved' (Pending Review)
-        const observations = state.observations.map((obs) => {
-          if (obs.id !== observationId) return obs
-          return {
-            ...obs,
-            status: 'resolved' as const,
-            closureRequest,
-            closureReview: undefined, // Clear any previous review
-            timeline: [timelineEntry, ...(obs.timeline || [])],
-          }
-        })
-
-        // Update selected observation if it matches
-        let selectedObservation = state.selectedObservation
-        if (selectedObservation?.id === observationId) {
-          selectedObservation = {
-            ...selectedObservation,
-            status: 'resolved' as const,
-            closureRequest,
-            closureReview: undefined,
-            timeline: [timelineEntry, ...(selectedObservation.timeline || [])],
-          }
-        }
-
-        return { observations, selectedObservation }
-      })
-    } catch (error) {
-      set({
-        error: error instanceof Error ? error.message : 'Failed to request closure',
-      })
-      throw error
+      // /close transitions status to 'closed' on the server; the legacy UI
+      // flow expected status='resolved' (pending review). We post then immediately
+      // re-set status locally so the modal renders the "Pending Review" state.
+      await api.post(`/observations/${observationId}/close`, { notes })
+    } catch (e) {
+      set({ error: errorMessage(e, 'Failed to request closure') })
     }
+    set((state) => {
+      const observations = state.observations.map((obs) => {
+        if (obs.id !== observationId) return obs
+        return {
+          ...obs,
+          status: 'resolved' as const,
+          closureRequest,
+          closureReview: undefined,
+          timeline: [timelineEntry, ...(obs.timeline || [])],
+        }
+      })
+      let selectedObservation = state.selectedObservation
+      if (selectedObservation?.id === observationId) {
+        selectedObservation = {
+          ...selectedObservation,
+          status: 'resolved' as const,
+          closureRequest,
+          closureReview: undefined,
+          timeline: [timelineEntry, ...(selectedObservation.timeline || [])],
+        }
+      }
+      return { observations, selectedObservation }
+    })
   },
 
-  reviewClosure: async (observationId: string, approved: boolean, reviewer: User, notes?: string) => {
-    // Phase 6 §8.2: `close` is gated as `Manage Audit Findings`.
+  reviewClosure: async (observationId, approved, reviewer, notes) => {
     requirePermission('Manage Audit Findings', { storeName: 'observation', actionName: `reviewClosure:${approved ? 'approved' : 'rejected'}`, id: observationId })
-    try {
-      await new Promise((resolve) => setTimeout(resolve, 300))
-
-      const closureReview: ClosureReview = {
-        reviewedAt: new Date().toISOString(),
-        reviewedBy: reviewer.id,
-        reviewedByName: reviewer.name,
-        approved,
-        notes,
-      }
-
-      const newStatus = approved ? 'closed' : 'in_progress'
-
-      const timelineEntry: ObservationTimelineEntry = {
-        id: crypto.randomUUID(),
-        date: new Date().toISOString(),
-        dateKey: 'today',
-        description: approved
-          ? `${reviewer.name} approved closure`
-          : `${reviewer.name} rejected closure request`,
-        descriptionAr: approved
-          ? `وافق ${reviewer.name} على إغلاق الملاحظة`
-          : `رفض ${reviewer.name} طلب الإغلاق`,
-        descriptionKey: approved
-          ? 'observations.detail.timeline.closureApproved'
-          : 'observations.detail.timeline.closureRejected',
-        descriptionParams: { name: reviewer.name },
-        userId: reviewer.id,
-        userName: reviewer.name,
-        userAvatar: reviewer.avatar,
-        actionType: 'status_change',
-      }
-
-      set((state) => {
-        // Update in observations array
-        const observations = state.observations.map((obs) => {
-          if (obs.id !== observationId) return obs
-          return {
-            ...obs,
-            status: newStatus as 'closed' | 'in_progress',
-            closureReview,
-            // If rejected, clear the closure request so they can request again
-            closureRequest: approved ? obs.closureRequest : undefined,
-            timeline: [timelineEntry, ...(obs.timeline || [])],
-          }
-        })
-
-        // Update selected observation if it matches
-        let selectedObservation = state.selectedObservation
-        if (selectedObservation?.id === observationId) {
-          selectedObservation = {
-            ...selectedObservation,
-            status: newStatus as 'closed' | 'in_progress',
-            closureReview,
-            closureRequest: approved ? selectedObservation.closureRequest : undefined,
-            timeline: [timelineEntry, ...(selectedObservation.timeline || [])],
-          }
-        }
-
-        return { observations, selectedObservation }
-      })
-    } catch (error) {
-      set({
-        error: error instanceof Error ? error.message : 'Failed to review closure',
-      })
-      throw error
+    const closureReview: ClosureReview = {
+      reviewedAt: new Date().toISOString(),
+      reviewedBy: reviewer.id,
+      reviewedByName: reviewer.name,
+      approved,
+      notes,
     }
+    const newStatus = approved ? 'closed' : 'in_progress'
+    const timelineEntry: ObservationTimelineEntry = {
+      id: crypto.randomUUID(),
+      date: new Date().toISOString(),
+      dateKey: 'today',
+      description: approved
+        ? `${reviewer.name} approved closure`
+        : `${reviewer.name} rejected closure request`,
+      descriptionAr: approved
+        ? `وافق ${reviewer.name} على إغلاق الملاحظة`
+        : `رفض ${reviewer.name} طلب الإغلاق`,
+      descriptionKey: approved
+        ? 'observations.detail.timeline.closureApproved'
+        : 'observations.detail.timeline.closureRejected',
+      descriptionParams: { name: reviewer.name },
+      userId: reviewer.id,
+      userName: reviewer.name,
+      userAvatar: reviewer.avatar,
+      actionType: 'status_change',
+    }
+    try {
+      if (approved) {
+        // Already closed server-side via requestClosure; ensure it stays closed.
+        await api.patch(`/observations/${observationId}`, { status: 'closed' })
+      } else {
+        await api.post(`/observations/${observationId}/reopen`)
+      }
+    } catch (e) {
+      set({ error: errorMessage(e, 'Failed to review closure') })
+    }
+    set((state) => {
+      const observations = state.observations.map((obs) => {
+        if (obs.id !== observationId) return obs
+        return {
+          ...obs,
+          status: newStatus as 'closed' | 'in_progress',
+          closureReview,
+          closureRequest: approved ? obs.closureRequest : undefined,
+          timeline: [timelineEntry, ...(obs.timeline || [])],
+        }
+      })
+      let selectedObservation = state.selectedObservation
+      if (selectedObservation?.id === observationId) {
+        selectedObservation = {
+          ...selectedObservation,
+          status: newStatus as 'closed' | 'in_progress',
+          closureReview,
+          closureRequest: approved ? selectedObservation.closureRequest : undefined,
+          timeline: [timelineEntry, ...(selectedObservation.timeline || [])],
+        }
+      }
+      return { observations, selectedObservation }
+    })
   },
 
-  addDocument: async (observationId: string, document: { name: string; type: 'pdf' | 'image' | 'doc' }, uploader: User, addToRemediationPlan?: boolean) => {
+  // ---- documents ---------------------------------------------------------
+
+  addDocument: async (observationId, doc, uploader, addToRemediationPlan) => {
+    const newDocument = {
+      id: crypto.randomUUID(),
+      name: doc.name,
+      type: doc.type,
+    }
     try {
-      await new Promise((resolve) => setTimeout(resolve, 300))
-
-      const newDocument = {
-        id: crypto.randomUUID(),
-        name: document.name,
-        type: document.type,
-      }
-
-      const timelineEntry: ObservationTimelineEntry = {
-        id: crypto.randomUUID(),
-        date: new Date().toISOString(),
-        dateKey: 'today',
-        description: addToRemediationPlan
-          ? `${uploader.name} uploaded remediation document: ${document.name}`
-          : `${uploader.name} uploaded a document: ${document.name}`,
-        descriptionAr: addToRemediationPlan
-          ? `${uploader.name} رفع مستند معالجة: ${document.name}`
-          : `رفع ${uploader.name} مستند: ${document.name}`,
-        descriptionKey: addToRemediationPlan
-          ? 'observations.detail.timeline.remediationDocumentUploaded'
-          : 'observations.detail.timeline.documentUploaded',
-        descriptionParams: { name: uploader.name, document: document.name },
-        userId: uploader.id,
-        userName: uploader.name,
-        userAvatar: uploader.avatar,
-        actionType: 'document_add',
-      }
-
-      set((state) => {
-        // Update in observations array
-        const observations = state.observations.map((obs) => {
-          if (obs.id !== observationId) return obs
-
-          const documents = [...(obs.documents || []), newDocument]
-
-          // If addToRemediationPlan is true, add to plan documents (create stub plan if needed)
-          let remediationPlan = obs.remediationPlan
-          if (addToRemediationPlan) {
-            if (remediationPlan) {
-              remediationPlan = {
-                ...remediationPlan,
-                documents: [...(remediationPlan.documents || []), newDocument],
-              }
-            } else {
-              // Create a stub remediation plan with just the document
-              remediationPlan = {
-                id: crypto.randomUUID(),
-                title: '',
-                description: '',
-                dueDate: obs.dueDate || new Date().toISOString(),
-                status: 'draft' as const,
-                documents: [newDocument],
-                createdAt: new Date().toISOString(),
-              }
+      const row = await api.post<{ id: string; name: string; type: 'pdf' | 'image' | 'doc' }>(
+        `/observations/${observationId}/evidence`,
+        {
+          name: doc.name,
+          type: doc.type,
+          storage_path: doc.storage_path ?? `observations/${observationId}/${doc.name}`,
+        },
+      )
+      newDocument.id = row.id
+    } catch (e) {
+      set({ error: errorMessage(e, 'Failed to add document') })
+    }
+    const timelineEntry: ObservationTimelineEntry = {
+      id: crypto.randomUUID(),
+      date: new Date().toISOString(),
+      dateKey: 'today',
+      description: addToRemediationPlan
+        ? `${uploader.name} uploaded remediation document: ${doc.name}`
+        : `${uploader.name} uploaded a document: ${doc.name}`,
+      descriptionAr: addToRemediationPlan
+        ? `${uploader.name} رفع مستند معالجة: ${doc.name}`
+        : `رفع ${uploader.name} مستند: ${doc.name}`,
+      descriptionKey: addToRemediationPlan
+        ? 'observations.detail.timeline.remediationDocumentUploaded'
+        : 'observations.detail.timeline.documentUploaded',
+      descriptionParams: { name: uploader.name, document: doc.name },
+      userId: uploader.id,
+      userName: uploader.name,
+      userAvatar: uploader.avatar,
+      actionType: 'document_add',
+    }
+    set((state) => {
+      const observations = state.observations.map((obs) => {
+        if (obs.id !== observationId) return obs
+        const documents = [...(obs.documents || []), newDocument]
+        let remediationPlan = obs.remediationPlan
+        if (addToRemediationPlan) {
+          if (remediationPlan) {
+            remediationPlan = {
+              ...remediationPlan,
+              documents: [...(remediationPlan.documents || []), newDocument],
             }
-          }
-
-          return { ...obs, documents, remediationPlan }
-        })
-
-        // Update selected observation if it matches
-        let selectedObservation = state.selectedObservation
-        if (selectedObservation?.id === observationId) {
-          const documents = [...(selectedObservation.documents || []), newDocument]
-
-          let remediationPlan = selectedObservation.remediationPlan
-          if (addToRemediationPlan) {
-            if (remediationPlan) {
-              remediationPlan = {
-                ...remediationPlan,
-                documents: [...(remediationPlan.documents || []), newDocument],
-              }
-            } else {
-              // Create a stub remediation plan with just the document
-              remediationPlan = {
-                id: crypto.randomUUID(),
-                title: '',
-                description: '',
-                dueDate: selectedObservation.dueDate || new Date().toISOString(),
-                status: 'draft' as const,
-                documents: [newDocument],
-                createdAt: new Date().toISOString(),
-              }
+          } else {
+            remediationPlan = {
+              id: crypto.randomUUID(),
+              title: '',
+              description: '',
+              dueDate: obs.dueDate || new Date().toISOString(),
+              status: 'draft' as const,
+              documents: [newDocument],
+              createdAt: new Date().toISOString(),
             }
-          }
-
-          selectedObservation = {
-            ...selectedObservation,
-            documents,
-            remediationPlan,
-            timeline: [timelineEntry, ...(selectedObservation.timeline || [])],
           }
         }
-
-        return { observations, selectedObservation }
+        return { ...obs, documents, remediationPlan }
       })
-    } catch (error) {
-      set({
-        error: error instanceof Error ? error.message : 'Failed to add document',
-      })
-      throw error
-    }
+      let selectedObservation = state.selectedObservation
+      if (selectedObservation?.id === observationId) {
+        const documents = [...(selectedObservation.documents || []), newDocument]
+        let remediationPlan = selectedObservation.remediationPlan
+        if (addToRemediationPlan) {
+          if (remediationPlan) {
+            remediationPlan = {
+              ...remediationPlan,
+              documents: [...(remediationPlan.documents || []), newDocument],
+            }
+          } else {
+            remediationPlan = {
+              id: crypto.randomUUID(),
+              title: '',
+              description: '',
+              dueDate: selectedObservation.dueDate || new Date().toISOString(),
+              status: 'draft' as const,
+              documents: [newDocument],
+              createdAt: new Date().toISOString(),
+            }
+          }
+        }
+        selectedObservation = {
+          ...selectedObservation,
+          documents,
+          remediationPlan,
+          timeline: [timelineEntry, ...(selectedObservation.timeline || [])],
+        }
+      }
+      return { observations, selectedObservation }
+    })
   },
 
-  removeDocument: async (observationId: string, documentId: string, documentName: string, user: User) => {
+  // TODO(Phase 6): wire DELETE /api/observations/[id]/evidence/[docId] (the route exists).
+  removeDocument: async (observationId, documentId, documentName, user) => {
+    const timelineEntry: ObservationTimelineEntry = {
+      id: crypto.randomUUID(),
+      date: new Date().toISOString(),
+      dateKey: 'today',
+      description: `${user.name} deleted document: ${documentName}`,
+      descriptionAr: `${user.name} حذف مستند: ${documentName}`,
+      descriptionKey: 'observations.detail.timeline.documentDeleted',
+      descriptionParams: { name: user.name, document: documentName },
+      userId: user.id,
+      userName: user.name,
+      userAvatar: user.avatar,
+      actionType: 'document_delete',
+      targetId: documentId,
+    }
     try {
-      await new Promise((resolve) => setTimeout(resolve, 300))
-
-      const timelineEntry: ObservationTimelineEntry = {
-        id: crypto.randomUUID(),
-        date: new Date().toISOString(),
-        dateKey: 'today',
-        description: `${user.name} deleted document: ${documentName}`,
-        descriptionAr: `${user.name} حذف مستند: ${documentName}`,
-        descriptionKey: 'observations.detail.timeline.documentDeleted',
-        descriptionParams: { name: user.name, document: documentName },
-        userId: user.id,
-        userName: user.name,
-        userAvatar: user.avatar,
-        actionType: 'document_delete',
-        targetId: documentId,
-      }
-
-      set((state) => {
-        // Update in observations array
-        const observations = state.observations.map((obs) => {
-          if (obs.id !== observationId) return obs
-
-          const documents = (obs.documents || []).filter(doc => doc.id !== documentId)
-
-          // Also remove from remediation plan if exists
-          let remediationPlan = obs.remediationPlan
-          if (remediationPlan?.documents) {
-            remediationPlan = {
-              ...remediationPlan,
-              documents: remediationPlan.documents.filter(doc => doc.id !== documentId),
-            }
-          }
-
-          return { ...obs, documents, remediationPlan }
-        })
-
-        // Update selected observation if it matches
-        let selectedObservation = state.selectedObservation
-        if (selectedObservation?.id === observationId) {
-          const documents = (selectedObservation.documents || []).filter(doc => doc.id !== documentId)
-
-          let remediationPlan = selectedObservation.remediationPlan
-          if (remediationPlan?.documents) {
-            remediationPlan = {
-              ...remediationPlan,
-              documents: remediationPlan.documents.filter(doc => doc.id !== documentId),
-            }
-          }
-
-          selectedObservation = {
-            ...selectedObservation,
-            documents,
-            remediationPlan,
-            timeline: [timelineEntry, ...(selectedObservation.timeline || [])],
+      await api.delete(`/observations/${observationId}/evidence/${documentId}`)
+    } catch (e) {
+      set({ error: errorMessage(e, 'Failed to remove document') })
+    }
+    set((state) => {
+      const observations = state.observations.map((obs) => {
+        if (obs.id !== observationId) return obs
+        const documents = (obs.documents || []).filter((doc) => doc.id !== documentId)
+        let remediationPlan = obs.remediationPlan
+        if (remediationPlan?.documents) {
+          remediationPlan = {
+            ...remediationPlan,
+            documents: remediationPlan.documents.filter((doc) => doc.id !== documentId),
           }
         }
-
-        return { observations, selectedObservation }
+        return { ...obs, documents, remediationPlan }
       })
-    } catch (error) {
-      set({
-        error: error instanceof Error ? error.message : 'Failed to remove document',
-      })
-      throw error
-    }
+      let selectedObservation = state.selectedObservation
+      if (selectedObservation?.id === observationId) {
+        const documents = (selectedObservation.documents || []).filter((doc) => doc.id !== documentId)
+        let remediationPlan = selectedObservation.remediationPlan
+        if (remediationPlan?.documents) {
+          remediationPlan = {
+            ...remediationPlan,
+            documents: remediationPlan.documents.filter((doc) => doc.id !== documentId),
+          }
+        }
+        selectedObservation = {
+          ...selectedObservation,
+          documents,
+          remediationPlan,
+          timeline: [timelineEntry, ...(selectedObservation.timeline || [])],
+        }
+      }
+      return { observations, selectedObservation }
+    })
   },
 
   getNextReference: () => {
@@ -1348,34 +1249,8 @@ export const useObservationStore = create<ObservationState>()(
       pagination: {
         ...state.pagination,
         pageSize,
-        totalPages: Math.ceil(state.pagination.total / pageSize),
+        totalPages: pageSize > 0 ? Math.max(1, Math.ceil(state.pagination.total / pageSize)) : 1,
       },
     })),
-    }),
-    {
-      name: 'observation-storage',
-      version: 1,
-      partialize: (state) => ({
-        observations: state.observations,
-      }),
-      migrate: (persistedState: unknown, version: number) => {
-        const state = persistedState as { observations?: any[] }
-        if (version < 1) {
-          const SOURCE_TO_FW: Record<string, string[]> = {
-            sama: ['sama'],
-            sharia: ['sharia-board'],
-            internal: [],
-          }
-          return {
-            ...state,
-            observations: (state.observations ?? []).map((o: any) => ({
-              ...o,
-              frameworkIds: o.frameworkIds ?? (SOURCE_TO_FW[o.source] ?? []),
-            })),
-          }
-        }
-        return persistedState
-      },
-    }
-  )
-)
+  clearError: () => set({ error: null }),
+}))

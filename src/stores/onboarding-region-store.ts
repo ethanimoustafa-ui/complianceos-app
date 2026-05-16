@@ -1,3 +1,9 @@
+// Onboarding region picker — Phase 5 review.
+//
+// **KEPT PERSISTED (client-only).** Same rationale as
+// `onboarding-industry-store.ts`: one consumer in `(auth)/onboarding/page.tsx`,
+// no API endpoint, purely cosmetic dropdown.
+
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { requirePermission } from '@/lib/rbac-store-gate'

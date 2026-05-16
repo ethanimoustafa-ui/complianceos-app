@@ -1,3 +1,12 @@
+// Onboarding industry picker — Phase 5 review.
+//
+// **KEPT PERSISTED (client-only).** Pure UI-defaults store with one
+// remaining consumer (`src/app/(auth)/onboarding/page.tsx` after the audit-loop
+// iter-2 UI cleanup). No `/api/settings/onboarding/industry` endpoint exists.
+// If the onboarding flow is ever removed entirely this file becomes dead and
+// can be deleted; until then it stays client-only since the data feeds a
+// purely cosmetic dropdown.
+
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { requirePermission } from '@/lib/rbac-store-gate'

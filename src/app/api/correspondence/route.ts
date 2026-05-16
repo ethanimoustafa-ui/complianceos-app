@@ -1,0 +1,137 @@
+// /api/correspondence — generic correspondence registry list + create.
+
+import type { NextRequest } from 'next/server'
+import { requirePerm, requireUser } from '@/lib/api/auth'
+import { handle, NotFound } from '@/lib/api/errors'
+import { ok, paginate } from '@/lib/api/response'
+import { parseJson } from '@/lib/api/validate'
+import { rangeFor } from '@/lib/api/pagination'
+import { cacheTags, revalidate } from '@/lib/api/cache'
+import { writeAudit } from '@/lib/api/audit'
+import {
+  CreateCorrespondenceSchema,
+  ListCorrespondenceQuerySchema,
+} from '@/lib/api/schemas/correspondence'
+import {
+  CORRESPONDENCE_LIST_COLUMNS,
+  nextCorrespondenceReference,
+} from '@/lib/api/services/correspondence'
+
+export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
+
+export async function GET(req: NextRequest) {
+  try {
+    const { supabase } = await requireUser()
+    const q = ListCorrespondenceQuerySchema.parse(
+      Object.fromEntries(req.nextUrl.searchParams.entries()),
+    )
+
+    let query = supabase
+      .from('correspondence')
+      .select(CORRESPONDENCE_LIST_COLUMNS, { count: 'exact' })
+      .is('deleted_at', null)
+
+    if (q.type) query = query.eq('type', q.type)
+    if (q.status) query = query.eq('status', q.status)
+    if (q.thread_id) query = query.eq('thread_id', q.thread_id)
+    if (q.assignee_id) query = query.eq('assignee_id', q.assignee_id)
+    if (q.q) query = query.ilike('subject', `%${q.q}%`)
+
+    if (q.direction === 'inbound') query = query.eq('status', 'received')
+    if (q.direction === 'outbound') query = query.in('status', ['draft', 'sent'])
+
+    if (q.archived === 'true') query = query.eq('archived', true)
+    else if (q.archived === 'false') query = query.eq('archived', false)
+    // 'all' — no filter
+
+    if (q.has_attachments === 'true' || q.has_attachments === 'false') {
+      const { data: rows } = await supabase
+        .from('correspondence_attachments')
+        .select('correspondence_id')
+      const set = new Set(
+        ((rows ?? []) as { correspondence_id: string }[]).map((r) => r.correspondence_id),
+      )
+      if (q.has_attachments === 'true') {
+        if (set.size === 0) {
+          return ok(paginate([], q.page, q.pageSize, 0), {
+            cache: {
+              sMaxAge: 60,
+              staleWhileRevalidate: 300,
+              tags: [cacheTags.correspondence()],
+            },
+          })
+        }
+        query = query.in('id', Array.from(set))
+      } else if (set.size > 0) {
+        query = query.not('id', 'in', `(${Array.from(set).join(',')})`)
+      }
+    }
+
+    const [from, to] = rangeFor(q.page, q.pageSize)
+    const { data, error, count } = await query
+      .order('date', { ascending: false })
+      .range(from, to)
+    if (error) throw error
+
+    return ok(paginate(data ?? [], q.page, q.pageSize, count ?? 0), {
+      cache: { sMaxAge: 60, staleWhileRevalidate: 300, tags: [cacheTags.correspondence()] },
+    })
+  } catch (e) {
+    return handle(e)
+  }
+}
+
+export async function POST(req: NextRequest) {
+  try {
+    const { supabase, user, profile } = await requirePerm('create')
+    const input = await parseJson(req, CreateCorrespondenceSchema)
+
+    let inserted: Record<string, unknown> | null = null
+    let lastError: unknown = null
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const reference = await nextCorrespondenceReference(supabase)
+      const { data, error } = await supabase
+        .from('correspondence')
+        .insert({
+          reference,
+          subject: input.subject,
+          from_party: input.from_party,
+          to_parties: input.to_parties,
+          date: input.date,
+          type: input.type,
+          status: input.status,
+          body: input.body ?? null,
+          thread_id: input.thread_id ?? null,
+          archived: input.archived,
+          assignee_id: input.assignee_id ?? null,
+          framework_ids: input.framework_ids,
+        })
+        .select(CORRESPONDENCE_LIST_COLUMNS)
+        .single()
+      if (!error && data) {
+        inserted = data as Record<string, unknown>
+        break
+      }
+      lastError = error
+      if (error && (error as { code?: string }).code !== '23505') break
+    }
+    if (!inserted) throw lastError ?? NotFound('Insert returned no row')
+
+    const created = inserted as { id: string; reference: string }
+    await writeAudit({
+      actor_id: user.id,
+      actor_name: profile.name ?? profile.email ?? user.id,
+      action: 'correspondence.create',
+      entity_type: 'correspondence',
+      entity_id: created.id,
+      metadata: { reference: created.reference, type: input.type },
+      supabase,
+    })
+
+    revalidate(cacheTags.correspondence())
+    return ok(inserted, { status: 201 })
+  } catch (e) {
+    return handle(e)
+  }
+}

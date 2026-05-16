@@ -24,7 +24,7 @@ export default function SignInPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
   const { t } = useTranslation()
-  const login = useAuthStore((s) => s.login)
+  const signIn = useAuthStore((s) => s.signIn)
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated)
   const [hasMounted, setHasMounted] = useState(false)
 
@@ -32,7 +32,7 @@ export default function SignInPage() {
     setHasMounted(true)
   }, [])
 
-  // RBAC-018: if already authenticated after hydration, redirect to dashboard.
+  // Already authenticated → bounce to dashboard.
   useEffect(() => {
     if (hasMounted && isAuthenticated) {
       router.replace('/dashboard')
@@ -47,28 +47,16 @@ export default function SignInPage() {
     resolver: zodResolver(signInSchema),
   })
 
-  // RBAC-011: real sign-in. `login` matches by email against SEED_USERS
-  // (case-insensitive) and ignores password. On success, push to dashboard;
-  // on failure, surface the error under the password field.
+  // Real sign-in via Supabase. On success, the AuthListener hook syncs state
+  // and `middleware.ts` will let us through to the dashboard.
   const onSubmit = async (data: SignInInput) => {
     setSubmitError(null)
     setIsLoading(true)
-    const result = await login(data.email, data.password)
+    const result = await signIn(data.email, data.password)
     setIsLoading(false)
     if (result.ok) {
       router.push('/dashboard')
-    } else {
-      setSubmitError(result.error ?? 'Invalid credentials')
-    }
-  }
-
-  const handleDemoAdmin = async () => {
-    setSubmitError(null)
-    setIsLoading(true)
-    const result = await login('admin@example.com', 'demo')
-    setIsLoading(false)
-    if (result.ok) {
-      router.push('/dashboard')
+      router.refresh()
     } else {
       setSubmitError(result.error ?? 'Invalid credentials')
     }
@@ -184,31 +172,10 @@ export default function SignInPage() {
               )}
             </Button>
 
-            {/* Demo Admin Shortcut (RBAC-011) */}
-            <Button
-              type="button"
-              onClick={handleDemoAdmin}
-              disabled={isLoading}
-              variant="outline"
-              className="w-full py-3 text-sm"
-            >
-              <Icon icon="lucide:shield-check" className="text-base" />
-              Sign in as demo admin
-            </Button>
-            <p className="text-center text-xs text-slate-400 -mt-2">
-              Demo seeds: admin@example.com (admin) · sarah@company.com (manager) · lisa@company.com (officer). Password is ignored.
-            </p>
-
-            {/* Sign Up Link */}
+            {/* Sign-up is admin-only (per backend decision) — show a contact note. */}
             <div className="text-center pt-4">
               <p className="text-sm text-slate-500">
-                {t('auth.dontHaveAccount')}{' '}
-                <Link
-                  href="/sign-up"
-                  className="font-medium text-emerald-600 hover:text-emerald-700 transition-colors"
-                >
-                  {t('auth.signUp')}
-                </Link>
+                Need an account? Contact your compliance admin to be invited.
               </p>
             </div>
           </form>

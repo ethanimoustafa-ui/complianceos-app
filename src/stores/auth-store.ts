@@ -1,48 +1,171 @@
+// Real Supabase-backed auth store. Replaces the round-3 mock implementation.
+//
+// State shape preserves the legacy fields (`user`, `token`, `isAuthenticated`,
+// `originalUserId`, `error`, `isLoading`) so the ~33 existing consumer files
+// keep compiling without churn. The semantics now back on Supabase:
+//   • `signIn` calls `supabase.auth.signInWithPassword`, then hydrates
+//     `user` from `profiles` and `permissions` from the user_roles →
+//     role_permissions → permissions join.
+//   • `signOut` calls `supabase.auth.signOut` and clears state.
+//   • `refreshSession` re-reads the session and re-hydrates.
+//
+// Backwards-compat actions retained as thin shims:
+//   • `login(email, pwd)`            → calls `signIn`, returns the same shape.
+//   • `logout()`                     → calls `signOut`.
+//   • `refreshToken()`               → calls `refreshSession`.
+//   • `updateProfile(data)`          → updates the local `user` (server-side
+//                                      write happens elsewhere via the
+//                                      profiles row directly).
+//   • `setUser`, `setToken`, etc.    → preserved for direct callers.
+//
+// Removed: `switchUser` (mock acting-as), `SEED_USERS`, `DEFAULT_USER`.
+//          References in components were updated/removed surgically.
+
 import { create } from 'zustand'
-import { persist } from 'zustand/middleware'
 import type { User } from '@/types'
 import { useUserLogStore } from '@/stores/user-log-store'
+import { createClient } from '@/lib/supabase/client'
 
-// ── Seed users (RBAC-009) ────────────────────────────────────────────────────
-// Mirror the team-store seeds so impersonation (Phase 4 RBAC-024) can switch
-// between any of them. The admin user's id is `'admin'` to keep it stable
-// across the v3→v4 migration; the other seed ids ('1'..'5') match team-store
-// member ids exactly so `getEffectivePermissions` finds the matching record.
-const SEED_USERS: User[] = [
-  {
-    id: 'admin',
-    name: 'Test Admin',
-    email: 'admin@example.com',
-    role: 'admin',
-    department: 'Compliance',
-    phone: '+966 50 123 4567',
-    avatarSeed: 'Felix',
-    workload: 75,
-  },
-  // Mirrors team-store seed members (id 1..5):
-  { id: '1', name: 'Sarah Connor', email: 'sarah@company.com', role: 'manager', department: 'Compliance', avatarSeed: 'Sarah', workload: 65 },
-  { id: '2', name: 'Ahmed Khan', email: 'ahmed@company.com', role: 'manager', department: 'Risk Management', avatarSeed: 'Ahmed', workload: 45 },
-  { id: '3', name: 'Lisa Martinez', email: 'lisa@company.com', role: 'officer', department: 'Legal', avatarSeed: 'Lisa', workload: 80 },
-  { id: '4', name: 'Michael Scott', email: 'michael@company.com', role: 'admin', department: 'IT & Cybersecurity', avatarSeed: 'Michael', workload: 55 },
-  { id: '5', name: 'Dr. Hassan Ali', email: 'hassan@company.com', role: 'manager', department: 'Compliance', avatarSeed: 'Hassan', workload: 70 },
-]
+// ── Helpers ─────────────────────────────────────────────────────────────────
 
-const DEFAULT_USER = SEED_USERS[0]
+type ProfileRow = {
+  id: string
+  email: string | null
+  name: string | null
+  role: 'officer' | 'manager' | 'admin' | string | null
+  department_id: string | null
+  phone: string | null
+  avatar_seed: string | null
+  workload: number | null
+  last_login: string | null
+  created_at: string | null
+}
 
-export { SEED_USERS, DEFAULT_USER }
+function mapProfileToUser(row: ProfileRow): User {
+  // Coerce backend role keys (`org_admin`, `compliance_officer`, `auditor`,
+  // `viewer`) into the legacy three-tier shape the UI expects. Profiles also
+  // store a free-form `role` text column that may already match — prefer it
+  // when valid.
+  const raw = (row.role ?? '').toLowerCase()
+  const role: User['role'] =
+    raw === 'admin' || raw === 'org_admin'
+      ? 'admin'
+      : raw === 'manager' || raw === 'compliance_officer'
+        ? 'manager'
+        : 'officer'
+
+  return {
+    id: row.id,
+    name: row.name ?? row.email ?? 'Unknown user',
+    email: row.email ?? '',
+    role,
+    department: row.department_id ?? '',
+    phone: row.phone ?? undefined,
+    avatarSeed: row.avatar_seed ?? row.name ?? row.email ?? 'user',
+    workload: row.workload ?? 0,
+    lastLogin: row.last_login ?? undefined,
+    createdAt: row.created_at ?? undefined,
+  }
+}
+
+async function fetchProfile(userId: string): Promise<User | null> {
+  const supabase = createClient()
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('id, email, name, role, department_id, phone, avatar_seed, workload, last_login, created_at')
+    .eq('id', userId)
+    .maybeSingle()
+  if (error) {
+    console.error('[auth-store] fetchProfile error', error)
+    return null
+  }
+  if (!data) return null
+  return mapProfileToUser(data as ProfileRow)
+}
+
+async function fetchPermissions(userId: string): Promise<string[]> {
+  const supabase = createClient()
+  // Pull permission keys via the join chain user_roles → role_permissions → permissions.
+  // PostgREST embedding handles the joins.
+  const { data, error } = await supabase
+    .from('user_roles')
+    .select('roles:role_key(role_permissions(permissions(key)))')
+    .eq('user_id', userId)
+  if (error) {
+    console.error('[auth-store] fetchPermissions error', error)
+    return []
+  }
+  // PostgREST returns embedded relations as arrays even for to-one joins;
+  // typings below accommodate both shapes defensively.
+  type EmbeddedRow = {
+    roles?: unknown
+  }
+  const keys = new Set<string>()
+  const rows = (data ?? []) as EmbeddedRow[]
+  for (const row of rows) {
+    const roles = Array.isArray(row.roles) ? row.roles : row.roles ? [row.roles] : []
+    for (const role of roles as Array<{ role_permissions?: unknown }>) {
+      const rps = Array.isArray(role.role_permissions) ? role.role_permissions : []
+      for (const rp of rps as Array<{ permissions?: unknown }>) {
+        const perms = Array.isArray(rp.permissions)
+          ? rp.permissions
+          : rp.permissions
+            ? [rp.permissions]
+            : []
+        for (const p of perms as Array<{ key?: string }>) {
+          if (p?.key) keys.add(p.key)
+        }
+      }
+    }
+  }
+  return Array.from(keys)
+}
+
+async function recordActivity(
+  userId: string,
+  userName: string,
+  action: string,
+  module: string,
+): Promise<void> {
+  try {
+    const supabase = createClient()
+    await supabase.from('user_activity_logs').insert({
+      user_id: userId,
+      user_name: userName,
+      action,
+      module,
+      details: null,
+      ip_address: null,
+      metadata: null,
+    })
+  } catch (err) {
+    // Activity logging is best-effort — never block auth on it.
+    console.warn('[auth-store] recordActivity failed', err)
+  }
+}
+
+// ── Store ───────────────────────────────────────────────────────────────────
 
 interface AuthState {
   user: User | null
   token: string | null
+  permissions: string[]
   isAuthenticated: boolean
   isLoading: boolean
   error: string | null
-  // RBAC-024: tracks the original logged-in identity (the "real" account
-  // behind any Acting-As impersonation). Stays untouched by `switchUser` so
-  // the demo banner + Reset can return to it. Cleared on `logout`.
+  // Retained for backwards compatibility with components that read it.
+  // Always tracks the same id as `user.id` (no impersonation in MVP).
   originalUserId?: string
 
-  // Actions
+  // New canonical actions
+  signIn: (email: string, password: string) => Promise<{ ok: boolean; error?: string }>
+  signOut: () => Promise<void>
+  refreshSession: () => Promise<void>
+  loadPermissions: (userId: string) => Promise<void>
+  // Sync helper used by the onAuthStateChange listener.
+  setSessionUser: (userId: string | null) => Promise<void>
+
+  // Legacy aliases (kept so existing call sites compile)
   login: (email: string, password: string) => Promise<{ ok: boolean; error?: string }>
   logout: () => void
   refreshToken: () => Promise<void>
@@ -52,172 +175,158 @@ interface AuthState {
   setLoading: (loading: boolean) => void
   setError: (error: string | null) => void
   clearError: () => void
-  switchUser: (userId: string) => void
 }
 
-export const useAuthStore = create<AuthState>()(
-  persist(
-    (set, get) => ({
-      // Default current user — admin so existing demo flows keep working.
-      // Phase 3 (RBAC-011) wires the real sign-in form to this store; Phase 4
-      // (RBAC-024) adds an Acting-As switcher.
-      user: { ...DEFAULT_USER },
-      token: 'demo-token',
-      isAuthenticated: true,
+export const useAuthStore = create<AuthState>()((set, get) => ({
+  user: null,
+  token: null,
+  permissions: [],
+  isAuthenticated: false,
+  isLoading: false,
+  error: null,
+  originalUserId: undefined,
+
+  // ── Canonical actions ────────────────────────────────────────────────────
+
+  signIn: async (email, password) => {
+    set({ isLoading: true, error: null })
+    const supabase = createClient()
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: email.trim(),
+      password,
+    })
+    if (error || !data.user) {
+      const message = error?.message ?? 'Invalid credentials'
+      set({ isLoading: false, error: message })
+      return { ok: false, error: message }
+    }
+
+    const [profile, permissions] = await Promise.all([
+      fetchProfile(data.user.id),
+      fetchPermissions(data.user.id),
+    ])
+
+    set({
+      user: profile,
+      token: data.session?.access_token ?? null,
+      permissions,
+      isAuthenticated: !!profile,
       isLoading: false,
       error: null,
-      originalUserId: DEFAULT_USER.id,
+      originalUserId: profile?.id,
+    })
 
-      // Mock login — matches `email` against SEED_USERS, ignores password.
-      // Returns `{ ok, error? }` so callers can branch without try/catch.
-      login: async (email, password) => {
-        set({ isLoading: true, error: null })
-        try {
-          // Pretend network round-trip so the spinner is visible.
-          await new Promise((resolve) => setTimeout(resolve, 400))
-
-          const normalised = email.trim().toLowerCase()
-          const matched = SEED_USERS.find((u) => u.email.toLowerCase() === normalised)
-          // password ignored on purpose — this is a demo. See plan §11.1.
-          void password
-
-          if (!matched) {
-            const error = 'Invalid credentials'
-            set({ isLoading: false, error })
-            return { ok: false, error }
-          }
-
-          set({
-            user: { ...matched },
-            token: 'demo-token',
-            isAuthenticated: true,
-            isLoading: false,
-            error: null,
-            // RBAC-024: stamp the genuine logged-in identity. switchUser()
-            // does not touch this; logout() clears it.
-            originalUserId: matched.id,
-          })
-          // RBAC-025: audit log every successful login.
-          useUserLogStore.getState().log({
-            userId: matched.id,
-            action: 'auth.login',
-            target: 'sign-in',
-          })
-          return { ok: true }
-        } catch (error) {
-          const message = error instanceof Error ? error.message : 'Login failed'
-          set({ error: message, isLoading: false })
-          return { ok: false, error: message }
-        }
-      },
-
-      logout: () => {
-        const previousUserId = get().user?.id
-        // RBAC-025: log BEFORE clearing the user so the actor id is captured.
-        if (previousUserId) {
-          useUserLogStore.getState().log({
-            userId: previousUserId,
-            action: 'auth.logout',
-            target: 'sign-out',
-          })
-        }
-        set({
-          user: null,
-          token: null,
-          isAuthenticated: false,
-          error: null,
-          originalUserId: undefined,
-        })
-      },
-
-      refreshToken: async () => {
-        const { token } = get()
-        if (!token) return
-
-        try {
-          await new Promise((resolve) => setTimeout(resolve, 500))
-          set({ token: 'demo-token-refreshed' })
-        } catch {
-          set({
-            user: null,
-            token: null,
-            isAuthenticated: false,
-            error: 'Session expired',
-          })
-        }
-      },
-
-      updateProfile: (data) => {
-        const { user } = get()
-        if (!user) return
-        set({ user: { ...user, ...data } })
-      },
-
-      setUser: (user) => set({ user, isAuthenticated: !!user }),
-      setToken: (token) => set({ token }),
-      setLoading: (isLoading) => set({ isLoading }),
-      setError: (error) => set({ error }),
-      clearError: () => set({ error: null }),
-
-      // RBAC-010 / RBAC-024 / RBAC-025: switch the current user by id (used by
-      // the demo Acting-As picker). Throws if `userId` is not in SEED_USERS.
-      // Audit-logs an `auth.switch_user` entry with the actor id BEFORE the
-      // swap so direct callers (not just the UI) get audited too. Does NOT
-      // mutate `originalUserId` — that stays anchored to the genuine
-      // logged-in identity for as long as the session is alive.
-      switchUser: (userId) => {
-        const matched = SEED_USERS.find((u) => u.id === userId)
-        if (!matched) {
-          throw new Error(`switchUser: unknown userId "${userId}"`)
-        }
-        const previousUserId = get().user?.id ?? 'anonymous'
-        useUserLogStore.getState().log({
-          userId: previousUserId,
-          action: 'auth.switch_user',
-          target: userId,
-        })
-        set({
-          user: { ...matched },
-          token: 'demo-token',
-          isAuthenticated: true,
-          error: null,
-        })
-      },
-    }),
-    {
-      name: 'auth-storage',
-      version: 5,
-      migrate: (persistedState, fromVersion) => {
-        // v3→v4 (RBAC-009): rewrite `id: 'current-user'` to `id: 'admin'` so
-        // the user matches a stable seed id; preserve any other persisted user.
-        // v4→v5 (RBAC-024): add `originalUserId` (defaults to current user's
-        // id, or `'admin'` as fallback) so the demo banner / Reset can return
-        // to the genuine logged-in identity.
-        type PartialAuth = {
-          user?: User | null
-          token?: string | null
-          isAuthenticated?: boolean
-          originalUserId?: string
-        }
-        const state = (persistedState ?? {}) as PartialAuth
-        let user: User | null = state.user ?? { ...DEFAULT_USER }
-        if (fromVersion < 4 && user && user.id === 'current-user') {
-          user = { ...user, id: 'admin' }
-        }
-        const originalUserId = state.originalUserId ?? user?.id ?? 'admin'
-        return {
-          user,
-          token: state.token ?? 'demo-token',
-          isAuthenticated: state.isAuthenticated ?? !!user,
-          originalUserId,
-        }
-      },
-      partialize: (state) => ({
-        user: state.user,
-        token: state.token,
-        isAuthenticated: state.isAuthenticated,
-        originalUserId: state.originalUserId,
-      }),
+    if (profile) {
+      // Local zustand audit log (instant UI feedback)
+      useUserLogStore.getState().log({
+        userId: profile.id,
+        action: 'auth.login',
+        target: 'sign-in',
+      })
+      // Server-side audit log (best-effort).
+      void recordActivity(profile.id, profile.name, 'auth.login', 'auth')
     }
-  )
-)
+
+    return { ok: true }
+  },
+
+  signOut: async () => {
+    const previousUser = get().user
+    const supabase = createClient()
+    await supabase.auth.signOut()
+    if (previousUser) {
+      useUserLogStore.getState().log({
+        userId: previousUser.id,
+        action: 'auth.logout',
+        target: 'sign-out',
+      })
+      void recordActivity(previousUser.id, previousUser.name, 'auth.logout', 'auth')
+    }
+    set({
+      user: null,
+      token: null,
+      permissions: [],
+      isAuthenticated: false,
+      error: null,
+      originalUserId: undefined,
+    })
+  },
+
+  refreshSession: async () => {
+    const supabase = createClient()
+    const { data } = await supabase.auth.getSession()
+    const sessionUser = data.session?.user
+    if (!sessionUser) {
+      set({
+        user: null,
+        token: null,
+        permissions: [],
+        isAuthenticated: false,
+        originalUserId: undefined,
+      })
+      return
+    }
+    const [profile, permissions] = await Promise.all([
+      fetchProfile(sessionUser.id),
+      fetchPermissions(sessionUser.id),
+    ])
+    set({
+      user: profile,
+      token: data.session?.access_token ?? null,
+      permissions,
+      isAuthenticated: !!profile,
+      originalUserId: profile?.id,
+    })
+  },
+
+  loadPermissions: async (userId) => {
+    const permissions = await fetchPermissions(userId)
+    set({ permissions })
+  },
+
+  setSessionUser: async (userId) => {
+    if (!userId) {
+      set({
+        user: null,
+        token: null,
+        permissions: [],
+        isAuthenticated: false,
+        originalUserId: undefined,
+      })
+      return
+    }
+    const [profile, permissions] = await Promise.all([
+      fetchProfile(userId),
+      fetchPermissions(userId),
+    ])
+    set({
+      user: profile,
+      permissions,
+      isAuthenticated: !!profile,
+      originalUserId: profile?.id,
+    })
+  },
+
+  // ── Legacy aliases ───────────────────────────────────────────────────────
+
+  login: (email, password) => get().signIn(email, password),
+
+  logout: () => {
+    void get().signOut()
+  },
+
+  refreshToken: () => get().refreshSession(),
+
+  updateProfile: (data) => {
+    const { user } = get()
+    if (!user) return
+    set({ user: { ...user, ...data } })
+  },
+
+  setUser: (user) =>
+    set({ user, isAuthenticated: !!user, originalUserId: user?.id }),
+  setToken: (token) => set({ token }),
+  setLoading: (isLoading) => set({ isLoading }),
+  setError: (error) => set({ error }),
+  clearError: () => set({ error: null }),
+}))

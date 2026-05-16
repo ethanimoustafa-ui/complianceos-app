@@ -33,7 +33,9 @@ import { InlineChipEditor } from '@/components/correspondence/sama-letters/Inlin
 import {
   placeholderValuesComplete,
   autoPromoteTypedTokens,
+  renderTemplate,
 } from '@/lib/letter-placeholders'
+import { downloadPdf, PdfError } from '@/lib/pdf-client'
 import type { PlaceholderDef, PlaceholderValue } from '@/types'
 import {
   Toast,
@@ -452,70 +454,59 @@ export default function SAMALettersPage() {
   }
 
   const handleDownloadPdf = useCallback(async () => {
-    if (!letterContentRef.current || !selectedLetter) return
-    const { default: html2canvas } = await import('html2canvas')
-    const { default: jsPDF } = await import('jspdf')
+    if (!selectedLetter) return
 
-    // Resolve oklch/lab/lch/color-p3 to plain rgb() via a 1×1 canvas.
-    // Chrome 111+ serialises computed colors in their authored color space
-    // (oklch), which html2canvas cannot parse. The canvas fillStyle API
-    // accepts any valid CSS color and getImageData returns sRGB bytes.
-    const toRgb = (color: string): string => {
-      if (!color || color === 'transparent' || color === 'rgba(0, 0, 0, 0)') return color
-      if (color.startsWith('rgb') || color.startsWith('#')) return color
-      try {
-        const c = document.createElement('canvas')
-        c.width = c.height = 1
-        const ctx = c.getContext('2d')!
-        ctx.fillStyle = color
-        ctx.fillRect(0, 0, 1, 1)
-        const [r, g, b, a] = ctx.getImageData(0, 0, 1, 1).data
-        if (a === 0) return 'transparent'
-        return a < 255 ? `rgba(${r},${g},${b},${(a / 255).toFixed(3)})` : `rgb(${r},${g},${b})`
-      } catch { return color }
-    }
+    // Phase 7: server-side rendered via @react-pdf/renderer.
+    // The legacy html2canvas+jsPDF path captured a screenshot of the live DOM;
+    // the new pipeline renders from a structured payload via the `sama-letter`
+    // template (lib/pdf/templates/sama-letter.tsx) so Arabic text, signatures,
+    // and page numbering all come out properly typeset.
+    const subjectRaw = language === 'ar' ? (selectedLetter.subjectAr || selectedLetter.subject) : selectedLetter.subject
+    const bodyRaw    = language === 'ar' ? (selectedLetter.bodyAr    || selectedLetter.body)    : selectedLetter.body
+    const subject = renderTemplate(subjectRaw, selectedLetter.placeholderValues ?? {})
+    const body    = renderTemplate(bodyRaw,    selectedLetter.placeholderValues ?? {})
 
-    const COLOR_PROPS = [
-      'color', 'backgroundColor',
-      'borderTopColor', 'borderBottomColor', 'borderLeftColor', 'borderRightColor',
-      'outlineColor', 'textDecorationColor',
-    ] as const
+    const recipientName = (language === 'ar' ? selectedLetter.recipientNameAr : selectedLetter.recipientName) ?? ''
+    const recipientOrg  = (language === 'ar' ? selectedLetter.recipientOrgAr  : selectedLetter.recipientOrg)  ?? undefined
+    const signerName    = (language === 'ar' ? selectedLetter.signerNameAr    : selectedLetter.signerName)    ?? currentUser
+    const signerTitle   = (language === 'ar' ? selectedLetter.signerTitleAr   : selectedLetter.signerTitle)   ?? undefined
 
-    // Pre-process original elements in the main document (correct layout context).
-    // Stamping before clone means the clone inherits safe rgb() inline styles.
-    const restore: Array<{ el: HTMLElement; prop: string; was: string }> = []
-    letterContentRef.current.querySelectorAll<HTMLElement>('*').forEach(el => {
-      const cs = window.getComputedStyle(el)
-      for (const prop of COLOR_PROPS) {
-        const rgb = toRgb(cs[prop as keyof typeof cs] as string)
-        restore.push({ el, prop, was: (el.style as unknown as Record<string, string>)[prop] })
-        ;(el.style as unknown as Record<string, string>)[prop] = rgb
-      }
-    })
+    const orgName = 'ComplianceOS'
 
     try {
-      const canvas = await html2canvas(letterContentRef.current, {
-        scale: 2,
-        useCORS: true,
-        backgroundColor: '#ffffff',
-        onclone: (_clonedDoc) => {
-          // CSS vars are no longer needed — inline rgb() styles carry all color info.
-          _clonedDoc.querySelectorAll('style, link[rel="stylesheet"], [data-pdf-hide]').forEach(n => n.remove())
+      await downloadPdf(
+        {
+          template: 'sama-letter',
+          locale: language,
+          data: {
+            organizationName: orgName,
+            letterReference: selectedLetter.reference,
+            letterDate: new Date(selectedLetter.createdAt).toLocaleDateString(
+              language === 'ar' ? 'ar-SA' : 'en-US',
+              { year: 'numeric', month: 'long', day: 'numeric' },
+            ),
+            recipientName,
+            recipientOrg,
+            subject,
+            body,
+            attachments: (selectedLetter.attachments ?? []).map((a) => ({
+              name: a.name,
+              size: a.size,
+            })),
+            signatoryName: signerName,
+            signatoryTitle: signerTitle,
+          },
         },
-      })
-      const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
-      const pdfW = pdf.internal.pageSize.getWidth()
-      const pdfH = (canvas.height * pdfW) / canvas.width
-      pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, pdfW, pdfH)
-      pdf.save(`${selectedLetter.reference}-${language}.pdf`)
-    } finally {
-      // Always restore original inline styles so the live view is unchanged.
-      restore.forEach(({ el, prop, was }) => {
-        ;(el.style as unknown as Record<string, string>)[prop] = was
-      })
+        `Letter-${selectedLetter.reference}-${language}.pdf`,
+      )
+    } catch (err) {
+      const message = err instanceof PdfError ? err.message : 'Failed to generate PDF'
+      console.error('[letters] PDF generation failed:', err)
+      showToast(message)
+      return
     }
 
-    // Bundle attachments into a zip alongside the PDF
+    // Bundle attachments into a zip alongside the PDF (unchanged from legacy).
     if (selectedLetter.attachments && selectedLetter.attachments.length > 0) {
       const { zip } = await import('fflate')
       const fileEntries: Record<string, Uint8Array> = {}
@@ -529,8 +520,8 @@ export default function SAMALettersPage() {
         }
       }
       if (Object.keys(fileEntries).length > 0) {
-        zip(fileEntries, (err, data) => {
-          if (err) return
+        zip(fileEntries, (zipErr, data) => {
+          if (zipErr) return
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const blob = new Blob([data as unknown as BlobPart], { type: 'application/zip' })
           const zipUrl = URL.createObjectURL(blob)
@@ -542,7 +533,8 @@ export default function SAMALettersPage() {
         })
       }
     }
-  }, [selectedLetter, language])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedLetter, language, currentUser, showToast])
 
   // Pure mail helper — opens mailto and marks the letter sent. Safe to call without a PDF download
   // (e.g. from the summary table where the letter content DOM is not rendered).

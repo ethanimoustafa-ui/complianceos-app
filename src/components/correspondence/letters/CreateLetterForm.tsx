@@ -248,13 +248,18 @@ export function CreateLetterForm({
     onSuccess()
   }
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     setIsSubmitting(true)
-    const newLetter = store.create(letterBaseData())
-    store.submitForApproval(newLetter.id)
-    if (template?.id) templateStore.incrementUsage(template.id)
-    setIsSubmitting(false)
-    onSuccess()
+    try {
+      const newLetter = await store.create(letterBaseData())
+      store.submitForApproval(newLetter.id)
+      if (template?.id) templateStore.incrementUsage(template.id)
+    } catch (err) {
+      console.error('Failed to submit letter for approval', err)
+    } finally {
+      setIsSubmitting(false)
+      onSuccess()
+    }
   }
 
   return (
@@ -366,11 +371,16 @@ export function CreateLetterForm({
                   ? t('samaLetters.subCategory')
                   : t('samaLetters.selectAuthorityFirst')
               }
-              onAdd={(label, labelAr) =>
-                authority
-                  ? subCategoryStore.add(authority, label, labelAr).id
-                  : undefined
-              }
+              onAdd={async (label, labelAr) => {
+                if (!authority) return undefined
+                try {
+                  const created = await subCategoryStore.add(authority, label, labelAr)
+                  return created.id
+                } catch (err) {
+                  console.error('Failed to add sub-category', err)
+                  return undefined
+                }
+              }}
               onEdit={(id, label, labelAr) =>
                 subCategoryStore.update(id, { label, labelAr: labelAr ?? label })
               }

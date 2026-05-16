@@ -1,0 +1,147 @@
+// /api/circulars — list + create circulars.
+
+import type { NextRequest } from 'next/server'
+import { requirePerm, requireUser } from '@/lib/api/auth'
+import { handle, NotFound } from '@/lib/api/errors'
+import { ok, paginate } from '@/lib/api/response'
+import { parseJson } from '@/lib/api/validate'
+import { rangeFor } from '@/lib/api/pagination'
+import { cacheTags, revalidate } from '@/lib/api/cache'
+import { writeAudit } from '@/lib/api/audit'
+import {
+  CreateCircularSchema,
+  ListCircularsQuerySchema,
+} from '@/lib/api/schemas/circulars'
+import {
+  CIRCULAR_LIST_COLUMNS,
+  insertCircularTimeline,
+  nextCircularReference,
+} from '@/lib/api/services/circulars'
+
+export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
+
+export async function GET(req: NextRequest) {
+  try {
+    const { supabase } = await requireUser()
+    const q = ListCircularsQuerySchema.parse(
+      Object.fromEntries(req.nextUrl.searchParams.entries()),
+    )
+
+    let query = supabase
+      .from('circulars')
+      .select(CIRCULAR_LIST_COLUMNS, { count: 'exact' })
+      .is('deleted_at', null)
+
+    if (q.status) query = query.eq('status', q.status)
+    const authority = q.authority ?? q.authority_id
+    if (authority) query = query.eq('authority', authority)
+    if (q.priority) query = query.eq('priority', q.priority)
+    if (q.applicability) query = query.eq('applicability', q.applicability)
+    if (q.framework_id) query = query.contains('framework_ids', [q.framework_id])
+    if (q.q) query = query.ilike('title', `%${q.q}%`)
+
+    if (q.has_pending_edits === 'true' || q.has_pending_edits === 'false') {
+      const { data: rows } = await supabase
+        .from('circular_pending_edits')
+        .select('circular_id')
+        .eq('status', 'pending')
+      const set = new Set(((rows ?? []) as { circular_id: string }[]).map((r) => r.circular_id))
+      if (q.has_pending_edits === 'true') {
+        if (set.size === 0) {
+          return ok(paginate([], q.page, q.pageSize, 0), {
+            cache: { sMaxAge: 60, staleWhileRevalidate: 300, tags: [cacheTags.circulars()] },
+          })
+        }
+        query = query.in('id', Array.from(set))
+      } else if (set.size > 0) {
+        query = query.not('id', 'in', `(${Array.from(set).join(',')})`)
+      }
+    }
+
+    const [from, to] = rangeFor(q.page, q.pageSize)
+    const { data, error, count } = await query
+      .order('issuance_date', { ascending: false })
+      .range(from, to)
+    if (error) throw error
+
+    return ok(paginate(data ?? [], q.page, q.pageSize, count ?? 0), {
+      cache: { sMaxAge: 60, staleWhileRevalidate: 300, tags: [cacheTags.circulars()] },
+    })
+  } catch (e) {
+    return handle(e)
+  }
+}
+
+export async function POST(req: NextRequest) {
+  try {
+    const { supabase, user, profile } = await requirePerm('create')
+    const input = await parseJson(req, CreateCircularSchema)
+
+    let inserted: Record<string, unknown> | null = null
+    let lastError: unknown = null
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const reference = await nextCircularReference(supabase, input.authority)
+      const { data, error } = await supabase
+        .from('circulars')
+        .insert({
+          reference,
+          authority: input.authority,
+          title: input.title,
+          priority: input.priority,
+          status: input.status,
+          applicability: input.applicability,
+          departments: input.departments,
+          business_owner_department: input.business_owner_department ?? null,
+          business_owner_department_id: input.business_owner_department_id ?? null,
+          assigned_to: input.assigned_to ?? null,
+          progress: input.progress,
+          issuance_date: input.issuance_date,
+          due_date: input.due_date,
+          cap_status: input.cap_status,
+          cap_due_date: input.cap_due_date ?? null,
+          cap_deadline: input.cap_deadline ?? null,
+          cap_response_deadline: input.cap_response_deadline ?? null,
+          remediation_deadline: input.remediation_deadline ?? null,
+          description: input.description ?? null,
+          pdf_url: input.pdf_url ?? null,
+          reference_url: input.reference_url ?? null,
+          framework_ids: input.framework_ids,
+        })
+        .select(CIRCULAR_LIST_COLUMNS)
+        .single()
+      if (!error && data) {
+        inserted = data as Record<string, unknown>
+        break
+      }
+      lastError = error
+      if (error && (error as { code?: string }).code !== '23505') break
+    }
+    if (!inserted) throw lastError ?? NotFound('Insert returned no row')
+
+    const created = inserted as { id: string; reference: string }
+    await Promise.all([
+      writeAudit({
+        actor_id: user.id,
+        actor_name: profile.name ?? profile.email ?? user.id,
+        action: 'circular.create',
+        entity_type: 'circular',
+        entity_id: created.id,
+        metadata: { reference: created.reference, authority: input.authority },
+        supabase,
+      }),
+      insertCircularTimeline(
+        supabase,
+        created.id,
+        'Circular created',
+        profile.name ?? profile.email ?? user.id,
+        'completed',
+      ),
+    ])
+
+    revalidate(cacheTags.circulars())
+    return ok(inserted, { status: 201 })
+  } catch (e) {
+    return handle(e)
+  }
+}

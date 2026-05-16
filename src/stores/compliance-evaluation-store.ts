@@ -1,6 +1,16 @@
+// Compliance evaluation store — Phase 5 server-state migration.
+//
+// Backed by `/api/reports/compliance-evaluations` (GET list, POST upsert),
+// `/api/reports/compliance-evaluations/bulk` (POST batch), and
+// `/api/reports/compliance-evaluations/score-summary` (GET aggregated scores).
+//
+// Each evaluation row keys on (kind, item_id, department_id). The row id is
+// `${kind}:${itemId}::${departmentId}` (matches the legacy local key shape so
+// dashboards' `evaluations[key]` lookups stay valid).
+
 import { create } from 'zustand'
-import { persist } from 'zustand/middleware'
 import type { Circular, Policy } from '@/types'
+import { api, ApiClientError } from '@/lib/api-client'
 
 export type ComplianceVerdict = 'compliant' | 'non-compliant' | 'na' | 'unknown'
 export type ComplianceItemKind = 'rule' | 'policy'
@@ -19,9 +29,9 @@ interface DerivedVerdictItems {
 }
 
 export interface ComplianceEvaluation {
-  id: string                // `${kind}:${itemId}::${departmentId}`
+  id: string
   kind: ComplianceItemKind
-  itemId: string            // circular id or policy id
+  itemId: string
   /** @deprecated use itemId — kept for backward-compat with older persisted records */
   ruleId?: string
   departmentId: string
@@ -36,31 +46,87 @@ export interface ComplianceItemRef {
   id: string
 }
 
+const evalKey = (kind: ComplianceItemKind, itemId: string, departmentId: string) =>
+  `${kind}:${itemId}::${departmentId}`
+
+interface EvaluationApiRow {
+  id: string
+  kind: ComplianceItemKind
+  item_id: string
+  department_id: string
+  verdict: ComplianceVerdict
+  notes: string | null
+  evaluated_by: string | null
+  evaluated_at: string | null
+  created_at: string
+  updated_at: string
+}
+
+interface EvaluationListResponse {
+  items: EvaluationApiRow[]
+  page: number
+  pageSize: number
+  total: number
+  totalPages: number
+}
+
+function mapRow(row: EvaluationApiRow): ComplianceEvaluation {
+  return {
+    id: row.id,
+    kind: row.kind,
+    itemId: row.item_id,
+    ruleId: row.kind === 'rule' ? row.item_id : undefined,
+    departmentId: row.department_id,
+    verdict: row.verdict,
+    notes: row.notes ?? undefined,
+    evaluatedBy: row.evaluated_by ?? undefined,
+    evaluatedAt: row.evaluated_at ?? undefined,
+  }
+}
+
+function errorMessage(e: unknown, fallback: string): string {
+  if (e instanceof ApiClientError) return e.message
+  if (e instanceof Error) return e.message
+  return fallback
+}
+
 interface ComplianceEvaluationState {
   evaluations: Record<string, ComplianceEvaluation>
-  setVerdict: (
+
+  isLoading: boolean
+  isMutating: boolean
+  error: string | null
+  lastFetched: number | null
+
+  fetchAll(opts?: { pageSize?: number }): Promise<void>
+  setVerdict(
     kind: ComplianceItemKind,
     itemId: string,
     departmentId: string,
     verdict: ComplianceVerdict,
     evaluatedBy?: string,
     notes?: string,
-  ) => void
-  getVerdict: (kind: ComplianceItemKind, itemId: string, departmentId: string) => ComplianceVerdict
-  /**
-   * §1.C — derived-on-read verdict resolution. Returns the explicit manual
-   * verdict if present; otherwise auto-derives `'compliant'` when the
-   * underlying rule/policy's full workflow has completed AND the item's
-   * business owner matches the department. Does NOT persist — manual
-   * `setVerdict` always wins thereafter.
-   */
-  getDerivedVerdict: (
+  ): Promise<void>
+  bulkUpsert(
+    rows: Array<{
+      kind: ComplianceItemKind
+      itemId: string
+      departmentId: string
+      verdict: ComplianceVerdict
+      notes?: string
+    }>,
+  ): Promise<void>
+  getVerdict(kind: ComplianceItemKind, itemId: string, departmentId: string): ComplianceVerdict
+  getDerivedVerdict(
     kind: ComplianceItemKind,
     itemId: string,
     departmentId: string,
     items: DerivedVerdictItems,
-  ) => DerivedVerdict
-  getDepartmentScoreFromItems: (departmentId: string, items: ComplianceItemRef[]) => {
+  ): DerivedVerdict
+  getDepartmentScoreFromItems(
+    departmentId: string,
+    items: ComplianceItemRef[],
+  ): {
     score: number
     compliantCount: number
     nonCompliantCount: number
@@ -68,127 +134,176 @@ interface ComplianceEvaluationState {
     pendingCount: number
     total: number
   }
+  clearError(): void
 }
 
-const evalKey = (kind: ComplianceItemKind, itemId: string, departmentId: string) =>
-  `${kind}:${itemId}::${departmentId}`
+export const useComplianceEvaluationStore = create<ComplianceEvaluationState>()((set, get) => ({
+  evaluations: {},
 
-export const useComplianceEvaluationStore = create<ComplianceEvaluationState>()(
-  persist(
-    (set, get) => ({
-      evaluations: {},
+  isLoading: false,
+  isMutating: false,
+  error: null,
+  lastFetched: null,
 
-      setVerdict: (kind, itemId, departmentId, verdict, evaluatedBy, notes) => {
-        const key = evalKey(kind, itemId, departmentId)
-        set((s) => ({
-          evaluations: {
-            ...s.evaluations,
-            [key]: {
-              id: key,
-              kind,
-              itemId,
-              ruleId: kind === 'rule' ? itemId : undefined,
-              departmentId,
-              verdict,
-              notes,
-              evaluatedBy,
-              evaluatedAt: new Date().toISOString(),
-            },
-          },
-        }))
-      },
-
-      getVerdict: (kind, itemId, departmentId) =>
-        get().evaluations[evalKey(kind, itemId, departmentId)]?.verdict ?? 'unknown',
-
-      getDerivedVerdict: (kind, itemId, departmentId, items) => {
-        const explicit = get().evaluations[evalKey(kind, itemId, departmentId)]?.verdict
-        if (explicit) return { verdict: explicit, source: 'explicit' }
-
-        if (kind === 'rule') {
-          const c = items.circulars.find((x) => x.id === itemId)
-          if (
-            c &&
-            c.businessOwnerDepartment === items.departmentName &&
-            c.workflowSteps &&
-            c.workflowSteps.length > 0 &&
-            c.workflowSteps.every((s) => s.status === 'completed')
-          ) {
-            return { verdict: 'compliant', source: 'derived-workflow' }
-          }
-        } else {
-          const p = items.policies.find((x) => x.id === itemId)
-          if (
-            p &&
-            p.businessOwnerDepartmentId === departmentId &&
-            p.workflowTimeline &&
-            p.workflowTimeline.length > 0 &&
-            p.workflowTimeline.every((s) => s.status === 'completed')
-          ) {
-            return { verdict: 'compliant', source: 'derived-workflow' }
-          }
+  fetchAll: async (opts) => {
+    set({ isLoading: true, error: null })
+    try {
+      // The list endpoint is paginated; for the dashboard's per-department
+      // scoring we need every row, so we burn through pages until exhausted.
+      const pageSize = opts?.pageSize ?? 100
+      const evaluations: Record<string, ComplianceEvaluation> = {}
+      let page = 1
+      let totalPages = 1
+      do {
+        const result = await api.get<EvaluationListResponse>(
+          '/reports/compliance-evaluations',
+          { page, pageSize },
+        )
+        for (const row of result.items) {
+          evaluations[row.id] = mapRow(row)
         }
-        return { verdict: 'unknown', source: 'unevaluated' }
-      },
+        totalPages = result.totalPages
+        page += 1
+      } while (page <= totalPages)
+      set({ evaluations, isLoading: false, lastFetched: Date.now() })
+    } catch (e) {
+      set({ error: errorMessage(e, 'Failed to fetch evaluations'), isLoading: false })
+    }
+  },
 
-      getDepartmentScoreFromItems: (departmentId, items) => {
-        let compliantCount = 0
-        let nonCompliantCount = 0
-        let naCount = 0
-        let pendingCount = 0
-        for (const item of items) {
-          const v = get().evaluations[evalKey(item.kind, item.id, departmentId)]?.verdict ?? 'unknown'
-          if (v === 'compliant') compliantCount++
-          else if (v === 'non-compliant') nonCompliantCount++
-          else if (v === 'na') naCount++
-          else pendingCount++
-        }
-        const denom = compliantCount + nonCompliantCount
-        const score = denom === 0 ? 0 : Math.round((compliantCount / denom) * 100)
+  setVerdict: async (kind, itemId, departmentId, verdict, evaluatedBy, notes) => {
+    const key = evalKey(kind, itemId, departmentId)
+    // Optimistic — verdict cycle is the primary interaction on the
+    // compliance-review page; users expect a snappy response.
+    const previous = get().evaluations[key]
+    const now = new Date().toISOString()
+    const optimistic: ComplianceEvaluation = {
+      id: key,
+      kind,
+      itemId,
+      ruleId: kind === 'rule' ? itemId : undefined,
+      departmentId,
+      verdict,
+      notes,
+      evaluatedBy,
+      evaluatedAt: now,
+    }
+    set((s) => ({
+      evaluations: { ...s.evaluations, [key]: optimistic },
+      isMutating: true,
+      error: null,
+    }))
+    try {
+      const row = await api.post<EvaluationApiRow>('/reports/compliance-evaluations', {
+        kind,
+        item_id: itemId,
+        department_id: departmentId,
+        verdict,
+        notes,
+      })
+      set((s) => ({
+        evaluations: { ...s.evaluations, [row.id]: mapRow(row) },
+        isMutating: false,
+      }))
+    } catch (e) {
+      // Rollback.
+      set((s) => {
+        const evaluations = { ...s.evaluations }
+        if (previous) evaluations[key] = previous
+        else delete evaluations[key]
         return {
-          score,
-          compliantCount,
-          nonCompliantCount,
-          naCount,
-          pendingCount,
-          total: items.length,
+          evaluations,
+          error: errorMessage(e, 'Failed to set verdict'),
+          isMutating: false,
         }
-      },
-    }),
-    {
-      name: 'compliance-evaluation-storage',
-      version: 2,
-      migrate: (persistedState, version) => {
-        // v1 → v2: rekey from `${ruleId}::${deptId}` to `rule:${ruleId}::${deptId}`
-        // and add `kind: 'rule'` + `itemId` to each record. Pre-v1 (no version) = same shape.
-        if (!persistedState || typeof persistedState !== 'object') return persistedState as unknown
-        if (version >= 2) return persistedState as unknown
-        const state = persistedState as { evaluations?: Record<string, ComplianceEvaluation & { ruleId?: string }> }
-        const oldEvals = state.evaluations ?? {}
-        const newEvals: Record<string, ComplianceEvaluation> = {}
-        for (const [oldKey, raw] of Object.entries(oldEvals)) {
-          // already-migrated key (defensive)
-          if (oldKey.startsWith('rule:') || oldKey.startsWith('policy:')) {
-            newEvals[oldKey] = raw as ComplianceEvaluation
-            continue
-          }
-          // old key shape: `${ruleId}::${departmentId}`
-          const sepIdx = oldKey.indexOf('::')
-          if (sepIdx === -1) continue
-          const ruleId = raw.ruleId ?? oldKey.slice(0, sepIdx)
-          const departmentId = raw.departmentId ?? oldKey.slice(sepIdx + 2)
-          const newKey = evalKey('rule', ruleId, departmentId)
-          newEvals[newKey] = {
-            ...raw,
-            id: newKey,
-            kind: 'rule',
-            itemId: ruleId,
-            ruleId,
-            departmentId,
-          }
-        }
-        return { ...state, evaluations: newEvals }
-      },
-    },
-  ),
-)
+      })
+      throw e
+    }
+  },
+
+  bulkUpsert: async (rows) => {
+    if (rows.length === 0) return
+    set({ isMutating: true, error: null })
+    try {
+      const result = await api.post<{ items: EvaluationApiRow[]; upserted: number }>(
+        '/reports/compliance-evaluations/bulk',
+        {
+          evaluations: rows.map((r) => ({
+            kind: r.kind,
+            item_id: r.itemId,
+            department_id: r.departmentId,
+            verdict: r.verdict,
+            notes: r.notes,
+          })),
+        },
+      )
+      set((s) => {
+        const evaluations = { ...s.evaluations }
+        for (const row of result.items) evaluations[row.id] = mapRow(row)
+        return { evaluations, isMutating: false }
+      })
+    } catch (e) {
+      set({ error: errorMessage(e, 'Failed to bulk-upsert evaluations'), isMutating: false })
+      throw e
+    }
+  },
+
+  getVerdict: (kind, itemId, departmentId) =>
+    get().evaluations[evalKey(kind, itemId, departmentId)]?.verdict ?? 'unknown',
+
+  getDerivedVerdict: (kind, itemId, departmentId, items) => {
+    const explicit = get().evaluations[evalKey(kind, itemId, departmentId)]?.verdict
+    if (explicit) return { verdict: explicit, source: 'explicit' }
+
+    if (kind === 'rule') {
+      const c = items.circulars.find((x) => x.id === itemId)
+      if (
+        c &&
+        c.businessOwnerDepartment === items.departmentName &&
+        c.workflowSteps &&
+        c.workflowSteps.length > 0 &&
+        c.workflowSteps.every((s) => s.status === 'completed')
+      ) {
+        return { verdict: 'compliant', source: 'derived-workflow' }
+      }
+    } else {
+      const p = items.policies.find((x) => x.id === itemId)
+      if (
+        p &&
+        p.businessOwnerDepartmentId === departmentId &&
+        p.workflowTimeline &&
+        p.workflowTimeline.length > 0 &&
+        p.workflowTimeline.every((s) => s.status === 'completed')
+      ) {
+        return { verdict: 'compliant', source: 'derived-workflow' }
+      }
+    }
+    return { verdict: 'unknown', source: 'unevaluated' }
+  },
+
+  getDepartmentScoreFromItems: (departmentId, items) => {
+    let compliantCount = 0
+    let nonCompliantCount = 0
+    let naCount = 0
+    let pendingCount = 0
+    for (const item of items) {
+      const v = get().evaluations[evalKey(item.kind, item.id, departmentId)]?.verdict ?? 'unknown'
+      if (v === 'compliant') compliantCount++
+      else if (v === 'non-compliant') nonCompliantCount++
+      else if (v === 'na') naCount++
+      else pendingCount++
+    }
+    const denom = compliantCount + nonCompliantCount
+    const score = denom === 0 ? 0 : Math.round((compliantCount / denom) * 100)
+    return {
+      score,
+      compliantCount,
+      nonCompliantCount,
+      naCount,
+      pendingCount,
+      total: items.length,
+    }
+  },
+
+  clearError: () => set({ error: null }),
+}))

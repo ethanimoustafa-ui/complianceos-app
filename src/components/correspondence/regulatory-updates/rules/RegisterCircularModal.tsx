@@ -67,7 +67,7 @@ export function RegisterCircularModal({ isOpen, onClose, onCreated, t }: Props) 
 
   async function handleCreate() {
     if (!formAuthority || !formTitle || !formDueDate || !formCapDeadline) return
-    const created = create({
+    const created = await create({
       authority: formAuthority as CircularAuthority,
       title: formTitle,
       priority: formPriority,

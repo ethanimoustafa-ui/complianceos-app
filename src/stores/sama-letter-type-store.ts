@@ -1,90 +1,159 @@
-import { create } from 'zustand'
-import { persist } from 'zustand/middleware'
-import { requirePermission } from '@/lib/rbac-store-gate'
+// SAMA letter type lookup store — Phase 5 server-state migration.
+//
+// Read `.planning/09-store-pattern.md` before editing.
+// Endpoints: GET/POST /api/letter-types, PATCH/DELETE /api/letter-types/[typeId]
+//
+// SKELETON-LOADING NOTE: render a skeleton when `isLoading && types.length === 0`
+// (first fetch). Refetches keep stale data visible while `isLoading` is true.
 
-// SAMA letter type — opaque string id keyed against the (now widened)
-// `SAMALetterType` type. Default seeds match the legacy union values so
-// existing letters and templates with `non-objection|inquiry|submission|notification`
-// keep matching.
+import { create } from 'zustand'
+import { api, ApiClientError } from '@/lib/api-client'
+
+// API row (snake_case) from /api/letter-types.
+interface LetterTypeApiRow {
+  id: string
+  key: string
+  name_en: string
+  name_ar: string
+  is_default: boolean
+  created_at: string
+  updated_at: string
+}
+
+// Public shape consumed by UI. The legacy store keyed entries by a slug-style
+// `id` field that doubled as the wire `key`; the API treats `id` (uuid) and
+// `key` (string) separately. We surface `id` (uuid), `label`, `labelAr` and
+// `isDefault` to match the legacy interface, and additionally carry `key` so
+// the persisted letter rows (which reference `letter_types.key`) keep matching.
 export interface SAMALetterTypeItem {
   id: string
-  label: string // EN
+  key: string
+  label: string
   labelAr: string
   isDefault?: boolean
 }
 
-interface SAMALetterTypeState {
-  types: SAMALetterTypeItem[]
-  add: (label: string, labelAr?: string) => string
-  update: (id: string, patch: Partial<Omit<SAMALetterTypeItem, 'id'>>) => void
-  remove: (id: string) => void
+function mapRow(row: LetterTypeApiRow): SAMALetterTypeItem {
+  return {
+    id: row.id,
+    key: row.key,
+    label: row.name_en,
+    labelAr: row.name_ar,
+    isDefault: row.is_default,
+  }
 }
 
-const seeds: SAMALetterTypeItem[] = [
-  { id: 'non-objection', label: 'Non-Objection', labelAr: 'عدم ممانعة',  isDefault: true },
-  { id: 'inquiry',       label: 'Inquiry',       labelAr: 'استفسار',     isDefault: true },
-  { id: 'submission',    label: 'Submission',    labelAr: 'تقديم',       isDefault: true },
-  { id: 'notification',  label: 'Notification',  labelAr: 'إشعار',       isDefault: true },
-]
+function errorMessage(e: unknown, fallback: string): string {
+  if (e instanceof ApiClientError) return e.message
+  if (e instanceof Error) return e.message
+  return fallback
+}
 
 const slugify = (s: string): string =>
   s.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
 
-export const useSAMALetterTypeStore = create<SAMALetterTypeState>()(
-  persist(
-    (set, get) => ({
-      types: seeds,
+interface SAMALetterTypeState {
+  types: SAMALetterTypeItem[]
+  byId: Record<string, SAMALetterTypeItem>
 
-      add: (label, labelAr) => {
-        requirePermission('Configure Lists & Categories', { storeName: 'samaLetterType', actionName: 'add' })
-        const baseId = slugify(label) || `type-${Date.now()}`
-        const existingIds = new Set(get().types.map((t) => t.id))
-        let id = baseId
-        let n = 2
-        while (existingIds.has(id)) id = `${baseId}-${n++}`
-        set((s) => ({
-          types: [
-            ...s.types,
-            { id, label, labelAr: labelAr ?? label },
-          ],
-        }))
-        return id
-      },
+  // First-fetch detector: `isLoading && types.length === 0` → render skeleton.
+  // Refetches keep stale data visible while `isLoading` is true.
+  isLoading: boolean
+  isMutating: boolean
+  error: string | null
+  lastFetched: number | null
 
-      update: (id, patch) => {
-        requirePermission('Configure Lists & Categories', { storeName: 'samaLetterType', actionName: 'update', id })
-        set((s) => ({
-          types: s.types.map((t) =>
-            t.id === id ? { ...t, ...patch } : t
-          ),
-        }))
-      },
+  fetchAll: () => Promise<void>
+  add: (label: string, labelAr?: string) => Promise<string>
+  update: (id: string, patch: Partial<Omit<SAMALetterTypeItem, 'id'>>) => Promise<void>
+  remove: (id: string) => Promise<void>
+  clearError: () => void
+}
 
-      remove: (id) => {
-        requirePermission('Configure Lists & Categories', { storeName: 'samaLetterType', actionName: 'remove', id })
-        set((s) => ({
-          // Seeds are deletable — see SPRINT-FOLLOWUP-PLAN §2.3. Persisted
-          // letters and templates retain their stored type id as text-only;
-          // the orphan-confirm modal in ListsAndCategoriesSection warns first.
+export const useSAMALetterTypeStore = create<SAMALetterTypeState>()((set, get) => ({
+  types: [],
+  byId: {},
+  isLoading: false,
+  isMutating: false,
+  error: null,
+  lastFetched: null,
+
+  fetchAll: async () => {
+    set({ isLoading: true, error: null })
+    try {
+      const rows = await api.get<LetterTypeApiRow[]>('/letter-types')
+      const types = rows.map(mapRow)
+      const byId: Record<string, SAMALetterTypeItem> = {}
+      for (const t of types) byId[t.id] = t
+      set({ types, byId, isLoading: false, lastFetched: Date.now() })
+    } catch (e) {
+      set({ error: errorMessage(e, 'Failed to fetch letter types'), isLoading: false })
+    }
+  },
+
+  add: async (label, labelAr) => {
+    set({ isMutating: true, error: null })
+    try {
+      const key = slugify(label) || `type-${Date.now()}`
+      const row = await api.post<LetterTypeApiRow>('/letter-types', {
+        key,
+        name_en: label,
+        name_ar: labelAr ?? label,
+        is_default: false,
+      })
+      const created = mapRow(row)
+      set((s) => ({
+        types: [...s.types, created],
+        byId: { ...s.byId, [created.id]: created },
+        isMutating: false,
+      }))
+      // Legacy callers used the returned id as the persisted letter `type` key.
+      // Return the wire `key` so existing call-sites continue working.
+      return created.key
+    } catch (e) {
+      set({ error: errorMessage(e, 'Failed to create letter type'), isMutating: false })
+      throw e
+    }
+  },
+
+  update: async (id, patch) => {
+    set({ isMutating: true, error: null })
+    try {
+      const body: Record<string, unknown> = {}
+      if (patch.label !== undefined) body.name_en = patch.label
+      if (patch.labelAr !== undefined) body.name_ar = patch.labelAr
+      if (patch.key !== undefined) body.key = patch.key
+      if (patch.isDefault !== undefined) body.is_default = patch.isDefault
+      const row = await api.patch<LetterTypeApiRow>(`/letter-types/${id}`, body)
+      const updated = mapRow(row)
+      set((s) => ({
+        types: s.types.map((t) => (t.id === id ? updated : t)),
+        byId: { ...s.byId, [id]: updated },
+        isMutating: false,
+      }))
+    } catch (e) {
+      set({ error: errorMessage(e, 'Failed to update letter type'), isMutating: false })
+      throw e
+    }
+  },
+
+  remove: async (id) => {
+    set({ isMutating: true, error: null })
+    try {
+      await api.delete(`/letter-types/${id}`)
+      set((s) => {
+        const { [id]: _drop, ...rest } = s.byId
+        return {
           types: s.types.filter((t) => t.id !== id),
-        }))
-      },
-    }),
-    {
-      name: 'sama-letter-type-storage',
-      version: 1,
-      // Ensure freshly-installed seeds always include the four defaults
-      // even if an older persisted state is missing one (e.g., after manual edits).
-      migrate: (persisted: unknown) => {
-        const state = (persisted as { types?: SAMALetterTypeItem[] } | undefined) ?? {}
-        const existing = state.types ?? []
-        const seenIds = new Set(existing.map((t) => t.id))
-        const merged = [...existing]
-        for (const seed of seeds) {
-          if (!seenIds.has(seed.id)) merged.push(seed)
+          byId: rest,
+          isMutating: false,
         }
-        return { ...state, types: merged }
-      },
-    },
-  ),
-)
+      })
+    } catch (e) {
+      set({ error: errorMessage(e, 'Failed to delete letter type'), isMutating: false })
+      throw e
+    }
+  },
+
+  clearError: () => set({ error: null }),
+}))

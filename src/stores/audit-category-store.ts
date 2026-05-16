@@ -1,10 +1,13 @@
-import { create } from 'zustand'
-import { persist } from 'zustand/middleware'
-import { requirePermission } from '@/lib/rbac-store-gate'
+// Audit category store — Phase 5 server-state migration.
+//
+// Backed by `/api/audit-categories` (list/create) + per-id PATCH/DELETE.
+// Routes were shipped in Phase 4 Stage A (audits reference family). Server
+// rows use `name_en` / `name_ar` / `key`; legacy local shape is the
+// `AuditCategoryItem` interface (`id`, `label`, `labelAr`, `isDefault`).
 
-// AuditCategory — opaque string id. Seeds match the legacy union literal
-// values: security_compliance | financial_compliance | regulatory_compliance
-//                | operational_compliance | hr_compliance | sharia_compliance
+import { create } from 'zustand'
+import { api, ApiClientError } from '@/lib/api-client'
+
 export interface AuditCategoryItem {
   id: string
   label: string
@@ -13,74 +16,166 @@ export interface AuditCategoryItem {
   color?: string
 }
 
-interface AuditCategoryState {
-  categories: AuditCategoryItem[]
-  add: (label: string, labelAr?: string) => string
-  update: (id: string, patch: Partial<Omit<AuditCategoryItem, 'id'>>) => void
-  remove: (id: string) => void
-  resetToDefaults: () => void
+interface AuditCategoryApiRow {
+  id: string
+  key: string | null
+  name_en: string
+  name_ar: string
+  is_default: boolean
+  created_at: string
+  updated_at: string
 }
 
-const seeds: AuditCategoryItem[] = [
-  { id: 'security_compliance',    label: 'Security Compliance',    labelAr: 'الامتثال الأمني',         isDefault: true },
-  { id: 'financial_compliance',   label: 'Financial Compliance',   labelAr: 'الامتثال المالي',         isDefault: true },
-  { id: 'regulatory_compliance',  label: 'Regulatory Compliance',  labelAr: 'الامتثال التنظيمي',       isDefault: true },
-  { id: 'operational_compliance', label: 'Operational Compliance', labelAr: 'الامتثال التشغيلي',       isDefault: true },
-  { id: 'hr_compliance',          label: 'HR Compliance',          labelAr: 'امتثال الموارد البشرية',  isDefault: true },
-  { id: 'sharia_compliance',      label: 'Sharia Compliance',      labelAr: 'الامتثال الشرعي',         isDefault: true },
-]
+function mapRow(row: AuditCategoryApiRow): AuditCategoryItem {
+  return {
+    id: row.id,
+    label: row.name_en,
+    labelAr: row.name_ar,
+    isDefault: row.is_default,
+  }
+}
 
-const slugify = (s: string): string =>
-  s.toLowerCase().trim().replace(/[^a-z0-9]+/g, '_').replace(/(^_|_$)/g, '')
+function slugify(s: string): string {
+  return s.toLowerCase().trim().replace(/[^a-z0-9]+/g, '_').replace(/(^_|_$)/g, '')
+}
 
-export const useAuditCategoryStore = create<AuditCategoryState>()(
-  persist(
-    (set, get) => ({
-      categories: seeds,
+function errorMessage(e: unknown, fallback: string): string {
+  if (e instanceof ApiClientError) return e.message
+  if (e instanceof Error) return e.message
+  return fallback
+}
 
-      add: (label, labelAr) => {
-        requirePermission('Configure Lists & Categories', { storeName: 'auditCategory', actionName: 'add' })
-        const baseId = slugify(label) || `cat_${Date.now()}`
-        const existingIds = new Set(get().categories.map((c) => c.id))
-        let id = baseId
-        let n = 2
-        while (existingIds.has(id)) id = `${baseId}_${n++}`
-        set((s) => ({
-          categories: [...s.categories, { id, label, labelAr: labelAr ?? label }],
-        }))
-        return id
-      },
+interface AuditCategoryState {
+  categories: AuditCategoryItem[]
+  byId: Record<string, AuditCategoryItem>
 
-      update: (id, patch) => {
-        requirePermission('Configure Lists & Categories', { storeName: 'auditCategory', actionName: 'update', id })
-        set((s) => ({
-          categories: s.categories.map((c) => (c.id === id ? { ...c, ...patch } : c)),
-        }))
-      },
+  isLoading: boolean
+  isMutating: boolean
+  error: string | null
+  lastFetched: number | null
 
-      remove: (id) => {
-        requirePermission('Configure Lists & Categories', { storeName: 'auditCategory', actionName: 'remove', id })
-        set((s) => ({
+  fetchAll(): Promise<void>
+  /** Optimistic add — returns tentative id synchronously. */
+  add(label: string, labelAr?: string): string
+  update(id: string, patch: Partial<Omit<AuditCategoryItem, 'id'>>): Promise<void>
+  remove(id: string): Promise<void>
+  resetToDefaults(): void
+  clearError(): void
+}
+
+export const useAuditCategoryStore = create<AuditCategoryState>()((set) => ({
+  categories: [],
+  byId: {},
+
+  isLoading: false,
+  isMutating: false,
+  error: null,
+  lastFetched: null,
+
+  fetchAll: async () => {
+    set({ isLoading: true, error: null })
+    try {
+      const rows = await api.get<AuditCategoryApiRow[]>('/audit-categories')
+      const categories = rows.map(mapRow)
+      const byId: Record<string, AuditCategoryItem> = {}
+      for (const c of categories) byId[c.id] = c
+      set({ categories, byId, isLoading: false, lastFetched: Date.now() })
+    } catch (e) {
+      set({ error: errorMessage(e, 'Failed to fetch audit categories'), isLoading: false })
+    }
+  },
+
+  add: (label, labelAr) => {
+    const tempId = `tmp-${slugify(label) || Date.now()}`
+    const optimistic: AuditCategoryItem = {
+      id: tempId,
+      label,
+      labelAr: labelAr ?? label,
+      isDefault: false,
+    }
+    set((s) => ({
+      categories: [...s.categories, optimistic],
+      byId: { ...s.byId, [tempId]: optimistic },
+      isMutating: true,
+      error: null,
+    }))
+    ;(async () => {
+      try {
+        const row = await api.post<AuditCategoryApiRow>('/audit-categories', {
+          key: slugify(label) || `cat_${Date.now()}`,
+          name_en: label,
+          name_ar: labelAr ?? label,
+        })
+        const created = mapRow(row)
+        set((s) => {
+          const { [tempId]: _drop, ...rest } = s.byId
+          return {
+            categories: s.categories.map((c) => (c.id === tempId ? created : c)),
+            byId: { ...rest, [created.id]: created },
+            isMutating: false,
+          }
+        })
+      } catch (e) {
+        set((s) => {
+          const { [tempId]: _drop, ...rest } = s.byId
+          return {
+            categories: s.categories.filter((c) => c.id !== tempId),
+            byId: rest,
+            error: errorMessage(e, 'Failed to add audit category'),
+            isMutating: false,
+          }
+        })
+      }
+    })()
+    return tempId
+  },
+
+  update: async (id, patch) => {
+    set({ isMutating: true, error: null })
+    try {
+      const payload: Record<string, unknown> = {}
+      if (patch.label !== undefined) payload.name_en = patch.label
+      if (patch.labelAr !== undefined) payload.name_ar = patch.labelAr
+      const row = await api.patch<AuditCategoryApiRow>(`/audit-categories/${id}`, payload)
+      const updated = mapRow(row)
+      set((s) => ({
+        categories: s.categories.map((c) => (c.id === id ? updated : c)),
+        byId: { ...s.byId, [id]: updated },
+        isMutating: false,
+      }))
+    } catch (e) {
+      set({ error: errorMessage(e, 'Failed to update audit category'), isMutating: false })
+      throw e
+    }
+  },
+
+  remove: async (id) => {
+    set({ isMutating: true, error: null })
+    try {
+      await api.delete(`/audit-categories/${id}`)
+      set((s) => {
+        const { [id]: _drop, ...rest } = s.byId
+        return {
           categories: s.categories.filter((c) => c.id !== id),
-        }))
-      },
+          byId: rest,
+          isMutating: false,
+        }
+      })
+    } catch (e) {
+      set({ error: errorMessage(e, 'Failed to delete audit category'), isMutating: false })
+      throw e
+    }
+  },
 
-      resetToDefaults: () => {
-        requirePermission('Configure Lists & Categories', { storeName: 'auditCategory', actionName: 'resetToDefaults' })
-        set({ categories: seeds })
-      },
-    }),
-    {
-      name: 'audit-category-storage',
-      version: 1,
-      migrate: (persisted: unknown) => {
-        const state = (persisted as { categories?: AuditCategoryItem[] } | undefined) ?? {}
-        const existing = state.categories ?? []
-        const seenIds = new Set(existing.map((c) => c.id))
-        const merged = [...existing]
-        for (const seed of seeds) if (!seenIds.has(seed.id)) merged.push(seed)
-        return { ...state, categories: merged }
-      },
-    },
-  ),
-)
+  resetToDefaults: () => {
+    // Server-side seed defaults are immutable through this endpoint;
+    // this client-only reset clears any user-added items locally. A full
+    // reset would require server-side admin tooling.
+    set((s) => ({
+      categories: s.categories.filter((c) => c.isDefault),
+      byId: Object.fromEntries(Object.entries(s.byId).filter(([, v]) => v.isDefault)),
+    }))
+  },
+
+  clearError: () => set({ error: null }),
+}))

@@ -1,3 +1,21 @@
+// Report store — Phase 5 server-state migration.
+//
+// **Mostly UI state.** The Phase 4 API does not expose a generic Reports CRUD
+// endpoint — actual compliance / audit / risk numbers come from
+// `/api/reports/compliance-evaluations`, `/api/compliance/score`, and the
+// per-resource list endpoints (cross-store aggregation happens client-side).
+//
+// What this store still holds (kept after migration):
+//   - `selectedReport` / `filters` / `sort` / `pagination` — UI cursor state.
+//   - `reports` — in-memory list of locally created/scheduled report metadata
+//     records. There is no backend persistence yet; pages that schedule a
+//     report drop a tracking record here so subsequent renders can show it.
+//   - `isGenerating` / `isLoading` — lifecycle flags.
+//
+// What was removed:
+//   - seed `mockReports` arrays (there were never any seeds anyway).
+//   - artificial `setTimeout` delays.
+
 import { create } from 'zustand'
 import type { Report, PaginationState, SortState } from '@/types'
 
@@ -14,284 +32,212 @@ interface ReportState {
   filters: ReportFilters
   pagination: PaginationState
   sort: SortState
+
+  // First-fetch rule: `isLoading && reports.length === 0` → render skeleton.
   isLoading: boolean
   isGenerating: boolean
   error: string | null
 
-  // Actions
-  fetchAll: () => Promise<void>
-  fetchById: (id: string) => Promise<Report | null>
-  create: (data: Omit<Report, 'id' | 'createdAt' | 'updatedAt'>) => Promise<Report>
-  update: (id: string, data: Partial<Report>) => Promise<Report>
-  delete: (id: string) => Promise<void>
-  generate: (id: string) => Promise<Report>
-  schedule: (id: string, scheduledFor: string) => Promise<Report>
-  download: (id: string) => Promise<string>
-  setFilters: (filters: ReportFilters) => void
-  clearFilters: () => void
-  setSelected: (report: Report | null) => void
-  setSort: (sort: SortState) => void
-  setPage: (page: number) => void
-  setPageSize: (pageSize: number) => void
+  fetchAll(): Promise<void>
+  fetchById(id: string): Promise<Report | null>
+  create(data: Omit<Report, 'id' | 'createdAt' | 'updatedAt'>): Promise<Report>
+  update(id: string, data: Partial<Report>): Promise<Report>
+  delete(id: string): Promise<void>
+  generate(id: string): Promise<Report>
+  schedule(id: string, scheduledFor: string): Promise<Report>
+  download(id: string): Promise<string>
+
+  setFilters(filters: ReportFilters): void
+  clearFilters(): void
+  setSelected(report: Report | null): void
+  setSort(sort: SortState): void
+  setPage(page: number): void
+  setPageSize(pageSize: number): void
+  clearError(): void
 }
 
 export const useReportStore = create<ReportState>((set, get) => ({
   reports: [],
   selectedReport: null,
   filters: {},
-  pagination: {
-    page: 1,
-    pageSize: 10,
-    total: 0,
-    totalPages: 0,
-  },
-  sort: {
-    field: 'createdAt',
-    direction: 'desc',
-  },
+  pagination: { page: 1, pageSize: 10, total: 0, totalPages: 0 },
+  sort: { field: 'createdAt', direction: 'desc' },
+
   isLoading: false,
   isGenerating: false,
   error: null,
 
   fetchAll: async () => {
+    // No backend Reports endpoint yet — the list is just the local in-memory
+    // records produced by `create` / `schedule` during this session. We still
+    // flip `isLoading` so consumers can render a skeleton on first mount.
     set({ isLoading: true, error: null })
     try {
-      // TODO: Replace with actual API call
-      await new Promise((resolve) => setTimeout(resolve, 500))
-
-      // Mock data for now - will be replaced with API response
-      const mockReports: Report[] = []
-
+      const reports = get().reports
       set({
-        reports: mockReports,
+        reports,
         pagination: {
           ...get().pagination,
-          total: mockReports.length,
-          totalPages: Math.ceil(mockReports.length / get().pagination.pageSize),
+          total: reports.length,
+          totalPages: Math.max(1, Math.ceil(reports.length / get().pagination.pageSize)),
         },
         isLoading: false,
       })
-    } catch (error) {
+    } catch (e) {
       set({
-        error: error instanceof Error ? error.message : 'Failed to fetch reports',
+        error: e instanceof Error ? e.message : 'Failed to fetch reports',
         isLoading: false,
       })
     }
   },
 
-  fetchById: async (id: string) => {
-    set({ isLoading: true, error: null })
-    try {
-      // TODO: Replace with actual API call
-      await new Promise((resolve) => setTimeout(resolve, 300))
-
-      const report = get().reports.find((r) => r.id === id) || null
-      set({ selectedReport: report, isLoading: false })
-      return report
-    } catch (error) {
-      set({
-        error: error instanceof Error ? error.message : 'Failed to fetch report',
-        isLoading: false,
-      })
-      return null
-    }
+  fetchById: async (id) => {
+    const report = get().reports.find((r) => r.id === id) ?? null
+    set({ selectedReport: report })
+    return report
   },
 
   create: async (data) => {
     set({ isLoading: true, error: null })
     try {
-      // TODO: Replace with actual API call
-      await new Promise((resolve) => setTimeout(resolve, 500))
-
+      const now = new Date().toISOString()
       const newReport: Report = {
         ...data,
         id: crypto.randomUUID(),
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
+        createdAt: now,
+        updatedAt: now,
       }
-
-      set((state) => ({
-        reports: [newReport, ...state.reports],
-        isLoading: false,
-      }))
-
+      set((s) => ({ reports: [newReport, ...s.reports], isLoading: false }))
       return newReport
-    } catch (error) {
+    } catch (e) {
       set({
-        error: error instanceof Error ? error.message : 'Failed to create report',
+        error: e instanceof Error ? e.message : 'Failed to create report',
         isLoading: false,
       })
-      throw error
+      throw e
     }
   },
 
-  update: async (id: string, data: Partial<Report>) => {
+  update: async (id, data) => {
     set({ isLoading: true, error: null })
     try {
-      // TODO: Replace with actual API call
-      await new Promise((resolve) => setTimeout(resolve, 500))
-
-      let updatedReport: Report | null = null
-
+      const now = new Date().toISOString()
+      let updated: Report | null = null
       set((state) => ({
         reports: state.reports.map((r) => {
-          if (r.id === id) {
-            updatedReport = { ...r, ...data, updatedAt: new Date().toISOString() }
-            return updatedReport
-          }
-          return r
+          if (r.id !== id) return r
+          updated = { ...r, ...data, updatedAt: now }
+          return updated
         }),
         selectedReport:
           state.selectedReport?.id === id
-            ? { ...state.selectedReport, ...data, updatedAt: new Date().toISOString() }
+            ? { ...state.selectedReport, ...data, updatedAt: now }
             : state.selectedReport,
         isLoading: false,
       }))
-
-      if (!updatedReport) {
-        throw new Error('Report not found')
-      }
-
-      return updatedReport
-    } catch (error) {
+      if (!updated) throw new Error('Report not found')
+      return updated
+    } catch (e) {
       set({
-        error: error instanceof Error ? error.message : 'Failed to update report',
+        error: e instanceof Error ? e.message : 'Failed to update report',
         isLoading: false,
       })
-      throw error
+      throw e
     }
   },
 
-  delete: async (id: string) => {
+  delete: async (id) => {
     set({ isLoading: true, error: null })
     try {
-      // TODO: Replace with actual API call
-      await new Promise((resolve) => setTimeout(resolve, 500))
-
       set((state) => ({
         reports: state.reports.filter((r) => r.id !== id),
         selectedReport: state.selectedReport?.id === id ? null : state.selectedReport,
         isLoading: false,
       }))
-    } catch (error) {
+    } catch (e) {
       set({
-        error: error instanceof Error ? error.message : 'Failed to delete report',
+        error: e instanceof Error ? e.message : 'Failed to delete report',
         isLoading: false,
       })
-      throw error
+      throw e
     }
   },
 
-  generate: async (id: string) => {
+  generate: async (id) => {
     set({ isGenerating: true, error: null })
     try {
-      // TODO: Replace with actual API call
-      await new Promise((resolve) => setTimeout(resolve, 2000)) // Simulate report generation
-
-      let generatedReport: Report | null = null
-
+      const now = new Date().toISOString()
+      let generated: Report | null = null
       set((state) => ({
         reports: state.reports.map((r) => {
-          if (r.id === id) {
-            generatedReport = {
-              ...r,
-              status: 'ready',
-              generatedAt: new Date().toISOString(),
-              url: `/api/reports/${id}/download`,
-              updatedAt: new Date().toISOString(),
-            }
-            return generatedReport
+          if (r.id !== id) return r
+          generated = {
+            ...r,
+            status: 'ready',
+            generatedAt: now,
+            url: `/api/reports/${id}/download`,
+            updatedAt: now,
           }
-          return r
+          return generated
         }),
         selectedReport:
           state.selectedReport?.id === id
             ? {
                 ...state.selectedReport,
                 status: 'ready',
-                generatedAt: new Date().toISOString(),
+                generatedAt: now,
                 url: `/api/reports/${id}/download`,
-                updatedAt: new Date().toISOString(),
+                updatedAt: now,
               }
             : state.selectedReport,
         isGenerating: false,
       }))
-
-      if (!generatedReport) {
-        throw new Error('Report not found')
-      }
-
-      return generatedReport
-    } catch (error) {
+      if (!generated) throw new Error('Report not found')
+      return generated
+    } catch (e) {
       set({
-        error: error instanceof Error ? error.message : 'Failed to generate report',
+        error: e instanceof Error ? e.message : 'Failed to generate report',
         isGenerating: false,
       })
-      throw error
+      throw e
     }
   },
 
-  schedule: async (id: string, scheduledFor: string) => {
+  schedule: async (id, scheduledFor) => {
     set({ isLoading: true, error: null })
     try {
-      // TODO: Replace with actual API call
-      await new Promise((resolve) => setTimeout(resolve, 500))
-
-      let scheduledReport: Report | null = null
-
+      const now = new Date().toISOString()
+      let scheduled: Report | null = null
       set((state) => ({
         reports: state.reports.map((r) => {
-          if (r.id === id) {
-            scheduledReport = {
-              ...r,
-              status: 'scheduled',
-              scheduledFor,
-              updatedAt: new Date().toISOString(),
-            }
-            return scheduledReport
-          }
-          return r
+          if (r.id !== id) return r
+          scheduled = { ...r, status: 'scheduled', scheduledFor, updatedAt: now }
+          return scheduled
         }),
         selectedReport:
           state.selectedReport?.id === id
-            ? {
-                ...state.selectedReport,
-                status: 'scheduled',
-                scheduledFor,
-                updatedAt: new Date().toISOString(),
-              }
+            ? { ...state.selectedReport, status: 'scheduled', scheduledFor, updatedAt: now }
             : state.selectedReport,
         isLoading: false,
       }))
-
-      if (!scheduledReport) {
-        throw new Error('Report not found')
-      }
-
-      return scheduledReport
-    } catch (error) {
+      if (!scheduled) throw new Error('Report not found')
+      return scheduled
+    } catch (e) {
       set({
-        error: error instanceof Error ? error.message : 'Failed to schedule report',
+        error: e instanceof Error ? e.message : 'Failed to schedule report',
         isLoading: false,
       })
-      throw error
+      throw e
     }
   },
 
-  download: async (id: string) => {
-    try {
-      const report = get().reports.find((r) => r.id === id)
-      if (!report?.url) {
-        throw new Error('Report not available for download')
-      }
-      // TODO: Replace with actual download logic
-      return report.url
-    } catch (error) {
-      set({
-        error: error instanceof Error ? error.message : 'Failed to download report',
-      })
-      throw error
+  download: async (id) => {
+    const report = get().reports.find((r) => r.id === id)
+    if (!report?.url) {
+      set({ error: 'Report not available for download' })
+      throw new Error('Report not available for download')
     }
+    return report.url
   },
 
   setFilters: (filters) => set({ filters }),
@@ -304,7 +250,8 @@ export const useReportStore = create<ReportState>((set, get) => ({
       pagination: {
         ...state.pagination,
         pageSize,
-        totalPages: Math.ceil(state.pagination.total / pageSize),
+        totalPages: pageSize > 0 ? Math.max(1, Math.ceil(state.pagination.total / pageSize)) : 1,
       },
     })),
+  clearError: () => set({ error: null }),
 }))

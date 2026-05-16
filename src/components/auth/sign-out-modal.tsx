@@ -13,12 +13,13 @@ interface SignOutModalProps {
 export function SignOutModal({ isOpen, onClose }: SignOutModalProps) {
   const { t } = useTranslation()
   const router = useRouter()
-  const logout = useAuthStore(s => s.logout)
+  const signOut = useAuthStore(s => s.signOut)
 
-  const handleSignOut = () => {
-    logout()
+  const handleSignOut = async () => {
+    await signOut()
     onClose()
     router.push('/sign-in')
+    router.refresh()
   }
 
   if (!isOpen) return null

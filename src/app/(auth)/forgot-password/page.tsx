@@ -8,6 +8,7 @@ import { z } from 'zod'
 import { Icon } from '@iconify/react'
 import { Button } from '@/components/ui/button'
 import { useTranslation } from '@/i18n'
+import { createClient } from '@/lib/supabase/client'
 
 const forgotPasswordSchema = z.object({
   email: z.string().email('Please enter a valid email'),
@@ -43,13 +44,23 @@ export default function ForgotPasswordPage() {
   const onSubmit = async (data: ForgotPasswordInput) => {
     setIsLoading(true)
     try {
-      // TODO: Replace with actual API call
-      await new Promise((resolve) => setTimeout(resolve, 1500))
+      const supabase = createClient()
+      const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? window.location.origin
+      const { error } = await supabase.auth.resetPasswordForEmail(data.email, {
+        redirectTo: `${appUrl}/api/auth/callback`,
+      })
+      if (error) {
+        console.error('Failed to send reset email:', error)
+      }
+      // Always show success — do not leak which emails exist.
       setSubmittedEmail(data.email)
       setIsSubmitted(true)
       setCooldown(COOLDOWN_SECONDS)
     } catch (error) {
       console.error('Failed to send reset email:', error)
+      setSubmittedEmail(data.email)
+      setIsSubmitted(true)
+      setCooldown(COOLDOWN_SECONDS)
     } finally {
       setIsLoading(false)
     }
@@ -60,15 +71,18 @@ export default function ForgotPasswordPage() {
 
     setIsLoading(true)
     try {
-      // TODO: Replace with actual API call
-      await new Promise((resolve) => setTimeout(resolve, 1500))
+      const supabase = createClient()
+      const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? window.location.origin
+      await supabase.auth.resetPasswordForEmail(submittedEmail, {
+        redirectTo: `${appUrl}/api/auth/callback`,
+      })
       setCooldown(COOLDOWN_SECONDS)
     } catch (error) {
       console.error('Failed to resend email:', error)
     } finally {
       setIsLoading(false)
     }
-  }, [cooldown])
+  }, [cooldown, submittedEmail])
 
   const formatCooldown = (seconds: number): string => {
     const mins = Math.floor(seconds / 60)

@@ -38,7 +38,15 @@ export function EditableAuthorityDeptField({
         onChange={(id) => onChange(id)}
         items={depts.map((d) => ({ id: d.id, label: d.en, labelAr: d.ar }))}
         placeholder="Select department..."
-        onAdd={(label, labelAr) => addDepartment(authority, label, labelAr ?? label).id}
+        onAdd={async (label, labelAr) => {
+          try {
+            const created = await addDepartment(authority, label, labelAr ?? label)
+            return created.id
+          } catch (err) {
+            console.error('Failed to add department', err)
+            return undefined
+          }
+        }}
         onEdit={(id, label, labelAr) =>
           updateDepartment(authority, id, { en: label, ar: labelAr ?? label })
         }

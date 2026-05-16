@@ -1,20 +1,191 @@
+// Policy store — Phase 5 server-state migration.
+//
+// Reads from /api/policies; mutations call POST/PATCH/DELETE and patch local
+// state on success. Legacy method signatures (`fetchAll`, `fetchById`,
+// `create`, `update`, `delete`, `submitForReview`, `approve`,
+// `initiateReview`, `setPhaseDeadline`, `renameWorkflowStep`,
+// `reviewAlerts`, `checkAndUpdateStatuses`) are preserved verbatim — the
+// pages currently consume them as **synchronous** calls; we keep that shape
+// by doing optimistic local updates and firing the network request in the
+// background. Errors surface via the store's `error` field.
+//
+// SKELETON-LOADING NOTE: pages render a skeleton when
+// `isLoading && policies.length === 0` (first fetch). Refetches show stale
+// data with a subtle indicator.
+
 import { create } from 'zustand'
-import { persist } from 'zustand/middleware'
-import type { Policy, PolicyFilters, PolicyStatus, PolicyWorkflowStep, PolicyActivityEntry } from '@/types'
+import type {
+  Policy,
+  PolicyFilters,
+  PolicyStatus,
+  PolicyCategory,
+  PolicyApprovalTier,
+  PolicyOwner,
+  PolicyWorkflowStep,
+  PolicyActivityEntry,
+  PaginationState,
+  RegulatoryBodyId,
+  ReviewSchedule,
+} from '@/types'
+import { api, ApiClientError } from '@/lib/api-client'
 import { computeNextReview, cadenceToReviewCycleDays } from '@/lib/review-schedule'
 import { validateChildDeadline } from '@/lib/deadline-validation'
 import { requirePermission } from '@/lib/rbac-store-gate'
 import { useUserLogStore } from '@/stores/user-log-store'
 
-interface PolicyState {
+// ---------- API row shape ----------------------------------------------------
+
+interface PolicyApiRow {
+  id: string
+  ref_code: string
+  name: string
+  description?: string
+  status: string
+  category: string
+  version: string
+  approval_tier: string
+  owner_id: string | null
+  owner_name: string | null
+  owner_department: string | null
+  business_owner_department_id: string | null
+  last_review_date: string | null
+  next_review_date: string | null
+  review_cycle_days?: number
+  approved_date?: string | null
+  overdue_count: number | null
+  last_overdue_date?: string | null
+  current_review_cycle_id?: string | null
+  current_review_cycle_label?: string | null
+  current_review_cycle_date?: string | null
+  review_schedule?: unknown
+  framework_ids: string[]
+  affected_departments: string[]
+  created_at: string
+  updated_at: string
+}
+
+function stubOwner(name: string | null, department: string | null): PolicyOwner {
+  return {
+    name: name ?? '',
+    avatar: name ?? '',
+    department: department ?? '',
+  }
+}
+
+function mapRow(row: PolicyApiRow, previous?: Policy): Policy {
+  return {
+    id: row.ref_code || row.id,
+    name: row.name,
+    description: row.description ?? previous?.description ?? '',
+    status: row.status as PolicyStatus,
+    category: row.category as PolicyCategory,
+    version: row.version,
+    approvalTier: row.approval_tier as PolicyApprovalTier,
+    owner: previous?.owner ?? stubOwner(row.owner_name, row.owner_department),
+    businessOwnerDepartmentId:
+      row.business_owner_department_id ?? previous?.businessOwnerDepartmentId,
+    affectedDepartments: row.affected_departments ?? previous?.affectedDepartments ?? [],
+    lastReviewDate: row.last_review_date ?? previous?.lastReviewDate ?? '',
+    nextReviewDate: row.next_review_date ?? previous?.nextReviewDate ?? '',
+    reviewCycleDays: row.review_cycle_days ?? previous?.reviewCycleDays ?? 365,
+    approvedDate: row.approved_date ?? previous?.approvedDate,
+    versionHistory: previous?.versionHistory ?? [],
+    workflowTimeline: previous?.workflowTimeline ?? [],
+    activityLog: previous?.activityLog ?? [],
+    attachments: previous?.attachments,
+    attachmentUrl: previous?.attachmentUrl,
+    evidence: previous?.evidence,
+    overdueCount: row.overdue_count ?? previous?.overdueCount ?? 0,
+    lastOverdueDate: row.last_overdue_date ?? previous?.lastOverdueDate,
+    currentReviewCycleId: row.current_review_cycle_id ?? previous?.currentReviewCycleId,
+    currentReviewCycleLabel: row.current_review_cycle_label ?? previous?.currentReviewCycleLabel,
+    currentReviewCycleDate: row.current_review_cycle_date ?? previous?.currentReviewCycleDate,
+    reviewCycleHistory: previous?.reviewCycleHistory,
+    reviewSchedule:
+      (row.review_schedule as ReviewSchedule | undefined) ?? previous?.reviewSchedule,
+    frameworkIds: (row.framework_ids ?? previous?.frameworkIds ?? []) as RegulatoryBodyId[],
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  }
+}
+
+function toCreatePayload(data: Omit<Policy, 'id' | 'createdAt' | 'updatedAt'>): Record<string, unknown> {
+  return {
+    ref_code: `POL-PENDING-${Date.now()}`, // overridden by getNextId-style consumers below
+    name: data.name,
+    description: data.description,
+    category: data.category as string,
+    version: data.version || 'v1.0',
+    approval_tier: data.approvalTier,
+    owner_name: data.owner?.name ?? undefined,
+    owner_department: data.owner?.department ?? undefined,
+    business_owner_department_id: data.businessOwnerDepartmentId ?? undefined,
+    last_review_date: data.lastReviewDate || undefined,
+    next_review_date: data.nextReviewDate || undefined,
+    review_cycle_days: data.reviewCycleDays ?? 365,
+    approved_date: data.approvedDate ?? undefined,
+    review_schedule: data.reviewSchedule ?? undefined,
+    framework_ids: data.frameworkIds ?? [],
+    affected_departments: data.affectedDepartments ?? [],
+  }
+}
+
+function toUpdatePayload(patch: Partial<Policy>): Record<string, unknown> {
+  const out: Record<string, unknown> = {}
+  if (patch.name !== undefined) out.name = patch.name
+  if (patch.description !== undefined) out.description = patch.description
+  if (patch.category !== undefined) out.category = patch.category
+  if (patch.version !== undefined) out.version = patch.version
+  if (patch.approvalTier !== undefined) out.approval_tier = patch.approvalTier
+  if (patch.owner !== undefined) {
+    out.owner_name = patch.owner?.name ?? null
+    out.owner_department = patch.owner?.department ?? null
+  }
+  if (patch.businessOwnerDepartmentId !== undefined)
+    out.business_owner_department_id = patch.businessOwnerDepartmentId
+  if (patch.lastReviewDate !== undefined) out.last_review_date = patch.lastReviewDate || null
+  if (patch.nextReviewDate !== undefined) out.next_review_date = patch.nextReviewDate || null
+  if (patch.reviewCycleDays !== undefined) out.review_cycle_days = patch.reviewCycleDays
+  if (patch.approvedDate !== undefined) out.approved_date = patch.approvedDate || null
+  if (patch.status !== undefined) out.status = patch.status
+  if (patch.reviewSchedule !== undefined) out.review_schedule = patch.reviewSchedule ?? null
+  if (patch.frameworkIds !== undefined) out.framework_ids = patch.frameworkIds
+  if (patch.affectedDepartments !== undefined) out.affected_departments = patch.affectedDepartments
+  if (patch.currentReviewCycleId !== undefined) out.current_review_cycle_id = patch.currentReviewCycleId
+  if (patch.currentReviewCycleLabel !== undefined)
+    out.current_review_cycle_label = patch.currentReviewCycleLabel
+  if (patch.currentReviewCycleDate !== undefined)
+    out.current_review_cycle_date = patch.currentReviewCycleDate
+  return out
+}
+
+function errorMessage(e: unknown, fallback: string): string {
+  if (e instanceof ApiClientError) return e.message
+  if (e instanceof Error) return e.message
+  return fallback
+}
+
+// ---------- store -----------------------------------------------------------
+
+interface PolicyStoreState {
   policies: Policy[]
+  byId: Record<string, Policy>
   selectedPolicy: Policy | null
+  pagination: PaginationState
   filters: PolicyFilters
 
-  // Actions
+  // First-fetch skeleton detector: `isLoading && policies.length === 0` → render skeleton.
+  isLoading: boolean
+  isMutating: boolean
+  error: string | null
+  lastFetched: number | null
+
+  // Legacy sync signatures preserved for consumer pages.
   fetchAll: () => void
   fetchById: (id: string) => Policy | null
   getNextId: () => string
+
+  /** Returns the locally-optimistic policy; background POST reconciles state. */
   create: (data: Omit<Policy, 'id' | 'createdAt' | 'updatedAt'>) => Policy
   update: (id: string, data: Partial<Policy>) => void
   delete: (id: string) => void
@@ -22,527 +193,432 @@ interface PolicyState {
   setFilters: (filters: PolicyFilters) => void
   clearFilters: () => void
 
-  // Status transitions
   submitForReview: (id: string) => void
-  // Round 4 Phase 6: `approvedBy` is gone — store reads `auth.user.name`
-  // itself after the gate passes.
   approve: (id: string, notes?: string) => void
   initiateReview: (id: string) => void
 
-  // Review alerts: policies with nextReviewDate ≤ 90 days from now OR status 'expired'
   reviewAlerts: () => Policy[]
-
-  // Status check: called on mount to update overdue/requires-review
   checkAndUpdateStatuses: () => void
 
-  // Phase deadlines (must be ≤ policy.nextReviewDate)
   setPhaseDeadline: (
     policyId: string,
     stepIndex: number,
     deadline: string | undefined,
     actingUser: string,
   ) => { ok: true } | { ok: false; reason: string }
-
-  // Inline rename of a non-completed workflow step
   renameWorkflowStep: (
     policyId: string,
     stepIndex: number,
     newLabel: string,
     actingUser: string,
   ) => void
+
+  clearError: () => void
 }
 
-const seedPolicies: Policy[] = [
-  {
-    id: 'POL-001',
-    name: 'AML Policy',
-    description: 'Anti-Money Laundering policy covering customer due diligence, suspicious activity reporting, and regulatory compliance requirements.',
-    status: 'approved',
-    category: 'compliance',
-    version: 'v2.3',
-    approvalTier: 'management',
-    owner: { name: 'Sarah Connor', avatar: 'Sarah', department: 'Compliance' },
-    businessOwnerDepartmentId: 'compliance',
-    lastReviewDate: '2025-08-15',
-    nextReviewDate: '2026-08-15',  // ~170 days from Mar 2026
-    reviewCycleDays: 365,
-    approvedDate: '2025-08-20',
-    versionHistory: [
-      { version: 'v2.3', date: '2025-08-20', author: 'Sarah Connor', changes: 'Updated suspicious activity thresholds' },
-      { version: 'v2.2', date: '2025-02-10', author: 'Michael Scott', changes: 'Added PEP screening requirements' },
-      { version: 'v2.1', date: '2024-09-05', author: 'Sarah Connor', changes: 'Revised CDD procedures' },
-    ],
-    workflowTimeline: [
-      { step: 'Draft Created', date: '2025-07-01', user: 'Sarah Connor', status: 'completed' },
-      { step: 'Legal Review', date: '2025-07-15', user: 'David Wallace', status: 'completed' },
-      { step: 'Compliance Review', date: '2025-08-01', user: 'Ahmed Al-Rashid', status: 'completed' },
-      { step: 'Final Approval', date: '2025-08-20', user: 'Executive Committee', status: 'completed' },
-    ],
-    frameworkIds: ['sama', 'safiu'],
-    createdAt: '2025-07-01T00:00:00.000Z',
-    updatedAt: '2025-08-20T00:00:00.000Z',
+const INITIAL_PAGINATION: PaginationState = {
+  page: 1,
+  pageSize: 50,
+  total: 0,
+  totalPages: 1,
+}
+
+export const usePolicyStore = create<PolicyStoreState>()((set, get) => ({
+  policies: [],
+  byId: {},
+  selectedPolicy: null,
+  pagination: INITIAL_PAGINATION,
+  filters: {},
+  isLoading: false,
+  isMutating: false,
+  error: null,
+  lastFetched: null,
+
+  fetchAll: () => {
+    set({ isLoading: true, error: null })
+    void (async () => {
+      try {
+        const result = await api.get<{
+          items: PolicyApiRow[]
+          page: number
+          pageSize: number
+          total: number
+          totalPages: number
+        }>('/policies', { page: 1, pageSize: 100 })
+        const previousById = get().byId
+        const policies = result.items.map((r) => mapRow(r, previousById[r.ref_code || r.id]))
+        const byId: Record<string, Policy> = {}
+        for (const p of policies) byId[p.id] = p
+        set({
+          policies,
+          byId,
+          pagination: {
+            page: result.page,
+            pageSize: result.pageSize,
+            total: result.total,
+            totalPages: result.totalPages,
+          },
+          isLoading: false,
+          lastFetched: Date.now(),
+        })
+      } catch (e) {
+        set({ error: errorMessage(e, 'Failed to fetch policies'), isLoading: false })
+      }
+    })()
   },
-  {
-    id: 'POL-002',
-    name: 'Information Security Policy',
-    description: 'Enterprise-wide information security policy covering data protection, access controls, and incident response procedures.',
-    status: 'under-review',
-    category: 'it',
-    version: 'v1.8',
-    approvalTier: 'board',
-    owner: { name: 'Felix Henderson', avatar: 'Felix', department: 'IT Security' },
-    businessOwnerDepartmentId: 'it-cybersecurity',
-    lastReviewDate: '2025-01-10',
-    nextReviewDate: '2026-01-10',  // overdue in Mar 2026
-    reviewCycleDays: 365,
-    versionHistory: [
-      { version: 'v1.8', date: '2025-10-01', author: 'Felix Henderson', changes: 'Added cloud security controls' },
-      { version: 'v1.7', date: '2025-01-10', author: 'Felix Henderson', changes: 'Updated incident response procedures' },
-    ],
-    workflowTimeline: [
-      { step: 'Draft Created', date: '2025-09-15', user: 'Felix Henderson', status: 'completed' },
-      { step: 'Technical Review', date: '2025-09-25', user: 'IT Team', status: 'completed' },
-      { step: 'Compliance Review', date: '2025-10-05', user: 'Sarah Connor', status: 'current' },
-      { step: 'Final Approval', date: '', user: 'Board', status: 'pending' },
-    ],
-    frameworkIds: ['nca-ecc'],
-    createdAt: '2025-09-15T00:00:00.000Z',
-    updatedAt: '2025-10-05T00:00:00.000Z',
-  },
-  {
-    id: 'POL-003',
-    name: 'Data Privacy Policy',
-    description: 'Comprehensive data privacy policy aligned with PDPL requirements covering personal data processing, consent management, and data subject rights.',
-    status: 'approved',
-    category: 'compliance',
-    version: 'v3.0',
-    approvalTier: 'board',
-    owner: { name: 'Michael Scott', avatar: 'Michael', department: 'Legal' },
-    businessOwnerDepartmentId: 'legal',
-    lastReviewDate: '2025-06-20',
-    nextReviewDate: '2026-06-20',  // ~110 days from Mar 2026
-    reviewCycleDays: 365,
-    approvedDate: '2025-06-25',
-    versionHistory: [
-      { version: 'v3.0', date: '2025-06-25', author: 'Michael Scott', changes: 'Major revision for PDPL compliance' },
-      { version: 'v2.5', date: '2024-12-01', author: 'Michael Scott', changes: 'Updated consent requirements' },
-    ],
-    workflowTimeline: [
-      { step: 'Draft Created', date: '2025-05-01', user: 'Michael Scott', status: 'completed' },
-      { step: 'Legal Review', date: '2025-05-20', user: 'David Wallace', status: 'completed' },
-      { step: 'DPO Review', date: '2025-06-10', user: 'Privacy Officer', status: 'completed' },
-      { step: 'Final Approval', date: '2025-06-25', user: 'Board', status: 'completed' },
-    ],
-    frameworkIds: ['ndmo-pdpl'],
-    createdAt: '2025-05-01T00:00:00.000Z',
-    updatedAt: '2025-06-25T00:00:00.000Z',
-  },
-  {
-    id: 'POL-004',
-    name: 'Business Continuity Plan',
-    description: 'Business continuity and disaster recovery plan outlining procedures for maintaining operations during disruptions.',
-    status: 'draft',
-    category: 'operations',
-    version: 'v1.0',
-    approvalTier: 'agm',
-    owner: { name: 'Kelly Kapoor', avatar: 'Kelly', department: 'Operations' },
-    businessOwnerDepartmentId: 'security-operations',
-    lastReviewDate: '',
-    nextReviewDate: '2026-05-01',  // ~60 days from Mar 2026 - triggers alert
-    reviewCycleDays: 365,
-    versionHistory: [
-      { version: 'v1.0', date: '2025-10-15', author: 'Kelly Kapoor', changes: 'Initial draft' },
-    ],
-    workflowTimeline: [
-      { step: 'Draft Created', date: '2025-10-15', user: 'Kelly Kapoor', status: 'current' },
-      { step: 'Technical Review', date: '', user: 'IT Team', status: 'pending' },
-      { step: 'Management Review', date: '', user: 'Operations Head', status: 'pending' },
-      { step: 'Final Approval', date: '', user: 'AGM', status: 'pending' },
-    ],
-    frameworkIds: [],
-    createdAt: '2025-10-15T00:00:00.000Z',
-    updatedAt: '2025-10-15T00:00:00.000Z',
-  },
-  {
-    id: 'POL-005',
-    name: 'Vendor Management Policy',
-    description: 'Third-party vendor management policy covering due diligence, contract requirements, and ongoing monitoring.',
-    status: 'expired',
-    category: 'risk',
-    version: 'v2.1',
-    approvalTier: 'sharia',
-    owner: { name: 'David Wallace', avatar: 'David', department: 'Risk Management' },
-    businessOwnerDepartmentId: 'risk-management',
-    lastReviewDate: '2024-06-15',
-    nextReviewDate: '2025-06-15',  // expired
-    reviewCycleDays: 365,
-    approvedDate: '2024-06-20',
-    versionHistory: [
-      { version: 'v2.1', date: '2024-06-20', author: 'David Wallace', changes: 'Added cloud vendor requirements' },
-      { version: 'v2.0', date: '2023-06-10', author: 'David Wallace', changes: 'Major revision' },
-    ],
-    workflowTimeline: [
-      { step: 'Draft Created', date: '2024-05-01', user: 'David Wallace', status: 'completed' },
-      { step: 'Risk Review', date: '2024-05-20', user: 'Risk Team', status: 'completed' },
-      { step: 'Legal Review', date: '2024-06-05', user: 'Legal Team', status: 'completed' },
-      { step: 'Final Approval', date: '2024-06-20', user: 'Executive Committee', status: 'completed' },
-    ],
-    frameworkIds: [],
-    createdAt: '2024-05-01T00:00:00.000Z',
-    updatedAt: '2024-06-20T00:00:00.000Z',
-  },
-]
 
-export const usePolicyStore = create<PolicyState>()(
-  persist(
-    (set, get) => ({
-      policies: seedPolicies,
-      selectedPolicy: null,
-      filters: {},
-
-      fetchAll: () => {
-        // TODO: Replace with actual API call
-      },
-
-      fetchById: (id) => {
-        // TODO: Replace with actual API call
-        return get().policies.find(p => p.id === id) ?? null
-      },
-
-      getNextId: (): string => {
-        const existing = get().policies
-          .map((p) => {
-            const match = p.id.match(/^POL-(\d+)$/)
-            return match ? parseInt(match[1], 10) : 0
-          })
-        const maxNum = existing.length > 0 ? Math.max(...existing) : 0
-        return `POL-${String(maxNum + 1).padStart(3, '0')}`
-      },
-
-      create: (data) => {
-        // TODO: Replace with actual API call
-        const now = new Date().toISOString()
-        const id = get().getNextId()
-        let nextReviewDate = data.nextReviewDate
-        let reviewCycleDays = data.reviewCycleDays
-        if (data.reviewSchedule) {
-          nextReviewDate = computeNextReview(data.reviewSchedule)
-          reviewCycleDays = cadenceToReviewCycleDays(data.reviewSchedule.cadence)
-        }
-        const newPolicy: Policy = {
-          ...data,
-          id,
-          nextReviewDate,
-          reviewCycleDays,
-          createdAt: now,
-          updatedAt: now,
-        }
-        set((state) => ({ policies: [newPolicy, ...state.policies] }))
-        return newPolicy
-      },
-
-      update: (id, data) => {
-        // TODO: Replace with actual API call
-        const now = new Date().toISOString()
-        set((state) => ({
-          policies: state.policies.map((p) =>
-            p.id === id ? { ...p, ...data, updatedAt: now } : p
-          ),
-          selectedPolicy:
-            state.selectedPolicy?.id === id
-              ? { ...state.selectedPolicy, ...data, updatedAt: now }
-              : state.selectedPolicy,
+  fetchById: (id) => {
+    // Legacy signature: synchronous lookup with background refresh.
+    const cached = get().byId[id] ?? get().policies.find((p) => p.id === id) ?? null
+    void (async () => {
+      try {
+        const row = await api.get<PolicyApiRow>(`/policies/${id}`)
+        const previous = get().byId[id]
+        const policy = mapRow(row, previous)
+        set((s) => ({
+          byId: { ...s.byId, [id]: policy },
+          policies: s.policies.some((p) => p.id === id)
+            ? s.policies.map((p) => (p.id === id ? policy : p))
+            : [policy, ...s.policies],
+          selectedPolicy: s.selectedPolicy?.id === id ? policy : s.selectedPolicy,
         }))
-      },
+      } catch {
+        // 404 / network errors are silent here — the legacy method just returns null/cached.
+      }
+    })()
+    return cached
+  },
 
-      delete: (id) => {
-        // TODO: Replace with actual API call
-        set((state) => ({
-          policies: state.policies.filter((p) => p.id !== id),
-          selectedPolicy: state.selectedPolicy?.id === id ? null : state.selectedPolicy,
-        }))
-      },
+  getNextId: () => {
+    const existing = get().policies
+      .map((p) => {
+        const match = p.id.match(/^POL-(\d+)$/)
+        return match ? parseInt(match[1], 10) : 0
+      })
+    const maxNum = existing.length > 0 ? Math.max(...existing) : 0
+    return `POL-${String(maxNum + 1).padStart(3, '0')}`
+  },
 
-      setSelected: (policy) => set({ selectedPolicy: policy }),
-      setFilters: (filters) => set({ filters }),
-      clearFilters: () => set({ filters: {} }),
-
-      submitForReview: (id) => {
-        requirePermission('Approve Policy Reviews', { storeName: 'policy', actionName: 'submitForReview', id })
-        // TODO: Replace with actual API call
-        const policy = get().policies.find((p) => p.id === id)
-        if (!policy) return
-        const newTimeline = policy.workflowTimeline.map(step =>
-          step.status === 'current' ? { ...step, stepState: 'pending-approval' as const } : step
-        )
-        get().update(id, {
-          status: 'under-review' as PolicyStatus,
-          workflowTimeline: newTimeline,
-        })
-      },
-
-      approve: (id, notes?) => {
-        const user = requirePermission('Approve Policy Reviews', { storeName: 'policy', actionName: 'approve', id })
-        // TODO: Replace with actual API call
-        const policy = get().policies.find((p) => p.id === id)
-        if (!policy) return
-        // RBAC-025: audit log the approval.
-        useUserLogStore.getState().log({
-          userId: user.id,
-          action: 'policy.approval_step_committed',
-          target: id,
-          metadata: notes ? { notes } : undefined,
-        })
-        const today = new Date().toISOString().split('T')[0]
-        const currentIdx = policy.workflowTimeline.findIndex(s => s.status === 'current')
-        const updatedTimeline = policy.workflowTimeline.map((step, idx) =>
-          step.status !== 'completed'
-            ? {
-                ...step, status: 'completed' as const, date: step.date || today, stepState: undefined,
-                ...(idx === currentIdx && notes ? { note: notes } : {}),
-              }
-            : step
-        )
-        const activityEntry: PolicyActivityEntry = {
-          id: Date.now().toString(),
-          timestamp: new Date().toISOString(),
-          date: today,
-          type: 'workflow_approved',
-          textEn: notes ? `Policy approved — ${notes}` : 'Policy approved',
-          textAr: notes ? `تمت الموافقة على السياسة — ${notes}` : 'تمت الموافقة على السياسة',
-          user: user.name,
-        }
-        get().update(id, {
-          status: 'approved' as PolicyStatus,
-          approvedDate: today,
-          workflowTimeline: updatedTimeline,
-          activityLog: [...(policy.activityLog ?? []), activityEntry],
-        })
-      },
-
-      initiateReview: (id) => {
-        requirePermission('Approve Policy Reviews', { storeName: 'policy', actionName: 'initiateReview', id })
-        // TODO: Replace with actual API call
-        const policy = get().policies.find((p) => p.id === id)
-        if (!policy) return
-        const today = new Date().toISOString().split('T')[0]
-        const cycleId = Date.now().toString()
-        const cycleLabel = `Review ${new Date().toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}`
-        // Push old cycle to history before replacing it
-        const oldEntry = policy.currentReviewCycleId
-          ? [{ id: policy.currentReviewCycleId, label: policy.currentReviewCycleLabel ?? 'Review', initiatedAt: today }]
-          : []
-        const resetTimeline = policy.workflowTimeline.map((step) =>
-          step.status === 'current' ? { ...step, status: 'completed' as const, date: today } : step
-        )
-        const newStep: PolicyWorkflowStep = {
-          step: 'Review Initiated',
-          date: today,
-          user: policy.owner.name,
-          status: 'current',
-        }
-        const nextReviewDate = policy.reviewSchedule
-          ? computeNextReview(policy.reviewSchedule, new Date())
-          : policy.nextReviewDate
-        get().update(id, {
-          status: 'draft' as PolicyStatus,
-          workflowTimeline: [...resetTimeline, newStep],
-          currentReviewCycleId: cycleId,
-          currentReviewCycleLabel: cycleLabel,
-          currentReviewCycleDate: new Date().toISOString(),
-          reviewCycleHistory: [...(policy.reviewCycleHistory ?? []), ...oldEntry],
-          nextReviewDate,
-        })
-      },
-
-      reviewAlerts: (): Policy[] => {
-        const now = new Date()
-        const ninetyDays = new Date(now.getTime() + 90 * 24 * 60 * 60 * 1000)
-        return get().policies.filter((p) => {
-          if (p.status === 'expired') return true
-          if (p.nextReviewDate) {
-            const reviewDate = new Date(p.nextReviewDate)
-            return reviewDate <= ninetyDays
-          }
-          return false
-        })
-      },
-
-      setPhaseDeadline: (policyId, stepIndex, deadline, actingUser) => {
-        const policy = get().policies.find((p) => p.id === policyId)
-        if (!policy) return { ok: false, reason: 'policy-not-found' }
-        if (stepIndex < 0 || stepIndex >= policy.workflowTimeline.length) {
-          return { ok: false, reason: 'step-not-found' }
-        }
-        const validation = validateChildDeadline(deadline ?? null, policy.nextReviewDate)
-        if (!validation.ok) {
-          return { ok: false, reason: validation.reason }
-        }
-        const previous = policy.workflowTimeline[stepIndex].deadline
-        const newTimeline = policy.workflowTimeline.map((step, i) =>
-          i === stepIndex ? { ...step, deadline: deadline || undefined } : step,
-        )
-        const today = new Date().toISOString().split('T')[0]
-        const stepLabel = policy.workflowTimeline[stepIndex].step
-        const action = previous
-          ? (deadline ? 'phase_deadline_changed' : 'phase_deadline_set')
-          : 'phase_deadline_set'
-        const entry: PolicyActivityEntry = {
-          id: Date.now().toString(),
-          timestamp: new Date().toISOString(),
-          date: today,
-          type: action,
-          textEn: deadline
-            ? (previous
-                ? `Deadline for "${stepLabel}" changed from ${previous} to ${deadline}`
-                : `Deadline for "${stepLabel}" set to ${deadline}`)
-            : `Deadline cleared on "${stepLabel}"`,
-          textAr: deadline
-            ? (previous
-                ? `تم تغيير الموعد النهائي لـ "${stepLabel}" من ${previous} إلى ${deadline}`
-                : `تم تعيين الموعد النهائي لـ "${stepLabel}" إلى ${deadline}`)
-            : `تم مسح الموعد النهائي لـ "${stepLabel}"`,
-          user: actingUser,
-        }
-        get().update(policyId, {
-          workflowTimeline: newTimeline,
-          activityLog: [...(policy.activityLog ?? []), entry],
-        })
-        return { ok: true }
-      },
-
-      renameWorkflowStep: (policyId, stepIndex, newLabel, actingUser) => {
-        const policy = get().policies.find((p) => p.id === policyId)
-        if (!policy) return
-        if (stepIndex < 0 || stepIndex >= policy.workflowTimeline.length) return
-        const step = policy.workflowTimeline[stepIndex]
-        if (step.status === 'completed') return
-        const trimmed = newLabel.trim()
-        if (!trimmed || trimmed === step.step) return
-        const previous = step.step
-        const newTimeline = policy.workflowTimeline.map((s, i) =>
-          i === stepIndex ? { ...s, step: trimmed } : s,
-        )
-        const today = new Date().toISOString().split('T')[0]
-        const entry: PolicyActivityEntry = {
-          id: Date.now().toString(),
-          timestamp: new Date().toISOString(),
-          date: today,
-          type: 'step_renamed',
-          textEn: `Workflow step renamed from "${previous}" to "${trimmed}"`,
-          textAr: `تمت إعادة تسمية الخطوة من "${previous}" إلى "${trimmed}"`,
-          user: actingUser,
-        }
-        get().update(policyId, {
-          workflowTimeline: newTimeline,
-          activityLog: [...(policy.activityLog ?? []), entry],
-        })
-      },
-
-      checkAndUpdateStatuses: () => {
-        const today = new Date().toISOString().split('T')[0]
-        const ninetyDaysFromNow = new Date(Date.now() + 90 * 86400000).toISOString().split('T')[0]
-        set(state => ({
-          policies: state.policies.map(p => {
-            if (p.status === 'draft' || p.status === 'expired') return p
-            let updated = { ...p }
-            if (
-              p.nextReviewDate &&
-              p.nextReviewDate < today &&
-              p.status !== 'overdue' &&
-              p.lastOverdueDate !== p.nextReviewDate
-            ) {
-              updated = {
-                ...updated,
-                status: 'overdue' as PolicyStatus,
-                overdueCount: (p.overdueCount ?? 0) + 1,
-                lastOverdueDate: p.nextReviewDate,
-              }
-            } else if (
-              p.nextReviewDate &&
-              p.nextReviewDate <= ninetyDaysFromNow &&
-              p.status === 'approved'
-            ) {
-              updated = { ...updated, status: 'requires-review' as PolicyStatus }
-            }
-            return updated
-          }),
-        }))
-      },
-    }),
-    {
-      name: 'policy-storage',
-      version: 4,
-      migrate: (persistedState: unknown, version: number) => {
-        let state = persistedState as { policies?: Policy[] }
-        if (version === 0) {
-          if (!state.policies || state.policies.length === 0) {
-            return { ...state, policies: seedPolicies }
-          }
-        }
-        if (version < 2) {
-          // Add actionType to workflow steps missing it, and currentReviewCycleId
-          const cycleId = Date.now().toString()
-          const cycleLabel = `Review ${new Date().toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}`
-          return {
-            ...state,
-            policies: (state.policies ?? seedPolicies).map(p => ({
-              ...p,
-              currentReviewCycleId: p.currentReviewCycleId ?? cycleId,
-              currentReviewCycleLabel: p.currentReviewCycleLabel ?? cycleLabel,
-              workflowTimeline: p.workflowTimeline.map(s =>
-                s.actionType ? s : { ...s, actionType: 'request-approval' }
-              ),
-            })),
-          }
-        }
-        if (version < 3) {
-          // Add frameworkIds to existing policies
-          const POLICY_FW_MAP: Record<string, string[]> = {
-            'POL-001': ['sama', 'safiu'],
-            'POL-002': ['nca-ecc'],
-            'POL-003': ['ndmo-pdpl'],
-          }
-          state = {
-            ...state,
-            policies: (state.policies ?? seedPolicies).map((p: any) => ({
-              ...p,
-              frameworkIds: p.frameworkIds ?? (POLICY_FW_MAP[p.id] ?? []),
-            })),
-          }
-        }
-        if (version < 4) {
-          // Derive businessOwnerDepartmentId from the legacy owner.department string.
-          // Falls back to a slugified id so unknown depts still produce a stable handle.
-          const DEPT_NAME_TO_ID: Record<string, string> = {
-            'Compliance': 'compliance',
-            'IT & Cybersecurity': 'it-cybersecurity',
-            'IT Security': 'it-cybersecurity',
-            'Finance': 'finance',
-            'Risk Management': 'risk-management',
-            'Legal': 'legal',
-            'Security & Operations': 'security-operations',
-            'Operations': 'security-operations',
-            'Human Resources': 'hr',
-            'Sharia Compliance': 'sharia-compliance',
-            'AML/CTF': 'aml-ctf',
-            'Business Development': 'business-dev',
-          }
-          const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
-          state = {
-            ...state,
-            policies: (state.policies ?? seedPolicies).map((p: any) => ({
-              ...p,
-              businessOwnerDepartmentId:
-                p.businessOwnerDepartmentId
-                ?? DEPT_NAME_TO_ID[p.owner?.department ?? '']
-                ?? (p.owner?.department ? slug(p.owner.department) : undefined),
-            })),
-          }
-        }
-        return state as PolicyState
-      },
-      partialize: (state) => ({ policies: state.policies }),
+  create: (data) => {
+    requirePermission('Approve Policy Reviews', { storeName: 'policy', actionName: 'create' })
+    const now = new Date().toISOString()
+    const id = get().getNextId()
+    let nextReviewDate = data.nextReviewDate
+    let reviewCycleDays = data.reviewCycleDays
+    if (data.reviewSchedule) {
+      nextReviewDate = computeNextReview(data.reviewSchedule)
+      reviewCycleDays = cadenceToReviewCycleDays(data.reviewSchedule.cadence)
     }
-  )
-)
+    const optimistic: Policy = {
+      ...data,
+      id,
+      nextReviewDate,
+      reviewCycleDays,
+      createdAt: now,
+      updatedAt: now,
+    }
+    set((s) => ({
+      policies: [optimistic, ...s.policies],
+      byId: { ...s.byId, [id]: optimistic },
+      isMutating: true,
+      error: null,
+    }))
+
+    void (async () => {
+      try {
+        const payload = { ...toCreatePayload({ ...optimistic }), ref_code: id }
+        const row = await api.post<PolicyApiRow>('/policies', payload)
+        const created = mapRow(row, optimistic)
+        // The server may return a different stable id — surface it on the
+        // optimistic row so subsequent calls (PATCH/DELETE) hit the same id.
+        set((s) => ({
+          policies: s.policies.map((p) => (p.id === id ? created : p)),
+          byId: { ...s.byId, [created.id]: created },
+          isMutating: false,
+        }))
+      } catch (e) {
+        // Roll back optimistic insert.
+        set((s) => {
+          const { [id]: _drop, ...rest } = s.byId
+          return {
+            policies: s.policies.filter((p) => p.id !== id),
+            byId: rest,
+            error: errorMessage(e, 'Failed to create policy'),
+            isMutating: false,
+          }
+        })
+      }
+    })()
+
+    return optimistic
+  },
+
+  update: (id, data) => {
+    const now = new Date().toISOString()
+    const previous = get().byId[id]
+    if (!previous) return
+    const optimistic: Policy = { ...previous, ...data, updatedAt: now }
+    set((s) => ({
+      policies: s.policies.map((p) => (p.id === id ? optimistic : p)),
+      byId: { ...s.byId, [id]: optimistic },
+      selectedPolicy: s.selectedPolicy?.id === id ? optimistic : s.selectedPolicy,
+      isMutating: true,
+      error: null,
+    }))
+
+    void (async () => {
+      try {
+        const row = await api.patch<PolicyApiRow>(`/policies/${id}`, toUpdatePayload(data))
+        const updated = mapRow(row, optimistic)
+        set((s) => ({
+          policies: s.policies.map((p) => (p.id === id ? updated : p)),
+          byId: { ...s.byId, [id]: updated },
+          selectedPolicy: s.selectedPolicy?.id === id ? updated : s.selectedPolicy,
+          isMutating: false,
+        }))
+      } catch (e) {
+        set({ error: errorMessage(e, 'Failed to update policy'), isMutating: false })
+      }
+    })()
+  },
+
+  delete: (id) => {
+    const previous = get().byId[id]
+    if (!previous) return
+    set((s) => {
+      const { [id]: _drop, ...rest } = s.byId
+      return {
+        policies: s.policies.filter((p) => p.id !== id),
+        byId: rest,
+        selectedPolicy: s.selectedPolicy?.id === id ? null : s.selectedPolicy,
+        isMutating: true,
+        error: null,
+      }
+    })
+
+    void (async () => {
+      try {
+        await api.delete(`/policies/${id}`)
+        set({ isMutating: false })
+      } catch (e) {
+        // Roll back.
+        set((s) => ({
+          policies: [previous, ...s.policies],
+          byId: { ...s.byId, [id]: previous },
+          error: errorMessage(e, 'Failed to delete policy'),
+          isMutating: false,
+        }))
+      }
+    })()
+  },
+
+  setSelected: (policy) => set({ selectedPolicy: policy }),
+  setFilters: (filters) => set({ filters }),
+  clearFilters: () => set({ filters: {} }),
+
+  submitForReview: (id) => {
+    requirePermission('Approve Policy Reviews', { storeName: 'policy', actionName: 'submitForReview', id })
+    const policy = get().byId[id]
+    if (!policy) return
+    const newTimeline = policy.workflowTimeline.map((step) =>
+      step.status === 'current' ? { ...step, stepState: 'pending-approval' as const } : step,
+    )
+    get().update(id, {
+      status: 'under-review' as PolicyStatus,
+      workflowTimeline: newTimeline,
+    })
+  },
+
+  approve: (id, notes?) => {
+    const user = requirePermission('Approve Policy Reviews', { storeName: 'policy', actionName: 'approve', id })
+    const policy = get().byId[id]
+    if (!policy) return
+    useUserLogStore.getState().log({
+      userId: user.id,
+      action: 'policy.approval_step_committed',
+      target: id,
+      metadata: notes ? { notes } : undefined,
+    })
+    const today = new Date().toISOString().split('T')[0]
+    const currentIdx = policy.workflowTimeline.findIndex((s) => s.status === 'current')
+    const updatedTimeline = policy.workflowTimeline.map((step, idx) =>
+      step.status !== 'completed'
+        ? {
+            ...step,
+            status: 'completed' as const,
+            date: step.date || today,
+            stepState: undefined,
+            ...(idx === currentIdx && notes ? { note: notes } : {}),
+          }
+        : step,
+    )
+    const activityEntry: PolicyActivityEntry = {
+      id: Date.now().toString(),
+      timestamp: new Date().toISOString(),
+      date: today,
+      type: 'workflow_approved',
+      textEn: notes ? `Policy approved — ${notes}` : 'Policy approved',
+      textAr: notes ? `تمت الموافقة على السياسة — ${notes}` : 'تمت الموافقة على السياسة',
+      user: user.name,
+    }
+    get().update(id, {
+      status: 'approved' as PolicyStatus,
+      approvedDate: today,
+      workflowTimeline: updatedTimeline,
+      activityLog: [...(policy.activityLog ?? []), activityEntry],
+    })
+  },
+
+  initiateReview: (id) => {
+    requirePermission('Approve Policy Reviews', { storeName: 'policy', actionName: 'initiateReview', id })
+    const policy = get().byId[id]
+    if (!policy) return
+    const today = new Date().toISOString().split('T')[0]
+    const cycleId = Date.now().toString()
+    const cycleLabel = `Review ${new Date().toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}`
+    const oldEntry = policy.currentReviewCycleId
+      ? [{ id: policy.currentReviewCycleId, label: policy.currentReviewCycleLabel ?? 'Review', initiatedAt: today }]
+      : []
+    const resetTimeline = policy.workflowTimeline.map((step) =>
+      step.status === 'current' ? { ...step, status: 'completed' as const, date: today } : step,
+    )
+    const newStep: PolicyWorkflowStep = {
+      step: 'Review Initiated',
+      date: today,
+      user: policy.owner.name,
+      status: 'current',
+    }
+    const nextReviewDate = policy.reviewSchedule
+      ? computeNextReview(policy.reviewSchedule, new Date())
+      : policy.nextReviewDate
+    get().update(id, {
+      status: 'draft' as PolicyStatus,
+      workflowTimeline: [...resetTimeline, newStep],
+      currentReviewCycleId: cycleId,
+      currentReviewCycleLabel: cycleLabel,
+      currentReviewCycleDate: new Date().toISOString(),
+      reviewCycleHistory: [...(policy.reviewCycleHistory ?? []), ...oldEntry],
+      nextReviewDate,
+    })
+  },
+
+  reviewAlerts: (): Policy[] => {
+    const now = new Date()
+    const ninetyDays = new Date(now.getTime() + 90 * 24 * 60 * 60 * 1000)
+    return get().policies.filter((p) => {
+      if (p.status === 'expired') return true
+      if (p.nextReviewDate) {
+        const reviewDate = new Date(p.nextReviewDate)
+        return reviewDate <= ninetyDays
+      }
+      return false
+    })
+  },
+
+  setPhaseDeadline: (policyId, stepIndex, deadline, actingUser) => {
+    const policy = get().byId[policyId]
+    if (!policy) return { ok: false, reason: 'policy-not-found' }
+    if (stepIndex < 0 || stepIndex >= policy.workflowTimeline.length) {
+      return { ok: false, reason: 'step-not-found' }
+    }
+    const validation = validateChildDeadline(deadline ?? null, policy.nextReviewDate)
+    if (!validation.ok) {
+      return { ok: false, reason: validation.reason }
+    }
+    const previous = policy.workflowTimeline[stepIndex].deadline
+    const newTimeline = policy.workflowTimeline.map((step, i) =>
+      i === stepIndex ? { ...step, deadline: deadline || undefined } : step,
+    )
+    const today = new Date().toISOString().split('T')[0]
+    const stepLabel = policy.workflowTimeline[stepIndex].step
+    const action = previous
+      ? deadline ? 'phase_deadline_changed' : 'phase_deadline_set'
+      : 'phase_deadline_set'
+    const entry: PolicyActivityEntry = {
+      id: Date.now().toString(),
+      timestamp: new Date().toISOString(),
+      date: today,
+      type: action,
+      textEn: deadline
+        ? (previous
+            ? `Deadline for "${stepLabel}" changed from ${previous} to ${deadline}`
+            : `Deadline for "${stepLabel}" set to ${deadline}`)
+        : `Deadline cleared on "${stepLabel}"`,
+      textAr: deadline
+        ? (previous
+            ? `تم تغيير الموعد النهائي لـ "${stepLabel}" من ${previous} إلى ${deadline}`
+            : `تم تعيين الموعد النهائي لـ "${stepLabel}" إلى ${deadline}`)
+        : `تم مسح الموعد النهائي لـ "${stepLabel}"`,
+      user: actingUser,
+    }
+    get().update(policyId, {
+      workflowTimeline: newTimeline,
+      activityLog: [...(policy.activityLog ?? []), entry],
+    })
+    return { ok: true }
+  },
+
+  renameWorkflowStep: (policyId, stepIndex, newLabel, actingUser) => {
+    const policy = get().byId[policyId]
+    if (!policy) return
+    if (stepIndex < 0 || stepIndex >= policy.workflowTimeline.length) return
+    const step = policy.workflowTimeline[stepIndex]
+    if (step.status === 'completed') return
+    const trimmed = newLabel.trim()
+    if (!trimmed || trimmed === step.step) return
+    const previous = step.step
+    const newTimeline = policy.workflowTimeline.map((s, i) =>
+      i === stepIndex ? { ...s, step: trimmed } : s,
+    )
+    const today = new Date().toISOString().split('T')[0]
+    const entry: PolicyActivityEntry = {
+      id: Date.now().toString(),
+      timestamp: new Date().toISOString(),
+      date: today,
+      type: 'step_renamed',
+      textEn: `Workflow step renamed from "${previous}" to "${trimmed}"`,
+      textAr: `تمت إعادة تسمية الخطوة من "${previous}" إلى "${trimmed}"`,
+      user: actingUser,
+    }
+    get().update(policyId, {
+      workflowTimeline: newTimeline,
+      activityLog: [...(policy.activityLog ?? []), entry],
+    })
+  },
+
+  checkAndUpdateStatuses: () => {
+    const today = new Date().toISOString().split('T')[0]
+    const ninetyDaysFromNow = new Date(Date.now() + 90 * 86400000).toISOString().split('T')[0]
+    set((state) => {
+      const policies = state.policies.map((p) => {
+        if (p.status === 'draft' || p.status === 'expired') return p
+        let updated = { ...p }
+        if (
+          p.nextReviewDate &&
+          p.nextReviewDate < today &&
+          p.status !== 'overdue' &&
+          p.lastOverdueDate !== p.nextReviewDate
+        ) {
+          updated = {
+            ...updated,
+            status: 'overdue' as PolicyStatus,
+            overdueCount: (p.overdueCount ?? 0) + 1,
+            lastOverdueDate: p.nextReviewDate,
+          }
+        } else if (
+          p.nextReviewDate &&
+          p.nextReviewDate <= ninetyDaysFromNow &&
+          p.status === 'approved'
+        ) {
+          updated = { ...updated, status: 'requires-review' as PolicyStatus }
+        }
+        return updated
+      })
+      const byId: Record<string, Policy> = {}
+      for (const p of policies) byId[p.id] = p
+      return { policies, byId }
+    })
+  },
+
+  clearError: () => set({ error: null }),
+}))

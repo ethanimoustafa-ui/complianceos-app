@@ -1,3 +1,17 @@
+// User preferences store — Phase 5 review.
+//
+// **KEPT PERSISTED (client-only) for MVP.** Per-user preferences (dashboard
+// view, timezone, date format, notification module/event/scope toggles, email
+// digest, Slack) live in localStorage because no `/api/team/me/preferences`
+// (nor equivalent column on `profiles`) endpoint exists yet. `/api/team/me`
+// only exposes `preferred_language` and never a richer preference bag.
+//
+// This is acceptable for MVP because preferences are non-critical and
+// re-derivable: a fresh device just renders the documented defaults. When the
+// backend grows a `profiles.preferences` JSONB column (or a dedicated
+// `/api/settings/me/preferences` endpoint), this store should migrate to the
+// canonical server-state pattern from `.planning/09-store-pattern.md`.
+
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import type { DashboardView, DateFormatPreference, NotificationModule, NotificationEvent, NotificationScope, NotificationPreferences } from '@/types'

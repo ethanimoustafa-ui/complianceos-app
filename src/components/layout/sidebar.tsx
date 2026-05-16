@@ -13,7 +13,6 @@ import { NotificationPanel } from '@/components/notifications/notification-panel
 import { MessagePanel } from '@/components/messages/message-panel'
 import { HelpPanel } from '@/components/help/help-panel'
 import { SignOutModal } from '@/components/auth/sign-out-modal'
-import { UserSwitcher } from '@/components/auth/user-switcher'
 import { ProfileModal } from '@/components/profile/profile-modal'
 import { useNotificationEngine } from '@/hooks/useNotificationEngine'
 import { dicebearAvatar } from '@/lib/avatar'
@@ -142,9 +141,7 @@ export function Sidebar() {
             />
           </button>
 
-          {/* RBAC-024: Acting-As affordance — admin-only Demo user switcher.
-              Renders nothing when the current user lacks `Switch User (Demo)`. */}
-          <UserSwitcher />
+          {/* Acting-As affordance removed in MVP — real auth via Supabase. */}
         </div>
       </aside>
 

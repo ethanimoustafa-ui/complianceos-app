@@ -1,3 +1,10 @@
+// Help store — Phase 5 review.
+//
+// **KEPT PERSISTED (client-only) by design.** Pure UI state for the help-tour
+// articles + recently-viewed list. The article catalog is hard-coded copy
+// that ships with the bundle (no editorial workflow, no backend search), and
+// the recently-viewed list is per-device. No server endpoint applies.
+
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import type { HelpArticle } from '@/types'

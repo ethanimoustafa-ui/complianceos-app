@@ -1,5 +1,18 @@
+// Audit log store — Phase 5 server-state migration.
+//
+// Backed by `/api/audit-logs` (paginated read) + `/api/audit-logs/[id]`
+// (single-row detail). The endpoint is **read-only** — every mutation across
+// the app writes its audit row server-side through `writeAudit()` in
+// `lib/api/audit.ts` (not via this store).
+//
+// `addLog` is preserved as a client-only no-server-call shim so the other
+// stores (`audit-store`, `audit-task-store`, etc.) keep compiling and can
+// still surface optimistic activity entries to the audit-detail page without
+// waiting for the next `fetchAll`. The server-side row already exists; this
+// local copy is just there to bridge the round-trip.
+
 import { create } from 'zustand'
-import { persist } from 'zustand/middleware'
+import { api, ApiClientError } from '@/lib/api-client'
 
 type ActionType = 'opened' | 'closed' | 'commented' | 'uploaded' | 'created' | 'assigned' | 'updated' | 'reviewed'
 type LogStatus = 'completed' | 'pending' | 'info' | 'failed'
@@ -19,207 +32,172 @@ export interface AuditLog {
   context?: string
 }
 
-interface AuditLogState {
-  logs: AuditLog[]
-  addLog: (log: Omit<AuditLog, 'id' | 'timestamp'>) => void
-  getLogsByAuditId: (auditId: string) => AuditLog[]
-  clearLogs: () => void
+interface AuditLogApiRow {
+  id: number
+  timestamp: string
+  user_id: string | null
+  user_name: string | null
+  action: string
+  details_key: string | null
+  details_params: Record<string, string> | null
+  ip_address: string | null
+  device: string | null
+  location: string | null
+  status: string | null
+  target_type: string | null
+  target_id: string | null
+  metadata: Record<string, unknown> | null
 }
 
-const seedLogs: AuditLog[] = [
-  {
-    id: 'log-001',
-    timestamp: '2026-04-18T08:15:00.000Z',
-    user: { name: 'Michael Scott', avatar: 'Michael' },
-    action: 'uploaded',
-    audit: 'SAMA Cybersecurity Framework — Annual Self-Assessment',
-    auditId: 'audit-001',
-    description: 'Uploaded Asset-Inventory-2026.xlsx to evidence folder',
-    status: 'completed',
-    duration: '2m',
-    context: 'Evidence collection',
-  },
-  {
-    id: 'log-002',
-    timestamp: '2026-04-17T14:30:00.000Z',
-    user: { name: 'Sarah Connor', avatar: 'Sarah' },
-    action: 'commented',
-    audit: 'SAMA Cybersecurity Framework — Annual Self-Assessment',
-    auditId: 'audit-001',
-    description: 'Added review note on control ID-AM-02 gap finding',
-    status: 'info',
-    context: 'Review',
-  },
-  {
-    id: 'log-003',
-    timestamp: '2026-04-17T10:05:00.000Z',
-    user: { name: 'Ahmed Khan', avatar: 'Ahmed' },
-    action: 'reviewed',
-    audit: 'Q1 Internal Controls Walkthrough — Finance',
-    auditId: 'audit-006',
-    description: 'Completed control walkthrough testing for P2P cycle',
-    status: 'completed',
-    duration: '45m',
-    context: 'Control testing',
-  },
-  {
-    id: 'log-004',
-    timestamp: '2026-04-16T16:40:00.000Z',
-    user: { name: 'Lisa Martinez', avatar: 'Lisa' },
-    action: 'updated',
-    audit: 'PDPL Data Mapping & Subject Rights Readiness',
-    auditId: 'audit-004',
-    description: 'Updated RoPA register with 3 new processing activities',
-    status: 'completed',
-    context: 'Documentation',
-  },
-  {
-    id: 'log-005',
-    timestamp: '2026-04-16T11:20:00.000Z',
-    user: { name: 'Lisa Martinez', avatar: 'Lisa' },
-    action: 'updated',
-    audit: 'PDPL Data Mapping & Subject Rights Readiness',
-    auditId: 'audit-004',
-    description: 'Flagged DSR response SLA overdue (audit past due date)',
-    status: 'failed',
-    context: 'SLA breach',
-  },
-  {
-    id: 'log-006',
-    timestamp: '2026-04-15T09:10:00.000Z',
-    user: { name: 'Michael Scott', avatar: 'Michael' },
-    action: 'opened',
-    audit: 'NCA ECC-1:2018 — Control Effectiveness Review',
-    auditId: 'audit-002',
-    description: 'Opened Q1 ECC review cycle across 114 controls',
-    status: 'info',
-    context: 'Cycle kickoff',
-  },
-  {
-    id: 'log-007',
-    timestamp: '2026-04-12T15:50:00.000Z',
-    user: { name: 'Michael Scott', avatar: 'Michael' },
-    action: 'assigned',
-    audit: 'NCA ECC-1:2018 — Control Effectiveness Review',
-    auditId: 'audit-002',
-    description: 'Assigned control owners across 8 domains',
-    status: 'completed',
-    context: 'Ownership',
-  },
-  {
-    id: 'log-008',
-    timestamp: '2026-04-10T10:00:00.000Z',
-    user: { name: 'Ahmed Khan', avatar: 'Ahmed' },
-    action: 'uploaded',
-    audit: 'ZATCA E-invoicing Phase-2 Integration Audit',
-    auditId: 'audit-007',
-    description: 'Uploaded XML schema validation results for Subsidiary A',
-    status: 'completed',
-    duration: '5m',
-    context: 'Evidence collection',
-  },
-  {
-    id: 'log-009',
-    timestamp: '2026-04-08T13:25:00.000Z',
-    user: { name: 'Sarah Connor', avatar: 'Sarah' },
-    action: 'created',
-    audit: 'AML / CTF Program Independent Review',
-    auditId: 'audit-003',
-    description: 'Created audit engagement and scoping memo',
-    status: 'completed',
-    context: 'Engagement setup',
-  },
-  {
-    id: 'log-010',
-    timestamp: '2026-04-05T17:15:00.000Z',
-    user: { name: 'Michael Scott', avatar: 'Michael' },
-    action: 'updated',
-    audit: 'SAMA Cybersecurity Framework — Annual Self-Assessment',
-    auditId: 'audit-001',
-    description: 'Progress updated to 55% after completing Identity domain review',
-    status: 'completed',
-    context: 'Progress update',
-  },
-  {
-    id: 'log-011',
-    timestamp: '2026-04-02T09:45:00.000Z',
-    user: { name: 'Dr. Hassan Ali', avatar: 'Hassan' },
-    action: 'reviewed',
-    audit: 'AML / CTF Program Independent Review',
-    auditId: 'audit-003',
-    description: 'Subject matter review of sanctions screening coverage',
-    status: 'pending',
-    context: 'Expert review',
-  },
-  {
-    id: 'log-012',
-    timestamp: '2026-03-28T14:00:00.000Z',
-    user: { name: 'Dr. Hassan Ali', avatar: 'Hassan' },
-    action: 'closed',
-    audit: 'Sharia Governance Framework Review',
-    auditId: 'audit-005',
-    description: 'Audit completed and report issued to Sharia Board',
-    status: 'completed',
-    duration: '2h',
-    context: 'Closure',
-  },
-  {
-    id: 'log-013',
-    timestamp: '2026-03-14T16:00:00.000Z',
-    user: { name: 'Ahmed Khan', avatar: 'Ahmed' },
-    action: 'closed',
-    audit: 'Q1 Internal Controls Walkthrough — Finance',
-    auditId: 'audit-006',
-    description: 'Walkthrough closed with 2 minor observations raised',
-    status: 'completed',
-    duration: '1h',
-    context: 'Closure',
-  },
-  {
-    id: 'log-014',
-    timestamp: '2026-03-10T11:30:00.000Z',
-    user: { name: 'Sarah Connor', avatar: 'Sarah' },
-    action: 'commented',
-    audit: 'Sharia Governance Framework Review',
-    auditId: 'audit-005',
-    description: 'Added cross-reference to AML policy section 4.3',
-    status: 'info',
-    context: 'Review',
-  },
-  {
-    id: 'log-015',
-    timestamp: '2026-03-05T08:00:00.000Z',
-    user: { name: 'Michael Scott', avatar: 'Michael' },
-    action: 'created',
-    audit: 'NCA ECC-1:2018 — Control Effectiveness Review',
-    auditId: 'audit-002',
-    description: 'Created Q1 2026 NCA ECC audit engagement',
-    status: 'completed',
-    context: 'Engagement setup',
-  },
-]
+interface AuditLogListResponse {
+  items: AuditLogApiRow[]
+  page: number
+  pageSize: number
+  total: number
+  totalPages: number
+}
 
-export const useAuditLogStore = create<AuditLogState>()(
-  persist(
-    (set, get) => ({
-      logs: seedLogs,
-      addLog: (logData) => {
-        const newLog: AuditLog = {
-          ...logData,
-          id: crypto.randomUUID(),
-          timestamp: new Date().toISOString(),
-        }
-        set((state) => ({
-          logs: [newLog, ...state.logs],
-        }))
-      },
-      getLogsByAuditId: (auditId) => {
-        return get().logs.filter((log) => log.auditId === auditId)
-      },
-      clearLogs: () => set({ logs: [] }),
-    }),
-    {
-      name: 'audit-log-storage',
+function mapAction(action: string): ActionType {
+  const map: Record<string, ActionType> = {
+    'opened': 'opened',
+    'closed': 'closed',
+    'commented': 'commented',
+    'uploaded': 'uploaded',
+    'created': 'created',
+    'assigned': 'assigned',
+    'updated': 'updated',
+    'reviewed': 'reviewed',
+  }
+  // Server actions are usually `<entity>.<verb>` (e.g. `audit.update`); coerce
+  // to the closest legacy ActionType.
+  if (map[action]) return map[action]
+  if (action.endsWith('.create')) return 'created'
+  if (action.endsWith('.update')) return 'updated'
+  if (action.endsWith('.delete') || action.endsWith('.close')) return 'closed'
+  if (action.endsWith('.upload')) return 'uploaded'
+  if (action.endsWith('.comment')) return 'commented'
+  if (action.endsWith('.assign')) return 'assigned'
+  if (action.endsWith('.review')) return 'reviewed'
+  return 'updated'
+}
+
+function mapStatus(status: string | null): LogStatus {
+  if (status === 'completed' || status === 'pending' || status === 'info' || status === 'failed') {
+    return status
+  }
+  return 'completed'
+}
+
+function mapRow(row: AuditLogApiRow): AuditLog {
+  return {
+    id: String(row.id),
+    timestamp: row.timestamp,
+    user: { name: row.user_name ?? '', avatar: '' },
+    action: mapAction(row.action),
+    audit: typeof row.metadata?.audit_title === 'string' ? (row.metadata.audit_title as string) : '',
+    auditId: row.target_type === 'audit' && row.target_id ? row.target_id : (
+      typeof row.metadata?.audit_id === 'string' ? (row.metadata.audit_id as string) : ''
+    ),
+    description: typeof row.metadata?.description === 'string'
+      ? (row.metadata.description as string)
+      : row.action,
+    descriptionKey: row.details_key ?? undefined,
+    descriptionParams: row.details_params ?? undefined,
+    status: mapStatus(row.status),
+    context: typeof row.metadata?.context === 'string' ? (row.metadata.context as string) : undefined,
+  }
+}
+
+function errorMessage(e: unknown, fallback: string): string {
+  if (e instanceof ApiClientError) return e.message
+  if (e instanceof Error) return e.message
+  return fallback
+}
+
+interface AuditLogState {
+  logs: AuditLog[]
+  byId: Record<string, AuditLog>
+
+  // First-fetch rule: `isLoading && logs.length === 0` → render skeleton.
+  isLoading: boolean
+  error: string | null
+  lastFetched: number | null
+
+  fetchAll(opts?: { page?: number; pageSize?: number; auditId?: string }): Promise<void>
+  fetchById(id: string): Promise<AuditLog | null>
+  /**
+   * Local-only optimistic insert. Mutations across the app already write
+   * audit rows server-side via `writeAudit()`; this shim keeps legacy
+   * call sites (`useAuditLogStore.getState().addLog({...})`) compiling
+   * and refreshes the in-memory list so detail pages see the entry before
+   * the next `fetchAll`.
+   */
+  addLog(log: Omit<AuditLog, 'id' | 'timestamp'>): void
+  getLogsByAuditId(auditId: string): AuditLog[]
+  clearLogs(): void
+  clearError(): void
+}
+
+export const useAuditLogStore = create<AuditLogState>()((set, get) => ({
+  logs: [],
+  byId: {},
+
+  isLoading: false,
+  error: null,
+  lastFetched: null,
+
+  fetchAll: async (opts) => {
+    set({ isLoading: true, error: null })
+    try {
+      const result = await api.get<AuditLogListResponse>('/audit-logs', {
+        page: opts?.page ?? 1,
+        pageSize: opts?.pageSize ?? 100,
+        entity_id: opts?.auditId,
+      })
+      const logs = result.items.map(mapRow)
+      const byId: Record<string, AuditLog> = {}
+      for (const l of logs) byId[l.id] = l
+      set({ logs, byId, isLoading: false, lastFetched: Date.now() })
+    } catch (e) {
+      set({ error: errorMessage(e, 'Failed to fetch audit logs'), isLoading: false })
     }
-  )
-)
+  },
+
+  fetchById: async (id) => {
+    set({ isLoading: true, error: null })
+    try {
+      const row = await api.get<AuditLogApiRow>(`/audit-logs/${id}`)
+      const log = mapRow(row)
+      set((s) => ({
+        byId: { ...s.byId, [log.id]: log },
+        logs: s.logs.some((l) => l.id === log.id)
+          ? s.logs.map((l) => (l.id === log.id ? log : l))
+          : s.logs,
+        isLoading: false,
+      }))
+      return log
+    } catch (e) {
+      set({ error: errorMessage(e, 'Failed to fetch audit log'), isLoading: false })
+      if (e instanceof ApiClientError && e.code === 'not_found') return null
+      return null
+    }
+  },
+
+  addLog: (logData) => {
+    const newLog: AuditLog = {
+      ...logData,
+      id: crypto.randomUUID(),
+      timestamp: new Date().toISOString(),
+    }
+    set((s) => ({
+      logs: [newLog, ...s.logs],
+      byId: { ...s.byId, [newLog.id]: newLog },
+    }))
+  },
+
+  getLogsByAuditId: (auditId) => get().logs.filter((log) => log.auditId === auditId),
+
+  clearLogs: () => set({ logs: [], byId: {} }),
+
+  clearError: () => set({ error: null }),
+}))

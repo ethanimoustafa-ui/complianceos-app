@@ -4,6 +4,41 @@ import { useAuthStore } from '@/stores/auth-store'
 import { useTeamStore } from '@/stores/team-store'
 import { PERMISSIONS, STANDARD_PERMISSIONS, type Permission } from '@/lib/permissions-registry'
 
+// ── Backend permission keys (Supabase `public.permissions` seed) ─────────────
+// The DB-backed permissions registry exposes 25 lowercase:colon keys. These
+// are joined into the auth-store as `permissions: string[]` on sign-in.
+// Components that want to gate on backend keys should pass one of these
+// strings; the existing label-based `Permission` union still works for the
+// legacy code paths.
+export const BACKEND_PERMISSIONS = [
+  'audit:comment',
+  'audit:create',
+  'audit:delete',
+  'audit:edit',
+  'audit:view',
+  'comment',
+  'create',
+  'delete',
+  'edit',
+  'export',
+  'observation:comment',
+  'observation:create',
+  'observation:delete',
+  'observation:edit',
+  'observation:view',
+  'report:create',
+  'report:delete',
+  'report:view',
+  'settings:edit',
+  'settings:view',
+  'team:edit',
+  'team:invite',
+  'team:remove',
+  'team:view',
+  'view',
+] as const
+export type BackendPermission = (typeof BACKEND_PERMISSIONS)[number]
+
 // Round 4 Phase 2 — gate helpers re-enabled.
 //
 // Strategy: every helper consults the new label-based PERMISSIONS registry
@@ -258,20 +293,33 @@ export function canReviewClosure(user: User | null, obs: { leaderId?: string }):
 // ── React hooks for permission checks (RBAC-016) ─────────────────────────────
 /**
  * useCan — returns true iff the current user has every permission in the list.
- * Pass a single Permission or an array. Subscribes to auth + team stores.
+ *
+ * Accepts either:
+ *   • a legacy label-based `Permission` (e.g. `'Manage Settings'`), checked
+ *     against the team-store accessControls toggles, OR
+ * • a backend permission key (e.g. `'team:invite'`), checked against the
+ *     Supabase-backed `permissions: string[]` array on auth-store.
+ *
+ * Admins always pass.
  */
-export function useCan(perm: Permission | Permission[]): boolean {
+export function useCan(perm: Permission | BackendPermission | (Permission | BackendPermission)[]): boolean {
   const effective = useEffectivePermissions()
+  const backendPerms = useAuthStore((s) => s.permissions)
+  const isAdminUser = useAuthStore((s) => s.user?.role === 'admin')
   const list = Array.isArray(perm) ? perm : [perm]
-  return list.every((p) => effective.includes(p))
+  if (isAdminUser) return true
+  return list.every((p) => effective.includes(p as Permission) || backendPerms.includes(p as string))
 }
 
 /**
  * useCanAny — returns true iff the user has at least one of the listed perms.
  */
-export function useCanAny(perms: Permission[]): boolean {
+export function useCanAny(perms: (Permission | BackendPermission)[]): boolean {
   const effective = useEffectivePermissions()
-  return perms.some((p) => effective.includes(p))
+  const backendPerms = useAuthStore((s) => s.permissions)
+  const isAdminUser = useAuthStore((s) => s.user?.role === 'admin')
+  if (isAdminUser) return true
+  return perms.some((p) => effective.includes(p as Permission) || backendPerms.includes(p as string))
 }
 
 export { ROLE_HIERARCHY }

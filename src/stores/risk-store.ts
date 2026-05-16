@@ -1,5 +1,22 @@
+// Risk store — Phase 5 server-state migration.
+//
+// Core CRUD (`fetchAll`, `fetchById`, `create`, `update`, `delete`) goes through
+// /api/risks. The mitigation-workflow sub-actions
+// (`assignDepartment`, `setMitigationDeadline`, `sendToDepartment`,
+// `submitDepartmentPlan`, `acceptDepartmentPlan`, `toggleDepartmentPlanItem`)
+// hit the dedicated route family at /api/risks/[id]/*. Checklist mutations
+// (`addMitigationItem` / `editMitigationItem` / `toggleMitigationItem` /
+// `removeMitigationItem`) and `markReviewed` patch local state only — no
+// individual endpoints exist for those yet (Phase 6 will wire them once the
+// risk-checklist routes ship).
+//
+// Legacy method names are preserved so the risks reports page keeps compiling.
+//
+// SKELETON-LOADING NOTE: consumer pages render a skeleton when
+// `isLoading && risks.length === 0` (first-fetch). On refetch, stale data
+// stays visible while `isLoading` flips back to true with a subtle indicator.
+
 import { create } from 'zustand'
-import { persist } from 'zustand/middleware'
 import type {
   Risk,
   RiskFilters,
@@ -9,231 +26,184 @@ import type {
   MitigationChecklistItem,
   RiskMitigationWorkflowStatus,
   DepartmentProposedPlan,
+  RegulatoryBodyId,
+  ReviewSchedule,
+  User,
 } from '@/types'
+import { api, ApiClientError } from '@/lib/api-client'
 import { computeNextReview } from '@/lib/review-schedule'
 import { requirePermission } from '@/lib/rbac-store-gate'
+
+// ---------- helpers ---------------------------------------------------------
 
 function computeNextReviewDate(from: string, frequency: MonitoringFrequency): string {
   const d = new Date(from)
   switch (frequency) {
-    case 'weekly': d.setDate(d.getDate() + 7); break
-    case 'monthly': d.setMonth(d.getMonth() + 1); break
-    case 'quarterly': d.setMonth(d.getMonth() + 3); break
+    case 'weekly':      d.setDate(d.getDate() + 7);   break
+    case 'monthly':     d.setMonth(d.getMonth() + 1); break
+    case 'quarterly':   d.setMonth(d.getMonth() + 3); break
     case 'semi_annual': d.setMonth(d.getMonth() + 6); break
-    case 'annual': d.setFullYear(d.getFullYear() + 1); break
+    case 'annual':      d.setFullYear(d.getFullYear() + 1); break
   }
   return d.toISOString()
 }
 
 function computeMitigationProgress(checklist?: Array<{ completed: boolean }>): number {
   if (!checklist || checklist.length === 0) return 0
-  return Math.round(checklist.filter(i => i.completed).length / checklist.length * 100)
+  return Math.round((checklist.filter((i) => i.completed).length / checklist.length) * 100)
 }
 
-const owner = (id: string, name: string, department: string, avatar: string, role: 'officer' | 'manager' | 'admin' = 'manager') => ({
-  id, name, email: `${name.split(' ')[0].toLowerCase()}@company.com`, role, department, avatar, workload: 60,
-})
+// ---------- API row shape ----------------------------------------------------
 
-const seedRisks: Risk[] = [
-  {
-    id: 'risk-001',
-    title: 'Inadequate customer due diligence for high-risk accounts',
-    description: 'KYC refresh cycles for PEP and high-risk customer segments are lagging the SAMA AML expectations, creating heightened exposure to sanctions and AML findings.',
-    category: 'compliance',
-    likelihood: 4,
-    impact: 5,
-    riskScore: 20,
-    status: 'mitigating',
-    owner: owner('1', 'Sarah Connor', 'Compliance', 'Sarah'),
-    mitigationPlan: 'Implement automated KYC refresh triggers, reallocate two analysts to backlog clearance, and introduce monthly PEP screening reports.',
-    mitigationChecklist: [
-      { id: 'c1', text: 'Configure automated PEP screening triggers', completed: true },
-      { id: 'c2', text: 'Clear 300-case KYC refresh backlog', completed: true },
-      { id: 'c3', text: 'Roll out monthly management dashboard', completed: false },
-      { id: 'c4', text: 'Independent QA sampling of 5% of refreshed files', completed: false },
-    ],
-    mitigationProgress: 50,
-    monitoringFrequency: 'monthly',
-    lastReviewDate: '2026-03-20T09:00:00.000Z',
-    nextReviewDate: '2026-04-20T09:00:00.000Z',
-    history: [
-      { id: 'h1', timestamp: '2026-01-10T09:00:00.000Z', user: 'Sarah Connor', action: 'created' },
-      { id: 'h2', timestamp: '2026-02-15T12:00:00.000Z', user: 'Sarah Connor', action: 'status_changed', previousValue: 'identified', newValue: 'mitigating' },
-      { id: 'h3', timestamp: '2026-03-20T09:00:00.000Z', user: 'Sarah Connor', action: 'reviewed' },
-    ],
-    frameworkIds: ['sama'],
-    createdAt: '2026-01-10T09:00:00.000Z',
-    updatedAt: '2026-03-20T09:00:00.000Z',
-  },
-  {
-    id: 'risk-002',
-    title: 'Third-party cloud vendor concentration risk',
-    description: 'Critical workloads are concentrated with a single cloud provider, exposing the bank to availability and data residency risk under NCA ECC and SAMA Cybersecurity Framework.',
-    category: 'operational',
-    likelihood: 3,
-    impact: 5,
-    riskScore: 15,
-    status: 'identified',
-    owner: owner('4', 'Michael Scott', 'IT & Cybersecurity', 'Michael', 'admin'),
-    mitigationPlan: 'Develop multi-region failover strategy and evaluate secondary provider for tier-1 workloads.',
-    mitigationChecklist: [
-      { id: 'c1', text: 'Complete vendor concentration assessment', completed: true },
-      { id: 'c2', text: 'Define tier-1 workload RPO/RTO targets', completed: false },
-      { id: 'c3', text: 'Shortlist secondary provider', completed: false },
-    ],
-    mitigationProgress: 33,
-    monitoringFrequency: 'quarterly',
-    lastReviewDate: '2026-02-01T10:00:00.000Z',
-    nextReviewDate: '2026-05-01T10:00:00.000Z',
-    history: [
-      { id: 'h1', timestamp: '2025-12-05T10:00:00.000Z', user: 'Michael Scott', action: 'created' },
-      { id: 'h2', timestamp: '2026-02-01T10:00:00.000Z', user: 'Michael Scott', action: 'reviewed' },
-    ],
-    frameworkIds: ['sama', 'nca-ecc'],
-    createdAt: '2025-12-05T10:00:00.000Z',
-    updatedAt: '2026-02-01T10:00:00.000Z',
-  },
-  {
-    id: 'risk-003',
-    title: 'PDPL data subject rights response delays',
-    description: 'Current DSR handling process does not consistently meet the 30-day response window under PDPL, driven by manual case routing and fragmented data sources.',
-    category: 'compliance',
-    likelihood: 4,
-    impact: 4,
-    riskScore: 16,
-    status: 'mitigating',
-    owner: owner('3', 'Lisa Martinez', 'Legal', 'Lisa', 'officer'),
-    mitigationPlan: 'Stand up a centralized DSR intake workflow with SLA tracking and integrate with CRM/ERP data sources.',
-    mitigationChecklist: [
-      { id: 'c1', text: 'Map PII systems of record', completed: true },
-      { id: 'c2', text: 'Deploy DSR intake portal', completed: true },
-      { id: 'c3', text: 'Integrate CRM and ERP extraction', completed: false },
-      { id: 'c4', text: 'Train 8 case handlers', completed: false },
-    ],
-    mitigationProgress: 50,
-    monitoringFrequency: 'monthly',
-    lastReviewDate: '2026-03-15T11:00:00.000Z',
-    nextReviewDate: '2026-04-15T11:00:00.000Z',
-    history: [
-      { id: 'h1', timestamp: '2026-01-20T11:00:00.000Z', user: 'Lisa Martinez', action: 'created' },
-      { id: 'h2', timestamp: '2026-03-15T11:00:00.000Z', user: 'Lisa Martinez', action: 'reviewed' },
-    ],
-    frameworkIds: ['sdaia-pdpl'],
-    createdAt: '2026-01-20T11:00:00.000Z',
-    updatedAt: '2026-03-15T11:00:00.000Z',
-  },
-  {
-    id: 'risk-004',
-    title: 'Insider fraud in expense reimbursement workflow',
-    description: 'Absence of maker-checker controls on low-value expense claims has created an opportunity for duplicate or fabricated claims to bypass detection.',
-    category: 'financial',
-    likelihood: 3,
-    impact: 3,
-    riskScore: 9,
-    status: 'identified',
-    owner: owner('2', 'Ahmed Khan', 'Risk Management', 'Ahmed'),
-    mitigationPlan: 'Introduce dual-approval threshold and run retrospective analytics on 12 months of claims.',
-    mitigationChecklist: [
-      { id: 'c1', text: 'Define threshold for dual approval', completed: false },
-      { id: 'c2', text: 'Run 12-month forensic analytics', completed: false },
-    ],
-    mitigationProgress: 0,
-    monitoringFrequency: 'quarterly',
-    nextReviewDate: '2026-05-10T09:00:00.000Z',
-    history: [
-      { id: 'h1', timestamp: '2026-02-10T09:00:00.000Z', user: 'Ahmed Khan', action: 'created' },
-    ],
-    frameworkIds: ['sama'],
-    createdAt: '2026-02-10T09:00:00.000Z',
-    updatedAt: '2026-02-10T09:00:00.000Z',
-  },
-  {
-    id: 'risk-005',
-    title: 'Sharia non-compliance in new product launches',
-    description: 'Product team has historically sought Sharia Board approval late in the development cycle, creating rework risk and potential reputational exposure.',
-    category: 'reputational',
-    likelihood: 2,
-    impact: 4,
-    riskScore: 8,
-    status: 'mitigating',
-    owner: owner('5', 'Dr. Hassan Ali', 'Sharia Compliance', 'Hassan'),
-    mitigationPlan: 'Embed Sharia review gate in product lifecycle and require pre-read pack two weeks before board sitting.',
-    mitigationChecklist: [
-      { id: 'c1', text: 'Update product lifecycle RACI', completed: true },
-      { id: 'c2', text: 'Create Sharia pre-read template', completed: true },
-      { id: 'c3', text: 'Pilot new gate on 2 upcoming products', completed: false },
-    ],
-    mitigationProgress: 67,
-    monitoringFrequency: 'quarterly',
-    lastReviewDate: '2026-03-01T08:00:00.000Z',
-    nextReviewDate: '2026-06-01T08:00:00.000Z',
-    history: [
-      { id: 'h1', timestamp: '2025-11-12T08:00:00.000Z', user: 'Dr. Hassan Ali', action: 'created' },
-      { id: 'h2', timestamp: '2026-03-01T08:00:00.000Z', user: 'Dr. Hassan Ali', action: 'reviewed' },
-    ],
-    frameworkIds: ['sharia-board'],
-    createdAt: '2025-11-12T08:00:00.000Z',
-    updatedAt: '2026-03-01T08:00:00.000Z',
-  },
-  {
-    id: 'risk-006',
-    title: 'ZATCA e-invoicing integration lag for new subsidiaries',
-    description: 'Recently acquired subsidiaries are not fully onboarded to the integrated e-invoicing platform, delaying phase-2 compliance.',
-    category: 'compliance',
-    likelihood: 3,
-    impact: 4,
-    riskScore: 12,
-    status: 'mitigating',
-    owner: owner('2', 'Ahmed Khan', 'Finance', 'Ahmed'),
-    mitigationPlan: 'Accelerate ERP connector deployment and assign dedicated integration lead per subsidiary.',
-    mitigationChecklist: [
-      { id: 'c1', text: 'Confirm ERP stack per subsidiary', completed: true },
-      { id: 'c2', text: 'Deploy connector to Subsidiary A', completed: true },
-      { id: 'c3', text: 'Deploy connector to Subsidiary B', completed: false },
-      { id: 'c4', text: 'Complete ZATCA pairing & certification', completed: false },
-    ],
-    mitigationProgress: 50,
-    monitoringFrequency: 'monthly',
-    lastReviewDate: '2026-04-01T10:00:00.000Z',
-    nextReviewDate: '2026-05-01T10:00:00.000Z',
-    history: [
-      { id: 'h1', timestamp: '2026-01-15T10:00:00.000Z', user: 'Ahmed Khan', action: 'created' },
-    ],
-    frameworkIds: ['zatca'],
-    createdAt: '2026-01-15T10:00:00.000Z',
-    updatedAt: '2026-04-01T10:00:00.000Z',
-  },
-]
+interface RiskApiRow {
+  id: string
+  title: string
+  description?: string
+  category: string
+  likelihood: number
+  impact: number
+  risk_score: number
+  status: string
+  owner_id: string | null
+  mitigation_plan?: string | null
+  mitigation_progress: number
+  monitoring_frequency: string
+  last_review_date?: string | null
+  next_review_date?: string | null
+  review_schedule?: unknown
+  intended_department_id?: string | null
+  mitigation_deadline?: string | null
+  mitigation_workflow_status?: string | null
+  sent_to_department_at?: string | null
+  framework_ids: string[]
+  created_at: string
+  updated_at: string
+}
+
+function stubOwner(id: string | null): User {
+  return {
+    id: id ?? '',
+    name: '',
+    email: '',
+    role: 'officer',
+    department: '',
+    avatar: '',
+    workload: 0,
+  }
+}
+
+function mapRow(row: RiskApiRow, previous?: Risk): Risk {
+  return {
+    id: row.id,
+    title: row.title,
+    description: row.description ?? previous?.description ?? '',
+    category: row.category,
+    likelihood: row.likelihood as Risk['likelihood'],
+    impact: row.impact as Risk['impact'],
+    riskScore: row.risk_score,
+    status: row.status as Risk['status'],
+    owner: previous?.owner ?? stubOwner(row.owner_id),
+    mitigationPlan: row.mitigation_plan ?? previous?.mitigationPlan,
+    mitigationChecklist: previous?.mitigationChecklist,
+    mitigationProgress: row.mitigation_progress ?? previous?.mitigationProgress ?? 0,
+    monitoringFrequency: row.monitoring_frequency as MonitoringFrequency,
+    lastReviewDate: row.last_review_date ?? previous?.lastReviewDate,
+    nextReviewDate: row.next_review_date ?? previous?.nextReviewDate,
+    reviewSchedule: (row.review_schedule as ReviewSchedule | undefined) ?? previous?.reviewSchedule,
+    history: previous?.history ?? [],
+    frameworkIds: (row.framework_ids ?? previous?.frameworkIds ?? []) as RegulatoryBodyId[],
+    intendedDepartmentId: row.intended_department_id ?? previous?.intendedDepartmentId,
+    mitigationDeadline: row.mitigation_deadline ?? previous?.mitigationDeadline,
+    mitigationWorkflowStatus:
+      (row.mitigation_workflow_status as RiskMitigationWorkflowStatus | undefined) ??
+      previous?.mitigationWorkflowStatus,
+    departmentProposedPlan: previous?.departmentProposedPlan,
+    sentToDepartmentAt: row.sent_to_department_at ?? previous?.sentToDepartmentAt,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  }
+}
+
+function toCreatePayload(data: Omit<Risk, 'id' | 'riskScore' | 'createdAt' | 'updatedAt' | 'history'>): Record<string, unknown> {
+  return {
+    title: data.title,
+    description: data.description,
+    category: data.category,
+    likelihood: data.likelihood,
+    impact: data.impact,
+    owner_id: data.owner?.id || undefined,
+    mitigation_plan: data.mitigationPlan ?? undefined,
+    monitoring_frequency: data.monitoringFrequency,
+    last_review_date: data.lastReviewDate ?? undefined,
+    next_review_date: data.nextReviewDate ?? undefined,
+    review_schedule: data.reviewSchedule ?? undefined,
+    intended_department_id: data.intendedDepartmentId ?? undefined,
+    mitigation_deadline: data.mitigationDeadline ?? undefined,
+    framework_ids: data.frameworkIds ?? [],
+  }
+}
+
+function toUpdatePayload(patch: Partial<Risk>): Record<string, unknown> {
+  const out: Record<string, unknown> = {}
+  if (patch.title !== undefined) out.title = patch.title
+  if (patch.description !== undefined) out.description = patch.description
+  if (patch.category !== undefined) out.category = patch.category
+  if (patch.likelihood !== undefined) out.likelihood = patch.likelihood
+  if (patch.impact !== undefined) out.impact = patch.impact
+  if (patch.status !== undefined) out.status = patch.status
+  if (patch.mitigationPlan !== undefined) out.mitigation_plan = patch.mitigationPlan
+  if (patch.mitigationProgress !== undefined) out.mitigation_progress = patch.mitigationProgress
+  if (patch.monitoringFrequency !== undefined) out.monitoring_frequency = patch.monitoringFrequency
+  if (patch.lastReviewDate !== undefined) out.last_review_date = patch.lastReviewDate
+  if (patch.nextReviewDate !== undefined) out.next_review_date = patch.nextReviewDate
+  if (patch.reviewSchedule !== undefined) out.review_schedule = patch.reviewSchedule
+  if (patch.intendedDepartmentId !== undefined)
+    out.intended_department_id = patch.intendedDepartmentId
+  if (patch.mitigationDeadline !== undefined) out.mitigation_deadline = patch.mitigationDeadline
+  if (patch.frameworkIds !== undefined) out.framework_ids = patch.frameworkIds
+  return out
+}
+
+function errorMessage(e: unknown, fallback: string): string {
+  if (e instanceof ApiClientError) return e.message
+  if (e instanceof Error) return e.message
+  return fallback
+}
+
+// ---------- store -----------------------------------------------------------
 
 interface RiskState {
   risks: Risk[]
+  byId: Record<string, Risk>
   selectedRisk: Risk | null
   filters: RiskFilters
   pagination: PaginationState
   sort: SortState
-  isLoading: boolean
-  error: string | null
 
-  // Actions
+  // First-fetch skeleton: `isLoading && risks.length === 0` → render skeleton.
+  isLoading: boolean
+  isMutating: boolean
+  error: string | null
+  lastFetched: number | null
+
+  // Async CRUD
   fetchAll: () => Promise<void>
   fetchById: (id: string) => Promise<Risk | null>
   create: (data: Omit<Risk, 'id' | 'riskScore' | 'createdAt' | 'updatedAt' | 'history'>) => Promise<Risk>
   update: (id: string, data: Partial<Risk>) => Promise<Risk>
   delete: (id: string) => Promise<void>
+
+  // Status / review (legacy sync facade backed by an async PATCH)
   updateStatus: (id: string, newStatus: Risk['status']) => void
+  markReviewed: (riskId: string) => void
+
+  // Mitigation checklist — local-only (no per-item endpoint yet; see TODO).
   addMitigationItem: (riskId: string, text: string) => void
   editMitigationItem: (riskId: string, itemId: string, newText: string) => void
   toggleMitigationItem: (riskId: string, itemId: string) => void
   removeMitigationItem: (riskId: string, itemId: string) => void
-  markReviewed: (riskId: string) => void
-  setFilters: (filters: RiskFilters) => void
-  clearFilters: () => void
-  setSelected: (risk: Risk | null) => void
-  setSort: (sort: SortState) => void
-  setPage: (page: number) => void
-  setPageSize: (pageSize: number) => void
 
-  // Mitigation workflow (officer-driven)
+  // Officer-driven mitigation workflow (async; backed by /api/risks/[id]/*).
   assignDepartment: (riskId: string, departmentId: string) => void
   setMitigationDeadline: (riskId: string, deadline: string | undefined) => void
   sendToDepartment: (riskId: string, actingUser: string) => void
@@ -245,506 +215,536 @@ interface RiskState {
   ) => void
   acceptDepartmentPlan: (riskId: string, actingUser: string) => void
   toggleDepartmentPlanItem: (riskId: string, itemId: string, actingUser: string) => void
+
+  // UI helpers
+  setFilters: (filters: RiskFilters) => void
+  clearFilters: () => void
+  setSelected: (risk: Risk | null) => void
+  setSort: (sort: SortState) => void
+  setPage: (page: number) => void
+  setPageSize: (pageSize: number) => void
+  clearError: () => void
 }
 
-export const useRiskStore = create<RiskState>()(
-  persist(
-    (set, get) => ({
-      risks: seedRisks,
-      selectedRisk: null,
-      filters: {},
-      pagination: {
-        page: 1,
-        pageSize: 10,
-        total: seedRisks.length,
-        totalPages: Math.ceil(seedRisks.length / 10),
-      },
-      sort: {
-        field: 'riskScore',
-        direction: 'desc',
-      },
-      isLoading: false,
-      error: null,
+const INITIAL_PAGINATION: PaginationState = {
+  page: 1,
+  pageSize: 50,
+  total: 0,
+  totalPages: 1,
+}
 
-      fetchAll: async () => {
-        set({ isLoading: true, error: null })
-        try {
-          await new Promise((resolve) => setTimeout(resolve, 500))
+const INITIAL_SORT: SortState = {
+  field: 'riskScore',
+  direction: 'desc',
+}
 
-          // Preserve existing risks from persistence
-          const existingRisks = get().risks
+export const useRiskStore = create<RiskState>()((set, get) => ({
+  risks: [],
+  byId: {},
+  selectedRisk: null,
+  filters: {},
+  pagination: INITIAL_PAGINATION,
+  sort: INITIAL_SORT,
+  isLoading: false,
+  isMutating: false,
+  error: null,
+  lastFetched: null,
 
-          set({
-            pagination: {
-              ...get().pagination,
-              total: existingRisks.length,
-              totalPages: Math.ceil(existingRisks.length / get().pagination.pageSize),
-            },
-            isLoading: false,
-          })
-        } catch (error) {
-          set({
-            error: error instanceof Error ? error.message : 'Failed to fetch risks',
-            isLoading: false,
-          })
-        }
-      },
-
-      fetchById: async (id: string) => {
-        set({ isLoading: true, error: null })
-        try {
-          await new Promise((resolve) => setTimeout(resolve, 300))
-
-          const risk = get().risks.find((r) => r.id === id) || null
-          set({ selectedRisk: risk, isLoading: false })
-          return risk
-        } catch (error) {
-          set({
-            error: error instanceof Error ? error.message : 'Failed to fetch risk',
-            isLoading: false,
-          })
-          return null
-        }
-      },
-
-      create: async (data) => {
-        requirePermission('Manage Audit Findings', { storeName: 'risk', actionName: 'create' })
-        set({ isLoading: true, error: null })
-        try {
-          await new Promise((resolve) => setTimeout(resolve, 500))
-
-          const now = new Date().toISOString()
-          // Generate sequential ID like RSK-001, RSK-002, ...
-          const existingIds = get().risks
-            .map(r => r.id.match(/^RSK-(\d+)$/))
-            .filter(Boolean)
-            .map(m => parseInt(m![1], 10))
-          const nextNum = existingIds.length > 0 ? Math.max(...existingIds) + 1 : 1
-          const cadenceToMonitoringFrequency: Record<string, MonitoringFrequency> = {
-            monthly: 'monthly', quarterly: 'quarterly', 'semi-annual': 'semi_annual', yearly: 'annual', adhoc: 'monthly',
-          }
-          const monitoringFrequency = data.reviewSchedule
-            ? cadenceToMonitoringFrequency[data.reviewSchedule.cadence] ?? data.monitoringFrequency
-            : data.monitoringFrequency
-          const nextReviewDate = data.reviewSchedule
-            ? computeNextReview(data.reviewSchedule)
-            : computeNextReviewDate(now, data.monitoringFrequency)
-          const newRisk: Risk = {
-            ...data,
-            id: `RSK-${String(nextNum).padStart(3, '0')}`,
-            riskScore: data.likelihood * data.impact,
-            mitigationChecklist: data.mitigationChecklist ?? [],
-            mitigationProgress: data.mitigationProgress ?? 0,
-            monitoringFrequency,
-            lastReviewDate: now,
-            nextReviewDate,
-            history: [{
-              id: crypto.randomUUID(),
-              timestamp: now,
-              user: data.owner.name,
-              action: 'created',
-              notes: 'Risk created',
-            }],
-            createdAt: now,
-            updatedAt: now,
-          }
-
-          set((state) => ({
-            risks: [newRisk, ...state.risks],
-            isLoading: false,
-          }))
-
-          return newRisk
-        } catch (error) {
-          set({
-            error: error instanceof Error ? error.message : 'Failed to create risk',
-            isLoading: false,
-          })
-          throw error
-        }
-      },
-
-      update: async (id: string, data: Partial<Risk>) => {
-        requirePermission('Manage Audit Findings', { storeName: 'risk', actionName: 'update', id })
-        set({ isLoading: true, error: null })
-        try {
-          await new Promise((resolve) => setTimeout(resolve, 500))
-
-          let updatedRisk: Risk | null = null
-
-          set((state) => ({
-            risks: state.risks.map((r) => {
-              if (r.id === id) {
-                // Recompute riskScore if likelihood or impact changed
-                const likelihood = data.likelihood ?? r.likelihood
-                const impact = data.impact ?? r.impact
-                updatedRisk = {
-                  ...r,
-                  ...data,
-                  riskScore: likelihood * impact,
-                  updatedAt: new Date().toISOString(),
-                }
-                return updatedRisk
-              }
-              return r
-            }),
-            selectedRisk:
-              state.selectedRisk?.id === id
-                ? { ...state.selectedRisk, ...data, updatedAt: new Date().toISOString() }
-                : state.selectedRisk,
-            isLoading: false,
-          }))
-
-          if (!updatedRisk) {
-            throw new Error('Risk not found')
-          }
-
-          return updatedRisk
-        } catch (error) {
-          set({
-            error: error instanceof Error ? error.message : 'Failed to update risk',
-            isLoading: false,
-          })
-          throw error
-        }
-      },
-
-      delete: async (id: string) => {
-        requirePermission('Manage Audit Findings', { storeName: 'risk', actionName: 'delete', id })
-        set({ isLoading: true, error: null })
-        try {
-          await new Promise((resolve) => setTimeout(resolve, 500))
-
-          set((state) => ({
-            risks: state.risks.filter((r) => r.id !== id),
-            selectedRisk: state.selectedRisk?.id === id ? null : state.selectedRisk,
-            isLoading: false,
-          }))
-        } catch (error) {
-          set({
-            error: error instanceof Error ? error.message : 'Failed to delete risk',
-            isLoading: false,
-          })
-          throw error
-        }
-      },
-
-      updateStatus: (id: string, newStatus: Risk['status']) => {
-        requirePermission('Manage Audit Findings', { storeName: 'risk', actionName: `updateStatus:${newStatus}`, id })
-        set((state) => ({
-          risks: state.risks.map((r) => {
-            if (r.id === id) {
-              const now = new Date().toISOString()
-              return {
-                ...r,
-                status: newStatus,
-                updatedAt: now,
-                history: [
-                  ...r.history,
-                  {
-                    id: crypto.randomUUID(),
-                    timestamp: now,
-                    user: r.owner.name,
-                    action: 'status_changed' as const,
-                    previousValue: r.status,
-                    newValue: newStatus,
-                  },
-                ],
-              }
-            }
-            return r
-          }),
-          selectedRisk:
-            state.selectedRisk?.id === id
-              ? { ...state.selectedRisk, status: newStatus, updatedAt: new Date().toISOString() }
-              : state.selectedRisk,
-        }))
-      },
-
-      addMitigationItem: (riskId: string, text: string) => {
-        set((state) => ({
-          risks: state.risks.map((r) => {
-            if (r.id !== riskId) return r
-            const now = new Date().toISOString()
-            const newItem = { id: crypto.randomUUID(), text, completed: false }
-            const checklist = [...(r.mitigationChecklist || []), newItem]
-            return {
-              ...r,
-              mitigationChecklist: checklist,
-              mitigationProgress: computeMitigationProgress(checklist),
-              updatedAt: now,
-              history: [...r.history, {
-                id: crypto.randomUUID(), timestamp: now, user: r.owner.name,
-                action: 'checklist_added' as const, newValue: text,
-              }],
-            }
-          }),
-        }))
-      },
-
-      editMitigationItem: (riskId: string, itemId: string, newText: string) => {
-        set((state) => ({
-          risks: state.risks.map((r) => {
-            if (r.id !== riskId) return r
-            const now = new Date().toISOString()
-            const checklist = (r.mitigationChecklist || []).map(i =>
-              i.id === itemId ? { ...i, text: newText } : i
-            )
-            return {
-              ...r,
-              mitigationChecklist: checklist,
-              updatedAt: now,
-              history: [...r.history, {
-                id: crypto.randomUUID(), timestamp: now, user: r.owner.name,
-                action: 'checklist_edited' as const, newValue: newText,
-              }],
-            }
-          }),
-        }))
-      },
-
-      toggleMitigationItem: (riskId: string, itemId: string) => {
-        set((state) => ({
-          risks: state.risks.map((r) => {
-            if (r.id !== riskId) return r
-            const now = new Date().toISOString()
-            const checklist = (r.mitigationChecklist || []).map(i =>
-              i.id === itemId ? { ...i, completed: !i.completed } : i
-            )
-            return {
-              ...r,
-              mitigationChecklist: checklist,
-              mitigationProgress: computeMitigationProgress(checklist),
-              updatedAt: now,
-              history: [...r.history, {
-                id: crypto.randomUUID(), timestamp: now, user: r.owner.name,
-                action: 'checklist_toggled' as const,
-                newValue: checklist.find(i => i.id === itemId)?.text,
-              }],
-            }
-          }),
-        }))
-      },
-
-      removeMitigationItem: (riskId: string, itemId: string) => {
-        set((state) => ({
-          risks: state.risks.map((r) => {
-            if (r.id !== riskId) return r
-            const now = new Date().toISOString()
-            const removed = (r.mitigationChecklist || []).find(i => i.id === itemId)
-            const checklist = (r.mitigationChecklist || []).filter(i => i.id !== itemId)
-            return {
-              ...r,
-              mitigationChecklist: checklist,
-              mitigationProgress: computeMitigationProgress(checklist),
-              updatedAt: now,
-              history: [...r.history, {
-                id: crypto.randomUUID(), timestamp: now, user: r.owner.name,
-                action: 'checklist_removed' as const, newValue: removed?.text,
-              }],
-            }
-          }),
-        }))
-      },
-
-      markReviewed: (riskId: string) => {
-        set((state) => ({
-          risks: state.risks.map((r) => {
-            if (r.id !== riskId) return r
-            const now = new Date().toISOString()
-            const nextReviewDate = r.reviewSchedule
-              ? computeNextReview(r.reviewSchedule, new Date())
-              : computeNextReviewDate(now, r.monitoringFrequency)
-            return {
-              ...r,
-              lastReviewDate: now,
-              nextReviewDate,
-              updatedAt: now,
-              history: [...r.history, {
-                id: crypto.randomUUID(), timestamp: now, user: r.owner.name,
-                action: 'reviewed' as const, notes: 'Risk marked as reviewed',
-              }],
-            }
-          }),
-        }))
-      },
-
-      assignDepartment: (riskId, departmentId) => {
-        set((state) => ({
-          risks: state.risks.map((r) =>
-            r.id === riskId
-              ? {
-                  ...r,
-                  intendedDepartmentId: departmentId,
-                  mitigationWorkflowStatus: r.mitigationWorkflowStatus ?? 'pending-assignment',
-                  updatedAt: new Date().toISOString(),
-                }
-              : r,
-          ),
-        }))
-      },
-
-      setMitigationDeadline: (riskId, deadline) => {
-        set((state) => ({
-          risks: state.risks.map((r) =>
-            r.id === riskId
-              ? { ...r, mitigationDeadline: deadline, updatedAt: new Date().toISOString() }
-              : r,
-          ),
-        }))
-      },
-
-      sendToDepartment: (riskId, actingUser) => {
-        set((state) => ({
-          risks: state.risks.map((r) => {
-            if (r.id !== riskId) return r
-            const now = new Date().toISOString()
-            return {
-              ...r,
-              mitigationWorkflowStatus: 'sent-to-department' as RiskMitigationWorkflowStatus,
-              sentToDepartmentAt: now,
-              updatedAt: now,
-              history: [
-                ...r.history,
-                {
-                  id: crypto.randomUUID(), timestamp: now, user: actingUser,
-                  action: 'note_added' as const,
-                  notes: 'Risk sent to intended department for mitigation plan',
-                },
-              ],
-            }
-          }),
-        }))
-      },
-
-      submitDepartmentPlan: (riskId, plan, checklist, submittedBy) => {
-        set((state) => ({
-          risks: state.risks.map((r) => {
-            if (r.id !== riskId) return r
-            const now = new Date().toISOString()
-            const proposedPlan: DepartmentProposedPlan = {
-              id: crypto.randomUUID(),
-              plan,
-              checklist: checklist.map((c) => ({
-                id: crypto.randomUUID(),
-                text: c.text,
-                deadline: c.deadline,
-                completed: false,
-              })),
-              submittedAt: now,
-              submittedBy,
-            }
-            return {
-              ...r,
-              departmentProposedPlan: proposedPlan,
-              mitigationWorkflowStatus: 'plan-proposed' as RiskMitigationWorkflowStatus,
-              updatedAt: now,
-              history: [
-                ...r.history,
-                {
-                  id: crypto.randomUUID(), timestamp: now, user: submittedBy,
-                  action: 'mitigation_updated' as const,
-                  notes: 'Department proposed mitigation plan',
-                },
-              ],
-            }
-          }),
-        }))
-      },
-
-      acceptDepartmentPlan: (riskId, actingUser) => {
-        requirePermission('Manage Audit Findings', { storeName: 'risk', actionName: 'acceptDepartmentPlan', id: riskId })
-        set((state) => ({
-          risks: state.risks.map((r) => {
-            if (r.id !== riskId || !r.departmentProposedPlan) return r
-            const now = new Date().toISOString()
-            return {
-              ...r,
-              // Promote department-proposed checklist into the canonical mitigationChecklist
-              mitigationChecklist: r.departmentProposedPlan.checklist,
-              mitigationPlan: r.departmentProposedPlan.plan,
-              mitigationProgress: computeMitigationProgress(r.departmentProposedPlan.checklist),
-              mitigationWorkflowStatus: 'in-progress' as RiskMitigationWorkflowStatus,
-              status: 'mitigating',
-              updatedAt: now,
-              history: [
-                ...r.history,
-                {
-                  id: crypto.randomUUID(), timestamp: now, user: actingUser,
-                  action: 'mitigation_updated' as const,
-                  notes: 'Officer accepted department-proposed plan',
-                },
-              ],
-            }
-          }),
-        }))
-      },
-
-      toggleDepartmentPlanItem: (riskId, itemId, actingUser) => {
-        set((state) => ({
-          risks: state.risks.map((r) => {
-            if (r.id !== riskId) return r
-            const now = new Date().toISOString()
-            const checklist: MitigationChecklistItem[] = (r.mitigationChecklist ?? []).map((i) =>
-              i.id === itemId ? { ...i, completed: !i.completed } : i,
-            )
-            const progress = computeMitigationProgress(checklist)
-            const allDone = checklist.length > 0 && checklist.every((i) => i.completed)
-            return {
-              ...r,
-              mitigationChecklist: checklist,
-              mitigationProgress: progress,
-              mitigationWorkflowStatus: allDone
-                ? 'mitigated'
-                : (r.mitigationWorkflowStatus ?? 'in-progress'),
-              status: allDone ? 'resolved' : r.status,
-              updatedAt: now,
-              history: [
-                ...r.history,
-                {
-                  id: crypto.randomUUID(), timestamp: now, user: actingUser,
-                  action: 'checklist_toggled' as const,
-                  newValue: checklist.find((i) => i.id === itemId)?.text,
-                },
-              ],
-            }
-          }),
-        }))
-      },
-
-      setFilters: (filters) => set({ filters }),
-      clearFilters: () => set({ filters: {} }),
-      setSelected: (risk) => set({ selectedRisk: risk }),
-      setSort: (sort) => set({ sort }),
-      setPage: (page) => set((state) => ({ pagination: { ...state.pagination, page } })),
-      setPageSize: (pageSize) =>
-        set((state) => ({
-          pagination: {
-            ...state.pagination,
-            pageSize,
-            totalPages: Math.ceil(state.pagination.total / pageSize),
-          },
-        })),
-    }),
-    {
-      name: 'risk-storage',
-      version: 1,
-      partialize: (state) => ({
-        risks: state.risks,
-      }),
-      migrate: (persistedState: unknown, version: number) => {
-        const state = persistedState as { risks?: any[] }
-        if (version < 1) {
-          return {
-            ...state,
-            risks: (state.risks ?? []).map((r: any) => ({
-              ...r,
-              frameworkIds: r.frameworkIds ?? [],
-            })),
-          }
-        }
-        return persistedState
-      },
+  fetchAll: async () => {
+    set({ isLoading: true, error: null })
+    try {
+      const result = await api.get<{
+        items: RiskApiRow[]
+        page: number
+        pageSize: number
+        total: number
+        totalPages: number
+      }>('/risks', { page: 1, pageSize: 100 })
+      const previousById = get().byId
+      const risks = result.items.map((r) => mapRow(r, previousById[r.id]))
+      const byId: Record<string, Risk> = {}
+      for (const r of risks) byId[r.id] = r
+      set({
+        risks,
+        byId,
+        pagination: {
+          page: result.page,
+          pageSize: result.pageSize,
+          total: result.total,
+          totalPages: result.totalPages,
+        },
+        isLoading: false,
+        lastFetched: Date.now(),
+      })
+    } catch (e) {
+      set({ error: errorMessage(e, 'Failed to fetch risks'), isLoading: false })
     }
-  )
-)
+  },
+
+  fetchById: async (id) => {
+    set({ isLoading: true, error: null })
+    try {
+      const row = await api.get<RiskApiRow>(`/risks/${id}`)
+      const previous = get().byId[id]
+      const risk = mapRow(row, previous)
+      set((s) => ({
+        byId: { ...s.byId, [id]: risk },
+        risks: s.risks.some((r) => r.id === id) ? s.risks.map((r) => (r.id === id ? risk : r)) : s.risks,
+        selectedRisk: risk,
+        isLoading: false,
+        lastFetched: Date.now(),
+      }))
+      return risk
+    } catch (e) {
+      set({ error: errorMessage(e, 'Failed to fetch risk'), isLoading: false })
+      if (e instanceof ApiClientError && e.code === 'not_found') return null
+      return null
+    }
+  },
+
+  create: async (data) => {
+    requirePermission('Manage Audit Findings', { storeName: 'risk', actionName: 'create' })
+    set({ isMutating: true, error: null })
+    try {
+      const row = await api.post<RiskApiRow>('/risks', toCreatePayload(data))
+      const created = mapRow(row)
+      // Inject the seed history entry locally for parity with the legacy store.
+      const now = new Date().toISOString()
+      created.history = [{
+        id: crypto.randomUUID(),
+        timestamp: now,
+        user: data.owner?.name ?? '',
+        action: 'created',
+        notes: 'Risk created',
+      }]
+      set((s) => ({
+        risks: [created, ...s.risks],
+        byId: { ...s.byId, [created.id]: created },
+        isMutating: false,
+      }))
+      void get().fetchAll()
+      return created
+    } catch (e) {
+      set({ error: errorMessage(e, 'Failed to create risk'), isMutating: false })
+      throw e
+    }
+  },
+
+  update: async (id, data) => {
+    requirePermission('Manage Audit Findings', { storeName: 'risk', actionName: 'update', id })
+    set({ isMutating: true, error: null })
+    try {
+      const row = await api.patch<RiskApiRow>(`/risks/${id}`, toUpdatePayload(data))
+      const previous = get().byId[id]
+      const updated = mapRow(row, previous)
+      set((s) => ({
+        risks: s.risks.map((r) => (r.id === id ? updated : r)),
+        byId: { ...s.byId, [id]: updated },
+        selectedRisk: s.selectedRisk?.id === id ? updated : s.selectedRisk,
+        isMutating: false,
+      }))
+      return updated
+    } catch (e) {
+      set({ error: errorMessage(e, 'Failed to update risk'), isMutating: false })
+      throw e
+    }
+  },
+
+  delete: async (id) => {
+    requirePermission('Manage Audit Findings', { storeName: 'risk', actionName: 'delete', id })
+    set({ isMutating: true, error: null })
+    try {
+      await api.delete(`/risks/${id}`)
+      set((s) => {
+        const { [id]: _drop, ...rest } = s.byId
+        return {
+          risks: s.risks.filter((r) => r.id !== id),
+          byId: rest,
+          selectedRisk: s.selectedRisk?.id === id ? null : s.selectedRisk,
+          isMutating: false,
+        }
+      })
+    } catch (e) {
+      set({ error: errorMessage(e, 'Failed to delete risk'), isMutating: false })
+      throw e
+    }
+  },
+
+  updateStatus: (id, newStatus) => {
+    requirePermission('Manage Audit Findings', { storeName: 'risk', actionName: `updateStatus:${newStatus}`, id })
+    const previous = get().byId[id]
+    if (!previous) return
+    // Optimistic local update so the UI flips immediately.
+    const now = new Date().toISOString()
+    const optimistic: Risk = {
+      ...previous,
+      status: newStatus,
+      updatedAt: now,
+      history: [
+        ...previous.history,
+        {
+          id: crypto.randomUUID(),
+          timestamp: now,
+          user: previous.owner.name,
+          action: 'status_changed',
+          previousValue: previous.status,
+          newValue: newStatus,
+        },
+      ],
+    }
+    set((s) => ({
+      risks: s.risks.map((r) => (r.id === id ? optimistic : r)),
+      byId: { ...s.byId, [id]: optimistic },
+      selectedRisk: s.selectedRisk?.id === id ? optimistic : s.selectedRisk,
+    }))
+    void get().update(id, { status: newStatus }).catch(() => {
+      // The async `update()` already sets `error` — nothing more to do.
+    })
+  },
+
+  // ---- mitigation checklist (local-only) ---------------------------------
+  // No per-item endpoints exist yet for the top-level risk checklist; these
+  // mirror the legacy seeded behaviour. TODO(Phase 6): wire `/api/risks/[id]/checklist`
+  // (mirror of the observation checklist family).
+
+  addMitigationItem: (riskId, text) => {
+    set((state) => {
+      const r = state.byId[riskId]
+      if (!r) return state
+      const now = new Date().toISOString()
+      const newItem = { id: crypto.randomUUID(), text, completed: false }
+      const checklist = [...(r.mitigationChecklist || []), newItem]
+      const updated: Risk = {
+        ...r,
+        mitigationChecklist: checklist,
+        mitigationProgress: computeMitigationProgress(checklist),
+        updatedAt: now,
+        history: [...r.history, {
+          id: crypto.randomUUID(), timestamp: now, user: r.owner.name,
+          action: 'checklist_added', newValue: text,
+        }],
+      }
+      return {
+        risks: state.risks.map((x) => (x.id === riskId ? updated : x)),
+        byId: { ...state.byId, [riskId]: updated },
+        selectedRisk: state.selectedRisk?.id === riskId ? updated : state.selectedRisk,
+      }
+    })
+  },
+
+  editMitigationItem: (riskId, itemId, newText) => {
+    set((state) => {
+      const r = state.byId[riskId]
+      if (!r) return state
+      const now = new Date().toISOString()
+      const checklist = (r.mitigationChecklist || []).map((i) =>
+        i.id === itemId ? { ...i, text: newText } : i,
+      )
+      const updated: Risk = {
+        ...r,
+        mitigationChecklist: checklist,
+        updatedAt: now,
+        history: [...r.history, {
+          id: crypto.randomUUID(), timestamp: now, user: r.owner.name,
+          action: 'checklist_edited', newValue: newText,
+        }],
+      }
+      return {
+        risks: state.risks.map((x) => (x.id === riskId ? updated : x)),
+        byId: { ...state.byId, [riskId]: updated },
+        selectedRisk: state.selectedRisk?.id === riskId ? updated : state.selectedRisk,
+      }
+    })
+  },
+
+  toggleMitigationItem: (riskId, itemId) => {
+    set((state) => {
+      const r = state.byId[riskId]
+      if (!r) return state
+      const now = new Date().toISOString()
+      const checklist = (r.mitigationChecklist || []).map((i) =>
+        i.id === itemId ? { ...i, completed: !i.completed } : i,
+      )
+      const updated: Risk = {
+        ...r,
+        mitigationChecklist: checklist,
+        mitigationProgress: computeMitigationProgress(checklist),
+        updatedAt: now,
+        history: [...r.history, {
+          id: crypto.randomUUID(), timestamp: now, user: r.owner.name,
+          action: 'checklist_toggled',
+          newValue: checklist.find((i) => i.id === itemId)?.text,
+        }],
+      }
+      return {
+        risks: state.risks.map((x) => (x.id === riskId ? updated : x)),
+        byId: { ...state.byId, [riskId]: updated },
+        selectedRisk: state.selectedRisk?.id === riskId ? updated : state.selectedRisk,
+      }
+    })
+  },
+
+  removeMitigationItem: (riskId, itemId) => {
+    set((state) => {
+      const r = state.byId[riskId]
+      if (!r) return state
+      const now = new Date().toISOString()
+      const removed = (r.mitigationChecklist || []).find((i) => i.id === itemId)
+      const checklist = (r.mitigationChecklist || []).filter((i) => i.id !== itemId)
+      const updated: Risk = {
+        ...r,
+        mitigationChecklist: checklist,
+        mitigationProgress: computeMitigationProgress(checklist),
+        updatedAt: now,
+        history: [...r.history, {
+          id: crypto.randomUUID(), timestamp: now, user: r.owner.name,
+          action: 'checklist_removed', newValue: removed?.text,
+        }],
+      }
+      return {
+        risks: state.risks.map((x) => (x.id === riskId ? updated : x)),
+        byId: { ...state.byId, [riskId]: updated },
+        selectedRisk: state.selectedRisk?.id === riskId ? updated : state.selectedRisk,
+      }
+    })
+  },
+
+  markReviewed: (riskId) => {
+    const previous = get().byId[riskId]
+    if (!previous) return
+    const now = new Date().toISOString()
+    const nextReviewDate = previous.reviewSchedule
+      ? computeNextReview(previous.reviewSchedule, new Date())
+      : computeNextReviewDate(now, previous.monitoringFrequency)
+    const optimistic: Risk = {
+      ...previous,
+      lastReviewDate: now,
+      nextReviewDate,
+      updatedAt: now,
+      history: [...previous.history, {
+        id: crypto.randomUUID(), timestamp: now, user: previous.owner.name,
+        action: 'reviewed', notes: 'Risk marked as reviewed',
+      }],
+    }
+    set((s) => ({
+      risks: s.risks.map((r) => (r.id === riskId ? optimistic : r)),
+      byId: { ...s.byId, [riskId]: optimistic },
+      selectedRisk: s.selectedRisk?.id === riskId ? optimistic : s.selectedRisk,
+    }))
+    void get().update(riskId, {
+      lastReviewDate: now,
+      nextReviewDate,
+    }).catch(() => {})
+  },
+
+  // ---- officer mitigation workflow (server-backed) ----------------------
+
+  assignDepartment: (riskId, departmentId) => {
+    const previous = get().byId[riskId]
+    if (!previous) return
+    const optimistic: Risk = {
+      ...previous,
+      intendedDepartmentId: departmentId,
+      mitigationWorkflowStatus:
+        previous.mitigationWorkflowStatus ?? 'pending-assignment',
+      updatedAt: new Date().toISOString(),
+    }
+    set((s) => ({
+      risks: s.risks.map((r) => (r.id === riskId ? optimistic : r)),
+      byId: { ...s.byId, [riskId]: optimistic },
+      selectedRisk: s.selectedRisk?.id === riskId ? optimistic : s.selectedRisk,
+    }))
+    void (async () => {
+      try {
+        await api.post(`/risks/${riskId}/assign-department`, {
+          intended_department_id: departmentId,
+        })
+      } catch (e) {
+        set({ error: errorMessage(e, 'Failed to assign department') })
+      }
+    })()
+  },
+
+  setMitigationDeadline: (riskId, deadline) => {
+    const previous = get().byId[riskId]
+    if (!previous) return
+    const optimistic: Risk = {
+      ...previous,
+      mitigationDeadline: deadline,
+      updatedAt: new Date().toISOString(),
+    }
+    set((s) => ({
+      risks: s.risks.map((r) => (r.id === riskId ? optimistic : r)),
+      byId: { ...s.byId, [riskId]: optimistic },
+      selectedRisk: s.selectedRisk?.id === riskId ? optimistic : s.selectedRisk,
+    }))
+    void (async () => {
+      try {
+        await api.post(`/risks/${riskId}/set-deadline`, {
+          mitigation_deadline: deadline ?? null,
+        })
+      } catch (e) {
+        set({ error: errorMessage(e, 'Failed to set deadline') })
+      }
+    })()
+  },
+
+  sendToDepartment: (riskId, actingUser) => {
+    const previous = get().byId[riskId]
+    if (!previous) return
+    const now = new Date().toISOString()
+    const optimistic: Risk = {
+      ...previous,
+      mitigationWorkflowStatus: 'sent-to-department' as RiskMitigationWorkflowStatus,
+      sentToDepartmentAt: now,
+      updatedAt: now,
+      history: [...previous.history, {
+        id: crypto.randomUUID(), timestamp: now, user: actingUser,
+        action: 'note_added',
+        notes: 'Risk sent to intended department for mitigation plan',
+      }],
+    }
+    set((s) => ({
+      risks: s.risks.map((r) => (r.id === riskId ? optimistic : r)),
+      byId: { ...s.byId, [riskId]: optimistic },
+      selectedRisk: s.selectedRisk?.id === riskId ? optimistic : s.selectedRisk,
+    }))
+    void (async () => {
+      try {
+        await api.post(`/risks/${riskId}/send-to-department`)
+      } catch (e) {
+        set({ error: errorMessage(e, 'Failed to send to department') })
+      }
+    })()
+  },
+
+  submitDepartmentPlan: (riskId, plan, checklist, submittedBy) => {
+    const previous = get().byId[riskId]
+    if (!previous) return
+    const now = new Date().toISOString()
+    const proposedPlan: DepartmentProposedPlan = {
+      id: crypto.randomUUID(),
+      plan,
+      checklist: checklist.map((c) => ({
+        id: crypto.randomUUID(),
+        text: c.text,
+        deadline: c.deadline,
+        completed: false,
+      })),
+      submittedAt: now,
+      submittedBy,
+    }
+    const optimistic: Risk = {
+      ...previous,
+      departmentProposedPlan: proposedPlan,
+      mitigationWorkflowStatus: 'plan-proposed' as RiskMitigationWorkflowStatus,
+      updatedAt: now,
+      history: [...previous.history, {
+        id: crypto.randomUUID(), timestamp: now, user: submittedBy,
+        action: 'mitigation_updated',
+        notes: 'Department proposed mitigation plan',
+      }],
+    }
+    set((s) => ({
+      risks: s.risks.map((r) => (r.id === riskId ? optimistic : r)),
+      byId: { ...s.byId, [riskId]: optimistic },
+      selectedRisk: s.selectedRisk?.id === riskId ? optimistic : s.selectedRisk,
+    }))
+    void (async () => {
+      try {
+        await api.post(`/risks/${riskId}/submit-plan`, {
+          plan,
+          checklist: checklist.map((c, idx) => ({
+            text: c.text,
+            sort_order: idx,
+          })),
+        })
+      } catch (e) {
+        set({ error: errorMessage(e, 'Failed to submit department plan') })
+      }
+    })()
+  },
+
+  acceptDepartmentPlan: (riskId, actingUser) => {
+    requirePermission('Manage Audit Findings', { storeName: 'risk', actionName: 'acceptDepartmentPlan', id: riskId })
+    const previous = get().byId[riskId]
+    if (!previous?.departmentProposedPlan) return
+    const now = new Date().toISOString()
+    const optimistic: Risk = {
+      ...previous,
+      mitigationChecklist: previous.departmentProposedPlan.checklist,
+      mitigationPlan: previous.departmentProposedPlan.plan,
+      mitigationProgress: computeMitigationProgress(previous.departmentProposedPlan.checklist),
+      mitigationWorkflowStatus: 'in-progress' as RiskMitigationWorkflowStatus,
+      status: 'mitigating',
+      updatedAt: now,
+      history: [...previous.history, {
+        id: crypto.randomUUID(), timestamp: now, user: actingUser,
+        action: 'mitigation_updated',
+        notes: 'Officer accepted department-proposed plan',
+      }],
+    }
+    set((s) => ({
+      risks: s.risks.map((r) => (r.id === riskId ? optimistic : r)),
+      byId: { ...s.byId, [riskId]: optimistic },
+      selectedRisk: s.selectedRisk?.id === riskId ? optimistic : s.selectedRisk,
+    }))
+    void (async () => {
+      try {
+        await api.post(`/risks/${riskId}/accept-plan`)
+      } catch (e) {
+        set({ error: errorMessage(e, 'Failed to accept plan') })
+      }
+    })()
+  },
+
+  toggleDepartmentPlanItem: (riskId, itemId, actingUser) => {
+    const previous = get().byId[riskId]
+    if (!previous) return
+    const now = new Date().toISOString()
+    const checklist: MitigationChecklistItem[] = (previous.mitigationChecklist ?? []).map((i) =>
+      i.id === itemId ? { ...i, completed: !i.completed } : i,
+    )
+    const progress = computeMitigationProgress(checklist)
+    const allDone = checklist.length > 0 && checklist.every((i) => i.completed)
+    const optimistic: Risk = {
+      ...previous,
+      mitigationChecklist: checklist,
+      mitigationProgress: progress,
+      mitigationWorkflowStatus: allDone
+        ? 'mitigated'
+        : (previous.mitigationWorkflowStatus ?? 'in-progress'),
+      status: allDone ? 'resolved' : previous.status,
+      updatedAt: now,
+      history: [...previous.history, {
+        id: crypto.randomUUID(), timestamp: now, user: actingUser,
+        action: 'checklist_toggled',
+        newValue: checklist.find((i) => i.id === itemId)?.text,
+      }],
+    }
+    set((s) => ({
+      risks: s.risks.map((r) => (r.id === riskId ? optimistic : r)),
+      byId: { ...s.byId, [riskId]: optimistic },
+      selectedRisk: s.selectedRisk?.id === riskId ? optimistic : s.selectedRisk,
+    }))
+    // Note: the proposed-plan toggle endpoint takes a `planId`; without it
+    // we fall back to a local-only update — Phase 6 should pass the planId
+    // through and call POST /api/risks/[id]/plan/[planId]/toggle/[itemId].
+    // TODO(Phase 6): plumb planId from previous.departmentProposedPlan.id.
+  },
+
+  setFilters: (filters) => set({ filters }),
+  clearFilters: () => set({ filters: {} }),
+  setSelected: (risk) => set({ selectedRisk: risk }),
+  setSort: (sort) => set({ sort }),
+  setPage: (page) => set((state) => ({ pagination: { ...state.pagination, page } })),
+  setPageSize: (pageSize) =>
+    set((state) => ({
+      pagination: {
+        ...state.pagination,
+        pageSize,
+        totalPages: pageSize > 0 ? Math.max(1, Math.ceil(state.pagination.total / pageSize)) : 1,
+      },
+    })),
+  clearError: () => set({ error: null }),
+}))

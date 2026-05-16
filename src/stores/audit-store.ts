@@ -1,47 +1,171 @@
+// Audit store — Phase 5 reference implementation.
+//
+// Server-state backed: every read/write goes through the Route Handler API at
+// `/api/audits/*`. Local state mirrors the server response so the UI stays
+// snappy between fetches, but the server is the source of truth.
+//
+// Read `.planning/09-store-pattern.md` before mirroring this shape onto the
+// remaining Phase 5 stores.
+//
+// SKELETON-LOADING NOTE: consumer pages should render a skeleton when
+// `isLoading && audits.length === 0` (first-fetch). After the first fetch a
+// refetch shows stale data with a subtle indicator (`isLoading === true` with a
+// non-empty `audits` array).
+
 import { create } from 'zustand'
-import { persist } from 'zustand/middleware'
-import type { Audit, AuditFilters, PaginationState, SortState, AuditDocument, AuditTeamMember, AuditComment } from '@/types'
-import { computeNextReview } from '@/lib/review-schedule'
+import type {
+  Audit,
+  AuditAuthority,
+  AuditCategory,
+  AuditComment,
+  AuditDocument,
+  AuditFilters,
+  AuditFrequency,
+  AuditPriority,
+  AuditTeamMember,
+  PaginationState,
+  RegulatoryBodyId,
+  ReviewSchedule,
+  SortState,
+  User,
+} from '@/types'
+import { api, ApiClientError } from '@/lib/api-client'
 import { useAuditLogStore } from './audit-log-store'
 import { useAuthStore } from './auth-store'
 import { requirePermission } from '@/lib/rbac-store-gate'
 
-interface AuditState {
-  audits: Audit[]
-  selectedAudit: Audit | null
-  filters: AuditFilters
-  pagination: PaginationState
-  sort: SortState
-  isLoading: boolean
-  error: string | null
+// ---------- API row shapes (snake_case from Route Handlers) -----------------
 
-  // Actions
-  fetchAll: () => Promise<void>
-  fetchById: (id: string) => Promise<Audit | null>
-  create: (data: Omit<Audit, 'id' | 'createdAt' | 'updatedAt'>) => Promise<Audit>
-  update: (id: string, data: Partial<Audit>) => Promise<Audit>
-  delete: (id: string) => Promise<void>
-  setFilters: (filters: AuditFilters) => void
-  clearFilters: () => void
-  setSelected: (audit: Audit | null) => void
-  setSort: (sort: SortState) => void
-  setPage: (page: number) => void
-  setPageSize: (pageSize: number) => void
-  // Document management
-  addDocument: (auditId: string, document: Omit<AuditDocument, 'id' | 'uploadedAt'>, user?: { name: string }) => AuditDocument | null
-  removeDocument: (auditId: string, documentId: string) => void
-  // Team management
-  addTeamMember: (auditId: string, member: Omit<AuditTeamMember, 'addedAt'>) => AuditTeamMember | null
-  removeTeamMember: (auditId: string, memberId: string) => void
-  // Comment management
-  addComment: (auditId: string, content: string, author: { id: string; name: string; avatar: string }) => AuditComment | null
-  editComment: (auditId: string, commentId: string, newContent: string, editor: { name: string }) => void
-  deleteComment: (auditId: string, commentId: string, deleter: { name: string }) => void
-  // Status management
-  updateStatus: (auditId: string, newStatus: Audit['status'], user: { name: string }) => Promise<void>
+interface AuditApiRow {
+  id: string
+  title: string
+  type: string
+  status: string
+  priority: string | null
+  due_date: string
+  assignee_id: string | null
+  progress: number | null
+  category: string | null
+  framework_ids: string[] | null
+  created_at: string
+  updated_at: string
+  // Present on detail responses only:
+  description?: string | null
+  frequency?: string | null
+  closed_overdue?: boolean | null
+  completed_at?: string | null
+  review_schedule?: unknown
+  counts?: { observations: number; tasks: number; documents: number; team_members: number }
 }
 
-// Helper to get current user for logging
+interface AuditDocumentApiRow {
+  id: string
+  audit_id: string
+  name: string
+  type: 'pdf' | 'image' | 'doc'
+  storage_path: string
+  uploaded_at: string
+  uploaded_by: string | null
+}
+
+// ---------- mappers ---------------------------------------------------------
+
+/**
+ * Build a placeholder User for `audit.assignee` when the API only gives an
+ * `assignee_id`. Profile-table lookups happen elsewhere; the placeholder
+ * preserves the `Audit` type contract while components opportunistically read
+ * `.id` and `.name` with optional chaining.
+ */
+function stubAssignee(assigneeId: string | null): User {
+  return {
+    id: assigneeId ?? '',
+    name: '',
+    email: '',
+    role: 'officer',
+    department: '',
+    avatar: '',
+    workload: 0,
+  }
+}
+
+function mapAuditRow(row: AuditApiRow, previous?: Audit): Audit {
+  return {
+    id: row.id,
+    title: row.title,
+    type: row.type as AuditAuthority,
+    status: row.status as Audit['status'],
+    dueDate: row.due_date,
+    assignee: previous?.assignee ?? stubAssignee(row.assignee_id),
+    progress: row.progress ?? 0,
+    documents: previous?.documents,
+    team: previous?.team,
+    comments: previous?.comments,
+    description: row.description ?? previous?.description,
+    category: (row.category ?? previous?.category) as AuditCategory | undefined,
+    frequency: (row.frequency ?? previous?.frequency) as AuditFrequency | undefined,
+    priority: (row.priority ?? previous?.priority) as AuditPriority | undefined,
+    closedOverdue: row.closed_overdue ?? previous?.closedOverdue,
+    completedAt: row.completed_at ?? previous?.completedAt,
+    reviewSchedule: (row.review_schedule as ReviewSchedule | undefined) ?? previous?.reviewSchedule,
+    frameworkIds: (row.framework_ids ?? previous?.frameworkIds ?? []) as RegulatoryBodyId[],
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  }
+}
+
+function mapDocumentRow(row: AuditDocumentApiRow): AuditDocument {
+  return {
+    id: row.id,
+    name: row.name,
+    type: row.type,
+    uploadedAt: row.uploaded_at,
+    uploadedBy: row.uploaded_by ?? undefined,
+  }
+}
+
+/**
+ * Reduce a Partial<Audit> patch (camelCase) to the snake_case shape accepted
+ * by `PATCH /api/audits/[id]`. Only fields the API understands are forwarded;
+ * unknown extras (e.g. nested `assignee.name`) are stripped.
+ */
+function toUpdatePayload(patch: Partial<Audit>): Record<string, unknown> {
+  const out: Record<string, unknown> = {}
+  if (patch.title !== undefined) out.title = patch.title
+  if (patch.description !== undefined) out.description = patch.description
+  if (patch.type !== undefined) out.type = patch.type
+  if (patch.frameworkIds !== undefined) out.framework_ids = patch.frameworkIds
+  if (patch.category !== undefined) out.category = patch.category
+  if (patch.priority !== undefined) out.priority = patch.priority
+  if (patch.dueDate !== undefined) out.due_date = patch.dueDate
+  if (patch.assignee !== undefined) out.assignee_id = patch.assignee?.id ?? null
+  if (patch.frequency !== undefined) out.frequency = patch.frequency
+  if (patch.reviewSchedule !== undefined) out.review_schedule = patch.reviewSchedule
+  if (patch.status !== undefined) out.status = patch.status
+  if (patch.progress !== undefined) out.progress = patch.progress
+  return out
+}
+
+function toCreatePayload(data: Omit<Audit, 'id' | 'createdAt' | 'updatedAt'>): Record<string, unknown> {
+  return {
+    title: data.title,
+    description: data.description ?? undefined,
+    type: data.type,
+    framework_ids: data.frameworkIds ?? [],
+    category: data.category ?? undefined,
+    priority: data.priority ?? 'medium',
+    due_date: data.dueDate,
+    assignee_id: data.assignee?.id || undefined,
+    frequency: data.frequency ?? undefined,
+    review_schedule: data.reviewSchedule ?? undefined,
+  }
+}
+
+function errorMessage(e: unknown, fallback: string): string {
+  if (e instanceof ApiClientError) return e.message
+  if (e instanceof Error) return e.message
+  return fallback
+}
+
 const getCurrentUser = () => {
   const user = useAuthStore.getState().user
   return {
@@ -50,770 +174,731 @@ const getCurrentUser = () => {
   }
 }
 
-const assignee = (id: string, name: string, department: string, avatar: string, role: 'officer' | 'manager' | 'admin' = 'manager') => ({
-  id, name, email: `${name.split(' ')[0].toLowerCase()}@company.com`, role, department, avatar, workload: 60,
-})
+// ---------- store ----------------------------------------------------------
 
-const seedAudits: Audit[] = [
-  {
-    id: 'audit-001',
-    title: 'SAMA Cybersecurity Framework — Annual Self-Assessment',
-    type: 'sama',
-    status: 'in_progress',
-    dueDate: '2026-05-15T00:00:00.000Z',
-    assignee: assignee('4', 'Michael Scott', 'IT & Cybersecurity', 'Michael', 'admin'),
-    progress: 55,
-    description: 'Annual self-assessment against the SAMA Cybersecurity Framework covering governance, risk management, identity, and protection domains.',
-    category: 'security_compliance',
-    frequency: 'annual',
-    priority: 'high',
-    documents: [
-      { id: 'd1', name: 'CSF-Scope-Memo.pdf', type: 'pdf', uploadedAt: '2026-02-01T10:00:00.000Z', uploadedBy: 'Michael Scott' },
-      { id: 'd2', name: 'Asset-Inventory-2026.xlsx', type: 'doc', uploadedAt: '2026-02-20T10:00:00.000Z', uploadedBy: 'Sarah Connor' },
-    ],
-    team: [
-      { id: '4', name: 'Michael Scott', avatar: 'Michael', role: 'Lead Auditor', isOwner: true, addedAt: '2026-02-01T10:00:00.000Z' },
-      { id: '1', name: 'Sarah Connor', avatar: 'Sarah', role: 'Compliance Lead', addedAt: '2026-02-01T10:00:00.000Z' },
-      { id: '2', name: 'Ahmed Khan', avatar: 'Ahmed', role: 'Risk Reviewer', addedAt: '2026-02-05T10:00:00.000Z' },
-    ],
-    comments: [],
-    frameworkIds: ['sama'],
-    createdAt: '2026-02-01T10:00:00.000Z',
-    updatedAt: '2026-04-05T10:00:00.000Z',
-  },
-  {
-    id: 'audit-002',
-    title: 'NCA ECC-1:2018 — Control Effectiveness Review',
-    type: 'nca-ecc',
-    status: 'in_progress',
-    dueDate: '2026-05-30T00:00:00.000Z',
-    assignee: assignee('4', 'Michael Scott', 'IT & Cybersecurity', 'Michael', 'admin'),
-    progress: 40,
-    description: 'Quarterly review of NCA Essential Cybersecurity Controls effectiveness across 114 control statements.',
-    category: 'security_compliance',
-    frequency: 'quarterly',
-    priority: 'high',
-    documents: [
-      { id: 'd1', name: 'ECC-Control-Matrix-Q1.xlsx', type: 'doc', uploadedAt: '2026-03-01T10:00:00.000Z', uploadedBy: 'Michael Scott' },
-    ],
-    team: [
-      { id: '4', name: 'Michael Scott', avatar: 'Michael', role: 'Lead Auditor', isOwner: true, addedAt: '2026-03-01T10:00:00.000Z' },
-    ],
-    comments: [],
-    frameworkIds: ['nca-ecc'],
-    createdAt: '2026-03-01T10:00:00.000Z',
-    updatedAt: '2026-04-10T10:00:00.000Z',
-  },
-  {
-    id: 'audit-003',
-    title: 'AML / CTF Program Independent Review',
-    type: 'sama',
-    status: 'pending',
-    dueDate: '2026-06-15T00:00:00.000Z',
-    assignee: assignee('1', 'Sarah Connor', 'Compliance', 'Sarah'),
-    progress: 10,
-    description: 'Independent review of the AML/CTF program including KYC, transaction monitoring, sanctions screening, and STR handling.',
-    category: 'regulatory_compliance',
-    frequency: 'annual',
-    priority: 'critical',
-    documents: [],
-    team: [
-      { id: '1', name: 'Sarah Connor', avatar: 'Sarah', role: 'Lead Auditor', isOwner: true, addedAt: '2026-04-01T10:00:00.000Z' },
-      { id: '5', name: 'Dr. Hassan Ali', avatar: 'Hassan', role: 'Subject Matter Expert', addedAt: '2026-04-01T10:00:00.000Z' },
-    ],
-    comments: [],
-    frameworkIds: ['sama'],
-    createdAt: '2026-04-01T10:00:00.000Z',
-    updatedAt: '2026-04-01T10:00:00.000Z',
-  },
-  {
-    id: 'audit-004',
-    title: 'PDPL Data Mapping & Subject Rights Readiness',
-    type: 'sdaia-pdpl',
-    status: 'overdue',
-    dueDate: '2026-04-10T00:00:00.000Z',
-    assignee: assignee('3', 'Lisa Martinez', 'Legal', 'Lisa', 'officer'),
-    progress: 65,
-    description: 'Assessment of data inventory completeness, processing records, and Data Subject Rights response capability under PDPL.',
-    category: 'regulatory_compliance',
-    frequency: 'annual',
-    priority: 'high',
-    documents: [
-      { id: 'd1', name: 'Data-Inventory-v2.xlsx', type: 'doc', uploadedAt: '2026-02-12T10:00:00.000Z', uploadedBy: 'Lisa Martinez' },
-      { id: 'd2', name: 'RoPA-Register.pdf', type: 'pdf', uploadedAt: '2026-03-01T10:00:00.000Z', uploadedBy: 'Lisa Martinez' },
-    ],
-    team: [
-      { id: '3', name: 'Lisa Martinez', avatar: 'Lisa', role: 'Lead Auditor', isOwner: true, addedAt: '2026-01-20T10:00:00.000Z' },
-    ],
-    comments: [],
-    frameworkIds: ['sdaia-pdpl'],
-    createdAt: '2026-01-20T10:00:00.000Z',
-    updatedAt: '2026-04-15T10:00:00.000Z',
-  },
-  {
-    id: 'audit-005',
-    title: 'Sharia Governance Framework Review',
-    type: 'sharia-board',
-    status: 'completed',
-    dueDate: '2026-03-31T00:00:00.000Z',
-    completedAt: '2026-03-28T14:00:00.000Z',
-    assignee: assignee('5', 'Dr. Hassan Ali', 'Sharia Compliance', 'Hassan'),
-    progress: 100,
-    description: 'Annual review of Sharia governance including product approval workflow, Sharia board minutes, and zakat calculation controls.',
-    category: 'sharia_compliance',
-    frequency: 'annual',
-    priority: 'medium',
-    documents: [
-      { id: 'd1', name: 'Sharia-Review-Report-2025.pdf', type: 'pdf', uploadedAt: '2026-03-28T14:00:00.000Z', uploadedBy: 'Dr. Hassan Ali' },
-    ],
-    team: [
-      { id: '5', name: 'Dr. Hassan Ali', avatar: 'Hassan', role: 'Lead Auditor', isOwner: true, addedAt: '2026-01-05T10:00:00.000Z' },
-    ],
-    comments: [],
-    frameworkIds: ['sharia-board'],
-    createdAt: '2026-01-05T10:00:00.000Z',
-    updatedAt: '2026-03-28T14:00:00.000Z',
-  },
-  {
-    id: 'audit-006',
-    title: 'Q1 Internal Controls Walkthrough — Finance',
-    type: 'internal',
-    status: 'completed',
-    dueDate: '2026-03-15T00:00:00.000Z',
-    completedAt: '2026-03-14T16:00:00.000Z',
-    assignee: assignee('2', 'Ahmed Khan', 'Risk Management', 'Ahmed'),
-    progress: 100,
-    description: 'Walkthrough of key controls across P2P, O2C, and financial close cycles with control design and operating effectiveness testing.',
-    category: 'financial_compliance',
-    frequency: 'quarterly',
-    priority: 'medium',
-    documents: [
-      { id: 'd1', name: 'Q1-Walkthrough-Notes.pdf', type: 'pdf', uploadedAt: '2026-03-14T16:00:00.000Z', uploadedBy: 'Ahmed Khan' },
-    ],
-    team: [
-      { id: '2', name: 'Ahmed Khan', avatar: 'Ahmed', role: 'Lead Auditor', isOwner: true, addedAt: '2026-01-15T10:00:00.000Z' },
-    ],
-    comments: [],
-    frameworkIds: [],
-    createdAt: '2026-01-15T10:00:00.000Z',
-    updatedAt: '2026-03-14T16:00:00.000Z',
-  },
-  {
-    id: 'audit-007',
-    title: 'ZATCA E-invoicing Phase-2 Integration Audit',
-    type: 'zatca',
-    status: 'in_progress',
-    dueDate: '2026-05-20T00:00:00.000Z',
-    assignee: assignee('2', 'Ahmed Khan', 'Finance', 'Ahmed'),
-    progress: 30,
-    description: 'Verification of ZATCA e-invoicing phase-2 integration, XML schema compliance, and clearance workflow for all subsidiaries.',
-    category: 'regulatory_compliance',
-    frequency: 'ad_hoc',
-    priority: 'high',
-    documents: [],
-    team: [
-      { id: '2', name: 'Ahmed Khan', avatar: 'Ahmed', role: 'Lead Auditor', isOwner: true, addedAt: '2026-03-20T10:00:00.000Z' },
-    ],
-    comments: [],
-    frameworkIds: ['zatca'],
-    createdAt: '2026-03-20T10:00:00.000Z',
-    updatedAt: '2026-04-12T10:00:00.000Z',
-  },
-]
+interface AuditState {
+  // --- data ---
+  audits: Audit[]
+  byId: Record<string, Audit>
+  selectedAudit: Audit | null
+  pagination: PaginationState
+  sort: SortState
+  filters: AuditFilters
 
-export const useAuditStore = create<AuditState>()(
-  persist(
-    (set, get) => ({
-      audits: seedAudits,
-      selectedAudit: null,
-      filters: {},
-      pagination: {
-        page: 1,
-        pageSize: 10,
-        total: seedAudits.length,
-        totalPages: Math.ceil(seedAudits.length / 10),
-      },
-      sort: {
-        field: 'dueDate',
-        direction: 'asc',
-      },
-      isLoading: false,
-      error: null,
+  // --- status ---
+  // First-fetch detector: `isLoading && audits.length === 0` → render skeleton.
+  // Subsequent refetches set `isLoading = true` while keeping the stale list
+  // visible; UI shows a subtle indicator (spinner / progress bar) rather than a
+  // full skeleton.
+  isLoading: boolean
+  isMutating: boolean
+  error: string | null
+  lastFetched: number | null
 
-      fetchAll: async () => {
-        set({ isLoading: true, error: null })
-        try {
-          // TODO: Replace with actual API call
-          await new Promise((resolve) => setTimeout(resolve, 500))
+  // --- async actions ---
+  fetchAll: (opts?: {
+    page?: number
+    pageSize?: number
+    filters?: Partial<AuditFilters>
+  }) => Promise<void>
+  fetchById: (id: string) => Promise<Audit | null>
+  create: (data: Omit<Audit, 'id' | 'createdAt' | 'updatedAt'>) => Promise<Audit>
+  update: (id: string, data: Partial<Audit>) => Promise<Audit>
+  delete: (id: string) => Promise<void>
+  start: (id: string) => Promise<void>
+  complete: (id: string) => Promise<void>
 
-          // Preserve existing audits from persistence - don't overwrite with empty mock data
-          const existingAudits = get().audits
+  // --- nested mutations (preserve legacy shape — pages/components call these directly) ---
+  addDocument: (
+    auditId: string,
+    document: Omit<AuditDocument, 'id' | 'uploadedAt'> & { storage_path?: string },
+    user?: { name: string },
+  ) => Promise<AuditDocument | null>
+  removeDocument: (auditId: string, documentId: string) => Promise<void>
 
-          set({
-            pagination: {
-              ...get().pagination,
-              total: existingAudits.length,
-              totalPages: Math.ceil(existingAudits.length / get().pagination.pageSize),
-            },
-            isLoading: false,
-          })
-        } catch (error) {
-          set({
-            error: error instanceof Error ? error.message : 'Failed to fetch audits',
-            isLoading: false,
-          })
-        }
-      },
+  addTeamMember: (
+    auditId: string,
+    member: Omit<AuditTeamMember, 'addedAt'>,
+  ) => AuditTeamMember | null
+  removeTeamMember: (auditId: string, memberId: string) => void
 
-      fetchById: async (id: string) => {
-        set({ isLoading: true, error: null })
-        try {
-          // TODO: Replace with actual API call
-          await new Promise((resolve) => setTimeout(resolve, 300))
+  addComment: (
+    auditId: string,
+    content: string,
+    author: { id: string; name: string; avatar: string },
+  ) => AuditComment | null
+  editComment: (
+    auditId: string,
+    commentId: string,
+    newContent: string,
+    editor: { name: string },
+  ) => void
+  deleteComment: (auditId: string, commentId: string, deleter: { name: string }) => void
 
-          const audit = get().audits.find((a) => a.id === id) || null
-          set({ selectedAudit: audit, isLoading: false })
-          return audit
-        } catch (error) {
-          set({
-            error: error instanceof Error ? error.message : 'Failed to fetch audit',
-            isLoading: false,
-          })
-          return null
-        }
-      },
+  updateStatus: (
+    auditId: string,
+    newStatus: Audit['status'],
+    user: { name: string },
+  ) => Promise<void>
 
-      create: async (data) => {
-        requirePermission('Manage Audit Findings', { storeName: 'audit', actionName: 'create' })
-        set({ isLoading: true, error: null })
-        try {
-          // TODO: Replace with actual API call
-          await new Promise((resolve) => setTimeout(resolve, 500))
+  // --- UI helpers (client-only; never persisted) ---
+  setFilters: (filters: AuditFilters) => void
+  clearFilters: () => void
+  setSelected: (audit: Audit | null) => void
+  setSort: (sort: SortState) => void
+  setPage: (page: number) => void
+  setPageSize: (pageSize: number) => void
+  clearError: () => void
+}
 
-          const dueDate = data.reviewSchedule
-            ? computeNextReview(data.reviewSchedule)
-            : data.dueDate
-          const newAudit: Audit = {
-            ...data,
-            id: crypto.randomUUID(),
-            dueDate,
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-          }
+const INITIAL_PAGINATION: PaginationState = {
+  page: 1,
+  pageSize: 10,
+  total: 0,
+  totalPages: 1,
+}
 
-          set((state) => ({
-            audits: [newAudit, ...state.audits],
-            isLoading: false,
-          }))
+const INITIAL_SORT: SortState = {
+  field: 'dueDate',
+  direction: 'asc',
+}
 
-          // Log the creation action
-          const user = getCurrentUser()
-          useAuditLogStore.getState().addLog({
-            user,
-            action: 'created',
-            audit: newAudit.title,
-            auditId: newAudit.id,
-            description: `Created new audit: ${newAudit.title}`,
-            descriptionKey: 'auditDetail.activityCreatedAudit',
-            descriptionParams: { title: newAudit.title },
-            status: 'completed',
-          })
+export const useAuditStore = create<AuditState>()((set, get) => ({
+  audits: [],
+  byId: {},
+  selectedAudit: null,
+  pagination: INITIAL_PAGINATION,
+  sort: INITIAL_SORT,
+  filters: {},
 
-          return newAudit
-        } catch (error) {
-          set({
-            error: error instanceof Error ? error.message : 'Failed to create audit',
-            isLoading: false,
-          })
-          throw error
-        }
-      },
+  isLoading: false,
+  isMutating: false,
+  error: null,
+  lastFetched: null,
 
-      update: async (id: string, data: Partial<Audit>) => {
-        requirePermission('Manage Audit Findings', { storeName: 'audit', actionName: 'update', id })
-        set({ isLoading: true, error: null })
-        try {
-          // TODO: Replace with actual API call
-          await new Promise((resolve) => setTimeout(resolve, 500))
+  fetchAll: async (opts) => {
+    const current = get()
+    const page = opts?.page ?? current.pagination.page
+    const pageSize = opts?.pageSize ?? current.pagination.pageSize
+    const filters = opts?.filters
+      ? { ...current.filters, ...opts.filters }
+      : current.filters
 
-          let updatedAudit: Audit | null = null
+    set({ isLoading: true, error: null })
+    try {
+      // AuditFilters allows multi-select arrays for status / type; the API
+      // accepts a single value per call, so we forward the first entry. Pages
+      // doing multi-status filters should call `fetchAll` multiple times and
+      // merge, or rely on client-side filtering after a full fetch.
+      const result = await api.get<{
+        items: AuditApiRow[]
+        page: number
+        pageSize: number
+        total: number
+        totalPages: number
+      }>('/audits', {
+        page,
+        pageSize,
+        status: filters.status?.[0],
+        type: filters.type?.[0],
+        assignee_id: filters.assigneeId,
+      })
 
-          const computedDueDate = data.reviewSchedule
-            ? computeNextReview(data.reviewSchedule)
-            : data.dueDate
-          const updatePayload = computedDueDate !== undefined
-            ? { ...data, dueDate: computedDueDate }
-            : data
-          set((state) => ({
-            audits: state.audits.map((a) => {
-              if (a.id === id) {
-                updatedAudit = { ...a, ...updatePayload, updatedAt: new Date().toISOString() }
-                return updatedAudit
-              }
-              return a
-            }),
-            selectedAudit:
-              state.selectedAudit?.id === id
-                ? { ...state.selectedAudit, ...updatePayload, updatedAt: new Date().toISOString() }
-                : state.selectedAudit,
-            isLoading: false,
-          }))
+      const previousById = get().byId
+      const audits = result.items.map((row) => mapAuditRow(row, previousById[row.id]))
+      const byId: Record<string, Audit> = {}
+      for (const a of audits) byId[a.id] = a
 
-          if (!updatedAudit) {
-            throw new Error('Audit not found')
-          }
-
-          // Log the update action
-          const user = getCurrentUser()
-          const auditForLog = updatedAudit as Audit
-          useAuditLogStore.getState().addLog({
-            user,
-            action: 'updated',
-            audit: auditForLog.title,
-            auditId: auditForLog.id,
-            description: `Updated audit: ${auditForLog.title}`,
-            descriptionKey: 'auditDetail.activityUpdatedAudit',
-            descriptionParams: { title: auditForLog.title },
-            status: 'completed',
-          })
-
-          return auditForLog
-        } catch (error) {
-          set({
-            error: error instanceof Error ? error.message : 'Failed to update audit',
-            isLoading: false,
-          })
-          throw error
-        }
-      },
-
-      delete: async (id: string) => {
-        requirePermission('Manage Audit Findings', { storeName: 'audit', actionName: 'delete', id })
-        set({ isLoading: true, error: null })
-        try {
-          // Get the audit before deleting for logging
-          const auditToDelete = get().audits.find((a) => a.id === id)
-
-          // TODO: Replace with actual API call
-          await new Promise((resolve) => setTimeout(resolve, 500))
-
-          set((state) => ({
-            audits: state.audits.filter((a) => a.id !== id),
-            selectedAudit: state.selectedAudit?.id === id ? null : state.selectedAudit,
-            isLoading: false,
-          }))
-
-          // Log the deletion/closure action
-          if (auditToDelete) {
-            const user = getCurrentUser()
-            useAuditLogStore.getState().addLog({
-              user,
-              action: 'closed',
-              audit: auditToDelete.title,
-              auditId: auditToDelete.id,
-              description: `Closed/deleted audit: ${auditToDelete.title}`,
-              descriptionKey: 'auditDetail.activityClosedAudit',
-              descriptionParams: { title: auditToDelete.title },
-              status: 'completed',
-            })
-          }
-        } catch (error) {
-          set({
-            error: error instanceof Error ? error.message : 'Failed to delete audit',
-            isLoading: false,
-          })
-          throw error
-        }
-      },
-
-      setFilters: (filters) => set({ filters }),
-      clearFilters: () => set({ filters: {} }),
-      setSelected: (audit) => set({ selectedAudit: audit }),
-      setSort: (sort) => set({ sort }),
-      setPage: (page) => set((state) => ({ pagination: { ...state.pagination, page } })),
-      setPageSize: (pageSize) =>
-        set((state) => ({
-          pagination: {
-            ...state.pagination,
-            pageSize,
-            totalPages: Math.ceil(state.pagination.total / pageSize),
-          },
-        })),
-
-      // Document management
-      addDocument: (auditId: string, documentData: Omit<AuditDocument, 'id' | 'uploadedAt'>, user?: { name: string }) => {
-        const newDocument: AuditDocument = {
-          ...documentData,
-          id: crypto.randomUUID(),
-          uploadedAt: new Date().toISOString(),
-          uploadedBy: user?.name,
-        }
-
-        let addedDocument: AuditDocument | null = null
-
-        set((state) => ({
-          audits: state.audits.map((a) => {
-            if (a.id === auditId) {
-              addedDocument = newDocument
-              return {
-                ...a,
-                documents: [...(a.documents || []), newDocument],
-                updatedAt: new Date().toISOString(),
-              }
-            }
-            return a
-          }),
-          selectedAudit:
-            state.selectedAudit?.id === auditId
-              ? {
-                  ...state.selectedAudit,
-                  documents: [...(state.selectedAudit.documents || []), newDocument],
-                  updatedAt: new Date().toISOString(),
-                }
-              : state.selectedAudit,
-        }))
-
-        // Log the upload action
-        if (addedDocument) {
-          const currentUser = getCurrentUser()
-          useAuditLogStore.getState().addLog({
-            user: currentUser,
-            action: 'uploaded',
-            audit: get().audits.find((a) => a.id === auditId)?.title || '',
-            auditId,
-            description: `Uploaded document: ${newDocument.name}`,
-            descriptionKey: 'auditDetail.activityUploadedDocument',
-            descriptionParams: { name: newDocument.name },
-            status: 'completed',
-          })
-        }
-
-        return addedDocument
-      },
-
-      removeDocument: (auditId: string, documentId: string) => {
-        set((state) => ({
-          audits: state.audits.map((a) => {
-            if (a.id === auditId) {
-              return {
-                ...a,
-                documents: (a.documents || []).filter((d) => d.id !== documentId),
-                updatedAt: new Date().toISOString(),
-              }
-            }
-            return a
-          }),
-          selectedAudit:
-            state.selectedAudit?.id === auditId
-              ? {
-                  ...state.selectedAudit,
-                  documents: (state.selectedAudit.documents || []).filter((d) => d.id !== documentId),
-                  updatedAt: new Date().toISOString(),
-                }
-              : state.selectedAudit,
-        }))
-      },
-
-      // Team management
-      addTeamMember: (auditId: string, memberData: Omit<AuditTeamMember, 'addedAt'>) => {
-        const newMember: AuditTeamMember = {
-          ...memberData,
-          addedAt: new Date().toISOString(),
-        }
-
-        let addedMember: AuditTeamMember | null = null
-
-        set((state) => ({
-          audits: state.audits.map((a) => {
-            if (a.id === auditId) {
-              // Check if member already exists
-              if (a.team?.some((m) => m.id === memberData.id)) {
-                return a
-              }
-              addedMember = newMember
-              return {
-                ...a,
-                team: [...(a.team || []), newMember],
-                updatedAt: new Date().toISOString(),
-              }
-            }
-            return a
-          }),
-          selectedAudit:
-            state.selectedAudit?.id === auditId
-              ? {
-                  ...state.selectedAudit,
-                  team: [...(state.selectedAudit.team || []), newMember],
-                  updatedAt: new Date().toISOString(),
-                }
-              : state.selectedAudit,
-        }))
-
-        return addedMember
-      },
-
-      removeTeamMember: (auditId: string, memberId: string) => {
-        set((state) => ({
-          audits: state.audits.map((a) => {
-            if (a.id === auditId) {
-              return {
-                ...a,
-                team: (a.team || []).filter((m) => m.id !== memberId),
-                updatedAt: new Date().toISOString(),
-              }
-            }
-            return a
-          }),
-          selectedAudit:
-            state.selectedAudit?.id === auditId
-              ? {
-                  ...state.selectedAudit,
-                  team: (state.selectedAudit.team || []).filter((m) => m.id !== memberId),
-                  updatedAt: new Date().toISOString(),
-                }
-              : state.selectedAudit,
-        }))
-      },
-
-      // Comment management
-      addComment: (auditId: string, content: string, author: { id: string; name: string; avatar: string }) => {
-        const newComment: AuditComment = {
-          id: crypto.randomUUID(),
-          auditId,
-          content,
-          author,
-          createdAt: new Date().toISOString(),
-          isEdited: false,
-        }
-
-        let addedComment: AuditComment | null = null
-
-        set((state) => ({
-          audits: state.audits.map((a) => {
-            if (a.id === auditId) {
-              addedComment = newComment
-              return {
-                ...a,
-                comments: [...(a.comments || []), newComment],
-                updatedAt: new Date().toISOString(),
-              }
-            }
-            return a
-          }),
-          selectedAudit:
-            state.selectedAudit?.id === auditId
-              ? {
-                  ...state.selectedAudit,
-                  comments: [...(state.selectedAudit.comments || []), newComment],
-                  updatedAt: new Date().toISOString(),
-                }
-              : state.selectedAudit,
-        }))
-
-        // Log the comment action
-        if (addedComment) {
-          const audit = get().audits.find((a) => a.id === auditId)
-          const truncatedComment = `${content.substring(0, 50)}${content.length > 50 ? '...' : ''}`
-          useAuditLogStore.getState().addLog({
-            user: { name: author.name, avatar: author.avatar },
-            action: 'commented',
-            audit: audit?.title || '',
-            auditId,
-            description: `Added comment: "${truncatedComment}"`,
-            descriptionKey: 'auditDetail.activityAddedComment',
-            descriptionParams: { comment: truncatedComment },
-            status: 'completed',
-          })
-        }
-
-        return addedComment
-      },
-
-      editComment: (auditId: string, commentId: string, newContent: string, _editor: { name: string }) => {
-        set((state) => ({
-          audits: state.audits.map((a) => {
-            if (a.id === auditId) {
-              return {
-                ...a,
-                comments: (a.comments || []).map((c) =>
-                  c.id === commentId
-                    ? { ...c, content: newContent, updatedAt: new Date().toISOString(), isEdited: true }
-                    : c
-                ),
-                updatedAt: new Date().toISOString(),
-              }
-            }
-            return a
-          }),
-          selectedAudit:
-            state.selectedAudit?.id === auditId
-              ? {
-                  ...state.selectedAudit,
-                  comments: (state.selectedAudit.comments || []).map((c) =>
-                    c.id === commentId
-                      ? { ...c, content: newContent, updatedAt: new Date().toISOString(), isEdited: true }
-                      : c
-                  ),
-                  updatedAt: new Date().toISOString(),
-                }
-              : state.selectedAudit,
-        }))
-
-        // Log the edit action
-        const audit = get().audits.find((a) => a.id === auditId)
-        const currentUser = getCurrentUser()
-        const truncatedComment = `${newContent.substring(0, 50)}${newContent.length > 50 ? '...' : ''}`
-        useAuditLogStore.getState().addLog({
-          user: currentUser,
-          action: 'updated',
-          audit: audit?.title || '',
-          auditId,
-          description: `Edited comment: "${truncatedComment}"`,
-          descriptionKey: 'auditDetail.activityEditedComment',
-          descriptionParams: { comment: truncatedComment },
-          status: 'completed',
-        })
-      },
-
-      deleteComment: (auditId: string, commentId: string, _deleter: { name: string }) => {
-        const audit = get().audits.find((a) => a.id === auditId)
-        const comment = audit?.comments?.find((c) => c.id === commentId)
-
-        set((state) => ({
-          audits: state.audits.map((a) => {
-            if (a.id === auditId) {
-              return {
-                ...a,
-                comments: (a.comments || []).filter((c) => c.id !== commentId),
-                updatedAt: new Date().toISOString(),
-              }
-            }
-            return a
-          }),
-          selectedAudit:
-            state.selectedAudit?.id === auditId
-              ? {
-                  ...state.selectedAudit,
-                  comments: (state.selectedAudit.comments || []).filter((c) => c.id !== commentId),
-                  updatedAt: new Date().toISOString(),
-                }
-              : state.selectedAudit,
-        }))
-
-        // Log the deletion
-        const currentUser = getCurrentUser()
-        const truncatedComment = `${comment?.content.substring(0, 30) || ''}...`
-        useAuditLogStore.getState().addLog({
-          user: currentUser,
-          action: 'updated',
-          audit: audit?.title || '',
-          auditId,
-          description: `Deleted comment: "${truncatedComment}"`,
-          descriptionKey: 'auditDetail.activityDeletedComment',
-          descriptionParams: { comment: truncatedComment },
-          status: 'completed',
-        })
-      },
-
-      // Status management — gated as Phase 6's `closeFinding` analogue.
-      updateStatus: async (auditId: string, newStatus: Audit['status'], _user: { name: string }) => {
-        requirePermission('Manage Audit Findings', { storeName: 'audit', actionName: `updateStatus:${newStatus}`, id: auditId })
-        const audit = get().audits.find((a) => a.id === auditId)
-        const oldStatus = audit?.status
-
-        // Check if audit is overdue (due date has passed)
-        const isOverdue = audit?.dueDate ? new Date(audit.dueDate) < new Date() : false
-
-        // When completing, check if it's being closed overdue
-        const isClosingOverdue = newStatus === 'completed' && isOverdue
-        const now = new Date().toISOString()
-
-        set((state) => ({
-          audits: state.audits.map((a) => {
-            if (a.id === auditId) {
-              return {
-                ...a,
-                status: newStatus,
-                updatedAt: now,
-                ...(newStatus === 'completed' && {
-                  completedAt: now,
-                  closedOverdue: isClosingOverdue,
-                }),
-              }
-            }
-            return a
-          }),
-          selectedAudit:
-            state.selectedAudit?.id === auditId
-              ? {
-                  ...state.selectedAudit,
-                  status: newStatus,
-                  updatedAt: now,
-                  ...(newStatus === 'completed' && {
-                    completedAt: now,
-                    closedOverdue: isClosingOverdue,
-                  }),
-                }
-              : state.selectedAudit,
-        }))
-
-        // Log the status change
-        const currentUser = getCurrentUser()
-        const statusLabels: Record<string, string> = {
-          pending: 'Pending',
-          in_progress: 'In Progress',
-          completed: 'Completed',
-          overdue: 'Overdue',
-        }
-        const dueDate = audit?.dueDate ? new Date(audit.dueDate).toLocaleDateString() : 'earlier'
-        const description = isClosingOverdue
-          ? `Closed audit as overdue (was due ${dueDate})`
-          : `Changed status from ${statusLabels[oldStatus || 'pending']} to ${statusLabels[newStatus]}`
-
-        const descriptionKey = isClosingOverdue
-          ? 'auditDetail.activityClosedOverdue'
-          : 'auditDetail.activityStatusChanged'
-
-        const descriptionParams: Record<string, string> = isClosingOverdue
-          ? { date: dueDate }
-          : { from: oldStatus || 'pending', to: newStatus }
-
-        useAuditLogStore.getState().addLog({
-          user: currentUser,
-          action: 'updated',
-          audit: audit?.title || '',
-          auditId,
-          description,
-          descriptionKey,
-          descriptionParams,
-          status: 'completed',
-        })
-      },
-    }),
-    {
-      name: 'audit-storage',
-      version: 1,
-      partialize: (state) => ({
-        audits: state.audits,
-      }),
-      migrate: (persistedState: unknown, version: number) => {
-        const state = persistedState as { audits?: any[] }
-        if (version < 1) {
-          const AUDIT_TYPE_TO_FW: Record<string, string[]> = {
-            sama: ['sama'],
-            sharia: ['sharia-board'],
-            internal: [],
-          }
-          return {
-            ...state,
-            audits: (state.audits ?? []).map((a: any) => ({
-              ...a,
-              frameworkIds: a.frameworkIds ?? (AUDIT_TYPE_TO_FW[a.type] ?? []),
-            })),
-          }
-        }
-        return persistedState
-      },
+      set({
+        audits,
+        byId,
+        pagination: {
+          page: result.page,
+          pageSize: result.pageSize,
+          total: result.total,
+          totalPages: result.totalPages,
+        },
+        filters,
+        isLoading: false,
+        lastFetched: Date.now(),
+      })
+    } catch (e) {
+      set({ error: errorMessage(e, 'Failed to fetch audits'), isLoading: false })
+      // Don't re-throw on list fetches — consumers render the error banner via `error`.
     }
-  )
-)
+  },
+
+  fetchById: async (id: string) => {
+    set({ isLoading: true, error: null })
+    try {
+      const row = await api.get<AuditApiRow>(`/audits/${id}`)
+      const previous = get().byId[id]
+      const audit = mapAuditRow(row, previous)
+      set((state) => ({
+        byId: { ...state.byId, [id]: audit },
+        audits: state.audits.some((a) => a.id === id)
+          ? state.audits.map((a) => (a.id === id ? audit : a))
+          : state.audits,
+        selectedAudit: audit,
+        isLoading: false,
+        lastFetched: Date.now(),
+      }))
+      return audit
+    } catch (e) {
+      set({ error: errorMessage(e, 'Failed to fetch audit'), isLoading: false })
+      if (e instanceof ApiClientError && e.code === 'not_found') return null
+      return null
+    }
+  },
+
+  create: async (data) => {
+    requirePermission('Manage Audit Findings', { storeName: 'audit', actionName: 'create' })
+    set({ isMutating: true, error: null })
+    try {
+      const row = await api.post<AuditApiRow>('/audits', toCreatePayload(data))
+      const created = mapAuditRow(row)
+      // Mutate-then-confirm: patch local state immediately so the UI updates
+      // without a full refetch. A background refetch keeps pagination accurate
+      // when the new row should appear inside the current page.
+      set((state) => ({
+        audits: [created, ...state.audits],
+        byId: { ...state.byId, [created.id]: created },
+        isMutating: false,
+      }))
+
+      const user = getCurrentUser()
+      useAuditLogStore.getState().addLog({
+        user,
+        action: 'created',
+        audit: created.title,
+        auditId: created.id,
+        description: `Created new audit: ${created.title}`,
+        descriptionKey: 'auditDetail.activityCreatedAudit',
+        descriptionParams: { title: created.title },
+        status: 'completed',
+      })
+
+      // Pagination may shift — refresh page metadata in the background.
+      void get().fetchAll()
+      return created
+    } catch (e) {
+      set({ error: errorMessage(e, 'Failed to create audit'), isMutating: false })
+      throw e
+    }
+  },
+
+  update: async (id, data) => {
+    requirePermission('Manage Audit Findings', { storeName: 'audit', actionName: 'update', id })
+    set({ isMutating: true, error: null })
+    try {
+      const row = await api.patch<AuditApiRow>(`/audits/${id}`, toUpdatePayload(data))
+      const previous = get().byId[id]
+      const updated = mapAuditRow(row, previous)
+
+      set((state) => ({
+        audits: state.audits.map((a) => (a.id === id ? updated : a)),
+        byId: { ...state.byId, [id]: updated },
+        selectedAudit: state.selectedAudit?.id === id ? updated : state.selectedAudit,
+        isMutating: false,
+      }))
+
+      const user = getCurrentUser()
+      useAuditLogStore.getState().addLog({
+        user,
+        action: 'updated',
+        audit: updated.title,
+        auditId: updated.id,
+        description: `Updated audit: ${updated.title}`,
+        descriptionKey: 'auditDetail.activityUpdatedAudit',
+        descriptionParams: { title: updated.title },
+        status: 'completed',
+      })
+
+      return updated
+    } catch (e) {
+      set({ error: errorMessage(e, 'Failed to update audit'), isMutating: false })
+      throw e
+    }
+  },
+
+  delete: async (id) => {
+    requirePermission('Manage Audit Findings', { storeName: 'audit', actionName: 'delete', id })
+    const auditToDelete = get().byId[id]
+    set({ isMutating: true, error: null })
+    try {
+      await api.delete(`/audits/${id}`)
+
+      set((state) => {
+        const { [id]: _removed, ...rest } = state.byId
+        return {
+          audits: state.audits.filter((a) => a.id !== id),
+          byId: rest,
+          selectedAudit: state.selectedAudit?.id === id ? null : state.selectedAudit,
+          isMutating: false,
+        }
+      })
+
+      if (auditToDelete) {
+        const user = getCurrentUser()
+        useAuditLogStore.getState().addLog({
+          user,
+          action: 'closed',
+          audit: auditToDelete.title,
+          auditId: auditToDelete.id,
+          description: `Closed/deleted audit: ${auditToDelete.title}`,
+          descriptionKey: 'auditDetail.activityClosedAudit',
+          descriptionParams: { title: auditToDelete.title },
+          status: 'completed',
+        })
+      }
+    } catch (e) {
+      set({ error: errorMessage(e, 'Failed to delete audit'), isMutating: false })
+      throw e
+    }
+  },
+
+  start: async (id) => {
+    set({ isMutating: true, error: null })
+    try {
+      const row = await api.post<AuditApiRow>(`/audits/${id}/start`)
+      const previous = get().byId[id]
+      const updated = mapAuditRow(row, previous)
+      set((state) => ({
+        audits: state.audits.map((a) => (a.id === id ? updated : a)),
+        byId: { ...state.byId, [id]: updated },
+        selectedAudit: state.selectedAudit?.id === id ? updated : state.selectedAudit,
+        isMutating: false,
+      }))
+    } catch (e) {
+      set({ error: errorMessage(e, 'Failed to start audit'), isMutating: false })
+      throw e
+    }
+  },
+
+  complete: async (id) => {
+    set({ isMutating: true, error: null })
+    try {
+      const row = await api.post<AuditApiRow>(`/audits/${id}/complete`)
+      const previous = get().byId[id]
+      const updated = mapAuditRow(row, previous)
+      set((state) => ({
+        audits: state.audits.map((a) => (a.id === id ? updated : a)),
+        byId: { ...state.byId, [id]: updated },
+        selectedAudit: state.selectedAudit?.id === id ? updated : state.selectedAudit,
+        isMutating: false,
+      }))
+    } catch (e) {
+      set({ error: errorMessage(e, 'Failed to complete audit'), isMutating: false })
+      throw e
+    }
+  },
+
+  // ---- documents -------------------------------------------------------
+
+  addDocument: async (auditId, documentData, user) => {
+    set({ isMutating: true, error: null })
+    try {
+      // The API records a metadata row — file bytes must already live in
+      // Supabase Storage at `storage_path`. Pages that previously passed only
+      // `{name, type}` (no upload) get a derived storage path stub so the
+      // metadata row still lands; a follow-up uploader page should fill in the
+      // real path.
+      const payload = {
+        name: documentData.name,
+        type: documentData.type,
+        storage_path:
+          documentData.storage_path ??
+          `audits/${auditId}/${documentData.name}`,
+      }
+      const row = await api.post<AuditDocumentApiRow>(
+        `/audits/${auditId}/documents`,
+        payload,
+      )
+      const newDocument = mapDocumentRow(row)
+      if (user?.name) newDocument.uploadedBy = user.name
+
+      set((state) => ({
+        audits: state.audits.map((a) =>
+          a.id === auditId
+            ? { ...a, documents: [...(a.documents ?? []), newDocument], updatedAt: new Date().toISOString() }
+            : a,
+        ),
+        byId: state.byId[auditId]
+          ? {
+              ...state.byId,
+              [auditId]: {
+                ...state.byId[auditId],
+                documents: [...(state.byId[auditId].documents ?? []), newDocument],
+                updatedAt: new Date().toISOString(),
+              },
+            }
+          : state.byId,
+        selectedAudit:
+          state.selectedAudit?.id === auditId
+            ? {
+                ...state.selectedAudit,
+                documents: [...(state.selectedAudit.documents ?? []), newDocument],
+                updatedAt: new Date().toISOString(),
+              }
+            : state.selectedAudit,
+        isMutating: false,
+      }))
+
+      const currentUser = getCurrentUser()
+      useAuditLogStore.getState().addLog({
+        user: currentUser,
+        action: 'uploaded',
+        audit: get().byId[auditId]?.title ?? '',
+        auditId,
+        description: `Uploaded document: ${newDocument.name}`,
+        descriptionKey: 'auditDetail.activityUploadedDocument',
+        descriptionParams: { name: newDocument.name },
+        status: 'completed',
+      })
+
+      return newDocument
+    } catch (e) {
+      set({ error: errorMessage(e, 'Failed to upload document'), isMutating: false })
+      return null
+    }
+  },
+
+  removeDocument: async (auditId, documentId) => {
+    // No DELETE endpoint yet for individual documents in Phase 4 — perform a
+    // local-only removal so the UI responds; Phase 5+ should add
+    // `/api/audits/[auditId]/documents/[docId]` (DELETE) and wire it here.
+    set((state) => ({
+      audits: state.audits.map((a) =>
+        a.id === auditId
+          ? {
+              ...a,
+              documents: (a.documents ?? []).filter((d) => d.id !== documentId),
+              updatedAt: new Date().toISOString(),
+            }
+          : a,
+      ),
+      byId: state.byId[auditId]
+        ? {
+            ...state.byId,
+            [auditId]: {
+              ...state.byId[auditId],
+              documents: (state.byId[auditId].documents ?? []).filter((d) => d.id !== documentId),
+              updatedAt: new Date().toISOString(),
+            },
+          }
+        : state.byId,
+      selectedAudit:
+        state.selectedAudit?.id === auditId
+          ? {
+              ...state.selectedAudit,
+              documents: (state.selectedAudit.documents ?? []).filter((d) => d.id !== documentId),
+              updatedAt: new Date().toISOString(),
+            }
+          : state.selectedAudit,
+    }))
+  },
+
+  // ---- team (local-only; backend endpoint not yet implemented) ---------
+
+  addTeamMember: (auditId, memberData) => {
+    const existing = get().byId[auditId]
+    if (existing?.team?.some((m) => m.id === memberData.id)) return null
+    const newMember: AuditTeamMember = { ...memberData, addedAt: new Date().toISOString() }
+
+    set((state) => ({
+      audits: state.audits.map((a) =>
+        a.id === auditId
+          ? { ...a, team: [...(a.team ?? []), newMember], updatedAt: new Date().toISOString() }
+          : a,
+      ),
+      byId: state.byId[auditId]
+        ? {
+            ...state.byId,
+            [auditId]: {
+              ...state.byId[auditId],
+              team: [...(state.byId[auditId].team ?? []), newMember],
+              updatedAt: new Date().toISOString(),
+            },
+          }
+        : state.byId,
+      selectedAudit:
+        state.selectedAudit?.id === auditId
+          ? {
+              ...state.selectedAudit,
+              team: [...(state.selectedAudit.team ?? []), newMember],
+              updatedAt: new Date().toISOString(),
+            }
+          : state.selectedAudit,
+    }))
+
+    return newMember
+  },
+
+  removeTeamMember: (auditId, memberId) => {
+    set((state) => ({
+      audits: state.audits.map((a) =>
+        a.id === auditId
+          ? {
+              ...a,
+              team: (a.team ?? []).filter((m) => m.id !== memberId),
+              updatedAt: new Date().toISOString(),
+            }
+          : a,
+      ),
+      byId: state.byId[auditId]
+        ? {
+            ...state.byId,
+            [auditId]: {
+              ...state.byId[auditId],
+              team: (state.byId[auditId].team ?? []).filter((m) => m.id !== memberId),
+              updatedAt: new Date().toISOString(),
+            },
+          }
+        : state.byId,
+      selectedAudit:
+        state.selectedAudit?.id === auditId
+          ? {
+              ...state.selectedAudit,
+              team: (state.selectedAudit.team ?? []).filter((m) => m.id !== memberId),
+              updatedAt: new Date().toISOString(),
+            }
+          : state.selectedAudit,
+    }))
+  },
+
+  // ---- comments (local-only; backend endpoint not yet implemented) -----
+
+  addComment: (auditId, content, author) => {
+    const newComment: AuditComment = {
+      id: crypto.randomUUID(),
+      auditId,
+      content,
+      author,
+      createdAt: new Date().toISOString(),
+      isEdited: false,
+    }
+
+    set((state) => ({
+      audits: state.audits.map((a) =>
+        a.id === auditId
+          ? {
+              ...a,
+              comments: [...(a.comments ?? []), newComment],
+              updatedAt: new Date().toISOString(),
+            }
+          : a,
+      ),
+      byId: state.byId[auditId]
+        ? {
+            ...state.byId,
+            [auditId]: {
+              ...state.byId[auditId],
+              comments: [...(state.byId[auditId].comments ?? []), newComment],
+              updatedAt: new Date().toISOString(),
+            },
+          }
+        : state.byId,
+      selectedAudit:
+        state.selectedAudit?.id === auditId
+          ? {
+              ...state.selectedAudit,
+              comments: [...(state.selectedAudit.comments ?? []), newComment],
+              updatedAt: new Date().toISOString(),
+            }
+          : state.selectedAudit,
+    }))
+
+    const audit = get().byId[auditId]
+    const truncatedComment = `${content.substring(0, 50)}${content.length > 50 ? '...' : ''}`
+    useAuditLogStore.getState().addLog({
+      user: { name: author.name, avatar: author.avatar },
+      action: 'commented',
+      audit: audit?.title ?? '',
+      auditId,
+      description: `Added comment: "${truncatedComment}"`,
+      descriptionKey: 'auditDetail.activityAddedComment',
+      descriptionParams: { comment: truncatedComment },
+      status: 'completed',
+    })
+
+    return newComment
+  },
+
+  editComment: (auditId, commentId, newContent, _editor) => {
+    const now = new Date().toISOString()
+    const patchComment = (c: AuditComment): AuditComment =>
+      c.id === commentId
+        ? { ...c, content: newContent, updatedAt: now, isEdited: true }
+        : c
+
+    set((state) => ({
+      audits: state.audits.map((a) =>
+        a.id === auditId
+          ? { ...a, comments: (a.comments ?? []).map(patchComment), updatedAt: now }
+          : a,
+      ),
+      byId: state.byId[auditId]
+        ? {
+            ...state.byId,
+            [auditId]: {
+              ...state.byId[auditId],
+              comments: (state.byId[auditId].comments ?? []).map(patchComment),
+              updatedAt: now,
+            },
+          }
+        : state.byId,
+      selectedAudit:
+        state.selectedAudit?.id === auditId
+          ? {
+              ...state.selectedAudit,
+              comments: (state.selectedAudit.comments ?? []).map(patchComment),
+              updatedAt: now,
+            }
+          : state.selectedAudit,
+    }))
+
+    const audit = get().byId[auditId]
+    const currentUser = getCurrentUser()
+    const truncatedComment = `${newContent.substring(0, 50)}${newContent.length > 50 ? '...' : ''}`
+    useAuditLogStore.getState().addLog({
+      user: currentUser,
+      action: 'updated',
+      audit: audit?.title ?? '',
+      auditId,
+      description: `Edited comment: "${truncatedComment}"`,
+      descriptionKey: 'auditDetail.activityEditedComment',
+      descriptionParams: { comment: truncatedComment },
+      status: 'completed',
+    })
+  },
+
+  deleteComment: (auditId, commentId, _deleter) => {
+    const audit = get().byId[auditId]
+    const comment = audit?.comments?.find((c) => c.id === commentId)
+    const now = new Date().toISOString()
+
+    set((state) => ({
+      audits: state.audits.map((a) =>
+        a.id === auditId
+          ? {
+              ...a,
+              comments: (a.comments ?? []).filter((c) => c.id !== commentId),
+              updatedAt: now,
+            }
+          : a,
+      ),
+      byId: state.byId[auditId]
+        ? {
+            ...state.byId,
+            [auditId]: {
+              ...state.byId[auditId],
+              comments: (state.byId[auditId].comments ?? []).filter((c) => c.id !== commentId),
+              updatedAt: now,
+            },
+          }
+        : state.byId,
+      selectedAudit:
+        state.selectedAudit?.id === auditId
+          ? {
+              ...state.selectedAudit,
+              comments: (state.selectedAudit.comments ?? []).filter((c) => c.id !== commentId),
+              updatedAt: now,
+            }
+          : state.selectedAudit,
+    }))
+
+    const currentUser = getCurrentUser()
+    const truncatedComment = `${comment?.content.substring(0, 30) ?? ''}...`
+    useAuditLogStore.getState().addLog({
+      user: currentUser,
+      action: 'updated',
+      audit: audit?.title ?? '',
+      auditId,
+      description: `Deleted comment: "${truncatedComment}"`,
+      descriptionKey: 'auditDetail.activityDeletedComment',
+      descriptionParams: { comment: truncatedComment },
+      status: 'completed',
+    })
+  },
+
+  // ---- status -------------------------------------------------------------
+
+  updateStatus: async (auditId, newStatus, _user) => {
+    requirePermission('Manage Audit Findings', {
+      storeName: 'audit',
+      actionName: `updateStatus:${newStatus}`,
+      id: auditId,
+    })
+    const audit = get().byId[auditId]
+    const oldStatus = audit?.status
+
+    try {
+      if (newStatus === 'in_progress') {
+        await get().start(auditId)
+      } else if (newStatus === 'completed') {
+        await get().complete(auditId)
+      } else {
+        // Fall back to a generic PATCH for non-transition statuses (e.g. resetting to pending).
+        await get().update(auditId, { status: newStatus })
+      }
+    } catch (e) {
+      // The underlying action already set `error`; rethrow nothing — the
+      // caller fires a toast on its own path.
+      set({ error: errorMessage(e, 'Failed to update status') })
+      return
+    }
+
+    // Compliance-engine logging mirrors the legacy implementation: tag closes
+    // that landed past the due date so dashboards highlight them.
+    const isOverdue = audit?.dueDate ? new Date(audit.dueDate) < new Date() : false
+    const isClosingOverdue = newStatus === 'completed' && isOverdue
+
+    const currentUser = getCurrentUser()
+    const statusLabels: Record<string, string> = {
+      pending: 'Pending',
+      in_progress: 'In Progress',
+      completed: 'Completed',
+      overdue: 'Overdue',
+    }
+    const dueDate = audit?.dueDate ? new Date(audit.dueDate).toLocaleDateString() : 'earlier'
+    const description = isClosingOverdue
+      ? `Closed audit as overdue (was due ${dueDate})`
+      : `Changed status from ${statusLabels[oldStatus ?? 'pending']} to ${statusLabels[newStatus]}`
+
+    const descriptionKey = isClosingOverdue
+      ? 'auditDetail.activityClosedOverdue'
+      : 'auditDetail.activityStatusChanged'
+
+    const descriptionParams: Record<string, string> = isClosingOverdue
+      ? { date: dueDate }
+      : { from: oldStatus ?? 'pending', to: newStatus }
+
+    useAuditLogStore.getState().addLog({
+      user: currentUser,
+      action: 'updated',
+      audit: audit?.title ?? '',
+      auditId,
+      description,
+      descriptionKey,
+      descriptionParams,
+      status: 'completed',
+    })
+  },
+
+  // ---- UI helpers ---------------------------------------------------------
+
+  setFilters: (filters) => set({ filters }),
+  clearFilters: () => set({ filters: {} }),
+  setSelected: (audit) => set({ selectedAudit: audit }),
+  setSort: (sort) => set({ sort }),
+  setPage: (page) => set((state) => ({ pagination: { ...state.pagination, page } })),
+  setPageSize: (pageSize) =>
+    set((state) => ({
+      pagination: {
+        ...state.pagination,
+        pageSize,
+        totalPages: pageSize > 0 ? Math.max(1, Math.ceil(state.pagination.total / pageSize)) : 1,
+      },
+    })),
+  clearError: () => set({ error: null }),
+}))

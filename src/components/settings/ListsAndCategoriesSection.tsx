@@ -74,7 +74,7 @@ interface ListSectionProps {
    * cheaper to compute than the full cross-store reference scan.
    */
   getReferenceCount?: (id: string) => number
-  onAdd: (label: string, labelAr?: string) => string | void
+  onAdd: (label: string, labelAr?: string) => string | void | Promise<string | void>
   onEdit: (id: string, label: string, labelAr?: string) => void
   onDelete: (id: string) => void
   onResetSection?: () => void
@@ -461,10 +461,15 @@ function FrameworkSubCategoryLauncher({ isRTL, t }: FrameworkSubCategoryLauncher
                 isDefault: sc.isDefault,
               }))}
               placeholder={t('listsAndCategories.subCategoriesTitle')}
-              onAdd={(label, labelAr) => {
-                const created = subCategoryStore.add(openFrameworkId, label, labelAr)
-                setHighlight(created.id)
-                return created.id
+              onAdd={async (label, labelAr) => {
+                try {
+                  const created = await subCategoryStore.add(openFrameworkId, label, labelAr)
+                  setHighlight(created.id)
+                  return created.id
+                } catch (err) {
+                  console.error('Failed to add sub-category', err)
+                  return undefined
+                }
               }}
               onEdit={(id, label, labelAr) =>
                 subCategoryStore.update(id, { label, labelAr: labelAr ?? label })

@@ -1,56 +1,110 @@
+// Team store — Phase 5 server-state migration.
+//
+// Server-state backed: profiles, roles, and permissions live in Supabase
+// (`/api/team/members*`, `/api/team/logs`). Local state mirrors the server
+// list so the UI stays snappy between fetches.
+//
+// SKELETON-LOADING NOTE: render a skeleton when
+//   `isLoading && members.length === 0` (first-fetch). Subsequent refetches
+//   keep the prior list visible while `isLoading` flips true.
+//
+// LEGACY-FIELD MAPPING: the TypeScript `TeamMember.role` is the legacy
+// `'officer' | 'manager' | 'admin'` union, while the API uses Supabase role
+// keys (`'viewer' | 'auditor' | 'compliance_officer' | 'org_admin'`). The
+// `roleApiToTs` / `roleTsToApi` helpers translate at the store boundary.
+//
+// CLIENT-ONLY FIELDS: `accessControls`, `burnoutSince`, and `assignments` are
+// not backed by the API yet — they live in store state and are merged into
+// the API-derived members so the existing UI keeps working. Once the matching
+// endpoints ship, swap these to API-backed reads/writes.
+
 import { create } from 'zustand'
-import { persist } from 'zustand/middleware'
 import type { TeamMember, PaginationState, SortState } from '@/types'
 import { STANDARD_PERMISSIONS } from '@/lib/permissions-registry'
 import { requirePermission } from '@/lib/rbac-store-gate'
 import { useUserLogStore } from '@/stores/user-log-store'
+import { api, ApiClientError } from '@/lib/api-client'
 
 // Re-exported for any direct callers (kept for backwards compat).
 export { STANDARD_PERMISSIONS }
 
-function perms(enabled: boolean[]): { label: string; enabled: boolean }[] {
-  return STANDARD_PERMISSIONS.map((label, i) => ({ label, enabled: enabled[i] ?? false }))
+// ---------- role / status translation ---------------------------------------
+
+type TsRole = TeamMember['role'] // 'officer' | 'manager' | 'admin'
+type ApiRole = 'viewer' | 'auditor' | 'compliance_officer' | 'org_admin'
+
+function roleApiToTs(role: string | null | undefined): TsRole {
+  switch (role) {
+    case 'org_admin':
+      return 'admin'
+    case 'compliance_officer':
+      return 'manager'
+    case 'viewer':
+    case 'auditor':
+    default:
+      return 'officer'
+  }
 }
 
-const sampleMembers: TeamMember[] = [
-  {
-    id: '1', name: 'Sarah Connor', email: 'sarah@company.com', role: 'manager', department: 'Compliance', avatar: 'Sarah', workload: 65, status: 'active', joinedAt: '2023-01-15', nationality: 'Saudi',
-    assignments: [
-      { title: 'ISO 27001 Annual Review', dueDate: 'Oct 15, 2024' },
-      { title: 'SOC2 Internal Audit (Q3)', dueDate: 'Oct 30, 2024' },
-    ],
-    accessControls: perms([true, true, true, true, false, true, true]),
-  },
-  {
-    id: '2', name: 'Ahmed Khan', email: 'ahmed@company.com', role: 'manager', department: 'Risk Management', avatar: 'Ahmed', workload: 45, status: 'active', joinedAt: '2023-03-20', nationality: 'Saudi',
-    assignments: [
-      { title: 'Vendor Risk Assessment', dueDate: 'Nov 5, 2024' },
-    ],
-    accessControls: perms([true, true, true, true, false, true, false]),
-  },
-  {
-    id: '3', name: 'Lisa Martinez', email: 'lisa@company.com', role: 'officer', department: 'Legal', avatar: 'Lisa', workload: 80, status: 'active', joinedAt: '2022-11-01', nationality: 'American',
-    assignments: [
-      { title: 'GDPR Compliance Check', dueDate: 'Nov 12, 2024' },
-    ],
-    accessControls: perms([false, false, false, true, true, false, false]),
-  },
-  {
-    id: '4', name: 'Michael Scott', email: 'michael@company.com', role: 'admin', department: 'IT & Cybersecurity', avatar: 'Michael', workload: 55, status: 'active', joinedAt: '2022-06-10', nationality: 'British',
-    assignments: [
-      { title: 'Q4 Compliance Report', dueDate: 'Dec 1, 2024' },
-    ],
-    // Admin role grants every permission via `getEffectivePermissions` regardless,
-    // but we mirror the full set in accessControls so the member-drawer toggles
-    // render as on for transparency.
-    accessControls: perms([true, true, true, true, true, true, true, true, true, true, true, true, true, true, true]),
-  },
-  {
-    id: '5', name: 'Dr. Hassan Ali', email: 'hassan@company.com', role: 'manager', department: 'Compliance', avatar: 'Hassan', workload: 70, status: 'active', joinedAt: '2021-09-05', nationality: 'Saudi',
-    assignments: [],
-    accessControls: perms([true, true, true, false, false, true, true]),
-  },
-]
+function roleTsToApi(role: TsRole): ApiRole {
+  switch (role) {
+    case 'admin':
+      return 'org_admin'
+    case 'manager':
+      return 'compliance_officer'
+    case 'officer':
+    default:
+      return 'auditor'
+  }
+}
+
+// ---------- API row shapes ---------------------------------------------------
+
+interface ProfileApiRow {
+  id: string
+  email: string | null
+  name: string | null
+  role: string | null
+  department_id: string | null
+  phone: string | null
+  avatar_seed: string | null
+  workload: number | null
+  nationality: string | null
+  status: string | null
+  joined_at: string | null
+  last_login: string | null
+  preferred_language: 'en' | 'ar' | null
+  created_at: string
+  updated_at: string
+}
+
+function mapProfileRow(row: ProfileApiRow, previous?: TeamMember): TeamMember {
+  return {
+    id: row.id,
+    name: row.name ?? '',
+    email: row.email ?? '',
+    role: roleApiToTs(row.role),
+    department: row.department_id ?? previous?.department ?? '',
+    avatar: row.avatar_seed ?? previous?.avatar,
+    avatarSeed: row.avatar_seed ?? previous?.avatarSeed,
+    workload: row.workload ?? 0,
+    status: (row.status as TeamMember['status']) ?? 'active',
+    joinedAt: row.joined_at ?? row.created_at,
+    nationality: row.nationality ?? previous?.nationality,
+    // Local-only fields — preserved from prior state until a matching API ships.
+    assignments: previous?.assignments,
+    accessControls: previous?.accessControls,
+    burnoutSince: previous?.burnoutSince,
+  }
+}
+
+function errorMessage(e: unknown, fallback: string): string {
+  if (e instanceof ApiClientError) return e.message
+  if (e instanceof Error) return e.message
+  return fallback
+}
+
+// ---------- store -----------------------------------------------------------
 
 interface TeamFilters {
   role?: TeamMember['role'][]
@@ -61,15 +115,18 @@ interface TeamFilters {
 
 interface TeamState {
   members: TeamMember[]
+  byId: Record<string, TeamMember>
   selectedMember: TeamMember | null
   filters: TeamFilters
   pagination: PaginationState
   sort: SortState
   isLoading: boolean
+  isMutating: boolean
   error: string | null
+  lastFetched: number | null
 
   // Actions
-  fetchAll: () => Promise<void>
+  fetchAll: (opts?: { page?: number; pageSize?: number; filters?: Partial<TeamFilters> }) => Promise<void>
   fetchById: (id: string) => Promise<TeamMember | null>
   invite: (data: { email: string; role: TeamMember['role']; department: string; fullName?: string }) => Promise<TeamMember>
   update: (id: string, data: Partial<TeamMember>) => Promise<TeamMember>
@@ -85,291 +142,301 @@ interface TeamState {
   unassignTask: (memberId: string, assignmentTitle: string) => void
   reassignTask: (fromId: string, toId: string, assignmentTitle: string) => void
   updateBurnoutTimestamps: () => void
+  clearError: () => void
 }
 
-export const useTeamStore = create<TeamState>()(
-  persist(
-    (set, get) => ({
-      members: sampleMembers,
-      selectedMember: null,
-      filters: {},
-      pagination: {
-        page: 1,
-        pageSize: 10,
-        total: 0,
-        totalPages: 0,
-      },
-      sort: {
-        field: 'name',
-        direction: 'asc',
-      },
-      isLoading: false,
-      error: null,
+export const useTeamStore = create<TeamState>()((set, get) => ({
+  members: [],
+  byId: {},
+  selectedMember: null,
+  filters: {},
+  pagination: { page: 1, pageSize: 10, total: 0, totalPages: 0 },
+  sort: { field: 'name', direction: 'asc' },
+  isLoading: false,
+  isMutating: false,
+  error: null,
+  lastFetched: null,
 
-      fetchAll: async () => {
-        set({ isLoading: true, error: null })
-        try {
-          // TODO: Replace with actual API call
-          await new Promise((resolve) => setTimeout(resolve, 500))
+  fetchAll: async (opts) => {
+    const current = get()
+    const page = opts?.page ?? current.pagination.page
+    const pageSize = opts?.pageSize ?? current.pagination.pageSize
+    const filters = opts?.filters ? { ...current.filters, ...opts.filters } : current.filters
 
-          // Mock data for now - will be replaced with API response
-          const mockMembers: TeamMember[] = []
-
-          set({
-            members: mockMembers,
-            pagination: {
-              ...get().pagination,
-              total: mockMembers.length,
-              totalPages: Math.ceil(mockMembers.length / get().pagination.pageSize),
-            },
-            isLoading: false,
-          })
-        } catch (error) {
-          set({
-            error: error instanceof Error ? error.message : 'Failed to fetch team members',
-            isLoading: false,
-          })
-        }
-      },
-
-      fetchById: async (id: string) => {
-        set({ isLoading: true, error: null })
-        try {
-          // TODO: Replace with actual API call
-          await new Promise((resolve) => setTimeout(resolve, 300))
-
-          const member = get().members.find((m) => m.id === id) || null
-          set({ selectedMember: member, isLoading: false })
-          return member
-        } catch (error) {
-          set({
-            error: error instanceof Error ? error.message : 'Failed to fetch team member',
-            isLoading: false,
-          })
-          return null
-        }
-      },
-
-      invite: async (data) => {
-        const actor = requirePermission('Manage Team & Permissions', { storeName: 'team', actionName: 'invite' })
-        set({ isLoading: true, error: null })
-        try {
-          // TODO: Replace with actual API call
-          await new Promise((resolve) => setTimeout(resolve, 500))
-
-          const newMember: TeamMember = {
-            id: crypto.randomUUID(),
-            name: data.fullName || data.email.split('@')[0], // Placeholder name from email
-            email: data.email,
-            role: data.role,
-            department: data.department,
-            workload: 0,
-            status: 'pending',
-            joinedAt: new Date().toISOString(),
-          }
-
-          set((state) => ({
-            members: [...state.members, newMember],
-            isLoading: false,
-          }))
-
-          // RBAC-025: audit log a successful invite.
-          useUserLogStore.getState().log({
-            userId: actor.id,
-            action: 'team.member_invited',
-            target: newMember.id,
-            metadata: { email: data.email, role: data.role, department: data.department },
-          })
-
-          return newMember
-        } catch (error) {
-          set({
-            error: error instanceof Error ? error.message : 'Failed to invite team member',
-            isLoading: false,
-          })
-          throw error
-        }
-      },
-
-      update: async (id: string, data: Partial<TeamMember>) => {
-        requirePermission('Manage Team & Permissions', { storeName: 'team', actionName: 'update', id })
-        set({ isLoading: true, error: null })
-        try {
-          // TODO: Replace with actual API call
-          await new Promise((resolve) => setTimeout(resolve, 500))
-
-          let updatedMember: TeamMember | null = null
-
-          set((state) => ({
-            members: state.members.map((m) => {
-              if (m.id === id) {
-                updatedMember = { ...m, ...data }
-                return updatedMember
-              }
-              return m
-            }),
-            selectedMember:
-              state.selectedMember?.id === id
-                ? { ...state.selectedMember, ...data }
-                : state.selectedMember,
-            isLoading: false,
-          }))
-
-          if (!updatedMember) {
-            throw new Error('Team member not found')
-          }
-
-          return updatedMember
-        } catch (error) {
-          set({
-            error: error instanceof Error ? error.message : 'Failed to update team member',
-            isLoading: false,
-          })
-          throw error
-        }
-      },
-
-      updateRole: (memberId: string, newRole: TeamMember['role']) => {
-        const actor = requirePermission('Manage Team & Permissions', { storeName: 'team', actionName: `updateRole:${newRole}`, id: memberId })
-        set((state) => ({
-          members: state.members.map((m) =>
-            m.id === memberId ? { ...m, role: newRole } : m
-          ),
-          selectedMember:
-            state.selectedMember?.id === memberId
-              ? { ...state.selectedMember, role: newRole }
-              : state.selectedMember,
-        }))
-        // RBAC-025: audit log the role change.
-        useUserLogStore.getState().log({
-          userId: actor.id,
-          action: 'team.member_role_changed',
-          target: memberId,
-          metadata: { newRole },
-        })
-      },
-
-      remove: async (id: string) => {
-        const actor = requirePermission('Manage Team & Permissions', { storeName: 'team', actionName: 'remove', id })
-        // RBAC-025: log BEFORE the mutation so the target id is still resolvable.
-        useUserLogStore.getState().log({
-          userId: actor.id,
-          action: 'team.member_removed',
-          target: id,
-        })
-        set({ isLoading: true, error: null })
-        try {
-          // TODO: Replace with actual API call
-          await new Promise((resolve) => setTimeout(resolve, 500))
-
-          set((state) => ({
-            members: state.members.filter((m) => m.id !== id),
-            selectedMember: state.selectedMember?.id === id ? null : state.selectedMember,
-            isLoading: false,
-          }))
-        } catch (error) {
-          set({
-            error: error instanceof Error ? error.message : 'Failed to remove team member',
-            isLoading: false,
-          })
-          throw error
-        }
-      },
-
-      resendInvite: async (_id: string) => {
-        set({ isLoading: true, error: null })
-        try {
-          // TODO: Replace with actual API call
-          await new Promise((resolve) => setTimeout(resolve, 500))
-          set({ isLoading: false })
-        } catch (error) {
-          set({
-            error: error instanceof Error ? error.message : 'Failed to resend invite',
-            isLoading: false,
-          })
-          throw error
-        }
-      },
-
-      setFilters: (filters) => set({ filters }),
-      clearFilters: () => set({ filters: {} }),
-      setSelected: (member) => set({ selectedMember: member }),
-      setSort: (sort) => set({ sort }),
-      setPage: (page) => set((state) => ({ pagination: { ...state.pagination, page } })),
-      setPageSize: (pageSize) =>
-        set((state) => ({
-          pagination: {
-            ...state.pagination,
-            pageSize,
-            totalPages: Math.ceil(state.pagination.total / pageSize),
-          },
-        })),
-
-      unassignTask: (memberId, assignmentTitle) => {
-        requirePermission('Manage Team & Permissions', { storeName: 'team', actionName: 'unassignTask', id: memberId })
-        set((state) => ({
-          members: state.members.map((m) =>
-            m.id === memberId
-              ? { ...m, assignments: (m.assignments || []).filter((a) => a.title !== assignmentTitle) }
-              : m
-          ),
-        }))
-      },
-
-      reassignTask: (fromId, toId, assignmentTitle) => {
-        requirePermission('Manage Team & Permissions', { storeName: 'team', actionName: `reassignTask:${fromId}->${toId}` })
-        set((state) => {
-          const fromMember = state.members.find((m) => m.id === fromId)
-          const assignment = fromMember?.assignments?.find((a) => a.title === assignmentTitle)
-          if (!assignment) return state
-          return {
-            members: state.members.map((m) => {
-              if (m.id === fromId) return { ...m, assignments: (m.assignments || []).filter((a) => a.title !== assignmentTitle) }
-              if (m.id === toId) return { ...m, assignments: [...(m.assignments || []), assignment] }
-              return m
-            }),
-          }
-        })
-      },
-
-      updateBurnoutTimestamps: () =>
-        set((state) => ({
-          members: state.members.map((m) => {
-            const workloadPct = m.workload
-            if (workloadPct >= 75) {
-              return { ...m, burnoutSince: m.burnoutSince || new Date().toISOString() }
-            }
-            return { ...m, burnoutSince: undefined }
-          }),
-        })),
-    }),
-    {
-      name: 'team-storage',
-      version: 3,
-      partialize: (state) => ({ members: state.members }),
-      migrate: (persisted: unknown, version: number) => {
-        const state = persisted as { members?: TeamMember[] }
-        if (version < 2 && state.members) {
-          state.members = state.members.map((m) => {
-            const seed = sampleMembers.find((s) => s.id === m.id)
-            return {
-              ...m,
-              accessControls: seed?.accessControls ?? perms([false, false, false, false, false, false, false]),
-            }
-          })
-        }
-        if (version < 3) {
-          const seedMap = new Map(sampleMembers.map(m => [m.id, m]))
-          state.members = (state.members ?? sampleMembers).map(m => {
-            const seed = seedMap.get(m.id)
-            if (seed && (!m.assignments || m.assignments.length === 0)) {
-              return { ...m, assignments: seed.assignments }
-            }
-            return m
-          })
-        }
-        return state as TeamState
-      },
+    set({ isLoading: true, error: null })
+    try {
+      const result = await api.get<{
+        items: ProfileApiRow[]
+        page: number
+        pageSize: number
+        total: number
+        totalPages: number
+      }>('/team/members', {
+        page,
+        pageSize,
+        role: filters.role?.[0] ? roleTsToApi(filters.role[0]) : undefined,
+        status: filters.status?.[0],
+        q: filters.search,
+      })
+      const previousById = get().byId
+      const members = result.items.map((row) => mapProfileRow(row, previousById[row.id]))
+      const byId: Record<string, TeamMember> = {}
+      for (const m of members) byId[m.id] = m
+      set({
+        members,
+        byId,
+        pagination: {
+          page: result.page,
+          pageSize: result.pageSize,
+          total: result.total,
+          totalPages: result.totalPages,
+        },
+        filters,
+        isLoading: false,
+        lastFetched: Date.now(),
+      })
+    } catch (e) {
+      set({ error: errorMessage(e, 'Failed to fetch team members'), isLoading: false })
     }
-  )
-)
+  },
+
+  fetchById: async (id) => {
+    set({ isLoading: true, error: null })
+    try {
+      const row = await api.get<ProfileApiRow>(`/team/members/${id}`)
+      const member = mapProfileRow(row, get().byId[id])
+      set((s) => ({
+        byId: { ...s.byId, [id]: member },
+        members: s.members.some((m) => m.id === id) ? s.members.map((m) => (m.id === id ? member : m)) : s.members,
+        selectedMember: member,
+        isLoading: false,
+        lastFetched: Date.now(),
+      }))
+      return member
+    } catch (e) {
+      set({ error: errorMessage(e, 'Failed to fetch team member'), isLoading: false })
+      if (e instanceof ApiClientError && e.code === 'not_found') return null
+      return null
+    }
+  },
+
+  invite: async (data) => {
+    const actor = requirePermission('Manage Team & Permissions', { storeName: 'team', actionName: 'invite' })
+    set({ isMutating: true, error: null })
+    try {
+      const row = await api.post<{
+        id: string
+        email: string
+        name: string
+        role: string
+        status: string
+      }>('/team/members/invite', {
+        email: data.email,
+        name: data.fullName || data.email.split('@')[0],
+        role_key: roleTsToApi(data.role),
+        // The route expects a UUID; pass undefined if the caller hasn't
+        // resolved one yet (legacy `department` is a free-form string).
+        department_id: undefined,
+      })
+      const newMember: TeamMember = {
+        id: row.id,
+        name: row.name,
+        email: row.email,
+        role: roleApiToTs(row.role),
+        department: data.department,
+        workload: 0,
+        status: (row.status as TeamMember['status']) ?? 'pending',
+        joinedAt: new Date().toISOString(),
+      }
+      set((s) => ({
+        members: [...s.members, newMember],
+        byId: { ...s.byId, [newMember.id]: newMember },
+        isMutating: false,
+      }))
+
+      useUserLogStore.getState().log({
+        userId: actor.id,
+        action: 'team.member_invited',
+        target: newMember.id,
+        metadata: { email: data.email, role: data.role, department: data.department },
+      })
+      return newMember
+    } catch (e) {
+      // The invite endpoint returns 503 when `SUPABASE_SERVICE_ROLE_KEY` is
+      // unset. Surface the message verbatim so the toast tells the operator
+      // what to configure.
+      const message = errorMessage(e, 'Failed to invite team member')
+      set({ error: message, isMutating: false })
+      throw e
+    }
+  },
+
+  update: async (id, data) => {
+    requirePermission('Manage Team & Permissions', { storeName: 'team', actionName: 'update', id })
+    set({ isMutating: true, error: null })
+    try {
+      const body: Record<string, unknown> = {}
+      if (data.name !== undefined) body.name = data.name
+      if (data.phone !== undefined) body.phone = data.phone
+      if (data.role !== undefined) body.role = roleTsToApi(data.role)
+      if (data.status !== undefined) body.status = data.status
+      if (data.workload !== undefined) body.workload = data.workload
+      if (data.nationality !== undefined) body.nationality = data.nationality
+      if (data.avatarSeed !== undefined) body.avatar_seed = data.avatarSeed
+
+      let updated: TeamMember
+      if (Object.keys(body).length > 0) {
+        const row = await api.patch<ProfileApiRow>(`/team/members/${id}`, body)
+        updated = mapProfileRow(row, get().byId[id])
+      } else {
+        // Local-only fields (assignments/accessControls/burnoutSince) — patch
+        // in-memory without hitting the API.
+        const existing = get().byId[id]
+        if (!existing) throw new Error('Team member not found')
+        updated = { ...existing }
+      }
+
+      // Merge client-only fields the API doesn't yet persist.
+      if (data.assignments !== undefined) updated.assignments = data.assignments
+      if (data.accessControls !== undefined) updated.accessControls = data.accessControls
+      if (data.burnoutSince !== undefined) updated.burnoutSince = data.burnoutSince
+      if (data.department !== undefined) updated.department = data.department
+      if (data.avatar !== undefined) updated.avatar = data.avatar
+
+      set((s) => ({
+        members: s.members.map((m) => (m.id === id ? updated : m)),
+        byId: { ...s.byId, [id]: updated },
+        selectedMember: s.selectedMember?.id === id ? updated : s.selectedMember,
+        isMutating: false,
+      }))
+      return updated
+    } catch (e) {
+      set({ error: errorMessage(e, 'Failed to update team member'), isMutating: false })
+      throw e
+    }
+  },
+
+  updateRole: (memberId, newRole) => {
+    const actor = requirePermission('Manage Team & Permissions', {
+      storeName: 'team',
+      actionName: `updateRole:${newRole}`,
+      id: memberId,
+    })
+    // Optimistic update; PATCH /team/members/[userId] in the background.
+    set((state) => ({
+      members: state.members.map((m) => (m.id === memberId ? { ...m, role: newRole } : m)),
+      byId: state.byId[memberId]
+        ? { ...state.byId, [memberId]: { ...state.byId[memberId], role: newRole } }
+        : state.byId,
+      selectedMember:
+        state.selectedMember?.id === memberId
+          ? { ...state.selectedMember, role: newRole }
+          : state.selectedMember,
+      isMutating: true,
+      error: null,
+    }))
+    void (async () => {
+      try {
+        await api.patch(`/team/members/${memberId}`, { role: roleTsToApi(newRole) })
+        set({ isMutating: false })
+      } catch (e) {
+        set({ error: errorMessage(e, 'Failed to update role'), isMutating: false })
+      }
+    })()
+    useUserLogStore.getState().log({
+      userId: actor.id,
+      action: 'team.member_role_changed',
+      target: memberId,
+      metadata: { newRole },
+    })
+  },
+
+  remove: async (id) => {
+    const actor = requirePermission('Manage Team & Permissions', { storeName: 'team', actionName: 'remove', id })
+    useUserLogStore.getState().log({
+      userId: actor.id,
+      action: 'team.member_removed',
+      target: id,
+    })
+    set({ isMutating: true, error: null })
+    try {
+      await api.delete(`/team/members/${id}`)
+      set((s) => {
+        const { [id]: _drop, ...rest } = s.byId
+        return {
+          members: s.members.filter((m) => m.id !== id),
+          byId: rest,
+          selectedMember: s.selectedMember?.id === id ? null : s.selectedMember,
+          isMutating: false,
+        }
+      })
+    } catch (e) {
+      set({ error: errorMessage(e, 'Failed to remove team member'), isMutating: false })
+      throw e
+    }
+  },
+
+  resendInvite: async (_id) => {
+    // No dedicated endpoint yet — the invite route always sends the recovery
+    // email on first invite. Keep this as a noop so callers compile.
+    set({ isMutating: false, error: null })
+  },
+
+  setFilters: (filters) => set({ filters }),
+  clearFilters: () => set({ filters: {} }),
+  setSelected: (member) => set({ selectedMember: member }),
+  setSort: (sort) => set({ sort }),
+  setPage: (page) => set((state) => ({ pagination: { ...state.pagination, page } })),
+  setPageSize: (pageSize) =>
+    set((state) => ({
+      pagination: {
+        ...state.pagination,
+        pageSize,
+        totalPages: Math.max(1, Math.ceil(state.pagination.total / pageSize)),
+      },
+    })),
+
+  unassignTask: (memberId, assignmentTitle) => {
+    requirePermission('Manage Team & Permissions', { storeName: 'team', actionName: 'unassignTask', id: memberId })
+    set((state) => ({
+      members: state.members.map((m) =>
+        m.id === memberId
+          ? { ...m, assignments: (m.assignments || []).filter((a) => a.title !== assignmentTitle) }
+          : m,
+      ),
+    }))
+  },
+
+  reassignTask: (fromId, toId, assignmentTitle) => {
+    requirePermission('Manage Team & Permissions', { storeName: 'team', actionName: `reassignTask:${fromId}->${toId}` })
+    set((state) => {
+      const fromMember = state.members.find((m) => m.id === fromId)
+      const assignment = fromMember?.assignments?.find((a) => a.title === assignmentTitle)
+      if (!assignment) return state
+      return {
+        members: state.members.map((m) => {
+          if (m.id === fromId) {
+            return { ...m, assignments: (m.assignments || []).filter((a) => a.title !== assignmentTitle) }
+          }
+          if (m.id === toId) {
+            return { ...m, assignments: [...(m.assignments || []), assignment] }
+          }
+          return m
+        }),
+      }
+    })
+  },
+
+  updateBurnoutTimestamps: () =>
+    set((state) => ({
+      members: state.members.map((m) => {
+        const workloadPct = m.workload
+        if (workloadPct >= 75) {
+          return { ...m, burnoutSince: m.burnoutSince || new Date().toISOString() }
+        }
+        return { ...m, burnoutSince: undefined }
+      }),
+    })),
+
+  clearError: () => set({ error: null }),
+}))

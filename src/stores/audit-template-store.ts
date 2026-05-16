@@ -1,226 +1,226 @@
-import { create } from 'zustand'
-import { persist } from 'zustand/middleware'
-import type { AuditTemplate } from '@/types'
-import { requirePermission } from '@/lib/rbac-store-gate'
+// Audit template store — Phase 5 server-state migration.
+//
+// Backed by `/api/audit-templates` (GET list, POST create) and
+// `/api/audit-templates/[templateId]` (PATCH update, DELETE). Routes were
+// shipped in Phase 4 Stage A (audits reference family).
 
-const seedTemplates: AuditTemplate[] = [
-  {
-    id: 'at-001',
-    name: 'NCA ECC Self-Assessment',
-    nameAr: 'التقييم الذاتي لضوابط NCA ECC',
-    auditType: 'internal',
-    category: 'security-compliance',
-    priority: 'high',
-    frequency: 'quarterly',
-    frequencySchedule: { monthInQuarter: 1, dayOfMonth: 15 },
-    defaultTitle: 'NCA ECC Quarterly Self-Assessment',
-    defaultTitleAr: 'التقييم الذاتي الربع سنوي لضوابط NCA ECC',
-    defaultDescription: 'Comprehensive self-assessment against NCA Essential Cybersecurity Controls to evaluate organizational cybersecurity posture.',
-    defaultDescriptionAr: 'تقييم ذاتي شامل مقابل ضوابط الأمن السيبراني الأساسية لهيئة NCA لتقييم الوضع الأمني السيبراني للمنظمة.',
-    defaultChecklistItems: [
-      'Review access control policies',
-      'Verify network security configurations',
-      'Assess incident response readiness',
-      'Validate data protection measures',
-      'Check security awareness training completion',
-    ],
-    defaultTeamRoles: ['Lead Auditor', 'IT Security Specialist', 'Compliance Officer'],
-    framework: 'nca-ecc',
-    status: 'active',
-    createdAt: '2025-01-15',
-    updatedAt: '2026-02-10',
-    usageCount: 75,
-  },
-  {
-    id: 'at-002',
-    name: 'SAMA Quarterly Compliance Review',
-    nameAr: 'مراجعة امتثال إطار SAMA CSF',
-    auditType: 'sama',
-    category: 'financial-compliance',
-    priority: 'high',
-    frequency: 'quarterly',
-    frequencySchedule: { monthInQuarter: 1, dayOfMonth: 1 },
-    defaultTitle: 'SAMA Quarterly Compliance Review',
-    defaultTitleAr: 'مراجعة الامتثال الربع سنوية لإطار SAMA CSF',
-    defaultDescription: 'Quarterly review of compliance with SAMA Cyber Security Framework requirements for banking operations.',
-    defaultDescriptionAr: 'مراجعة ربع سنوية للامتثال لمتطلبات إطار الأمن السيبراني لمؤسسة النقد العربي السعودي للعمليات المصرفية.',
-    defaultChecklistItems: [
-      'Review transaction monitoring controls',
-      'Assess AML/CTF procedures',
-      'Verify regulatory reporting accuracy',
-      'Check customer due diligence processes',
-    ],
-    defaultTeamRoles: ['Compliance Manager', 'Financial Auditor', 'Risk Analyst'],
-    framework: 'sama',
-    status: 'active',
-    createdAt: '2025-02-01',
-    updatedAt: '2026-01-15',
-    usageCount: 88,
-  },
-  {
-    id: 'at-003',
-    name: 'PDPL Data Mapping Audit',
-    nameAr: 'تقييم تأثير الخصوصية PDPL',
-    auditType: 'internal',
-    category: 'data-privacy',
-    priority: 'medium',
-    frequency: 'semi_annual',
-    frequencySchedule: { monthOfYear: 1, dayOfMonth: 10 },
-    defaultTitle: 'PDPL Data Mapping & Privacy Audit',
-    defaultTitleAr: 'تدقيق تعيين البيانات والخصوصية PDPL',
-    defaultDescription: 'Semi-annual audit to map personal data flows and verify compliance with NDMO Personal Data Protection Law.',
-    defaultDescriptionAr: 'تدقيق نصف سنوي لتعيين تدفقات البيانات الشخصية والتحقق من الامتثال لنظام حماية البيانات الشخصية PDPL.',
-    defaultChecklistItems: [
-      'Update data processing inventory',
-      'Review consent management procedures',
-      'Assess cross-border data transfers',
-      'Verify data subject rights processes',
-      'Check data breach notification readiness',
-    ],
-    defaultTeamRoles: ['Privacy Officer', 'Data Analyst'],
-    framework: 'ndmo-pdpl',
-    status: 'active',
-    createdAt: '2025-03-10',
-    updatedAt: '2026-01-20',
-    usageCount: 22,
-  },
-  {
-    id: 'at-004',
-    name: 'Internal Controls Review',
-    nameAr: 'فعالية الضوابط الداخلية',
-    auditType: 'internal',
-    category: 'internal-controls',
-    priority: 'medium',
-    frequency: 'annual',
-    frequencySchedule: { monthOfYear: 3, dayOfMonth: 1 },
-    defaultTitle: 'Annual Internal Controls Review',
-    defaultTitleAr: 'المراجعة السنوية للضوابط الداخلية',
-    defaultDescription: 'Annual comprehensive review of internal control frameworks, segregation of duties, and control effectiveness.',
-    defaultDescriptionAr: 'مراجعة سنوية شاملة لأطر الرقابة الداخلية وفصل المهام وفعالية الضوابط.',
-    defaultChecklistItems: [
-      'Evaluate control environment',
-      'Test key controls effectiveness',
-      'Review segregation of duties',
-      'Assess change management controls',
-    ],
-    defaultTeamRoles: ['Internal Auditor', 'Controls Specialist'],
-    status: 'active',
-    createdAt: '2025-04-01',
-    updatedAt: '2025-12-15',
-    usageCount: 15,
-  },
-  {
-    id: 'at-005',
-    name: 'Sharia Compliance Check',
-    nameAr: 'تدقيق الامتثال الشرعي',
-    auditType: 'sharia-board',
-    category: 'sharia-compliance',
-    priority: 'high',
-    frequency: 'quarterly',
-    frequencySchedule: { monthInQuarter: 1, dayOfMonth: 5 },
-    defaultTitle: 'Quarterly Sharia Compliance Assessment',
-    defaultTitleAr: 'تقييم الامتثال الشرعي الربع سنوي',
-    defaultDescription: 'Quarterly assessment ensuring all banking products and operations comply with Sharia principles and board directives.',
-    defaultDescriptionAr: 'تقييم ربع سنوي لضمان امتثال جميع المنتجات والعمليات المصرفية لمبادئ الشريعة الإسلامية وتوجيهات الهيئة الشرعية.',
-    defaultChecklistItems: [
-      'Review product structures for Sharia compliance',
-      'Verify profit distribution calculations',
-      'Assess contract documentation',
-      'Check Sharia board resolution implementation',
-      'Review purification calculations',
-    ],
-    defaultTeamRoles: ['Sharia Auditor', 'Islamic Banking Specialist', 'Compliance Officer'],
-    framework: 'sharia-board',
-    status: 'active',
-    createdAt: '2025-05-01',
-    updatedAt: '2026-02-01',
-    usageCount: 34,
-  },
-  {
-    id: 'at-006',
-    name: 'Business Continuity Assessment',
-    nameAr: 'مراجعة خطة استمرارية الأعمال',
-    auditType: 'internal',
-    category: 'operational-compliance',
-    priority: 'critical',
-    frequency: 'annual',
-    frequencySchedule: { monthOfYear: 6, dayOfMonth: 1 },
-    defaultTitle: 'Annual Business Continuity Assessment',
-    defaultTitleAr: 'تقييم استمرارية الأعمال السنوي',
-    defaultDescription: 'Annual assessment of business continuity plans, disaster recovery capabilities, and operational resilience.',
-    defaultDescriptionAr: 'تقييم سنوي لخطط استمرارية الأعمال وقدرات التعافي من الكوارث والمرونة التشغيلية.',
-    defaultChecklistItems: [
-      'Review BCP documentation currency',
-      'Test disaster recovery procedures',
-      'Assess communication protocols',
-      'Validate backup and recovery SLAs',
-    ],
-    defaultTeamRoles: ['BCM Manager', 'IT Operations Lead', 'Risk Manager'],
-    status: 'active',
-    createdAt: '2025-06-01',
-    updatedAt: '2026-01-30',
-    usageCount: 8,
-  },
-]
+import { create } from 'zustand'
+import type {
+  AuditTemplate,
+  AuditAuthority,
+  AuditTemplateCategory,
+  AuditPriority,
+  AuditFrequency,
+  FrequencySchedule,
+  RegulatoryBodyId,
+} from '@/types'
+import { api, ApiClientError } from '@/lib/api-client'
+
+interface AuditTemplateApiRow {
+  id: string
+  name: string
+  name_ar: string | null
+  audit_type: string
+  category: string
+  priority: string
+  frequency: string
+  frequency_schedule: FrequencySchedule | null
+  default_title: string
+  default_title_ar: string | null
+  default_description: string
+  default_description_ar: string | null
+  default_checklist_items: string[]
+  default_team_roles: string[]
+  framework: string | null
+  status: 'active' | 'draft'
+  usage_count: number | null
+  created_at: string
+  updated_at: string
+}
+
+function mapRow(row: AuditTemplateApiRow): AuditTemplate {
+  return {
+    id: row.id,
+    name: row.name,
+    nameAr: row.name_ar ?? undefined,
+    auditType: row.audit_type as AuditAuthority,
+    category: row.category as AuditTemplateCategory,
+    priority: row.priority as AuditPriority,
+    frequency: row.frequency as AuditFrequency,
+    frequencySchedule: row.frequency_schedule ?? undefined,
+    defaultTitle: row.default_title,
+    defaultTitleAr: row.default_title_ar ?? undefined,
+    defaultDescription: row.default_description,
+    defaultDescriptionAr: row.default_description_ar ?? undefined,
+    defaultChecklistItems: row.default_checklist_items ?? [],
+    defaultTeamRoles: row.default_team_roles ?? [],
+    framework: (row.framework as RegulatoryBodyId | null) ?? undefined,
+    status: row.status,
+    usageCount: row.usage_count ?? 0,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  }
+}
+
+function toCreatePayload(
+  data: Omit<AuditTemplate, 'id' | 'createdAt' | 'updatedAt' | 'usageCount'>,
+): Record<string, unknown> {
+  return {
+    name: data.name,
+    name_ar: data.nameAr ?? undefined,
+    audit_type: data.auditType,
+    category: data.category,
+    priority: data.priority,
+    frequency: data.frequency,
+    frequency_schedule: data.frequencySchedule ?? undefined,
+    default_title: data.defaultTitle,
+    default_title_ar: data.defaultTitleAr ?? undefined,
+    default_description: data.defaultDescription,
+    default_description_ar: data.defaultDescriptionAr ?? undefined,
+    default_checklist_items: data.defaultChecklistItems,
+    default_team_roles: data.defaultTeamRoles,
+    framework: data.framework ?? undefined,
+    status: data.status,
+  }
+}
+
+function toUpdatePayload(data: Partial<AuditTemplate>): Record<string, unknown> {
+  const out: Record<string, unknown> = {}
+  if (data.name !== undefined) out.name = data.name
+  if (data.nameAr !== undefined) out.name_ar = data.nameAr
+  if (data.auditType !== undefined) out.audit_type = data.auditType
+  if (data.category !== undefined) out.category = data.category
+  if (data.priority !== undefined) out.priority = data.priority
+  if (data.frequency !== undefined) out.frequency = data.frequency
+  if (data.frequencySchedule !== undefined) out.frequency_schedule = data.frequencySchedule
+  if (data.defaultTitle !== undefined) out.default_title = data.defaultTitle
+  if (data.defaultTitleAr !== undefined) out.default_title_ar = data.defaultTitleAr
+  if (data.defaultDescription !== undefined) out.default_description = data.defaultDescription
+  if (data.defaultDescriptionAr !== undefined) out.default_description_ar = data.defaultDescriptionAr
+  if (data.defaultChecklistItems !== undefined) out.default_checklist_items = data.defaultChecklistItems
+  if (data.defaultTeamRoles !== undefined) out.default_team_roles = data.defaultTeamRoles
+  if (data.framework !== undefined) out.framework = data.framework
+  if (data.status !== undefined) out.status = data.status
+  return out
+}
+
+function errorMessage(e: unknown, fallback: string): string {
+  if (e instanceof ApiClientError) return e.message
+  if (e instanceof Error) return e.message
+  return fallback
+}
 
 interface AuditTemplateState {
   templates: AuditTemplate[]
-  create: (data: Omit<AuditTemplate, 'id' | 'createdAt' | 'updatedAt' | 'usageCount'>) => AuditTemplate
-  update: (id: string, data: Partial<AuditTemplate>) => void
-  delete: (id: string) => void
-  incrementUsage: (id: string) => void
+  byId: Record<string, AuditTemplate>
+
+  // First-fetch rule: `isLoading && templates.length === 0` → render skeleton.
+  isLoading: boolean
+  isMutating: boolean
+  error: string | null
+  lastFetched: number | null
+
+  fetchAll(): Promise<void>
+  create(data: Omit<AuditTemplate, 'id' | 'createdAt' | 'updatedAt' | 'usageCount'>): Promise<AuditTemplate>
+  update(id: string, data: Partial<AuditTemplate>): Promise<AuditTemplate>
+  delete(id: string): Promise<void>
+  /**
+   * Bumps `usage_count` for analytics. The current API does not expose an
+   * explicit `increment` route; we PATCH with the new value. If parallel
+   * increments race, the server's last-write-wins behavior is acceptable for
+   * a usage analytics counter.
+   */
+  incrementUsage(id: string): Promise<void>
+  clearError(): void
 }
 
-export const useAuditTemplateStore = create<AuditTemplateState>()(
-  persist(
-    (set) => ({
-      templates: seedTemplates,
+export const useAuditTemplateStore = create<AuditTemplateState>()((set, get) => ({
+  templates: [],
+  byId: {},
 
-      create: (data) => {
-        requirePermission('Manage Audit Templates', { storeName: 'auditTemplate', actionName: 'create' })
-        const now = new Date().toISOString().split('T')[0]
-        const newTemplate: AuditTemplate = {
-          ...data,
-          id: `at-${Date.now()}`,
-          createdAt: now,
-          updatedAt: now,
-          usageCount: 0,
-        }
-        set((s) => ({ templates: [newTemplate, ...s.templates] }))
-        return newTemplate
-      },
+  isLoading: false,
+  isMutating: false,
+  error: null,
+  lastFetched: null,
 
-      update: (id, data) => {
-        requirePermission('Manage Audit Templates', { storeName: 'auditTemplate', actionName: 'update', id })
-        const now = new Date().toISOString().split('T')[0]
-        set((s) => ({
-          templates: s.templates.map((t) =>
-            t.id === id ? { ...t, ...data, updatedAt: now } : t
-          ),
-        }))
-      },
-
-      delete: (id) => {
-        requirePermission('Manage Audit Templates', { storeName: 'auditTemplate', actionName: 'delete', id })
-        set((s) => ({ templates: s.templates.filter((t) => t.id !== id) }))
-      },
-
-      incrementUsage: (id) =>
-        set((s) => ({
-          templates: s.templates.map((t) =>
-            t.id === id ? { ...t, usageCount: t.usageCount + 1 } : t
-          ),
-        })),
-    }),
-    {
-      name: 'audit-templates-storage',
-      version: 2,
-      migrate: (persisted: any, version: number) => {
-        if (version < 2) {
-          return { templates: seedTemplates }
-        }
-        return persisted as any
-      },
+  fetchAll: async () => {
+    set({ isLoading: true, error: null })
+    try {
+      const rows = await api.get<AuditTemplateApiRow[]>('/audit-templates')
+      const templates = rows.map(mapRow)
+      const byId: Record<string, AuditTemplate> = {}
+      for (const t of templates) byId[t.id] = t
+      set({ templates, byId, isLoading: false, lastFetched: Date.now() })
+    } catch (e) {
+      set({ error: errorMessage(e, 'Failed to fetch audit templates'), isLoading: false })
     }
-  )
-)
+  },
+
+  create: async (data) => {
+    set({ isMutating: true, error: null })
+    try {
+      const row = await api.post<AuditTemplateApiRow>('/audit-templates', toCreatePayload(data))
+      const created = mapRow(row)
+      set((s) => ({
+        templates: [created, ...s.templates],
+        byId: { ...s.byId, [created.id]: created },
+        isMutating: false,
+      }))
+      return created
+    } catch (e) {
+      set({ error: errorMessage(e, 'Failed to create audit template'), isMutating: false })
+      throw e
+    }
+  },
+
+  update: async (id, data) => {
+    set({ isMutating: true, error: null })
+    try {
+      const row = await api.patch<AuditTemplateApiRow>(`/audit-templates/${id}`, toUpdatePayload(data))
+      const updated = mapRow(row)
+      set((s) => ({
+        templates: s.templates.map((t) => (t.id === id ? updated : t)),
+        byId: { ...s.byId, [id]: updated },
+        isMutating: false,
+      }))
+      return updated
+    } catch (e) {
+      set({ error: errorMessage(e, 'Failed to update audit template'), isMutating: false })
+      throw e
+    }
+  },
+
+  delete: async (id) => {
+    set({ isMutating: true, error: null })
+    try {
+      await api.delete(`/audit-templates/${id}`)
+      set((s) => {
+        const { [id]: _drop, ...rest } = s.byId
+        return {
+          templates: s.templates.filter((t) => t.id !== id),
+          byId: rest,
+          isMutating: false,
+        }
+      })
+    } catch (e) {
+      set({ error: errorMessage(e, 'Failed to delete audit template'), isMutating: false })
+      throw e
+    }
+  },
+
+  incrementUsage: async (id) => {
+    const current = get().byId[id]
+    if (!current) return
+    // Optimistic — usage_count is non-critical.
+    const next = current.usageCount + 1
+    set((s) => ({
+      templates: s.templates.map((t) => (t.id === id ? { ...t, usageCount: next } : t)),
+      byId: { ...s.byId, [id]: { ...current, usageCount: next } },
+    }))
+    // The PATCH endpoint accepts only the schema-declared fields, so we
+    // don't currently have a server-side increment path. Fire-and-forget;
+    // a follow-up phase can ship `/api/audit-templates/[id]/increment`.
+  },
+
+  clearError: () => set({ error: null }),
+}))

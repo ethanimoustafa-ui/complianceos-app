@@ -1,211 +1,284 @@
+// Policy templates store — Phase 5 server-state migration.
+//
+// Lookup-style resource: GET /api/policy-templates returns the active set; we
+// keep an in-memory `templates` array plus a `byId` lookup. Mutations preserve
+// the legacy `create / update / delete / incrementUsage` shape so the
+// settings page and the "create policy from template" flow don't break.
+//
+// SKELETON-LOADING NOTE: consumer pages should render a skeleton when
+// `isLoading && templates.length === 0` (first-fetch).
+
 import { create } from 'zustand'
-import { persist } from 'zustand/middleware'
-import type { PolicyTemplate } from '@/types'
+import type { PolicyTemplate, PolicyCategory, PolicyApprovalTier, RegulatoryBodyId, AuditFrequency, FrequencySchedule } from '@/types'
+import { api, ApiClientError } from '@/lib/api-client'
 import { requirePermission } from '@/lib/rbac-store-gate'
 
-const seedTemplates: PolicyTemplate[] = [
-  {
-    id: 'pt-001',
-    name: 'Data Protection Policy',
-    nameAr: 'سياسة حماية البيانات',
-    category: 'it',
-    approvalTier: 'management',
-    frequency: 'annual',
-    frequencySchedule: { monthOfYear: 1, dayOfMonth: 15 },
-    defaultDescription: 'Comprehensive policy governing the collection, processing, storage, and disposal of personal and sensitive data in accordance with NDMO PDPL requirements.',
-    defaultDescriptionAr: 'سياسة شاملة تحكم جمع ومعالجة وتخزين والتخلص من البيانات الشخصية والحساسة وفقًا لمتطلبات نظام حماية البيانات الشخصية PDPL.',
-    defaultWorkflowSteps: [
-      { step: 'IT Review', description: 'Technical review of data controls', actionType: 'send-for-review' },
-      { step: 'Legal Review', description: 'Legal compliance verification', actionType: 'request-approval' },
-      { step: 'Management Approval', description: 'Final management sign-off', actionType: 'request-approval' },
-    ],
-    versionPattern: 'v{major}.{minor}',
-    framework: 'ndmo-pdpl',
-    status: 'active',
-    createdAt: '2025-01-20',
-    updatedAt: '2026-02-15',
-    usageCount: 12,
-  },
-  {
-    id: 'pt-002',
-    name: 'Access Control Policy',
-    nameAr: 'سياسة التحكم في الوصول',
-    category: 'it',
-    approvalTier: 'management',
-    frequency: 'semi_annual',
-    frequencySchedule: { monthOfYear: 1, dayOfMonth: 10 },
-    defaultDescription: 'Policy defining access control requirements, authentication standards, and authorization procedures for all information systems and physical assets.',
-    defaultDescriptionAr: 'سياسة تحدد متطلبات التحكم في الوصول ومعايير المصادقة وإجراءات التفويض لجميع أنظمة المعلومات والأصول المادية.',
-    defaultWorkflowSteps: [
-      { step: 'IT Security Review', description: 'Security controls assessment', actionType: 'send-for-review' },
-      { step: 'Department Head Approval', description: 'Operational feasibility review', actionType: 'request-approval' },
-      { step: 'Management Approval', description: 'Final management sign-off', actionType: 'request-approval' },
-    ],
-    versionPattern: 'v{major}.{minor}',
-    framework: 'nca-ecc',
-    status: 'active',
-    createdAt: '2025-02-10',
-    updatedAt: '2026-01-28',
-    usageCount: 8,
-  },
-  {
-    id: 'pt-003',
-    name: 'Incident Response Policy',
-    nameAr: 'سياسة الاستجابة للحوادث',
-    category: 'risk',
-    approvalTier: 'board',
-    frequency: 'annual',
-    frequencySchedule: { monthOfYear: 3, dayOfMonth: 1 },
-    defaultDescription: 'Policy establishing procedures for detecting, responding to, and recovering from cybersecurity incidents and data breaches.',
-    defaultDescriptionAr: 'سياسة تحدد إجراءات الكشف والاستجابة والتعافي من حوادث الأمن السيبراني وانتهاكات البيانات.',
-    defaultWorkflowSteps: [
-      { step: 'Legal Review', description: 'Initial legal assessment', actionType: 'send-for-review' },
-      { step: 'Risk Committee Review', description: 'Risk evaluation and mitigation review', actionType: 'request-approval' },
-      { step: 'Executive Approval', description: 'C-suite sign-off', actionType: 'request-approval' },
-      { step: 'Board Ratification', description: 'Board approval', actionType: 'request-approval' },
-    ],
-    versionPattern: 'v{major}.{minor}',
-    framework: 'nca-ecc',
-    status: 'active',
-    createdAt: '2025-03-05',
-    updatedAt: '2026-02-20',
-    usageCount: 5,
-  },
-  {
-    id: 'pt-004',
-    name: 'Business Continuity Policy',
-    nameAr: 'سياسة استمرارية الأعمال',
-    category: 'operations',
-    approvalTier: 'board',
-    frequency: 'annual',
-    frequencySchedule: { monthOfYear: 6, dayOfMonth: 1 },
-    defaultDescription: 'Policy defining the business continuity management framework, disaster recovery procedures, and crisis communication protocols.',
-    defaultDescriptionAr: 'سياسة تحدد إطار إدارة استمرارية الأعمال وإجراءات التعافي من الكوارث وبروتوكولات الاتصال في الأزمات.',
-    defaultWorkflowSteps: [
-      { step: 'Operations Review', description: 'Operational feasibility assessment', actionType: 'send-for-review' },
-      { step: 'Risk Committee Review', description: 'Risk impact evaluation', actionType: 'request-approval' },
-      { step: 'Executive Approval', description: 'C-suite sign-off', actionType: 'request-approval' },
-      { step: 'Board Ratification', description: 'Board approval', actionType: 'request-approval' },
-    ],
-    versionPattern: 'v{major}.{minor}',
-    status: 'active',
-    createdAt: '2025-04-12',
-    updatedAt: '2026-01-10',
-    usageCount: 3,
-  },
-  {
-    id: 'pt-005',
-    name: 'AML/CTF Policy',
-    nameAr: 'سياسة مكافحة غسل الأموال وتمويل الإرهاب',
-    category: 'compliance',
-    approvalTier: 'board',
-    frequency: 'quarterly',
-    frequencySchedule: { monthInQuarter: 1, dayOfMonth: 1 },
-    defaultDescription: 'Anti-Money Laundering and Counter-Terrorism Financing policy establishing customer due diligence, transaction monitoring, and suspicious activity reporting procedures.',
-    defaultDescriptionAr: 'سياسة مكافحة غسل الأموال وتمويل الإرهاب تحدد إجراءات العناية الواجبة بالعملاء ومراقبة المعاملات والإبلاغ عن الأنشطة المشبوهة.',
-    defaultWorkflowSteps: [
-      { step: 'Compliance Review', description: 'AML compliance assessment', actionType: 'send-for-review' },
-      { step: 'Legal Review', description: 'Legal and regulatory alignment check', actionType: 'request-approval' },
-      { step: 'Executive Approval', description: 'C-suite sign-off', actionType: 'request-approval' },
-      { step: 'Board Ratification', description: 'Board approval', actionType: 'request-approval' },
-    ],
-    versionPattern: 'v{major}.{minor}',
-    framework: 'safiu',
-    status: 'active',
-    createdAt: '2025-05-20',
-    updatedAt: '2026-02-05',
-    usageCount: 6,
-  },
-  {
-    id: 'pt-006',
-    name: 'Information Security Policy',
-    nameAr: 'سياسة أمن المعلومات',
-    category: 'it',
-    approvalTier: 'management',
-    frequency: 'semi_annual',
-    frequencySchedule: { monthOfYear: 1, dayOfMonth: 1 },
-    defaultDescription: 'Overarching information security policy defining the security governance structure, risk management approach, and security controls baseline.',
-    defaultDescriptionAr: 'سياسة شاملة لأمن المعلومات تحدد هيكل حوكمة الأمن ونهج إدارة المخاطر والمعايير الأساسية للضوابط الأمنية.',
-    defaultWorkflowSteps: [
-      { step: 'IT Security Review', description: 'Technical security controls review', actionType: 'send-for-review' },
-      { step: 'Risk Assessment', description: 'Security risk evaluation', actionType: 'send-for-review' },
-      { step: 'Management Approval', description: 'Final management sign-off', actionType: 'request-approval' },
-    ],
-    versionPattern: 'v{major}.{minor}',
-    framework: 'nca-ecc',
-    status: 'active',
-    createdAt: '2025-06-15',
-    updatedAt: '2026-02-18',
-    usageCount: 10,
-  },
-]
+// ---------- API row shape ----------------------------------------------------
+
+interface PolicyTemplateApiRow {
+  id: string
+  name: string
+  name_ar: string | null
+  category: string
+  approval_tier: string
+  frequency: string | null
+  frequency_schedule: unknown
+  default_description: string
+  default_description_ar: string | null
+  default_workflow_steps: unknown
+  version_pattern: string
+  framework: string | null
+  status: 'active' | 'archived' | 'draft'
+  usage_count: number
+  created_at: string
+  updated_at: string
+}
+
+function mapRow(row: PolicyTemplateApiRow): PolicyTemplate {
+  return {
+    id: row.id,
+    name: row.name,
+    nameAr: row.name_ar ?? undefined,
+    category: row.category as PolicyCategory,
+    approvalTier: row.approval_tier as PolicyApprovalTier,
+    frequency: (row.frequency as AuditFrequency | null) ?? undefined,
+    frequencySchedule: (row.frequency_schedule as FrequencySchedule | undefined) ?? undefined,
+    defaultDescription: row.default_description,
+    defaultDescriptionAr: row.default_description_ar ?? undefined,
+    defaultWorkflowSteps: (row.default_workflow_steps as PolicyTemplate['defaultWorkflowSteps']) ?? [],
+    versionPattern: row.version_pattern,
+    framework: (row.framework as RegulatoryBodyId | null) ?? undefined,
+    status: row.status === 'archived' ? 'draft' : (row.status as PolicyTemplate['status']),
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    usageCount: row.usage_count,
+  }
+}
+
+function toCreatePayload(data: Omit<PolicyTemplate, 'id' | 'createdAt' | 'updatedAt' | 'usageCount'>): Record<string, unknown> {
+  return {
+    name: data.name,
+    name_ar: data.nameAr ?? undefined,
+    category: data.category,
+    approval_tier: data.approvalTier,
+    frequency: data.frequency ?? undefined,
+    frequency_schedule: data.frequencySchedule ?? undefined,
+    default_description: data.defaultDescription,
+    default_description_ar: data.defaultDescriptionAr ?? undefined,
+    default_workflow_steps: data.defaultWorkflowSteps ?? [],
+    version_pattern: data.versionPattern ?? 'v{major}.{minor}',
+    framework: data.framework ?? undefined,
+    status: data.status === 'draft' ? 'active' : data.status,
+  }
+}
+
+function toUpdatePayload(data: Partial<PolicyTemplate>): Record<string, unknown> {
+  const out: Record<string, unknown> = {}
+  if (data.name !== undefined) out.name = data.name
+  if (data.nameAr !== undefined) out.name_ar = data.nameAr
+  if (data.category !== undefined) out.category = data.category
+  if (data.approvalTier !== undefined) out.approval_tier = data.approvalTier
+  if (data.frequency !== undefined) out.frequency = data.frequency
+  if (data.frequencySchedule !== undefined) out.frequency_schedule = data.frequencySchedule
+  if (data.defaultDescription !== undefined) out.default_description = data.defaultDescription
+  if (data.defaultDescriptionAr !== undefined) out.default_description_ar = data.defaultDescriptionAr
+  if (data.defaultWorkflowSteps !== undefined) out.default_workflow_steps = data.defaultWorkflowSteps
+  if (data.versionPattern !== undefined) out.version_pattern = data.versionPattern
+  if (data.framework !== undefined) out.framework = data.framework
+  if (data.status !== undefined) out.status = data.status === 'draft' ? 'active' : data.status
+  return out
+}
+
+function errorMessage(e: unknown, fallback: string): string {
+  if (e instanceof ApiClientError) return e.message
+  if (e instanceof Error) return e.message
+  return fallback
+}
+
+// ---------- store -----------------------------------------------------------
 
 interface PolicyTemplateState {
   templates: PolicyTemplate[]
+  byId: Record<string, PolicyTemplate>
+  isLoading: boolean
+  isMutating: boolean
+  error: string | null
+  lastFetched: number | null
+
+  fetchAll: () => Promise<void>
+  /**
+   * Legacy signature: returns the locally-optimistic template immediately. The
+   * POST runs in background; on success the row is replaced with the persisted
+   * version. On failure the optimistic row is removed and `error` is set.
+   */
   create: (data: Omit<PolicyTemplate, 'id' | 'createdAt' | 'updatedAt' | 'usageCount'>) => PolicyTemplate
   update: (id: string, data: Partial<PolicyTemplate>) => void
   delete: (id: string) => void
   incrementUsage: (id: string) => void
+  clearError: () => void
 }
 
-export const usePolicyTemplateStore = create<PolicyTemplateState>()(
-  persist(
-    (set) => ({
-      templates: seedTemplates,
+export const usePolicyTemplateStore = create<PolicyTemplateState>()((set, get) => ({
+  // First-fetch detector: `isLoading && templates.length === 0` → render skeleton.
+  templates: [],
+  byId: {},
+  isLoading: false,
+  isMutating: false,
+  error: null,
+  lastFetched: null,
 
-      create: (data) => {
-        requirePermission('Manage Policy Templates', { storeName: 'policyTemplate', actionName: 'create' })
-        const now = new Date().toISOString().split('T')[0]
-        const newTemplate: PolicyTemplate = {
-          ...data,
-          id: `pt-${Date.now()}`,
-          createdAt: now,
-          updatedAt: now,
-          usageCount: 0,
-        }
-        set((s) => ({ templates: [newTemplate, ...s.templates] }))
-        return newTemplate
-      },
-
-      update: (id, data) => {
-        requirePermission('Manage Policy Templates', { storeName: 'policyTemplate', actionName: 'update', id })
-        const now = new Date().toISOString().split('T')[0]
-        set((s) => ({
-          templates: s.templates.map((t) =>
-            t.id === id ? { ...t, ...data, updatedAt: now } : t
-          ),
-        }))
-      },
-
-      delete: (id) => {
-        requirePermission('Manage Policy Templates', { storeName: 'policyTemplate', actionName: 'delete', id })
-        set((s) => ({ templates: s.templates.filter((t) => t.id !== id) }))
-      },
-
-      incrementUsage: (id) =>
-        set((s) => ({
-          templates: s.templates.map((t) =>
-            t.id === id ? { ...t, usageCount: t.usageCount + 1 } : t
-          ),
-        })),
-    }),
-    {
-      name: 'policy-templates-storage',
-      version: 3,
-      migrate: (persisted: any, version: number) => {
-        if (version < 2) {
-          const templates = (persisted.templates ?? seedTemplates).map((t: any) => ({
-            ...t,
-            frequency: t.frequency ?? 'annual',
-            frequencySchedule: t.frequencySchedule ?? undefined,
-          }))
-          return { templates }
-        }
-        if (version < 3) {
-          return { templates: seedTemplates }
-        }
-        return persisted as any
-      },
+  fetchAll: async () => {
+    set({ isLoading: true, error: null })
+    try {
+      const rows = await api.get<PolicyTemplateApiRow[]>('/policy-templates')
+      const templates = rows.map(mapRow)
+      const byId: Record<string, PolicyTemplate> = {}
+      for (const t of templates) byId[t.id] = t
+      set({ templates, byId, isLoading: false, lastFetched: Date.now() })
+    } catch (e) {
+      set({ error: errorMessage(e, 'Failed to fetch policy templates'), isLoading: false })
     }
-  )
-)
+  },
+
+  create: (data) => {
+    requirePermission('Manage Policy Templates', { storeName: 'policyTemplate', actionName: 'create' })
+    const tempId = `pt-temp-${Date.now()}`
+    const now = new Date().toISOString().split('T')[0]
+    const optimistic: PolicyTemplate = {
+      ...data,
+      id: tempId,
+      createdAt: now,
+      updatedAt: now,
+      usageCount: 0,
+    }
+    set((s) => ({
+      templates: [optimistic, ...s.templates],
+      byId: { ...s.byId, [tempId]: optimistic },
+      isMutating: true,
+      error: null,
+    }))
+
+    void (async () => {
+      try {
+        const row = await api.post<PolicyTemplateApiRow>('/policy-templates', toCreatePayload(data))
+        const created = mapRow(row)
+        set((s) => {
+          const { [tempId]: _drop, ...rest } = s.byId
+          return {
+            templates: s.templates.map((t) => (t.id === tempId ? created : t)),
+            byId: { ...rest, [created.id]: created },
+            isMutating: false,
+          }
+        })
+      } catch (e) {
+        set((s) => {
+          const { [tempId]: _drop, ...rest } = s.byId
+          return {
+            templates: s.templates.filter((t) => t.id !== tempId),
+            byId: rest,
+            error: errorMessage(e, 'Failed to create policy template'),
+            isMutating: false,
+          }
+        })
+      }
+    })()
+
+    return optimistic
+  },
+
+  update: (id, data) => {
+    requirePermission('Manage Policy Templates', { storeName: 'policyTemplate', actionName: 'update', id })
+    const previous = get().byId[id]
+    if (!previous) return
+    const optimistic: PolicyTemplate = {
+      ...previous,
+      ...data,
+      updatedAt: new Date().toISOString().split('T')[0],
+    }
+    set((s) => ({
+      templates: s.templates.map((t) => (t.id === id ? optimistic : t)),
+      byId: { ...s.byId, [id]: optimistic },
+      isMutating: true,
+      error: null,
+    }))
+
+    // Temp-id rows (still pending create) skip the PATCH.
+    if (id.startsWith('pt-temp-')) {
+      set({ isMutating: false })
+      return
+    }
+
+    void (async () => {
+      try {
+        const row = await api.patch<PolicyTemplateApiRow>(`/policy-templates/${id}`, toUpdatePayload(data))
+        const updated = mapRow(row)
+        set((s) => ({
+          templates: s.templates.map((t) => (t.id === id ? updated : t)),
+          byId: { ...s.byId, [id]: updated },
+          isMutating: false,
+        }))
+      } catch (e) {
+        // Roll back to `previous` on failure.
+        set((s) => ({
+          templates: s.templates.map((t) => (t.id === id ? previous : t)),
+          byId: { ...s.byId, [id]: previous },
+          error: errorMessage(e, 'Failed to update policy template'),
+          isMutating: false,
+        }))
+      }
+    })()
+  },
+
+  delete: (id) => {
+    requirePermission('Manage Policy Templates', { storeName: 'policyTemplate', actionName: 'delete', id })
+    const previous = get().byId[id]
+    if (!previous) return
+    set((s) => {
+      const { [id]: _drop, ...rest } = s.byId
+      return {
+        templates: s.templates.filter((t) => t.id !== id),
+        byId: rest,
+        isMutating: true,
+        error: null,
+      }
+    })
+
+    if (id.startsWith('pt-temp-')) {
+      set({ isMutating: false })
+      return
+    }
+
+    void (async () => {
+      try {
+        await api.delete(`/policy-templates/${id}`)
+        set({ isMutating: false })
+      } catch (e) {
+        // Roll back: re-insert at the original position. Simplest is push to
+        // the head — UI sort logic will re-order.
+        set((s) => ({
+          templates: [previous, ...s.templates],
+          byId: { ...s.byId, [id]: previous },
+          error: errorMessage(e, 'Failed to delete policy template'),
+          isMutating: false,
+        }))
+      }
+    })()
+  },
+
+  // No dedicated /usage endpoint — increment locally so the UI counter ticks
+  // up while the policy-create flow records the choice; a future PATCH or
+  // server-side trigger should persist the usage_count column.
+  // TODO(Phase 6): wire a real POST /policy-templates/[id]/usage endpoint.
+  incrementUsage: (id) =>
+    set((s) => {
+      const previous = s.byId[id]
+      if (!previous) return s
+      const updated: PolicyTemplate = { ...previous, usageCount: previous.usageCount + 1 }
+      return {
+        templates: s.templates.map((t) => (t.id === id ? updated : t)),
+        byId: { ...s.byId, [id]: updated },
+      }
+    }),
+
+  clearError: () => set({ error: null }),
+}))

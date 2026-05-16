@@ -1,10 +1,51 @@
-import { create } from 'zustand'
-import { persist } from 'zustand/middleware'
+// User log store — Phase 5 server-state migration.
+//
+// Two complementary write paths exist here, both intentional:
+//
+//   1. `log()` is called inline by RBAC gates, auth-store, team-store, etc.
+//      It appends a UI-visible row to `state.logs` for instant feedback AND
+//      fires `mirrorAuthEventToSupabase` so auth-related events also land in
+//      the server-side `user_activity_logs` table. This path is unchanged
+//      from Phase 3.
+//
+//   2. `fetchLogs()` (new in Phase 5) loads the canonical, paginated log
+//      list from `GET /api/team/logs` and replaces `state.logs` with the
+//      server view. The admin "User Logs" page calls this on mount.
+//
+// SKELETON-LOADING NOTE: render a skeleton when
+//   `isLoading && logs.length === 0` (first-fetch).
 
-// Round 4 Phase 6 expands the action union with `auth.permission_denied`.
-// Round 4 Phase 7 adds the rest of the auth/team/policy/letter audit events.
-// The existing underscore-cased tokens stay for backwards compatibility with
-// the seed logs.
+import { create } from 'zustand'
+import { createClient } from '@/lib/supabase/client'
+import { api, ApiClientError } from '@/lib/api-client'
+
+// Best-effort server-side mirror for auth-related activity. The local log
+// stays as instant UI feedback; this just writes a row to the
+// `user_activity_logs` table so server-side analytics see the event too.
+async function mirrorAuthEventToSupabase(entry: {
+  userId: string
+  action: string
+  target?: string
+  metadata?: unknown
+}): Promise<void> {
+  if (typeof window === 'undefined') return
+  if (!entry.action.startsWith('auth.')) return
+  try {
+    const supabase = createClient()
+    await supabase.from('user_activity_logs').insert({
+      user_id: entry.userId === 'anonymous' ? null : entry.userId,
+      user_name: entry.userId,
+      action: entry.action,
+      module: 'auth',
+      details: entry.target ?? null,
+      ip_address: null,
+      metadata: entry.metadata ?? null,
+    })
+  } catch (err) {
+    console.warn('[user-log-store] mirror to supabase failed', err)
+  }
+}
+
 export type UserLogAction =
   | 'sign_in'
   | 'sign_out'
@@ -38,18 +79,10 @@ export interface UserLog {
   location: string
   status: 'success' | 'warning' | 'failed' | 'info'
   userId?: string
-  // Optional free-form target for RBAC-denied entries. Phase 6 records this
-  // as `${storeName}:${id}:${actionName}` so logs can be filtered later.
   target?: string
-  // Phase 7: optional structured payload for events that need to record more
-  // than a single target id (e.g. `team.permissions_changed` with arrays of
-  // granted/revoked permissions).
   metadata?: unknown
 }
 
-// Compact shape used by store-action gate failures (Phase 6 §8.1) and the
-// expanded Phase 7 audit-log emitters. The store `log()` action below
-// normalises this into a full `UserLog` entry.
 export interface RBACDeniedLogEntry {
   userId: string
   action: UserLogAction
@@ -57,84 +90,166 @@ export interface RBACDeniedLogEntry {
   metadata?: unknown
 }
 
+// ---------- API row shape (from /api/team/logs) ------------------------------
+
+interface UserLogApiRow {
+  id: string
+  user_id: string | null
+  user_name: string | null
+  action: string
+  module: string | null
+  details: string | null
+  ip_address: string | null
+  metadata: unknown
+  created_at: string
+}
+
+// Deterministic 32-bit numeric hash of the server uuid so the legacy
+// `UserLog.id: number` contract is preserved. Collisions are theoretical
+// but inconsequential — the table doesn't rely on `id` for uniqueness, only
+// for React keys and expand-toggle bookkeeping.
+function hashId(s: string): number {
+  let h = 0
+  for (let i = 0; i < s.length; i++) {
+    h = (h * 31 + s.charCodeAt(i)) | 0
+  }
+  return Math.abs(h) || 1
+}
+
+function mapRow(row: UserLogApiRow): UserLog {
+  // Map the server action onto the legacy action union when possible. Unknown
+  // actions fall through as-is — the log table renders them verbatim.
+  const status: UserLog['status'] =
+    row.action === 'auth.permission_denied' || row.action === 'policy.rejection'
+      ? 'warning'
+      : row.action === 'auth.login' || row.action === 'auth.logout' || row.action === 'sign_in'
+        ? 'success'
+        : row.action === 'failed_login'
+          ? 'failed'
+          : 'info'
+  return {
+    id: hashId(row.id),
+    timestamp: row.created_at,
+    user: row.user_name ?? row.user_id ?? 'system',
+    action: row.action as UserLogAction,
+    detailsKey: row.details ?? '',
+    ipAddress: row.ip_address ?? '',
+    device: '',
+    location: '',
+    status,
+    userId: row.user_id ?? undefined,
+    metadata: row.metadata ?? undefined,
+  }
+}
+
+function errorMessage(e: unknown, fallback: string): string {
+  if (e instanceof ApiClientError) return e.message
+  if (e instanceof Error) return e.message
+  return fallback
+}
+
 interface UserLogState {
   logs: UserLog[]
+  isLoading: boolean
+  error: string | null
+  lastFetched: number | null
+
+  /** Load the canonical paginated log list from `GET /api/team/logs`. */
+  fetchLogs: (opts?: {
+    page?: number
+    pageSize?: number
+    userId?: string
+    action?: string
+    module?: string
+  }) => Promise<void>
   addLog: (log: Omit<UserLog, 'id'>) => void
   /**
-   * Compact logger used by Phase 6 store-action gates. Fills in `timestamp`,
-   * default `status`, and a generic `detailsKey` so call sites can stay
-   * one-liners.
+   * Compact logger used by RBAC store-action gates and the Phase 7
+   * audit-log emitters. Fills in `timestamp`, status, and a generic
+   * `detailsKey` so call sites can stay one-liners. Auth events are mirrored
+   * to the `user_activity_logs` table.
    */
   log: (entry: RBACDeniedLogEntry) => void
   getLogsByUserId: (userId: string) => UserLog[]
   clearLogs: () => void
+  clearError: () => void
 }
 
-const seedLogs: UserLog[] = [
-  { id: 1, timestamp: '2024-01-15 14:32:18', user: 'Sarah Connor', action: 'sign_in', detailsKey: 'team.signedInViaSso', ipAddress: '192.168.1.45', device: 'Chrome on MacOS', location: 'San Francisco, CA', status: 'success', userId: '1' },
-  { id: 2, timestamp: '2024-01-15 14:28:45', user: 'Michael Scott', action: 'session_timeout', detailsKey: 'team.sessionExpiredInactivity', ipAddress: '192.168.1.102', device: 'Firefox on Windows', location: 'New York, NY', status: 'info', userId: '4' },
-  { id: 3, timestamp: '2024-01-15 13:55:12', user: 'David Wallace', action: 'password_change', detailsKey: 'team.passwordUpdatedSuccessfully', ipAddress: '192.168.1.88', device: 'Safari on iOS', location: 'Chicago, IL', status: 'success' },
-  { id: 4, timestamp: '2024-01-15 13:42:30', user: 'Kelly Kapoor', action: 'sign_out', detailsKey: 'team.userSignedOutManually', ipAddress: '192.168.1.76', device: 'Chrome on Windows', location: 'Los Angeles, CA', status: 'success' },
-  { id: 5, timestamp: '2024-01-15 12:18:09', user: 'John Smith', action: 'mfa_enabled', detailsKey: 'team.enabledTwoFactorAuth', ipAddress: '192.168.1.201', device: 'Edge on Windows', location: 'Seattle, WA', status: 'success' },
-  { id: 6, timestamp: '2024-01-15 11:45:22', user: 'Jane Doe', action: 'profile_update', detailsKey: 'team.updatedProfilePictureBio', ipAddress: '192.168.1.55', device: 'Chrome on MacOS', location: 'Austin, TX', status: 'success' },
-  { id: 7, timestamp: '2024-01-15 11:20:33', user: 'Sarah Connor', action: 'permission_change', detailsKey: 'team.grantedDocumentApprovalAccess', ipAddress: '192.168.1.45', device: 'Chrome on MacOS', location: 'San Francisco, CA', status: 'success', userId: '1' },
-  { id: 8, timestamp: '2024-01-15 10:55:47', user: 'Michael Scott', action: 'failed_login', detailsKey: 'team.invalidPasswordAttempt', ipAddress: '192.168.1.102', device: 'Firefox on Windows', location: 'New York, NY', status: 'warning', userId: '4' },
-  { id: 9, timestamp: '2024-01-15 10:12:18', user: 'David Wallace', action: 'sign_in', detailsKey: 'team.signedInWithPassword', ipAddress: '192.168.1.88', device: 'Safari on iOS', location: 'Chicago, IL', status: 'success' },
-  { id: 10, timestamp: '2024-01-15 09:38:55', user: 'Kelly Kapoor', action: 'sign_in', detailsKey: 'team.signedInViaGoogleOauth', ipAddress: '192.168.1.76', device: 'Chrome on Windows', location: 'Los Angeles, CA', status: 'success' },
-  { id: 11, timestamp: '2024-01-14 16:45:12', user: 'John Smith', action: 'sign_out', detailsKey: 'team.userSignedOutManually', ipAddress: '192.168.1.201', device: 'Edge on Windows', location: 'Seattle, WA', status: 'success' },
-  { id: 12, timestamp: '2024-01-14 15:22:30', user: 'Jane Doe', action: 'failed_login', detailsKey: 'team.accountLockedFailedAttempts', ipAddress: '10.0.0.55', device: 'Unknown Browser', location: 'Unknown', status: 'failed' },
-  { id: 13, timestamp: '2024-01-14 14:18:45', user: 'Sarah Connor', action: 'session_timeout', detailsKey: 'team.sessionExpiredInactivity', ipAddress: '192.168.1.45', device: 'Chrome on MacOS', location: 'San Francisco, CA', status: 'info', userId: '1' },
-  { id: 14, timestamp: '2024-01-14 13:55:09', user: 'Michael Scott', action: 'profile_update', detailsKey: 'team.updatedEmailNotificationPreferences', ipAddress: '192.168.1.102', device: 'Firefox on Windows', location: 'New York, NY', status: 'success', userId: '4' },
-  { id: 15, timestamp: '2024-01-14 12:42:33', user: 'David Wallace', action: 'permission_change', detailsKey: 'team.adminAccessRevoked', ipAddress: '192.168.1.88', device: 'Safari on iOS', location: 'Chicago, IL', status: 'warning' },
-]
+const nextLocalId = (logs: UserLog[]): number => {
+  let max = 0
+  for (const l of logs) {
+    if (l.id > max) max = l.id
+  }
+  return max + 1
+}
 
-export const useUserLogStore = create<UserLogState>()(
-  persist(
-    (set, get) => ({
-      logs: seedLogs,
+export const useUserLogStore = create<UserLogState>()((set, get) => ({
+  logs: [],
+  isLoading: false,
+  error: null,
+  lastFetched: null,
 
-      addLog: (log) =>
-        set((state) => ({
-          logs: [{ ...log, id: Math.max(0, ...state.logs.map(l => l.id)) + 1 }, ...state.logs],
-        })),
-
-      log: (entry) =>
-        set((state) => {
-          const detailsKey =
-            entry.action === 'auth.permission_denied'
-              ? 'team.permissionDenied'
-              : `team.${entry.action.replace(/\./g, '_')}`
-          const status: UserLog['status'] =
-            entry.action === 'auth.permission_denied' || entry.action === 'policy.rejection'
-              ? 'warning'
-              : entry.action === 'auth.login' || entry.action === 'auth.logout'
-                ? 'success'
-                : 'info'
-          const next: UserLog = {
-            id: Math.max(0, ...state.logs.map(l => l.id)) + 1,
-            timestamp: new Date().toISOString(),
-            user: entry.userId,
-            action: entry.action,
-            detailsKey,
-            ipAddress: 'demo',
-            device: 'demo',
-            location: 'demo',
-            status,
-            userId: entry.userId,
-            target: entry.target,
-            metadata: entry.metadata,
-          }
-          return { logs: [next, ...state.logs] }
-        }),
-
-      getLogsByUserId: (userId) => get().logs.filter((l) => l.userId === userId),
-
-      clearLogs: () => set({ logs: [] }),
-    }),
-    {
-      name: 'user-log-storage',
-      version: 1,
-      partialize: (state) => ({ logs: state.logs }),
+  fetchLogs: async (opts) => {
+    set({ isLoading: true, error: null })
+    try {
+      const result = await api.get<{
+        items: UserLogApiRow[]
+        page: number
+        pageSize: number
+        total: number
+        totalPages: number
+      }>('/team/logs', {
+        page: opts?.page,
+        pageSize: opts?.pageSize ?? 50,
+        user_id: opts?.userId,
+        action: opts?.action,
+        module: opts?.module,
+      })
+      set({ logs: result.items.map(mapRow), isLoading: false, lastFetched: Date.now() })
+    } catch (e) {
+      set({ error: errorMessage(e, 'Failed to fetch user logs'), isLoading: false })
     }
-  )
-)
+  },
+
+  addLog: (log) =>
+    set((state) => ({
+      logs: [{ ...log, id: nextLocalId(state.logs) }, ...state.logs],
+    })),
+
+  log: (entry) => {
+    // Fire-and-forget mirror to user_activity_logs for auth.* events.
+    void mirrorAuthEventToSupabase(entry)
+    return set((state) => {
+      const detailsKey =
+        entry.action === 'auth.permission_denied'
+          ? 'team.permissionDenied'
+          : `team.${entry.action.replace(/\./g, '_')}`
+      const status: UserLog['status'] =
+        entry.action === 'auth.permission_denied' || entry.action === 'policy.rejection'
+          ? 'warning'
+          : entry.action === 'auth.login' || entry.action === 'auth.logout'
+            ? 'success'
+            : 'info'
+      const next: UserLog = {
+        id: nextLocalId(state.logs),
+        timestamp: new Date().toISOString(),
+        user: entry.userId,
+        action: entry.action,
+        detailsKey,
+        ipAddress: 'demo',
+        device: 'demo',
+        location: 'demo',
+        status,
+        userId: entry.userId,
+        target: entry.target,
+        metadata: entry.metadata,
+      }
+      return { logs: [next, ...state.logs] }
+    })
+  },
+
+  getLogsByUserId: (userId) => get().logs.filter((l) => l.userId === userId),
+
+  clearLogs: () => set({ logs: [] }),
+  clearError: () => set({ error: null }),
+}))

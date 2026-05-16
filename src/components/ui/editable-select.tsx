@@ -18,7 +18,7 @@ interface EditableSelectProps {
   items: EditableSelectItem[]
   placeholder?: string
   // When provided, exposes inline +Add / Edit / Delete affordances.
-  onAdd?: (label: string, labelAr?: string) => string | void
+  onAdd?: (label: string, labelAr?: string) => string | void | Promise<string | void>
   onEdit?: (id: string, label: string, labelAr?: string) => void
   onDelete?: (id: string) => void
   // Per-row reset-to-default affordance. Used by Bucket-D label-override
@@ -136,12 +136,12 @@ export function EditableSelect({
     setDraftLabelAr(item.labelAr ?? '')
   }
 
-  const submitDraft = () => {
+  const submitDraft = async () => {
     const label = draftLabel.trim()
     if (!label) return
     const labelAr = draftLabelAr.trim() || undefined
     if (view === 'add' && effectiveOnAdd) {
-      const newId = effectiveOnAdd(label, labelAr)
+      const newId = await effectiveOnAdd(label, labelAr)
       if (typeof newId === 'string') onChange(newId)
     } else if (view === 'edit' && editingId && effectiveOnEdit) {
       effectiveOnEdit(editingId, label, labelAr)
