@@ -330,16 +330,32 @@ export function RegisterCircularModal({ isOpen, onClose, onCreated, t }: Props) 
           </div>
         </div>
 
-        <div className={`flex justify-end gap-3 pt-4 border-t border-slate-100`}>
-          <Button variant="ghost" onClick={onClose}>{t('common.cancel')}</Button>
-          <Button
-            variant="primary"
-            className="shadow-lg shadow-emerald-100"
-            onClick={handleCreate}
-            disabled={!formAuthority || !formTitle || !formDueDate || !formCapDeadline}
-          >
-            {t('regulatoryUpdates.initiateTracker')}
-          </Button>
+        <div className={`flex flex-col gap-3 pt-4 border-t border-slate-100`}>
+          {(() => {
+            const missing = [
+              !formAuthority && 'Authority',
+              !formTitle && 'Rule Title',
+              !formDueDate && 'Implementation Deadline',
+              !formCapDeadline && 'CAP Submission Deadline',
+            ].filter(Boolean) as string[]
+            if (missing.length === 0) return null
+            return (
+              <p className="text-xs text-rose-600 self-end">
+                Missing required: {missing.join(', ')}
+              </p>
+            )
+          })()}
+          <div className="flex justify-end gap-3">
+            <Button variant="ghost" onClick={onClose}>{t('common.cancel')}</Button>
+            <Button
+              variant="primary"
+              className="shadow-lg shadow-emerald-100"
+              onClick={handleCreate}
+              disabled={!formAuthority || !formTitle || !formDueDate || !formCapDeadline}
+            >
+              {t('regulatoryUpdates.initiateTracker')}
+            </Button>
+          </div>
         </div>
       </div>
     </Modal>

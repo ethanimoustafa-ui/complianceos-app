@@ -334,7 +334,10 @@ export default function RegulatoryUpdatesPoliciesPage() {
   }
 
   function handleCreate() {
-    if (!formName || !formCategory || !formTier || !formDescription || !formDocFile) return
+    // Required: name, category, approval tier, description. File upload is
+    // optional at create time — users can attach a document later from the
+    // policy detail view. Anything else still falls back to defaults.
+    if (!formName || !formCategory || !formTier || !formDescription) return
     const owner = OWNERS[formOwnerIdx]
     const today = new Date().toISOString().split('T')[0]
     const selectedTmpl = selectedPolicyTemplateId ? policyTemplates.find((t) => t.id === selectedPolicyTemplateId) : null
@@ -371,7 +374,7 @@ export default function RegulatoryUpdatesPoliciesPage() {
       nextReviewDate: computeNextReview(formReviewSchedule),
       reviewCycleDays: cadenceToReviewCycleDays(formReviewSchedule.cadence),
       reviewSchedule: formReviewSchedule,
-      attachmentUrl: formDocFile.name,
+      attachmentUrl: formDocFile?.name ?? '',
       currentReviewCycleId: cycleId,
       currentReviewCycleLabel: cycleLabel,
       reviewCycleHistory: [],
@@ -440,7 +443,13 @@ export default function RegulatoryUpdatesPoliciesPage() {
     setIsEditModalOpen(false)
   }
 
-  const createFormValid = !!(formName && formCategory && formTier && formDescription && formDocFile)
+  const createMissingFields = [
+    !formName && 'Policy Name',
+    !formCategory && 'Category',
+    !formTier && 'Approval Tier',
+    !formDescription && 'Description',
+  ].filter(Boolean) as string[]
+  const createFormValid = createMissingFields.length === 0
   const editFormValid = !!(formEditName && formEditCategory && formEditTier && formEditDescription)
 
   return (
@@ -969,16 +978,23 @@ export default function RegulatoryUpdatesPoliciesPage() {
             </div>
           </div>
 
-          <div className={`flex justify-end gap-3 pt-4 border-t border-slate-100`}>
-            <Button variant="ghost" onClick={() => { setIsCreatePolicyModalOpen(false); resetCreateForm() }}>{t('common.cancel')}</Button>
-            <Button
-              variant="primary"
-              className="shadow-lg shadow-emerald-100"
-              onClick={handleCreate}
-              disabled={!createFormValid}
-            >
-              {t('policies.createPolicy')}
-            </Button>
+          <div className={`flex flex-col gap-3 pt-4 border-t border-slate-100`}>
+            {!createFormValid && (
+              <p className="text-xs text-rose-600 self-end">
+                Missing required: {createMissingFields.join(', ')}
+              </p>
+            )}
+            <div className="flex justify-end gap-3">
+              <Button variant="ghost" onClick={() => { setIsCreatePolicyModalOpen(false); resetCreateForm() }}>{t('common.cancel')}</Button>
+              <Button
+                variant="primary"
+                className="shadow-lg shadow-emerald-100"
+                onClick={handleCreate}
+                disabled={!createFormValid}
+              >
+                {t('policies.createPolicy')}
+              </Button>
+            </div>
           </div>
         </div>
       </Modal>
