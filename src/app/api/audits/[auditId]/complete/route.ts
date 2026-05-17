@@ -22,7 +22,6 @@ export async function POST(_req: NextRequest, { params }: Params) {
       .from('audits')
       .select('id, status')
       .eq('id', auditId)
-      .is('deleted_at', null)
       .maybeSingle<{ id: string; status: string }>()
     if (readErr) throw readErr
     if (!current) throw NotFound(`Audit ${auditId} not found`)

@@ -2,7 +2,10 @@
 //
 //   GET    — detail (includes nested counts)
 //   PATCH  — partial update         (requires `audit:edit`)
-//   DELETE — soft-delete             (requires `audit:delete`)
+//   DELETE — hard-delete (cascades) (requires `audit:delete`)
+//
+// As of migration 042 audits are hard-deleted; the audit_logs row written
+// before the DELETE preserves the compliance trail.
 
 import type { NextRequest } from 'next/server'
 import { requirePerm, requireUser } from '@/lib/api/auth'
@@ -55,7 +58,6 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       .from('audits')
       .update(update)
       .eq('id', auditId)
-      .is('deleted_at', null)
       .select(AUDIT_LIST_COLUMNS)
       .single()
     if (error || !data) throw error ?? NotFound('Update returned no row')
@@ -94,13 +96,9 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
     const { supabase, user, profile } = await requirePerm('audit:delete')
     await assertAuditExists(supabase, auditId)
 
-    const { error } = await supabase
-      .from('audits')
-      .update({ deleted_at: new Date().toISOString() })
-      .eq('id', auditId)
-      .is('deleted_at', null)
-    if (error) throw error
-
+    // Write the compliance-log entry BEFORE the DELETE so we never lose the
+    // breadcrumb if the cascade fails midway (audit_logs.target_id is a
+    // polymorphic uuid, not a FK, so it survives the row's removal).
     await writeAudit({
       actor_id: user.id,
       actor_name: profile.name ?? profile.email ?? user.id,
@@ -109,6 +107,12 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
       entity_id: auditId,
       supabase,
     })
+
+    const { error } = await supabase
+      .from('audits')
+      .delete()
+      .eq('id', auditId)
+    if (error) throw error
 
     revalidateAll([cacheTags.audits(), cacheTags.audits(auditId)])
     revalidate(cacheTags.compliance())

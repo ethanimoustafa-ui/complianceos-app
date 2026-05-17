@@ -9,7 +9,7 @@
 
 import type { NextRequest } from 'next/server'
 import { requirePerm, requireUser } from '@/lib/api/auth'
-import { handle, NotFound } from '@/lib/api/errors'
+import { handle, NotFound, ValidationFailed } from '@/lib/api/errors'
 import { ok, paginate } from '@/lib/api/response'
 import { parseJson } from '@/lib/api/validate'
 import { rangeFor } from '@/lib/api/pagination'
@@ -27,12 +27,20 @@ export const dynamic = 'force-dynamic'
 export async function GET(req: NextRequest) {
   try {
     const { supabase } = await requireUser()
-    const q = ListAuditsQuerySchema.parse(Object.fromEntries(req.nextUrl.searchParams.entries()))
+    // safeParse + ValidationFailed → 400 on bad input. Using `.parse()` here
+    // would throw a raw ZodError which `handle()` collapses to a 500 — see
+    // policies wave's Zod query-parse 500 finding.
+    const parsed = ListAuditsQuerySchema.safeParse(
+      Object.fromEntries(req.nextUrl.searchParams.entries()),
+    )
+    if (!parsed.success) {
+      throw ValidationFailed(parsed.error.issues, 'Invalid query parameters')
+    }
+    const q = parsed.data
 
     let query = supabase
       .from('audits')
       .select(AUDIT_LIST_COLUMNS, { count: 'exact' })
-      .is('deleted_at', null)
 
     if (q.status) query = query.eq('status', q.status)
     if (q.priority) query = query.eq('priority', q.priority)

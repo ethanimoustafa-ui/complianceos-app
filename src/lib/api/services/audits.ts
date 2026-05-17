@@ -10,15 +10,31 @@ import { NotFound } from '../errors'
 // --- selection lists ---------------------------------------------------------
 
 /**
- * Columns returned on the audit list endpoint. Kept narrow to keep payloads
- * small — anything extra goes on the detail endpoint.
+ * Columns returned on the audit list endpoint. Expanded to cover everything
+ * the audit-card and /reports listing renders without a follow-up detail
+ * fetch: description preview, due_date, status, framework_ids, type,
+ * category, priority, progress, assignee_id. Detail-only data (team,
+ * comments, documents, counts, review_schedule, frequency) lives on the
+ * detail endpoint.
  */
 export const AUDIT_LIST_COLUMNS =
-  'id, title, type, status, priority, due_date, assignee_id, progress, category, framework_ids, created_at, updated_at'
+  'id, title, description, type, status, priority, due_date, completed_at, closed_overdue, assignee_id, progress, category, framework_ids, created_at, updated_at'
 
 /** Detail columns include everything except soft-delete bookkeeping. */
 export const AUDIT_DETAIL_COLUMNS =
   'id, title, description, type, status, due_date, assignee_id, progress, category, frequency, priority, closed_overdue, completed_at, review_schedule, framework_ids, created_at, updated_at'
+
+/** Columns returned by `audit_team_members` endpoints. */
+export const AUDIT_TEAM_MEMBER_COLUMNS =
+  'id, audit_id, user_id, role, is_owner, added_at'
+
+/** Columns returned by `audit_comments` endpoints. */
+export const AUDIT_COMMENT_COLUMNS =
+  'id, audit_id, content, author_id, is_edited, created_at, updated_at'
+
+/** Columns returned by `audit_documents` endpoints. */
+export const AUDIT_DOCUMENT_COLUMNS =
+  'id, audit_id, name, type, storage_path, uploaded_at, uploaded_by'
 
 // --- audit detail w/ counts ---------------------------------------------------
 
@@ -45,7 +61,10 @@ export interface AuditDetail {
 
 /**
  * Fetch an audit by id together with the counts the detail page needs. Throws
- * `ApiError('not_found', 404)` if the audit is soft-deleted or missing.
+ * `ApiError('not_found', 404)` if the audit is missing.
+ *
+ * As of migration 042 audits are hard-deleted, so we no longer filter on
+ * `deleted_at IS NULL` — a missing row really is missing.
  */
 export async function getAuditDetail(
   supabase: SupabaseClient,
@@ -55,12 +74,13 @@ export async function getAuditDetail(
     .from('audits')
     .select(AUDIT_DETAIL_COLUMNS)
     .eq('id', auditId)
-    .is('deleted_at', null)
     .maybeSingle<Omit<AuditDetail, 'counts'>>()
   if (error) throw error
   if (!audit) throw NotFound(`Audit ${auditId} not found`)
 
   const [tasks, documents, teamMembers] = await Promise.all([
+    // audit_tasks still has a deleted_at column (no migration to hard-delete
+    // those yet) — keep filtering tombstones out of the count.
     supabase
       .from('audit_tasks')
       .select('id', { count: 'exact', head: true })
@@ -91,8 +111,8 @@ export async function getAuditDetail(
 }
 
 /**
- * Ensure the audit exists (and is not soft-deleted) before mutating it.
- * Returns the row's id so callers can use it in log writes.
+ * Ensure the audit exists before mutating it. Returns the row's id so callers
+ * can use it in log writes. As of migration 042 audits are hard-deleted.
  */
 export async function assertAuditExists(
   supabase: SupabaseClient,
@@ -102,7 +122,6 @@ export async function assertAuditExists(
     .from('audits')
     .select('id')
     .eq('id', auditId)
-    .is('deleted_at', null)
     .maybeSingle<{ id: string }>()
   if (error) throw error
   if (!data) throw NotFound(`Audit ${auditId} not found`)

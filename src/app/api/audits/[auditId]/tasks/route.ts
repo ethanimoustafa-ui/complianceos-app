@@ -38,7 +38,7 @@ export async function GET(req: NextRequest, { params }: Params) {
     if (error) throw error
 
     return ok(paginate(data ?? [], page, pageSize, count ?? 0), {
-      cache: { sMaxAge: 60, tags: [cacheTags.auditTasks(auditId)] },
+      cache: { sMaxAge: 60, staleWhileRevalidate: 300, tags: [cacheTags.auditTasks(auditId)] },
     })
   } catch (e) {
     return handle(e)
@@ -90,6 +90,7 @@ export async function POST(req: NextRequest, { params }: Params) {
     ])
 
     revalidateAll([
+      cacheTags.audits(),
       cacheTags.audits(auditId),
       cacheTags.auditTasks(auditId),
     ])

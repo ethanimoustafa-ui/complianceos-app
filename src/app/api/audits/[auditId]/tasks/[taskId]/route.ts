@@ -37,6 +37,8 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       .update(update)
       .eq('id', taskId)
       .eq('audit_id', auditId)
+      // `audit_tasks.deleted_at` is still in use (no hard-delete migration for
+      // tasks yet) — keep tombstones excluded from update targets.
       .is('deleted_at', null)
       .select(TASK_COLUMNS)
       .single()
@@ -63,7 +65,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       }),
     ])
 
-    revalidateAll([cacheTags.audits(auditId), cacheTags.auditTasks(auditId)])
+    revalidateAll([cacheTags.audits(), cacheTags.audits(auditId), cacheTags.auditTasks(auditId)])
     if (update.completed !== undefined || update.status !== undefined) {
       revalidate(cacheTags.compliance())
     }
@@ -107,7 +109,7 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
       }),
     ])
 
-    revalidateAll([cacheTags.audits(auditId), cacheTags.auditTasks(auditId)])
+    revalidateAll([cacheTags.audits(), cacheTags.audits(auditId), cacheTags.auditTasks(auditId)])
     return ok({ id: taskId, deleted: true })
   } catch (e) {
     return handle(e)

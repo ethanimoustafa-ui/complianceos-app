@@ -83,6 +83,32 @@ export const RegisterAuditDocumentSchema = z.object({
 })
 export type RegisterAuditDocumentInput = z.infer<typeof RegisterAuditDocumentSchema>
 
+// ---------- audit team members -----------------------------------------------
+
+export const AddAuditTeamMemberSchema = z.object({
+  user_id: Uuid,
+  // `name` and `role` accompany the row for display purposes — they are not
+  // persisted on `audit_team_members` directly (name is read from profiles),
+  // but the role column IS persisted. We accept name for symmetry with the
+  // client store shape and ignore it server-side.
+  name: z.string().max(200).optional(),
+  role: z.string().min(1).max(100).default('Auditor'),
+  is_owner: z.boolean().optional(),
+})
+export type AddAuditTeamMemberInput = z.infer<typeof AddAuditTeamMemberSchema>
+
+// ---------- audit comments ---------------------------------------------------
+
+export const CreateAuditCommentSchema = z.object({
+  content: z.string().min(1).max(50_000),
+})
+export type CreateAuditCommentInput = z.infer<typeof CreateAuditCommentSchema>
+
+export const UpdateAuditCommentSchema = z.object({
+  content: z.string().min(1).max(50_000),
+})
+export type UpdateAuditCommentInput = z.infer<typeof UpdateAuditCommentSchema>
+
 // ---------- audit templates ---------------------------------------------------
 
 export const CreateAuditTemplateSchema = z.object({
