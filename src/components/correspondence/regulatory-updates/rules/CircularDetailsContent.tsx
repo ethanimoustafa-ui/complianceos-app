@@ -184,8 +184,12 @@ export function CircularDetailsContent({ circular, onClose, onOpenBOModal, onEdi
                 onChange={async (e) => {
                   const files = Array.from(e.target.files ?? [])
                   for (const file of files) {
-                    const dataUrl = await readFileAsDataUrl(file)
-                    setPdfUrl(freshCircular.id, dataUrl)
+                    try {
+                      const dataUrl = await readFileAsDataUrl(file)
+                      await setPdfUrl(freshCircular.id, dataUrl)
+                    } catch {
+                      // store sets error state; visible via store.error consumer
+                    }
                   }
                   e.target.value = ''
                 }}

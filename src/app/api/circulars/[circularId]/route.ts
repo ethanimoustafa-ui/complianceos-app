@@ -9,6 +9,9 @@ import { cacheTags, revalidate, revalidateAll } from '@/lib/api/cache'
 import { writeAudit } from '@/lib/api/audit'
 import { UpdateCircularSchema } from '@/lib/api/schemas/circulars'
 import {
+  ARTICLE_CHECKLIST_COLUMNS,
+  ARTICLE_TIMELINE_COLUMNS,
+  ARTICLE_VERSION_COLUMNS,
   CIRCULAR_DETAIL_COLUMNS,
   IMPLEMENTATION_COLUMNS,
   TIMELINE_COLUMNS,
@@ -44,7 +47,9 @@ export async function GET(_req: NextRequest, { params }: Params) {
         .order('sort_order', { ascending: true }),
       supabase
         .from('circular_articles')
-        .select(IMPLEMENTATION_COLUMNS)
+        .select(
+          `${IMPLEMENTATION_COLUMNS}, checklist:article_checklist_items(${ARTICLE_CHECKLIST_COLUMNS}), versions:article_versions(${ARTICLE_VERSION_COLUMNS}), timeline:article_timeline(${ARTICLE_TIMELINE_COLUMNS})`,
+        )
         .eq('circular_id', circularId)
         .order('sort_order', { ascending: true }),
       supabase

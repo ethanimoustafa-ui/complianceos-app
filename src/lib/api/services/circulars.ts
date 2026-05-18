@@ -14,7 +14,7 @@ export const IMPLEMENTATION_COLUMNS =
   'id, circular_id, article_number, title, description, risk_level, responsible_department, compliance_status, assigned_to, notes, sort_order'
 
 export const WORKFLOW_STEP_COLUMNS =
-  'id, circular_id, phase, label, label_ar, status, date, user_name, notes, action_label, action_label_ar, requires_notes, action_type, sort_order'
+  'id, circular_id, phase, label, label_ar, status, date, user_name, notes, action_label, action_label_ar, requires_notes, action_type, sort_order, deadline, assigned_to'
 
 export const TIMELINE_COLUMNS =
   'id, circular_id, title, title_ar, date, user_name, status'
@@ -87,6 +87,8 @@ export async function insertCircularTimeline(
 // --- article checklist + timeline -----------------------------------------
 
 export const ARTICLE_CHECKLIST_COLUMNS = 'id, article_id, text, completed, sort_order'
+export const ARTICLE_VERSION_COLUMNS = 'id, article_id, version_no, date, author, changes'
+export const ARTICLE_TIMELINE_COLUMNS = 'id, article_id, title, date, user_name, status'
 
 /** Throws NotFound if the article doesn't belong to the circular. */
 export async function assertArticleExists(
