@@ -196,8 +196,8 @@ export function ExecutiveView({ metrics }: ExecutiveViewProps) {
               <span className="font-bold text-rose-500">{policiesOverdue} {t('dashboard.policiesOverdue')}</span>.
             </p>
             <div className="flex gap-4 pt-2">
-              <Button variant="dark" onClick={() => router.push(primaryAction.route)}>{primaryAction.label}</Button>
-              <Button variant="outline" onClick={() => router.push('/correspondence/regulatory-updates/policies')}>{t('dashboard.policyLibrary')}</Button>
+              <Button variant="dark" onClick={() => router.push(primaryAction.route)} className="active:scale-[0.98]">{primaryAction.label}</Button>
+              <Button variant="outline" onClick={() => router.push('/correspondence/regulatory-updates/policies')} className="active:scale-[0.98]">{t('dashboard.policyLibrary')}</Button>
             </div>
           </div>
           <div className="relative flex-1 flex flex-col items-center justify-center gap-2">
@@ -291,7 +291,7 @@ export function ExecutiveView({ metrics }: ExecutiveViewProps) {
             <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest">
               {t('dashboard.activeFrameworks')}
             </h3>
-            <button onClick={() => router.push('/settings')} className="text-xs font-bold text-blue-600 hover:text-blue-700 cursor-pointer">
+            <button onClick={() => router.push('/settings')} className="text-xs font-bold text-blue-600 hover:text-blue-700 active:text-blue-800 transition-colors cursor-pointer">
               {t('dashboard.configure')}
             </button>
           </div>

@@ -16,6 +16,7 @@ import type { TranslationKey } from '@/i18n'
 import { EditableSelect } from '@/components/ui/editable-select'
 import { dicebearAvatar } from '@/lib/avatar'
 import { paginate } from '@/lib/pagination'
+import { ListSkeleton } from '@/components/ui/skeleton'
 
 // Types
 type ActionType = 'opened' | 'closed' | 'commented' | 'uploaded' | 'created' | 'assigned' | 'updated' | 'reviewed'
@@ -59,6 +60,13 @@ export default function ReportsDetailedPage() {
 
   // Stores
   const { logs: storeLogs } = useAuditLogStore()
+  // Wave-3 skeleton boundary — first-fetch placeholder (no rows + no
+  // lastFetched yet). Refetches keep stale list visible per
+  // OPTIMIZATION-PATTERNS §2.
+  const logsLoading = useAuditLogStore((s) => s.isLoading)
+  const logsLastFetched = useAuditLogStore((s) => s.lastFetched)
+  const showLogsSkeleton =
+    logsLoading && storeLogs.length === 0 && logsLastFetched === null
 
   // Hydrate server-state on mount (Fix-1).
   const fetchAuditLogs = useAuditLogStore((s) => s.fetchAll)
@@ -337,6 +345,19 @@ export default function ReportsDetailedPage() {
             </div>
           </CardHeader>
           <CardContent>
+            {showLogsSkeleton ? (
+              <div className="p-2">
+                <ListSkeleton rows={5} columns={6} />
+              </div>
+            ) : paginatedLogs.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-16 text-center">
+                <div className="p-4 bg-slate-100 rounded-full mb-3">
+                  <Icon icon="lucide:file-search" className="text-3xl text-slate-400" />
+                </div>
+                <p className="text-sm font-bold text-slate-900 mb-1">{t('reports.noLogsFound' as TranslationKey)}</p>
+                <p className="text-xs text-slate-500">{t('reports.tryAdjustingFilters' as TranslationKey)}</p>
+              </div>
+            ) : (
             <div className="overflow-x-auto">
               <table className={`w-full ${isRTL ? 'text-right' : 'text-left'}`}>
                 <thead className="sticky top-0 bg-slate-50 z-10">
@@ -499,6 +520,7 @@ export default function ReportsDetailedPage() {
                 </tbody>
               </table>
             </div>
+            )}
             {filteredLogs.length > LOGS_PER_PAGE && (
               <div className="flex items-center justify-between pt-4 mt-4 border-t border-slate-100">
                 <span className="text-xs text-slate-500" dir="ltr">

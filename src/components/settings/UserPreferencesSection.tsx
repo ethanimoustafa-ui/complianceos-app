@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { Icon } from '@iconify/react'
 import { Button } from '@/components/ui/button'
+import { LoadingButton } from '@/components/ui/loading-button'
 import { Input } from '@/components/ui/input'
 import { Modal } from '@/components/ui/modal'
 import { useUserPreferencesStore } from '@/stores/user-preferences-store'
@@ -38,6 +39,9 @@ export function UserPreferencesSection() {
 
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false)
   const [profileRole, setProfileRole] = useState<'compliance-manager' | 'auditor' | 'administrator'>('compliance-manager')
+  const [profileFullName, setProfileFullName] = useState('Felix Anderson')
+  const [profileEmail, setProfileEmail] = useState('felix@complianceos.io')
+  const [isSavingProfile, setIsSavingProfile] = useState(false)
 
   return (
     <>
@@ -139,8 +143,8 @@ export function UserPreferencesSection() {
               {t('sidebar.changeAvatar')}
             </button>
           </div>
-          <Input label={t('sidebar.fullName')} defaultValue="Felix Anderson" />
-          <Input label={t('sidebar.emailAddress')} type="email" defaultValue="felix@complianceos.io" />
+          <Input label={t('sidebar.fullName')} value={profileFullName} onChange={(e) => setProfileFullName(e.target.value)} />
+          <Input label={t('sidebar.emailAddress')} type="email" value={profileEmail} onChange={(e) => setProfileEmail(e.target.value)} />
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('sidebar.role')}</label>
             <EditableSelect
@@ -155,13 +159,38 @@ export function UserPreferencesSection() {
             />
           </div>
           <Input label={t('sidebar.department')} defaultValue="Risk & Compliance" />
+          {(() => {
+            const missing: string[] = []
+            if (!profileFullName.trim()) missing.push(t('sidebar.fullName'))
+            if (!profileEmail.trim()) missing.push(t('sidebar.emailAddress'))
+            return missing.length > 0 ? (
+              <p className="text-xs text-rose-600 text-end">
+                Missing required: {missing.join(', ')}
+              </p>
+            ) : null
+          })()}
           <div className="flex gap-3 pt-4">
             <Button variant="outline" className="flex-1" onClick={() => setIsProfileModalOpen(false)}>
               {t('common.cancel')}
             </Button>
-            <Button variant="primary" className="flex-1" onClick={() => setIsProfileModalOpen(false)}>
+            <LoadingButton
+              variant="primary"
+              className="flex-1"
+              loading={isSavingProfile}
+              disabled={!profileFullName.trim() || !profileEmail.trim()}
+              onClick={async () => {
+                setIsSavingProfile(true)
+                try {
+                  // Local-only profile preview save; persistence wired by team backend.
+                  await new Promise((r) => setTimeout(r, 250))
+                  setIsProfileModalOpen(false)
+                } finally {
+                  setIsSavingProfile(false)
+                }
+              }}
+            >
               {t('common.saveChanges')}
-            </Button>
+            </LoadingButton>
           </div>
         </div>
       </Modal>

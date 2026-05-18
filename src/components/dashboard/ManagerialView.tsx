@@ -16,6 +16,7 @@ import { CircularProgressRing } from './CircularProgressRing'
 import { TrainingProgressBar } from './TrainingProgressBar'
 import { TeamMemberWorkload } from './TeamMemberWorkload'
 import { ObservationCard } from './ObservationCard'
+import { formatTimelineDate } from '@/lib/format-date'
 import type { DashboardMetrics } from '@/hooks/useDashboardMetrics'
 import { useTeamWorkloads, useBurnoutDetection } from '@/hooks/useWorkload'
 import { useDepartmentStore } from '@/stores/department-store'
@@ -242,7 +243,7 @@ export function ManagerialView({ metrics }: ManagerialViewProps) {
           <div className="flex flex-wrap gap-3 mt-6 pt-4 border-t border-slate-200/60">
             {criticalActions.length > 0 ? (
               criticalActions.map(action => (
-                <Button key={action.key} variant={action.score < 60 ? 'dark' : 'outline'} onClick={() => router.push(action.route)} className="gap-2">
+                <Button key={action.key} variant={action.score < 60 ? 'dark' : 'outline'} onClick={() => router.push(action.route)} className="gap-2 active:scale-[0.98]">
                   <Icon icon={action.icon} className="w-4 h-4" />
                   {action.label}
                   <Badge variant={action.score >= 60 ? 'warning' : 'danger'} size="sm">{action.score}%</Badge>
@@ -379,7 +380,7 @@ export function ManagerialView({ metrics }: ManagerialViewProps) {
               <button
                 key={item.id}
                 onClick={() => router.push(item.route)}
-                className="w-full px-5 py-3 flex items-center justify-between hover:bg-slate-50 transition-colors text-start cursor-pointer"
+                className="w-full px-5 py-3 flex items-center justify-between hover:bg-slate-50 active:bg-slate-100 transition-colors text-start cursor-pointer"
               >
                 <div className="flex items-center gap-3">
                   <Icon
@@ -393,7 +394,7 @@ export function ManagerialView({ metrics }: ManagerialViewProps) {
                 </div>
                 <div className="flex items-center gap-3">
                   {item.dueDate && (
-                    <span className="text-[10px] text-slate-400">{item.dueDate}</span>
+                    <span className="text-[10px] text-slate-400">{formatTimelineDate(item.dueDate, isRTL)}</span>
                   )}
                   <Badge variant={getStatusVariant(item.status)} size="sm">{item.typeKey}</Badge>
                   <Icon icon="lucide:chevron-right" className="text-slate-300 text-sm" />

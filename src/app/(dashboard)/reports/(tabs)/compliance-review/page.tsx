@@ -18,6 +18,7 @@ import {
 import { useAuthStore } from '@/stores/auth-store'
 import { calculateComplianceReviewScore } from '@/lib/compliance-review-score'
 import { paginate } from '@/lib/pagination'
+import { ListSkeleton, CardSkeleton } from '@/components/ui/skeleton'
 
 // Color/icon channels are static; the user-visible label comes from i18n
 // (`verdictLabelKeys`). Keeping these split avoids a per-render translate
@@ -54,6 +55,20 @@ export default function ComplianceReviewPage() {
   const { departments } = useDepartmentStore()
   const { observations } = useObservationStore()
   const { evaluations, setVerdict } = useComplianceEvaluationStore()
+  // Wave-3 skeleton boundary — show placeholders while ANY core store is on
+  // its first fetch (no data + no lastFetched yet). Refetches keep stale
+  // content visible per OPTIMIZATION-PATTERNS §2.
+  const circularsLoading = useCircularStore((s) => s.isLoading)
+  const circularsLastFetched = useCircularStore((s) => s.lastFetched)
+  const policiesLoading = usePolicyStore((s) => s.isLoading)
+  const policiesLastFetched = usePolicyStore((s) => s.lastFetched)
+  const departmentsLoading = useDepartmentStore((s) => s.isLoading)
+  const departmentsLastFetched = useDepartmentStore((s) => s.lastFetched)
+  const evaluationMutating = useComplianceEvaluationStore((s) => s.isMutating)
+  const showInitialSkeleton =
+    (circularsLoading && circularsLastFetched === null && circulars.length === 0) ||
+    (policiesLoading && policiesLastFetched === null && policies.length === 0) ||
+    (departmentsLoading && departmentsLastFetched === null && departments.length === 0)
   const user = useAuthStore((s) => s.user)
   const evaluatorName = user?.name ?? t('complianceReview.evaluatorFallback')
 
@@ -257,7 +272,14 @@ export default function ComplianceReviewPage() {
             </p>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 p-6">
-            {departmentScores.map((d) => {
+            {showInitialSkeleton && departmentScores.length === 0 ? (
+              <CardSkeleton count={6} className="md:col-span-2 lg:col-span-3 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3" />
+            ) : departmentScores.length === 0 ? (
+              <div className="md:col-span-2 lg:col-span-3 flex flex-col items-center justify-center py-12 text-center">
+                <Icon icon="lucide:building-2" className="text-3xl text-slate-300 mb-2" />
+                <p className="text-sm text-slate-500">{t('complianceReview.emptyOwnedNone')}</p>
+              </div>
+            ) : departmentScores.map((d) => {
               const isActive = d.dept.id === activeDeptId
               const scoreColor = d.score >= 80 ? 'text-emerald-600' : d.score >= 50 ? 'text-amber-600' : 'text-rose-600'
               const isFullyPending = d.evaluatedItems === 0
@@ -347,7 +369,11 @@ export default function ComplianceReviewPage() {
               </div>
             </div>
             <div className="divide-y divide-slate-100">
-              {filteredItems.length === 0 ? (
+              {showInitialSkeleton && filteredItems.length === 0 ? (
+                <div className="p-6">
+                  <ListSkeleton rows={5} columns={3} />
+                </div>
+              ) : filteredItems.length === 0 ? (
                 <div className="p-8 text-center text-sm text-slate-400">
                   {activeItems.length === 0
                     ? t('complianceReview.emptyOwnedNone')
@@ -444,8 +470,10 @@ export default function ComplianceReviewPage() {
                                 key={v}
                                 type="button"
                                 onClick={() => setVerdict(item.kind, item.id, activeDept.id, v, evaluatorName)}
+                                disabled={evaluationMutating}
+                                aria-busy={evaluationMutating || undefined}
                                 className={cn(
-                                  'flex items-center gap-1 px-2.5 py-1 text-[10px] font-bold rounded-full border transition-all cursor-pointer',
+                                  'flex items-center gap-1 px-2.5 py-1 text-[10px] font-bold rounded-full border transition-all cursor-pointer disabled:opacity-60 disabled:cursor-wait',
                                   isSelected
                                     ? cn(style.bg, style.text, 'border-transparent')
                                     : 'bg-white text-slate-400 border-slate-200 hover:border-slate-300',

@@ -3,6 +3,8 @@
 import { useMemo } from 'react'
 import { Icon } from '@iconify/react'
 import { Button } from '@/components/ui/button'
+import { LoadingButton } from '@/components/ui/loading-button'
+import { ListSkeleton } from '@/components/ui/skeleton'
 import { useTeamStore } from '@/stores/team-store'
 import { useAuthStore } from '@/stores/auth-store'
 import { useUserLogStore } from '@/stores/user-log-store'
@@ -66,6 +68,8 @@ function getEnabledLabels(member: TeamMember): Permission[] {
 export function AccessMatrixSection() {
   const { t } = useTranslation()
   const members = useTeamStore((s) => s.members)
+  const isLoading = useTeamStore((s) => s.isLoading)
+  const isMutating = useTeamStore((s) => s.isMutating)
   const updateMember = useTeamStore((s) => s.update)
   const currentUser = useAuthStore((s) => s.user)
   const log = useUserLogStore((s) => s.log)
@@ -145,17 +149,20 @@ export function AccessMatrixSection() {
             <p className="text-sm text-slate-500 mt-1 max-w-2xl">{t('accessMatrix.subtitle')}</p>
           </div>
           <div className="flex items-center gap-2 shrink-0">
-            <Button variant="outline" onClick={() => applyRoleDefaults()}>
+            <LoadingButton variant="outline" loading={isMutating} onClick={() => applyRoleDefaults()}>
               <Icon icon="lucide:wand-2" />
               {t('accessMatrix.applyRoleDefaults')}
-            </Button>
-            <Button variant="outline" onClick={() => clearAllNonAdmin()}>
+            </LoadingButton>
+            <LoadingButton variant="outline" loading={isMutating} onClick={() => clearAllNonAdmin()}>
               <Icon icon="lucide:eraser" />
               {t('accessMatrix.clearAll')}
-            </Button>
+            </LoadingButton>
           </div>
         </div>
 
+        {isLoading && members.length === 0 ? (
+          <div className="p-6"><ListSkeleton rows={5} columns={5} /></div>
+        ) : (
         <div className="overflow-x-auto">
           <table className="w-full text-left border-separate border-spacing-0">
             <thead>
@@ -225,6 +232,7 @@ export function AccessMatrixSection() {
             </tbody>
           </table>
         </div>
+        )}
 
         <div className="p-4 border-t border-slate-100 bg-slate-50/40 text-[11px] text-slate-500">
           <Icon icon="lucide:info" className="inline w-3.5 h-3.5 me-1 align-text-bottom" />

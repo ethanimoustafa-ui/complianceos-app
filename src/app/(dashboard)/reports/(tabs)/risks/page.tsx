@@ -773,6 +773,21 @@ export default function ReportsRisksPage() {
                   </tr>
                 </thead>
                 <tbody>
+                  {paginatedRisks.length === 0 && (
+                    <tr>
+                      <td colSpan={6} className="px-6 py-16 text-center">
+                        <div className="flex flex-col items-center gap-3">
+                          <div className="p-4 bg-slate-100 rounded-full">
+                            <Icon icon="lucide:shield-off" className="text-3xl text-slate-400" />
+                          </div>
+                          <div>
+                            <p className="text-sm font-bold text-slate-900 mb-1">{t('reports.noRisksFound' as TranslationKey)}</p>
+                            <p className="text-xs text-slate-500">{t('reports.addFirstRisk' as TranslationKey)}</p>
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
                   {paginatedRisks.map(risk => {
                     const score = getRiskScore(risk.likelihood, risk.impact)
                     const level = getRiskLevel(score)

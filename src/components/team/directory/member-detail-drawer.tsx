@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { Icon } from '@iconify/react'
 import { Button } from '@/components/ui/button'
+import { LoadingButton } from '@/components/ui/loading-button'
 import { Modal } from '@/components/ui/modal'
 import { useTranslation } from '@/i18n'
 import type { TranslationKey } from '@/i18n'
@@ -62,6 +63,7 @@ export function MemberDetailDrawer({
 }: MemberDetailDrawerProps) {
   const { t } = useTranslation()
   const currentUser = useAuthStore((s) => s.user)
+  const isMutating = useTeamStore((s) => s.isMutating)
   const workload = useWorkload(member?.id ?? '', member ?? undefined, member?.name)
   const [roleValue, setRoleValue] = useState(member?.role ?? 'officer')
   const [stagedPermissions, setStagedPermissions] = useState<{ label: string; enabled: boolean }[]>([])
@@ -339,7 +341,8 @@ export function MemberDetailDrawer({
                 {t('team.unsavedChanges' as TranslationKey)}
               </p>
             )}
-            <Button
+            <LoadingButton
+              loading={isMutating}
               variant="dark"
               className="w-full"
               disabled={!hasUnsavedChanges}
@@ -376,7 +379,7 @@ export function MemberDetailDrawer({
             >
               {t('team.updatePermissions')}
               <Icon icon="lucide:shield-check" />
-            </Button>
+            </LoadingButton>
             <RoleGuard requiredRole="admin" hidden>
               <Button
                 variant="outline"
@@ -397,9 +400,17 @@ export function MemberDetailDrawer({
             size="sm"
           >
             <div className="space-y-4">
-              <p className="text-sm text-slate-700">
-                {t('team.deleteConfirmation' as TranslationKey)} <strong>{member.name}</strong>
-              </p>
+              <div className="p-3 rounded-lg bg-rose-50 border border-rose-200 space-y-2">
+                <div className="flex items-start gap-2">
+                  <Icon icon="lucide:alert-triangle" className="text-rose-600 mt-0.5 shrink-0" />
+                  <p className="text-sm text-rose-700 font-medium">
+                    This will permanently remove <strong>{member.name}</strong> from the team. They will lose access immediately.
+                  </p>
+                </div>
+                <p className="text-xs text-slate-600">
+                  {t('team.deleteConfirmation' as TranslationKey)} <strong>{member.name}</strong>
+                </p>
+              </div>
               <input
                 type="text"
                 value={deleteConfirmName}
@@ -411,18 +422,19 @@ export function MemberDetailDrawer({
                 <Button variant="outline" className="flex-1" onClick={() => setIsDeleteModalOpen(false)}>
                   {t('common.cancel')}
                 </Button>
-                <Button
+                <LoadingButton
+                  loading={isMutating}
                   className="flex-1 bg-rose-600 hover:bg-rose-700 text-white"
                   disabled={deleteConfirmName !== member.name}
-                  onClick={() => {
-                    useTeamStore.getState().remove(member.id)
+                  onClick={async () => {
+                    await useTeamStore.getState().remove(member.id)
                     setIsDeleteModalOpen(false)
                     onClose()
                     onToast(t('team.memberDeleted' as TranslationKey))
                   }}
                 >
                   {t('team.deleteMember' as TranslationKey)}
-                </Button>
+                </LoadingButton>
               </div>
             </div>
           </Modal>

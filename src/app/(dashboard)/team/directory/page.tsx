@@ -6,6 +6,8 @@ import Link from 'next/link'
 import { Icon } from '@iconify/react'
 import { Card, CardHeader } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { LoadingButton } from '@/components/ui/loading-button'
+import { ListSkeleton } from '@/components/ui/skeleton'
 import { Input } from '@/components/ui/input'
 import { Modal } from '@/components/ui/modal'
 import { useTranslation } from '@/i18n'
@@ -105,6 +107,8 @@ export default function TeamDirectoryPage() {
   const members = useTeamStore((s) => s.members)
   const storeUpdate = useTeamStore((s) => s.update)
   const fetchTeam = useTeamStore((s) => s.fetchAll)
+  const isLoading = useTeamStore((s) => s.isLoading)
+  const isMutating = useTeamStore((s) => s.isMutating)
 
   // Hydrate server-state on mount (Fix-1).
   useEffect(() => {
@@ -291,6 +295,11 @@ export default function TeamDirectoryPage() {
                 </button>
                 </div>
               </CardHeader>
+              {isLoading && members.length === 0 ? (
+                <div className="p-6">
+                  <ListSkeleton rows={6} columns={6} />
+                </div>
+              ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-start">
                   <thead>
@@ -355,6 +364,7 @@ export default function TeamDirectoryPage() {
                   </tbody>
                 </table>
               </div>
+              )}
               <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex items-center justify-between">
                 <p className="text-xs text-slate-500 font-medium">
                   {t('team.showingMembers').replace('{shown}', String(filteredMembers.length)).replace('{total}', String(members.length))}
@@ -478,28 +488,47 @@ export default function TeamDirectoryPage() {
             {t('team.addAnother' as TranslationKey)}
           </button>
 
-          <div className="flex gap-3 pt-4 border-t border-slate-100">
-            <Button variant="outline" className="flex-1" onClick={() => { setIsInviteModalOpen(false); setInviteRows([defaultInviteRow()]) }}>
-              {t('common.cancel')}
-            </Button>
-            <Button
-              className="flex-1"
-              onClick={async () => {
-                const store = useTeamStore.getState()
-                for (const row of inviteRows) {
-                  if (row.email) {
-                    await store.invite({ email: row.email, role: row.role, department: '', fullName: row.fullName })
-                  }
-                }
-                setIsInviteModalOpen(false)
-                setInviteRows([defaultInviteRow()])
-                showToast(t('team.sendInvitation'))
-              }}
-            >
-              {t('team.sendInvitations' as TranslationKey)}
-              <Icon icon="lucide:send" className="text-sm" />
-            </Button>
-          </div>
+          {(() => {
+            const missing: string[] = []
+            const anyEmail = inviteRows.some(r => r.email.trim())
+            const invalidRow = inviteRows.find(r => r.email.trim() && !r.fullName.trim())
+            if (!anyEmail) missing.push(t('team.workEmail'))
+            if (invalidRow) missing.push(t('team.fullName'))
+            const sendDisabled = missing.length > 0
+            return (
+              <div className="space-y-2 pt-4 border-t border-slate-100">
+                {sendDisabled && (
+                  <p className="text-xs text-rose-600 text-end">
+                    Missing required: {missing.join(', ')}
+                  </p>
+                )}
+                <div className="flex gap-3">
+                  <Button variant="outline" className="flex-1" onClick={() => { setIsInviteModalOpen(false); setInviteRows([defaultInviteRow()]) }}>
+                    {t('common.cancel')}
+                  </Button>
+                  <LoadingButton
+                    loading={isMutating}
+                    disabled={sendDisabled}
+                    className="flex-1"
+                    onClick={async () => {
+                      const store = useTeamStore.getState()
+                      for (const row of inviteRows) {
+                        if (row.email.trim()) {
+                          await store.invite({ email: row.email, role: row.role, department: '', fullName: row.fullName })
+                        }
+                      }
+                      setIsInviteModalOpen(false)
+                      setInviteRows([defaultInviteRow()])
+                      showToast(t('team.sendInvitation'))
+                    }}
+                  >
+                    {t('team.sendInvitations' as TranslationKey)}
+                    <Icon icon="lucide:send" className="text-sm" />
+                  </LoadingButton>
+                </div>
+              </div>
+            )
+          })()}
         </div>
       </Modal>
 

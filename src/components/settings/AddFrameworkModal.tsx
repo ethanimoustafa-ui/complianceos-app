@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react'
 import { Icon } from '@iconify/react'
 import { Modal } from '@/components/ui/modal'
 import { Button } from '@/components/ui/button'
+import { LoadingButton } from '@/components/ui/loading-button'
 import { Input } from '@/components/ui/input'
 import { useFrameworkConfigStore } from '@/stores/framework-config-store'
 import { useDepartmentStore } from '@/stores/department-store'
@@ -241,12 +242,27 @@ export function AddFrameworkModal({ isOpen, onClose }: Props) {
           <p className="text-[10px] text-slate-400 font-mono">ID: {proposedId}</p>
         )}
         {error && <p className="text-xs text-rose-500">{error}</p>}
+        {(() => {
+          const missing: string[] = []
+          if (!name.trim()) missing.push(t('settings.nameEnglish'))
+          if (!description.trim()) missing.push(t('settings.descriptionEnglish'))
+          return missing.length > 0 ? (
+            <p className="text-xs text-rose-600 self-end text-end">
+              Missing required: {missing.join(', ')}
+            </p>
+          ) : null
+        })()}
 
         <div className="flex gap-3 pt-4">
           <Button variant="outline" className="flex-1" onClick={handleClose}>{t('common.cancel')}</Button>
-          <Button variant="primary" className="flex-1" onClick={handleSubmit}>
+          <LoadingButton
+            variant="primary"
+            className="flex-1"
+            disabled={!name.trim()}
+            onClick={handleSubmit}
+          >
             {t('settings.createFramework')}
-          </Button>
+          </LoadingButton>
         </div>
       </div>
     </Modal>

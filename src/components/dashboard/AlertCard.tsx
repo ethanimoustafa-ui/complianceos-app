@@ -45,7 +45,7 @@ export function AlertCard({ type, title, message, actionLabel, onAction }: Alert
       </div>
       <button
         onClick={onAction}
-        className={`text-[10px] font-bold ${s.buttonColor} uppercase tracking-widest px-3 py-1 bg-white border rounded-lg cursor-pointer`}
+        className={`text-[10px] font-bold ${s.buttonColor} uppercase tracking-widest px-3 py-1 bg-white border rounded-lg cursor-pointer transition-transform active:scale-[0.97]`}
       >
         {actionLabel}
       </button>

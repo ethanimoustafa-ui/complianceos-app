@@ -3,6 +3,7 @@
 import { Icon } from '@iconify/react'
 import { Modal } from '@/components/ui/modal'
 import { Button } from '@/components/ui/button'
+import { LoadingButton } from '@/components/ui/loading-button'
 import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -34,13 +35,14 @@ const roles = [
 ] as const
 
 export function InviteMemberModal({ isOpen, onClose, onSuccess }: InviteMemberModalProps) {
-  const { invite, isLoading } = useTeamStore()
+  const { invite, isMutating } = useTeamStore()
   const { departments: deptList, addDepartment, updateDepartment, removeDepartment } = useDepartmentStore()
 
   const {
     control,
     handleSubmit,
     reset,
+    watch,
     formState: { errors },
   } = useForm<InviteFormData>({
     resolver: zodResolver(inviteSchema),
@@ -196,27 +198,31 @@ export function InviteMemberModal({ isOpen, onClose, onSuccess }: InviteMemberMo
         </div>
 
         {/* Footer */}
-        <div className="p-8 bg-slate-50 border-t border-slate-200 flex justify-end gap-3">
-          <Button variant="ghost" onClick={handleClose} disabled={isLoading}>
-            Cancel
-          </Button>
-          <Button
-            variant="primary"
-            onClick={handleSubmit(onSubmit)}
-            disabled={isLoading}
-          >
-            {isLoading ? (
-              <>
-                <Icon icon="lucide:loader-2" className="animate-spin" />
-                Sending...
-              </>
-            ) : (
-              <>
-                <Icon icon="lucide:send" />
-                Send Invitation
-              </>
-            )}
-          </Button>
+        <div className="p-8 bg-slate-50 border-t border-slate-200 flex flex-col gap-2">
+          {(() => {
+            const values = watch()
+            const missing: string[] = []
+            if (!values.email?.trim()) missing.push('Email Address')
+            if (!values.department?.trim()) missing.push('Department')
+            return missing.length > 0 ? (
+              <p className="text-xs text-rose-600 self-end">
+                Missing required: {missing.join(', ')}
+              </p>
+            ) : null
+          })()}
+          <div className="flex justify-end gap-3">
+            <Button variant="ghost" onClick={handleClose} disabled={isMutating}>
+              Cancel
+            </Button>
+            <LoadingButton
+              variant="primary"
+              loading={isMutating}
+              onClick={handleSubmit(onSubmit)}
+            >
+              <Icon icon="lucide:send" />
+              Send Invitation
+            </LoadingButton>
+          </div>
         </div>
       </div>
     </Modal>

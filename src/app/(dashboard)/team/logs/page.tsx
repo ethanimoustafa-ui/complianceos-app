@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { Icon } from '@iconify/react'
 import { Card, CardHeader } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { ListSkeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
 import { useTranslation } from '@/i18n'
 import type { TranslationKey } from '@/i18n'
@@ -90,6 +91,7 @@ export default function TeamLogsPage() {
   const [currentPage, setCurrentPage] = useState(1)
 
   const userLogs = useUserLogStore((s) => s.logs)
+  const isLogsLoading = useUserLogStore((s) => s.isLoading)
   const members = useTeamStore((s) => s.members)
   const storeUpdate = useTeamStore((s) => s.update)
   const fetchUserLogs = useUserLogStore((s) => s.fetchLogs)
@@ -357,6 +359,11 @@ export default function TeamLogsPage() {
               {filteredLogs.length} {t('team.entriesFound')}
             </span>
           </CardHeader>
+          {isLogsLoading && userLogs.length === 0 ? (
+            <div className="p-6">
+              <ListSkeleton rows={6} columns={6} />
+            </div>
+          ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-start">
               <thead>
@@ -381,6 +388,13 @@ export default function TeamLogsPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50">
+                {pagedLogs.length === 0 && (
+                  <tr>
+                    <td colSpan={7} className="px-6 py-12 text-center text-xs text-slate-400 italic">
+                      {t('team.entriesFound') ? `0 ${t('team.entriesFound')}` : '—'}
+                    </td>
+                  </tr>
+                )}
                 {pagedLogs.map((log) => (
                   <React.Fragment key={log.id}>
                     <tr
@@ -493,6 +507,7 @@ export default function TeamLogsPage() {
               </tbody>
             </table>
           </div>
+          )}
           <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex items-center justify-between">
             <p className="text-xs text-slate-500 font-medium">
               {sortedLogs.length === 0

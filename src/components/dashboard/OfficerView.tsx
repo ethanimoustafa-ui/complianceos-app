@@ -15,6 +15,7 @@ import { useComplianceSettingsStore } from '@/stores/compliance-settings-store'
 import { useWorkload } from '@/hooks/useWorkload'
 import { Button } from '@/components/ui/button'
 import { CircularProgressRing } from './CircularProgressRing'
+import { formatTimelineDate } from '@/lib/format-date'
 import type { DashboardMetrics } from '@/hooks/useDashboardMetrics'
 
 interface OfficerViewProps {
@@ -22,7 +23,7 @@ interface OfficerViewProps {
 }
 
 export function OfficerView({ metrics }: OfficerViewProps) {
-  const { t } = useTranslation()
+  const { t, isRTL } = useTranslation()
   const router = useRouter()
   const targetScore = useComplianceSettingsStore(s => s.targetScore)
   const userId = metrics.currentUser?.id ?? ''
@@ -226,25 +227,25 @@ export function OfficerView({ metrics }: OfficerViewProps) {
           {/* Dynamic action buttons — direct task actions */}
           <div className="flex flex-wrap gap-3 mt-6 pt-4 border-t border-slate-200/60">
             {myObservations.length > 0 && (
-              <Button variant="dark" onClick={() => router.push('/observations')} className="gap-2">
+              <Button variant="dark" onClick={() => router.push('/observations')} className="gap-2 active:scale-[0.98]">
                 <Icon icon="lucide:eye" className="w-4 h-4" />
                 {t('dashboard.closeObservations', { count: String(myObservations.length) })}
               </Button>
             )}
             {myAudits.length > 0 && (
-              <Button variant={myObservations.length > 0 ? 'outline' : 'dark'} onClick={() => router.push('/reports')} className="gap-2">
+              <Button variant={myObservations.length > 0 ? 'outline' : 'dark'} onClick={() => router.push('/reports')} className="gap-2 active:scale-[0.98]">
                 <Icon icon="lucide:clipboard-check" className="w-4 h-4" />
                 {t('dashboard.completeAudits', { count: String(myAudits.length) })}
               </Button>
             )}
             {myPolicies.length > 0 && (
-              <Button variant="outline" onClick={() => router.push('/correspondence/regulatory-updates/policies')} className="gap-2">
+              <Button variant="outline" onClick={() => router.push('/correspondence/regulatory-updates/policies')} className="gap-2 active:scale-[0.98]">
                 <Icon icon="lucide:file-check" className="w-4 h-4" />
                 {t('dashboard.reviewMyPolicies', { count: String(myPolicies.length) })}
               </Button>
             )}
             {actionItems.length > 0 && (
-              <Button variant="outline" onClick={() => router.push('/correspondence')} className="gap-2">
+              <Button variant="outline" onClick={() => router.push('/correspondence')} className="gap-2 active:scale-[0.98]">
                 <Icon icon="lucide:check-circle" className="w-4 h-4" />
                 {t('dashboard.resolveItems', { count: String(actionItems.length) })}
               </Button>
@@ -342,7 +343,7 @@ export function OfficerView({ metrics }: OfficerViewProps) {
                   <button
                     key={`${item.type}-${item.id}`}
                     onClick={() => router.push(item.route)}
-                    className="w-full px-5 py-3 flex items-center justify-between hover:bg-slate-50 transition-colors text-start cursor-pointer"
+                    className="w-full px-5 py-3 flex items-center justify-between hover:bg-slate-50 active:bg-slate-100 transition-colors text-start cursor-pointer"
                   >
                     <div className="flex items-center gap-3">
                       <Icon icon={item.icon} className="text-slate-400" />
@@ -352,7 +353,7 @@ export function OfficerView({ metrics }: OfficerViewProps) {
                       </div>
                     </div>
                     <div className="flex items-center gap-3">
-                      <span className="text-[10px] text-slate-400">{item.dueDate}</span>
+                      <span className="text-[10px] text-slate-400">{formatTimelineDate(item.dueDate, isRTL)}</span>
                       <Badge variant={getStatusVariant(item.status)} size="sm">{item.status}</Badge>
                       <Icon icon="lucide:chevron-right" className="text-slate-300 text-sm" />
                     </div>
@@ -376,7 +377,7 @@ export function OfficerView({ metrics }: OfficerViewProps) {
                 </h3>
                 <div className="space-y-2">
                   {actionItems.map(item => (
-                    <Card key={`${item.type}-${item.id}`} className="p-4">
+                    <Card key={`${item.type}-${item.id}`} className="p-4 transition-colors active:bg-slate-100">
                       <button onClick={() => router.push(item.route)} className="w-full text-start cursor-pointer">
                         <div className="flex items-center gap-2 mb-1">
                           <Badge variant="warning" size="sm">{t('dashboard.approvalNeeded')}</Badge>
@@ -404,7 +405,7 @@ export function OfficerView({ metrics }: OfficerViewProps) {
                           <Icon icon={item.icon} className="text-slate-400 text-sm" />
                           <span className="text-xs text-slate-700">{item.title}</span>
                         </div>
-                        <span className="text-[10px] font-bold text-slate-500">{item.dueDate}</span>
+                        <span className="text-[10px] font-bold text-slate-500">{formatTimelineDate(item.dueDate, isRTL)}</span>
                       </div>
                     ))}
                   </div>
@@ -425,6 +426,9 @@ export function OfficerView({ metrics }: OfficerViewProps) {
                     <div key={n.id} className="px-4 py-3">
                       <p className="text-xs text-slate-700">{n.title}</p>
                       <p className="text-[10px] text-slate-400 mt-0.5">{n.message}</p>
+                      {n.createdAt && (
+                        <p className="text-[9px] text-slate-400 mt-1">{formatTimelineDate(n.createdAt, isRTL)}</p>
+                      )}
                     </div>
                   ))}
                 </Card>

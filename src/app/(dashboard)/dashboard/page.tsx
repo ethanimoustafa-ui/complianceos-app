@@ -8,6 +8,11 @@ import { useDashboardMetrics } from '@/hooks/useDashboardMetrics'
 import { ExecutiveView } from '@/components/dashboard/ExecutiveView'
 import { ManagerialView } from '@/components/dashboard/ManagerialView'
 import { OfficerView } from '@/components/dashboard/OfficerView'
+import {
+  ExecutiveSkeleton,
+  ManagerialSkeleton,
+  OfficerSkeleton,
+} from '@/components/dashboard/DashboardSkeletons'
 import { generateDashboardPdf } from '@/lib/dashboard-pdf'
 import type { DashboardView } from '@/types'
 import { useAuditStore } from '@/stores/audit-store'
@@ -87,14 +92,50 @@ export default function DashboardPage() {
 
   const { titleKey, subtitleKey } = viewConfig[dashboardView]
 
+  // First-fetch detector. Dashboard widgets read from many stores, so we
+  // treat the whole page as "still loading" until *any* of the headline
+  // stores has hydrated (`lastFetched != null`). The auto-deduped `apiFetch`
+  // means a stale store snapshot is still useful — once one resolves we
+  // unwrap the skeleton and let individual widget empty states take over.
+  const auditsLastFetched = useAuditStore((s) => s.lastFetched)
+  const observationsLastFetched = useObservationStore((s) => s.lastFetched)
+  const policiesLastFetched = usePolicyStore((s) => s.lastFetched)
+  const risksLastFetched = useRiskStore((s) => s.lastFetched)
+  const lettersLastFetched = useLetterStore((s) => s.lastFetched)
+  const correspondenceLastFetched = useCorrespondenceStore((s) => s.lastFetched)
+  const circularsLastFetched = useCircularStore((s) => s.lastFetched)
+  const trainingLastFetched = useTrainingStore((s) => s.lastFetched)
+  const teamLastFetched = useTeamStore((s) => s.lastFetched)
+
+  const anyStoreReady =
+    auditsLastFetched !== null ||
+    observationsLastFetched !== null ||
+    policiesLastFetched !== null ||
+    risksLastFetched !== null ||
+    lettersLastFetched !== null ||
+    correspondenceLastFetched !== null ||
+    circularsLastFetched !== null ||
+    trainingLastFetched !== null ||
+    teamLastFetched !== null
+
   return (
     <div className={showFadeIn ? 'dashboard-fade-in' : ''}>
       <Header title={t(titleKey as any)} subtitle={t(subtitleKey as any)} onExport={handleExport} exportLabel={t('common.exportPdf' as any)} />
 
       <div className="flex-1 overflow-auto hide-scrollbar p-8">
-        {dashboardView === 'executive' && <ExecutiveView metrics={metrics} />}
-        {dashboardView === 'managerial' && <ManagerialView metrics={metrics} />}
-        {dashboardView === 'officer' && <OfficerView metrics={metrics} />}
+        {!anyStoreReady ? (
+          <>
+            {dashboardView === 'executive' && <ExecutiveSkeleton />}
+            {dashboardView === 'managerial' && <ManagerialSkeleton />}
+            {dashboardView === 'officer' && <OfficerSkeleton />}
+          </>
+        ) : (
+          <>
+            {dashboardView === 'executive' && <ExecutiveView metrics={metrics} />}
+            {dashboardView === 'managerial' && <ManagerialView metrics={metrics} />}
+            {dashboardView === 'officer' && <OfficerView metrics={metrics} />}
+          </>
+        )}
       </div>
     </div>
   )

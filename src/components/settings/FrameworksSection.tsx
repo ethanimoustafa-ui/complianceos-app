@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { Icon } from '@iconify/react'
 import { Modal } from '@/components/ui/modal'
+import { Skeleton } from '@/components/ui/skeleton'
 import { useFrameworkConfigStore } from '@/stores/framework-config-store'
 import { useTranslation } from '@/i18n'
 import { Gate } from '@/components/auth/gate'
@@ -26,6 +27,7 @@ const iconColorMap: Record<string, string> = {
 export function FrameworksSection() {
   const { t, language } = useTranslation()
   const { frameworks, toggleEnabled, pinnedIds, pinFramework, unpinFramework, replacePinned } = useFrameworkConfigStore()
+  const isLoadingFrameworks = useFrameworkConfigStore((s) => s.isLoading)
   const [configureId, setConfigureId] = useState<RegulatoryBodyId | null>(null)
   const [showAllModal, setShowAllModal] = useState(false)
   const [showAddModal, setShowAddModal] = useState(false)
@@ -162,6 +164,18 @@ export function FrameworksSection() {
 
       <p className="text-xs font-medium text-slate-400 mb-3">{t('settings.pinnedFrameworks')} ({pinnedIds.length}/3)</p>
 
+      {isLoadingFrameworks && frameworks.length === 0 ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className="bg-white border border-slate-200 p-6 rounded-2xl space-y-4">
+              <Skeleton className="h-12 w-12 rounded-xl" />
+              <Skeleton className="h-5 w-2/3" />
+              <Skeleton className="h-4 w-full" />
+              <Skeleton className="h-4 w-1/2" />
+            </div>
+          ))}
+        </div>
+      ) : (
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {pinnedFrameworks.map((fw) => (
           <FrameworkCard
@@ -176,6 +190,7 @@ export function FrameworksSection() {
           />
         ))}
       </div>
+      )}
 
       <div className="mt-6 text-center">
         <Gate perm="Configure Frameworks">

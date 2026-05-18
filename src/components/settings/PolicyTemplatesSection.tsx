@@ -3,6 +3,8 @@
 import { useState, useMemo } from 'react'
 import { Icon } from '@iconify/react'
 import { Button } from '@/components/ui/button'
+import { LoadingButton } from '@/components/ui/loading-button'
+import { ListSkeleton } from '@/components/ui/skeleton'
 import { Input } from '@/components/ui/input'
 import { Modal } from '@/components/ui/modal'
 import { usePolicyTemplateStore } from '@/stores/policy-template-store'
@@ -20,6 +22,7 @@ const APPROVAL_TIERS: PolicyApprovalTier[] = ['board', 'management', 'sharia', '
 export function PolicyTemplatesSection() {
   const { t, isRTL } = useTranslation()
   const { templates, create, update, delete: deleteTemplate } = usePolicyTemplateStore()
+  const isLoading = usePolicyTemplateStore((s) => s.isLoading)
 
   const CATEGORY_LABELS: Record<PolicyCategory, string> = {
     compliance: t('policies.categoryCompliance'),
@@ -86,6 +89,9 @@ export function PolicyTemplatesSection() {
           </Button>
         </Gate>
       </div>
+      {isLoading && templates.length === 0 ? (
+        <div className="p-6"><ListSkeleton rows={4} columns={6} /></div>
+      ) : (
       <div className="overflow-x-auto">
         <table className="w-full text-left">
           <thead>
@@ -114,6 +120,13 @@ export function PolicyTemplatesSection() {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
+            {sorted.length === 0 && (
+              <tr>
+                <td colSpan={7} className="px-8 py-12 text-center text-xs text-slate-400 italic">
+                  {t('listsAndCategories.empty')}
+                </td>
+              </tr>
+            )}
             {sorted.map((tmpl) => (
               <tr key={tmpl.id} className="hover:bg-slate-50/50 transition-colors">
                 <td className="px-8 py-4">
@@ -144,6 +157,7 @@ export function PolicyTemplatesSection() {
           </tbody>
         </table>
       </div>
+      )}
 
       {/* Create Modal */}
       <PolicyTemplateFormModal
@@ -371,6 +385,11 @@ function PolicyTemplateFormModal({
             className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent resize-none"
           />
         </div>
+        {!name.trim() && (
+          <p className="text-xs text-rose-600 text-end">
+            Missing required: {t('settings.nameEnglish')}
+          </p>
+        )}
         <div className="flex gap-3 pt-4">
           <Button variant="outline" onClick={onClose}>{t('common.cancel')}</Button>
           {onDelete && (
@@ -380,9 +399,9 @@ function PolicyTemplateFormModal({
               </button>
             </Gate>
           )}
-          <Button variant="primary" className="flex-1" onClick={handleSave}>
+          <LoadingButton variant="primary" className="flex-1" disabled={!name.trim()} onClick={handleSave}>
             {t('common.saveChanges')}
-          </Button>
+          </LoadingButton>
         </div>
       </div>
     </Modal>

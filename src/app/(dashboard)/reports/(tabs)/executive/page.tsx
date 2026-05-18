@@ -19,6 +19,8 @@ import type { PeriodFilter } from '@/lib/compliance-engine.types'
 import { exportExecutiveReport, generatePrintableReport } from '@/lib/export'
 import type { TranslationKey } from '@/i18n'
 import { dicebearAvatar } from '@/lib/avatar'
+import { ListSkeleton, Skeleton } from '@/components/ui/skeleton'
+import { useFormattedDate } from '@/hooks/useFormattedDate'
 
 // Types
 type Severity = 'critical' | 'high' | 'medium' | 'low'
@@ -93,6 +95,7 @@ const confidenceConfig = {
 export default function ReportsExecutivePage() {
   const { t, isRTL } = useTranslation()
   const pathname = usePathname()
+  const { formatDate } = useFormattedDate()
 
   // Stores
   const storeAudits = useAuditStore((s) => s.audits)
@@ -100,6 +103,17 @@ export default function ReportsExecutivePage() {
   const storeRisks = useRiskStore((s) => s.risks)
   const allFrameworks = useFrameworkConfigStore((s) => s.frameworks)
   const enabledFrameworks = useMemo(() => allFrameworks.filter((f) => f.enabled), [allFrameworks])
+  // Wave-3 skeleton boundary — first-fetch placeholder for the findings table
+  // and risk distribution. Avoids the empty "no findings" flash on initial
+  // mount (OPTIMIZATION-PATTERNS §2).
+  const auditsLoading = useAuditStore((s) => s.isLoading)
+  const auditsLastFetched = useAuditStore((s) => s.lastFetched)
+  const risksLoading = useRiskStore((s) => s.isLoading)
+  const risksLastFetched = useRiskStore((s) => s.lastFetched)
+  const showFindingsSkeleton =
+    auditsLoading && storeAudits.length === 0 && auditsLastFetched === null
+  const showRisksSkeleton =
+    risksLoading && storeRisks.length === 0 && risksLastFetched === null
 
   // State
   const [periodFilter, setPeriodFilter] = useState('12months')
@@ -110,7 +124,13 @@ export default function ReportsExecutivePage() {
   const [isDrawerOpen, setIsDrawerOpen] = useState(false)
   const [hoveredTrendIdx, setHoveredTrendIdx] = useState<number | null>(null)
 
-  useEffect(() => { fetchAudits() }, [fetchAudits])
+  // Hydrate on mount. Both fetches are de-duped by apiFetch when called
+  // concurrently across tabs (OPTIMIZATION-PATTERNS §5).
+  const fetchRisks = useRiskStore((s) => s.fetchAll)
+  useEffect(() => {
+    void fetchAudits()
+    void fetchRisks()
+  }, [fetchAudits, fetchRisks])
 
   // Compliance score
   const complianceScore = useComplianceScore(periodFilter as PeriodFilter)
@@ -519,7 +539,19 @@ export default function ReportsExecutivePage() {
           <Card>
             <CardContent className="pt-3 pb-3 px-4">
               <h3 className="text-xs font-bold text-slate-900 mb-3">{t('reports.riskDistribution')}</h3>
-              {riskDistribution.length === 0 ? (
+              {showRisksSkeleton ? (
+                <div className="space-y-3 py-2">
+                  {[1, 2, 3, 4].map((i) => (
+                    <div key={i} className="space-y-1">
+                      <div className="flex justify-between">
+                        <Skeleton className="h-3 w-20" />
+                        <Skeleton className="h-3 w-8" />
+                      </div>
+                      <Skeleton className="h-1.5 w-full" />
+                    </div>
+                  ))}
+                </div>
+              ) : riskDistribution.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-6 text-center">
                   <Icon icon="lucide:shield-off" className="text-2xl text-slate-300 mb-2" />
                   <p className="text-[11px] text-slate-400">{t('reports.noRiskData' as TranslationKey)}</p>
@@ -561,7 +593,11 @@ export default function ReportsExecutivePage() {
                   <Badge className="bg-slate-100 text-slate-600 text-[10px] px-1.5 py-0">{auditFindings.length} {t('reports.total')}</Badge>
                 </div>
               </div>
-              {auditFindings.length === 0 ? (
+              {showFindingsSkeleton ? (
+                <div className="p-2">
+                  <ListSkeleton rows={4} columns={5} />
+                </div>
+              ) : auditFindings.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-8 text-center">
                   <Icon icon="lucide:clipboard-check" className="text-2xl text-slate-300 mb-2" />
                   <p className="text-[11px] text-slate-400">{t('reports.noAuditFindings' as TranslationKey)}</p>
@@ -818,7 +854,7 @@ export default function ReportsExecutivePage() {
                     </div>
                     <div className="p-3 bg-slate-50 rounded-lg">
                       <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1">{t('reports.dueDate')}</p>
-                      <span className="text-xs font-bold text-slate-700">{selectedFinding.dueDate.toLocaleDateString()}</span>
+                      <span className="text-xs font-bold text-slate-700">{formatDate(selectedFinding.dueDate)}</span>
                     </div>
                     <div className="p-3 bg-slate-50 rounded-lg">
                       <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1">{t('reports.progress')}</p>
@@ -905,7 +941,7 @@ export default function ReportsExecutivePage() {
                               <div className="w-5 h-5 rounded-full bg-slate-200 flex items-center justify-center text-[8px] font-bold text-slate-500">{comment.author.name.charAt(0)}</div>
                             )}
                             <span className="text-[10px] font-bold text-slate-700">{comment.author.name}</span>
-                            <span className="text-[9px] text-slate-400">{new Date(comment.createdAt).toLocaleDateString()}</span>
+                            <span className="text-[9px] text-slate-400">{formatDate(new Date(comment.createdAt))}</span>
                           </div>
                           <p className="text-[11px] text-slate-600 leading-relaxed">{comment.content}</p>
                         </div>

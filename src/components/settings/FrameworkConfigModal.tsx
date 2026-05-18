@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { Icon } from '@iconify/react'
 import { Modal } from '@/components/ui/modal'
 import { Button } from '@/components/ui/button'
+import { LoadingButton } from '@/components/ui/loading-button'
 import { useFrameworkConfigStore, getDefaultWeights } from '@/stores/framework-config-store'
 import { useDepartmentStore } from '@/stores/department-store'
 import { useTranslation } from '@/i18n'
@@ -332,9 +333,21 @@ export function FrameworkConfigModal({ frameworkId, isOpen, onClose }: Props) {
         </div>
         )}
 
+        {framework.correspondenceBased && weightsTotal !== 100 && (
+          <p className="text-xs text-rose-600 text-end">
+            Missing required: {t('settings.weightageTotal')} (= 100%)
+          </p>
+        )}
         <div className="flex gap-3 pt-4">
           <Button variant="outline" className="flex-1" onClick={onClose}>{t('common.cancel')}</Button>
-          <Button variant="primary" className="flex-1" onClick={handleSave}>{t('settings.saveSettings')}</Button>
+          <LoadingButton
+            variant="primary"
+            className="flex-1"
+            disabled={framework.correspondenceBased && weightsTotal !== 100}
+            onClick={handleSave}
+          >
+            {t('settings.saveSettings')}
+          </LoadingButton>
         </div>
       </div>
     </Modal>
