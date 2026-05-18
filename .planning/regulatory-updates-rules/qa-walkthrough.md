@@ -6,6 +6,112 @@
 **Source stories:** [user-stories.md](./user-stories.md)
 **Supabase project:** qdbitfgxbnbzkqhdoepd
 
+---
+
+## Orchestrator notes — 2026-05-18 (post-re-run, user-reported regressions)
+
+Captured here (not in the QA agent's evidence tables) so the engineering history stays attached to the QA findings. These are observations + patches I (orchestrator) made directly against the codebase + DB, with explicit user authorization for the DB writes.
+
+### Bug 1 — RegisterCircularModal `assigned_to` dropdown sent name, not UUID
+
+**File:** `src/components/correspondence/regulatory-updates/rules/RegisterCircularModal.tsx:210`
+**Before:** `id: m.name` — the team-member dropdown's option id was the display name.
+**After:** `id: m.id` — UUID.
+**Why it failed:** `CreateCircularSchema.assigned_to: z.string().uuid().optional()` rejected "John Smith" → 400 `Validation failed` (the error the user saw). Same gotcha called out in HANDOFF #15; regressed since the earlier fix.
+
+### Bug 2 — Same `m.name` bug in ArticleDetailModal
+
+**File:** `src/components/correspondence/regulatory-updates/rules/ArticleDetailModal.tsx:182`
+**Same fix** as Bug 1. This caused the user's "Validation failed" on article create — the article modal sent `assigned_to: "Hani Moustafa"` etc.
+
+### Bug 3 — Authority dropdown filter regressed to `correspondenceBased` only
+
+**Files:** `RegisterCircularModal.tsx:58-62` + `EditCircularModal.tsx:85-95`
+**Before:** `frameworksAll.filter((f) => f.correspondenceBased)` — dropped the `enabled` constraint.
+**After:** `frameworksAll.filter((f) => f.enabled && f.correspondenceBased)` — restored.
+**Why it matters:** product spec says authority dropdown should ONLY show frameworks the user enabled in Settings AND that are correspondence-based. Compliance-only frameworks (e.g. NCA, ISO-27001) still appear as framework tags via `FrameworkTagSelector` for any item — they just aren't valid "authority" values for a circular. A previous UI agent loosened the filter when fixing "CMA/IA/ZATCA missing"; the real fix is to enable them in Settings → Frameworks, not bypass the gate.
+
+### Bug 4 — `WORKFLOW_STEP_COLUMNS` missing `deadline` + `assigned_to`
+
+**File:** `src/lib/api/services/circulars.ts:17`
+**Added:** `deadline, assigned_to` to the SELECT clause.
+**Why:** the QA re-run found that per-step deadlines saved to DB but vanished on reload — the GET response was dropping the column. Same applies to `assigned_to` once we wire per-step assignment UI.
+
+### Bug 5 — Article detail GET missing nested children
+
+**File:** `src/app/api/circulars/[circularId]/route.ts:46-51`
+**Before:** `.from('circular_articles').select(IMPLEMENTATION_COLUMNS)` — no nested children.
+**After:** Nested join via Supabase relation syntax:
+```ts
+.select(`${IMPLEMENTATION_COLUMNS}, checklist:article_checklist_items(${ARTICLE_CHECKLIST_COLUMNS}), versions:article_versions(${ARTICLE_VERSION_COLUMNS}), timeline:article_timeline(${ARTICLE_TIMELINE_COLUMNS})`)
+```
+Plus added `ARTICLE_VERSION_COLUMNS` + `ARTICLE_TIMELINE_COLUMNS` constants in `services/circulars.ts` (only `ARTICLE_CHECKLIST_COLUMNS` existed before).
+
+### Bug 6 — PDF download/upload tooltips rendered raw i18n keys
+
+**Files:** `src/i18n/dictionaries/en.json` + `ar.json`
+**Added:** `downloadPdf`, `uploadMoreFiles`, `removePdf` keys under `regulatoryUpdates.*`. The CircularDetailsContent tooltips were referencing them; the keys just didn't exist.
+
+### Patch (UX) — PDF upload now awaits + try/catch
+
+**File:** `CircularDetailsContent.tsx:184-195`. Before, `setPdfUrl(...)` was fire-and-forget so errors disappeared silently. Now `await` inside `try/catch` so the store's `error` state surfaces failures (e.g. data URL exceeds the 10MB schema cap).
+
+### Direct DB cleanup — 2026-05-18T13:00:00Z (user-authorized)
+
+User instructed: *"please clear the database of any circular policy letters... only seed data I want for now is letter templates, frameworks, departments, things that are choices."*
+
+Executed via `mcp__supabase__execute_sql` against `qdbitfgxbnbzkqhdoepd`:
+
+```sql
+DELETE FROM circulars;
+DELETE FROM policies;
+DELETE FROM letters;
+DELETE FROM correspondence;
+DELETE FROM observations;
+DELETE FROM audits;
+DELETE FROM risks;
+```
+
+ON DELETE CASCADE (migrations 040–046) wiped all children automatically.
+
+**Before → After:**
+
+| Table | Before | After |
+|---|---|---|
+| circulars | 7 | 0 |
+| policies | 8 | 0 |
+| letters | 13 | 0 |
+| correspondence | 1 | 0 |
+| observations | 15 | 0 |
+| audits | 5 | 0 |
+| risks | 3 | 0 |
+| circular_workflow_steps | 40 | 0 |
+| frameworks (kept) | 11 | 11 |
+| departments (kept) | 13 | 13 |
+| letter_templates (kept) | 4 | 4 |
+
+Studio quick-link: `https://supabase.com/dashboard/project/qdbitfgxbnbzkqhdoepd/editor?schema=public`
+
+### Open items not yet patched
+
+- **Workflow advance on legacy fallback steps** — circulars created BEFORE workflow-seeding was wired have no `circular_workflow_steps` rows; the UI falls back to `buildInitialWorkflowSteps()` defaults with string IDs (`'cap-review'`, etc). Trying to advance/rename those steps sends a non-UUID `step_id` → schema rejects. The DB-wipe above (Direct DB cleanup) eliminates this for now, since every new circular post-fix gets UUIDs seeded. Long-term fix: server-side auto-seed defaults when a circular has zero step rows AND the user calls a step mutation.
+- **Clearing Reference URL doesn't null-out the value** — flagged in the re-run notes. Quick fix: send empty string explicitly (server route maps `""` → `null`) instead of dropping the field via `undefined`.
+- **Affected Departments in Edit modal is still a checkbox grid** — RegisterCircularModal got the chip-selector treatment; EditCircularModal didn't. Easy follow-up.
+- **Per-step inline editing of notes / assignee / action_type** — workflow tab has no editor UI for these on existing steps. Backend supports it (`UpdateCircularWorkflowStepSchema` accepts all of them).
+
+### What this means for the next pages (policies, observations, etc.)
+
+The recurring patterns I'm fixing here will apply 1:1 to every other entity:
+
+1. **Team-member dropdowns must use `m.id` (UUID), not `m.name`.** Audit every modal's assignee picker before declaring a page "done".
+2. **List-response column constant** (`*_LIST_COLUMNS`) must include every field the card / row card displays. Otherwise the card stays blank until detail fetch.
+3. **Detail-GET nested joins** for any sub-resource the modal renders (checklist, versions, timeline, etc.). Without the nested join the row IS in DB but the modal shows "—".
+4. **Schemas filtering UUID-typed optional fields must coerce empty string → undefined at the store layer** (`assigned_to: x || undefined`). Zod treats `""` as "present and invalid" for `.uuid().optional()`.
+5. **Authority/framework dropdown filters** should respect the user's enablement state. Don't loosen the filter as a workaround for seed data — fix the seed.
+6. **Workflow step IDs must be the DB UUIDs, not client-fallback slugs.** Auto-seed defaults on first mutation OR ensure POST /api/<entity> always seeds workflow defaults.
+
+---
+
 ## Re-run notes
 
 Three fix waves landed between the original run and this re-run. All mutations that were previously local-only (workflow, edit, BO-assign, add-article) now fire API calls and persist. This re-run retests every previously FAIL/PARTIAL/SKIPPED-due-to-blocker criterion on a fresh test circular (`SAMA-CIR-2026-0008`, id `53838ba8-9039-4048-9cad-ab9d51388b40`, later hard-deleted via the UI). Evidence screenshots continue at `20-...`; previous screenshots `00–19` are from the original run.

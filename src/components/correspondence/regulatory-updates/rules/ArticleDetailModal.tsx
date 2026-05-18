@@ -179,7 +179,9 @@ export function ArticleDetailModal({ circularId, article, mode, onClose, t, isRT
                   value={artAssignedTo || null}
                   onChange={(id) => setArtAssignedTo(id)}
                   items={teamMembers.filter((m) => m.status === 'active').map((m) => ({
-                    id: m.name,
+                    // Send the team-member UUID, not the name — assigned_to
+                    // is a UUID column on the server (HANDOFF #15).
+                    id: m.id,
                     label: `${m.name} — ${m.department}`,
                   }))}
                   placeholder={t('common.select' as any)}

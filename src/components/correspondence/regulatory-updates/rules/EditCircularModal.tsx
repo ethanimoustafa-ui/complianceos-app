@@ -82,11 +82,12 @@ export function EditCircularModal({ circular, isOpen, onClose, onSaved, t, isRTL
   // disabled doesn't silently switch the value.
   const frameworksAll = useFrameworkConfigStore((s) => s.frameworks)
   const authorityOptions = useMemo(() => {
-    // Drop the `enabled` constraint — all correspondence-based authorities
-    // (SAMA, CMA, IA, ZATCA, MISA, CITC, SAFIU, Sharia Board, …) should be
-    // selectable here even if not yet enabled in the org's framework config.
+    // Authority picker shows only frameworks the user has BOTH enabled in
+    // Settings AND that are correspondence-based. Compliance-only frameworks
+    // (e.g. NCA) still surface as framework tags via FrameworkTagSelector —
+    // they just aren't valid "authority" values for a circular.
     const base = frameworksAll
-      .filter((f) => f.correspondenceBased)
+      .filter((f) => f.enabled && f.correspondenceBased)
       .map((f) => ({ value: f.id as string, label: isRTL ? f.nameAr : f.name }))
     if (formAuthority && !base.some((o) => o.value === formAuthority)) {
       const match = frameworksAll.find((f) => f.id === formAuthority)

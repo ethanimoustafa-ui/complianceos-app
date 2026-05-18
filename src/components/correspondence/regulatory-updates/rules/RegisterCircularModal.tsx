@@ -45,18 +45,15 @@ export function RegisterCircularModal({ isOpen, onClose, onCreated, t }: Props) 
   const pdfInputRef = useRef<HTMLInputElement>(null)
   const [frameworkIds, setFrameworkIds] = useState<RegulatoryBodyId[]>([])
 
-  // Authority picker is driven directly by enabled correspondence-based
-  // frameworks — including any custom frameworks the user added via settings.
-  // Selecting the stable frameworks ref then deriving via useMemo avoids the
-  // Zustand getServerSnapshot infinite-loop warning.
+  // Authority picker shows ONLY frameworks the user has both enabled in
+  // Settings AND that are correspondence-based. Compliance-only frameworks
+  // (e.g. NCA) still surface as framework tags via FrameworkTagSelector
+  // below — they just aren't valid "authority" values for a circular.
   const frameworksAll = useFrameworkConfigStore((s) => s.frameworks)
-  // Drop the `enabled` constraint — all correspondence-based authorities
-  // (SAMA, CMA, IA, ZATCA, MISA, CITC, SAFIU, Sharia Board, …) should be
-  // selectable here even if not yet enabled in the org's framework config.
   const authorityOptions = useMemo(
     () =>
       frameworksAll
-        .filter((f) => f.correspondenceBased)
+        .filter((f) => f.enabled && f.correspondenceBased)
         .map((f) => ({ value: f.id, label: isRTL ? f.nameAr : f.name })),
     [frameworksAll, isRTL]
   )
@@ -207,8 +204,10 @@ export function RegisterCircularModal({ isOpen, onClose, onCreated, t }: Props) 
                 value={formAssignedTo || null}
                 onChange={(id) => setFormAssignedTo(id)}
                 items={teamMembers.filter((m) => m.status === 'active').map((m) => ({
-                  id: m.name,
-                  label: `${m.name} - ${m.department}`,
+                  // Send the team-member UUID, not their display name —
+                  // assigned_to is a UUID column on the server (HANDOFF #15).
+                  id: m.id,
+                  label: `${m.name} — ${m.department}`,
                 }))}
                 placeholder={t('regulatoryUpdates.selectOfficer')}
                 isRTL={isRTL}
