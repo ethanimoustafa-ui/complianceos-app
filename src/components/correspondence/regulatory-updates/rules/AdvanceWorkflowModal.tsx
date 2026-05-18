@@ -62,22 +62,30 @@ export function AdvanceWorkflowModal({ isOpen, stepId, stepLabel, circularId, on
     onClose()
   }
 
-  async function handleStepAction() {
+  function handleStepAction() {
     if (!confirmStep || !freshCircular) return
-    if (confirmStep.actionType === 'notify-bo') {
-      const subject = t('regulatoryUpdates.notifyBoPhase1Subject', { reference: freshCircular.reference })
+    // Capture refs before clearing/closing.
+    const circ = freshCircular
+    const step = confirmStep
+    const notes = advanceNotes || undefined
+
+    // Side-effects (mailto + zip download) and the advance call all run in
+    // the background. Close-on-click so the modal feels instant; the store
+    // applies an optimistic step transition and rolls back on failure.
+    if (step.actionType === 'notify-bo') {
+      const subject = t('regulatoryUpdates.notifyBoPhase1Subject', { reference: circ.reference })
       const body = t('regulatoryUpdates.notifyBoPhase1Body', {
-        reference: freshCircular.reference,
-        title: freshCircular.title,
-        deadline: freshCircular.capDeadline ?? '—',
+        reference: circ.reference,
+        title: circ.title,
+        deadline: circ.capDeadline ?? '—',
       })
       window.open(`mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`)
-    } else if (confirmStep.actionType === 'notify-authority') {
-      await notifyAuthority(freshCircular)
+    } else if (step.actionType === 'notify-authority') {
+      void notifyAuthority(circ).catch(() => {})
     }
-    advanceWorkflowStep(freshCircular.id, confirmStep.id, advanceNotes || undefined)
     setAdvanceNotes('')
     onClose()
+    void Promise.resolve(advanceWorkflowStep(circ.id, step.id, notes)).catch(() => {})
   }
 
   return (

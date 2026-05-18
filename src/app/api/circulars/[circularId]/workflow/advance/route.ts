@@ -1,13 +1,15 @@
 // POST /api/circulars/[circularId]/workflow/advance
-//   body: { notes?, next_phase? }
+//   body: { notes?, next_phase?, step_id? }
 //
-// Advances the current phase: marks the current `circular_workflow_steps` row
-// with phase === current as 'completed' (stamping date + user_name + notes),
-// and the next phase (current+1, or `next_phase` if provided) as 'current'.
+// Advances workflow. When `step_id` is provided, marks THAT specific step as
+// completed (stamping date + user_name + notes) and promotes the next step by
+// sort_order ascending to 'current'. When `step_id` is absent, falls back to
+// the legacy behavior: completes whichever step has status === 'current' and
+// promotes the next phase step.
 
 import type { NextRequest } from 'next/server'
 import { requirePerm } from '@/lib/api/auth'
-import { Conflict, handle, NotFound } from '@/lib/api/errors'
+import { Conflict, handle } from '@/lib/api/errors'
 import { ok } from '@/lib/api/response'
 import { parseJson } from '@/lib/api/validate'
 import { cacheTags, revalidate, revalidateAll } from '@/lib/api/cache'
@@ -16,13 +18,27 @@ import { AdvancePhaseSchema } from '@/lib/api/schemas/circulars'
 import {
   WORKFLOW_STEP_COLUMNS,
   assertCircularExists,
+  getCircularHeader,
   insertCircularTimeline,
+  recomputeCircularProgress,
 } from '@/lib/api/services/circulars'
+import { notifyCircularStepAssignee } from '@/lib/api/services/notifications'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
 type Params = { params: Promise<{ circularId: string }> }
+
+type StepRow = {
+  id: string
+  phase: number
+  status: string
+  sort_order: number
+  label: string
+  label_ar: string | null
+  notes: string | null
+  assigned_to: string | null
+}
 
 export async function POST(req: NextRequest, { params }: Params) {
   try {
@@ -31,25 +47,29 @@ export async function POST(req: NextRequest, { params }: Params) {
     await assertCircularExists(supabase, circularId)
     const body = await parseJson(req, AdvancePhaseSchema)
 
-    const { data: steps, error: stErr } = await supabase
+    const { data: stepsData, error: stErr } = await supabase
       .from('circular_workflow_steps')
-      .select(WORKFLOW_STEP_COLUMNS)
+      .select(WORKFLOW_STEP_COLUMNS + ', assigned_to')
       .eq('circular_id', circularId)
       .order('sort_order', { ascending: true })
     if (stErr) throw stErr
-    if (!steps || steps.length === 0) throw Conflict('No workflow steps configured')
+    const steps = (stepsData ?? []) as unknown as StepRow[]
+    if (steps.length === 0) throw Conflict('No workflow steps configured')
 
-    const current = (steps as { phase: number; status: string; id: string }[]).find(
-      (s) => s.status === 'current',
-    )
-    if (!current) throw Conflict('No active workflow step')
-
-    const nextPhase = body.next_phase ?? current.phase + 1
+    // Resolve which step is being completed.
+    let current: StepRow | undefined
+    if (body.step_id) {
+      current = steps.find((s) => s.id === body.step_id)
+      if (!current) throw Conflict('Workflow step not found for circular')
+    } else {
+      current = steps.find((s) => s.status === 'current')
+      if (!current) throw Conflict('No active workflow step')
+    }
 
     const today = new Date().toISOString().slice(0, 10)
     const actor = profile.name ?? profile.email ?? user.id
 
-    // Mark current step completed
+    // Mark the resolved step completed.
     const { error: cErr } = await supabase
       .from('circular_workflow_steps')
       .update({
@@ -61,10 +81,21 @@ export async function POST(req: NextRequest, { params }: Params) {
       .eq('id', current.id)
     if (cErr) throw cErr
 
-    // Promote next phase step to current (if exists)
-    const nextStep = (steps as { phase: number; status: string; id: string }[]).find(
-      (s) => s.phase === nextPhase && s.status === 'pending',
-    )
+    // Resolve next step: when step_id was provided, find the next step by
+    // sort_order ascending (status !== 'completed' && id !== current.id).
+    // Otherwise, retain legacy phase-based lookup.
+    let nextStep: StepRow | undefined
+    let nextPhase = current.phase
+    if (body.step_id) {
+      nextStep = steps
+        .filter((s) => s.id !== current!.id && s.status !== 'completed')
+        .sort((a, b) => a.sort_order - b.sort_order)[0]
+      nextPhase = nextStep?.phase ?? current.phase + 1
+    } else {
+      nextPhase = body.next_phase ?? current.phase + 1
+      nextStep = steps.find((s) => s.phase === nextPhase && s.status === 'pending')
+    }
+
     if (nextStep) {
       const { error: nErr } = await supabase
         .from('circular_workflow_steps')
@@ -80,7 +111,12 @@ export async function POST(req: NextRequest, { params }: Params) {
         action: 'circular.workflow.advance',
         entity_type: 'circular',
         entity_id: circularId,
-        metadata: { from_phase: current.phase, to_phase: nextPhase, notes: body.notes },
+        metadata: {
+          from_phase: current.phase,
+          to_phase: nextPhase,
+          step_id: current.id,
+          notes: body.notes,
+        },
         supabase,
       }),
       insertCircularTimeline(
@@ -90,9 +126,31 @@ export async function POST(req: NextRequest, { params }: Params) {
         actor,
         'completed',
       ),
+      recomputeCircularProgress(supabase, circularId).catch(() => undefined),
     ])
 
-    revalidateAll([cacheTags.circulars(), cacheTags.circulars(circularId)])
+    if (nextStep) {
+      const header = await getCircularHeader(supabase, circularId)
+      if (header) {
+        await notifyCircularStepAssignee(supabase, {
+          circular: header,
+          step: {
+            id: nextStep.id,
+            label: nextStep.label,
+            label_ar: nextStep.label_ar,
+            notes: nextStep.notes,
+            assigned_to: nextStep.assigned_to,
+          },
+          actor: { id: user.id, name: actor },
+        })
+      }
+    }
+
+    revalidateAll([
+      cacheTags.circulars(),
+      cacheTags.circulars(circularId),
+      cacheTags.circularWorkflowSteps(circularId),
+    ])
     revalidate(cacheTags.compliance())
     return ok({ id: circularId, from_phase: current.phase, to_phase: nextPhase })
   } catch (e) {

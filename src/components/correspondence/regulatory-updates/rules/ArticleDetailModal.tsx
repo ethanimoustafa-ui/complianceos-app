@@ -69,12 +69,14 @@ export function ArticleDetailModal({ circularId, article, mode, onClose, t, isRT
       checklist: currentMode === 'create' ? localChecklist : (article?.checklist ?? []),
       attachments: article?.attachments ?? [],
     }
-    if (currentMode === 'create') {
-      addArticle(circularId, data)
-    } else if (currentMode === 'edit' && article) {
-      updateArticle(circularId, article.id, data)
-    }
+    // Close-on-click + fire-and-forget. Store applies optimistic insert/patch
+    // (with temp-id swap for new articles) and rolls back on failure.
     onClose()
+    if (currentMode === 'create') {
+      void Promise.resolve(addArticle(circularId, data)).catch(() => {})
+    } else if (currentMode === 'edit' && article) {
+      void Promise.resolve(updateArticle(circularId, article.id, data)).catch(() => {})
+    }
   }
 
   function handleAddChecklistItem() {
@@ -433,7 +435,7 @@ export function ArticleDetailModal({ circularId, article, mode, onClose, t, isRT
                 ) : (
                   <div className="flex items-center gap-2">
                     <span className="text-xs text-rose-600 font-bold">{t('common.confirm')}?</span>
-                    <Button variant="outline" className="border-rose-200 text-rose-600 hover:bg-rose-50" onClick={() => { deleteArticle(circularId, article.id); onClose() }}>
+                    <Button variant="outline" className="border-rose-200 text-rose-600 hover:bg-rose-50" onClick={async () => { try { await deleteArticle(circularId, article.id) } finally { onClose() } }}>
                       {t('common.delete')}
                     </Button>
                     <Button variant="ghost" onClick={() => setDeleteConfirm(false)}>{t('common.cancel')}</Button>

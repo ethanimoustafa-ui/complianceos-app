@@ -28,7 +28,8 @@ export function BusinessOwnerModal({ isOpen, onClose, circular, onAssigned, t }:
 
   function handleAssign() {
     if (!circular || !boDept) return
-    assignBusinessOwner(circular.id, boDept)
+    // Close-on-click + fire-and-forget. The store handles optimistic update
+    // and rollback on failure.
     addTimelineEvent(circular.id, {
       title: `Business Owner assigned: ${boDept}`,
       titleAr: `تم تعيين المالك التنفيذي: ${boDept}`,
@@ -38,6 +39,7 @@ export function BusinessOwnerModal({ isOpen, onClose, circular, onAssigned, t }:
     })
     onAssigned(t('regulatoryUpdates.boAssigned'))
     onClose()
+    void Promise.resolve(assignBusinessOwner(circular.id, boDept)).catch(() => {})
   }
 
   return (

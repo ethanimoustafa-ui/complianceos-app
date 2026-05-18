@@ -623,15 +623,18 @@ export const useCircularStore = create<CircularState>()((set, get) => ({
     )
 
     try {
+      // Empty-string optional fields must be elided so the route's
+      // `z.string().uuid().optional()` / `.optional()` schemas don't fail with
+      // "Validation failed" — Zod treats `""` as present-and-invalid.
       const payload = {
         article_number: article.articleNumber,
         title: article.title,
-        description: article.description,
+        description: article.description || undefined,
         risk_level: article.riskLevel,
         compliance_status: article.complianceStatus,
-        responsible_department: article.responsibleDepartment,
-        assigned_to: article.assignedTo,
-        notes: article.notes,
+        responsible_department: article.responsibleDepartment || undefined,
+        assigned_to: article.assignedTo || undefined,
+        notes: article.notes || undefined,
         sort_order: (snapshot?.articles.length ?? 0),
       }
       const row = await api.post<ImplementationApiRow>(
@@ -736,12 +739,14 @@ export const useCircularStore = create<CircularState>()((set, get) => ({
       const payload: Record<string, unknown> = {}
       if (updates.articleNumber !== undefined) payload.article_number = updates.articleNumber
       if (updates.title !== undefined) payload.title = updates.title
-      if (updates.description !== undefined) payload.description = updates.description ?? null
+      if (updates.description !== undefined) payload.description = updates.description || undefined
       if (updates.riskLevel !== undefined) payload.risk_level = updates.riskLevel
       if (updates.complianceStatus !== undefined) payload.compliance_status = updates.complianceStatus
-      if (updates.responsibleDepartment !== undefined) payload.responsible_department = updates.responsibleDepartment
-      if (updates.assignedTo !== undefined) payload.assigned_to = updates.assignedTo ?? null
-      if (updates.notes !== undefined) payload.notes = updates.notes ?? null
+      // Empty string on an optional UUID would fail Zod's uuid().optional().
+      // Coerce empty string → undefined so the field is omitted on the wire.
+      if (updates.responsibleDepartment !== undefined) payload.responsible_department = updates.responsibleDepartment || undefined
+      if (updates.assignedTo !== undefined) payload.assigned_to = updates.assignedTo || undefined
+      if (updates.notes !== undefined) payload.notes = updates.notes || undefined
       const row = await api.patch<ImplementationApiRow>(
         `/circulars/${circularId}/implementations/${articleId}`,
         payload,

@@ -70,6 +70,7 @@ export type ListCircularsQuery = z.infer<typeof ListCircularsQuerySchema>
 export const AdvancePhaseSchema = z.object({
   notes: z.string().max(5_000).optional(),
   next_phase: z.coerce.number().int().min(0).max(2).optional(),
+  step_id: z.string().uuid().optional(),
 })
 export type AdvancePhaseInput = z.infer<typeof AdvancePhaseSchema>
 

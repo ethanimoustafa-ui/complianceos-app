@@ -119,8 +119,12 @@ export function EditCircularModal({ circular, isOpen, onClose, onSaved, t, isRTL
       assignedTo: formAssignedTo || undefined,
       frameworkIds,
     }
-    requestCircularEdit(circular.id, editData)
+    // Close-on-click: close immediately, fire the persist in the background.
+    // The store applies an optimistic update so the row reflects the new
+    // values right away; on failure the store will surface state.error and
+    // revert via its catch path.
     onSaved()
+    void Promise.resolve(requestCircularEdit(circular.id, editData)).catch(() => {})
   }
 
   return (

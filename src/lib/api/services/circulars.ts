@@ -5,7 +5,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { NotFound } from '../errors'
 
 export const CIRCULAR_LIST_COLUMNS =
-  'id, reference, authority, title, priority, status, applicability, departments, business_owner_department, business_owner_department_id, assigned_to, progress, issuance_date, due_date, cap_status, cap_due_date, framework_ids, created_at, updated_at'
+  'id, reference, authority, title, priority, status, applicability, departments, business_owner_department, business_owner_department_id, assigned_to, progress, issuance_date, due_date, cap_status, cap_due_date, cap_deadline, cap_response_deadline, remediation_deadline, description, pdf_url, reference_url, framework_ids, created_at, updated_at'
 
 export const CIRCULAR_DETAIL_COLUMNS =
   'id, reference, authority, title, priority, status, applicability, departments, business_owner_department, business_owner_department_id, assigned_to, progress, issuance_date, due_date, cap_status, cap_due_date, cap_deadline, cap_response_deadline, remediation_deadline, description, pdf_url, reference_url, framework_ids, created_at, updated_at'
