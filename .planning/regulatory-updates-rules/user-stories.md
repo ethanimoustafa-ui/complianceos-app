@@ -164,21 +164,25 @@ This is the heart of regulator-rule tracking. Every circular issued by SAMA / CM
 - Hard-reload → the chip is still on both surfaces
 - Reassigning emits a "Business Owner changed: A → B" entry; both surfaces update
 
-### Story 11 — Run the workflow: advance phases, edit notes, reorder, assign assignees
+### Story 11 — Run the workflow: add a step, reorder, set per-step deadline, advance, edit notes, assign assignees
 
 **As a** compliance officer driving CAP review through to completion
-**I want to** see all 10 default workflow steps grouped by phase (Initial Review → CAP Approval → Remediation), advance them one by one with notes, change an assignee, edit a step's note, reorder steps if process changes, and have every change persist
+**I want to** see all 10 default workflow steps grouped by phase (Initial Review → CAP Approval → Remediation), **add custom steps where the process needs them**, **move any step to a different position**, **set a deadline per step**, advance steps one by one with notes, change an assignee, edit a step's note, and have **every change still be there after a hard reload**
 **So that** the workflow reflects reality and notifies the right people.
 
 **Acceptance criteria**:
-- The Workflow tab renders all `circular_workflow_steps` rows, grouped by `phase` (0/1/2), in `sort_order`
+- The Workflow tab renders all `circular_workflow_steps` rows, grouped by `phase` (0/1/2), ordered by `sort_order`
 - The current step is highlighted; future steps are dimmed; completed steps show a check mark + completion date + actor
-- Each step has inline-editable: label, notes (textarea, saves on blur), assignee (team-member dropdown), action type
-- Drag-handles (or up/down chevrons) reorder steps; reorder PATCH persists; hard-reload → new order survives
-- An "Advance" button on the current step opens `AdvanceWorkflowModal` to add a note; on confirm, the step flips to completed, the next step becomes current, and the assignee of the new-current step receives an in-app `notifications` row
-- "Add Step" button lets the user insert a custom step in any phase; "Delete Step" removes a non-default step (with confirm)
-- Hard-reload → every step's label / notes / assignee / status / order persist exactly
+- Each step has inline-editable: label, notes (textarea, saves on blur), assignee (team-member dropdown), action type, **deadline (date picker)**
+- **Add Step** button opens an inline form (or a small modal) with required fields: label, phase, action type. On save, the step appears at the end of its phase's list with `status='pending'` and `sort_order = max + 1`. Hard-reload → the new step is still there at the same position with the same fields
+- **Move a step to another position**: drag-handles or up/down chevrons reorder steps; the new order PATCHes via `POST /api/circulars/[id]/workflow/steps/reorder` with the full updated `sort_order` map. Moving a step works **within and across phases**. Hard-reload → the new order survives
+- **Per-step deadline**: each non-completed step exposes a date picker. Picking a date saves immediately via `PATCH /api/circulars/[id]/workflow/steps/[stepId]` with `{ deadline: 'YYYY-MM-DD' }`. The deadline renders as a chip below the step label (e.g. "Due Mar 14", or "5 days overdue" in rose if past). Clearing the date removes the chip. Hard-reload → the deadline is still on the step
+- An "Advance" button on the current step opens `AdvanceWorkflowModal` to add a note; on confirm, the step flips to completed, the next step becomes current, **and the assignee of the new-current step receives an in-app `notifications` row** (per `notifyCircularStepAssignee`)
+- Editing a step's assignee triggers a notification to the newly-assigned team member (unless self-assigned)
+- **Delete Step** removes a non-default step (with a strong "this cannot be undone" confirm); the remaining steps' `sort_order` re-shuffles automatically
+- Hard-reload → every step's label / notes / assignee / **deadline** / status / order persists exactly. Pull the rows directly from Supabase Studio (`circular_workflow_steps WHERE circular_id = ...`) to confirm
 - Workflow advance also recomputes the rollup progress (server-side `recomputeCircularProgress`)
+- Optimistic UI: every workflow mutation (add/reorder/edit/deadline/advance/delete) updates the UI instantly and rolls back visibly with an inline error on server failure
 
 ### Story 12 — Edit a circular (everything optimistic + persistent)
 
