@@ -55,7 +55,6 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       .from('observations')
       .update(update)
       .eq('id', observationId)
-      .is('deleted_at', null)
       .select(OBSERVATION_LIST_COLUMNS)
       .single()
     if (error || !data) throw error ?? NotFound('Update returned no row')
@@ -97,11 +96,17 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
     const { supabase, user, profile } = await requirePerm('observation:delete')
     const observationId = await assertObservationExists(supabase, observationIdParam)
 
+    // Hard-delete. Migration 043 verified every child FK
+    // (observation_assignees, observation_checklist, observation_documents,
+    //  observation_team, observation_timeline, observation_updates,
+    //  remediation_plans, closure_requests, closure_reviews,
+    //  letter_observations) already specifies ON DELETE CASCADE. The
+    //  append-only audit_logs row below is polymorphic (no FK) so the
+    //  compliance trail survives.
     const { error } = await supabase
       .from('observations')
-      .update({ deleted_at: new Date().toISOString() })
+      .delete()
       .eq('id', observationId)
-      .is('deleted_at', null)
     if (error) throw error
 
     await writeAudit({

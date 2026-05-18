@@ -127,3 +127,8 @@ export const CreateObservationCommentSchema = z.object({
   text: z.string().min(1).max(10_000),
 })
 export type CreateObservationCommentInput = z.infer<typeof CreateObservationCommentSchema>
+
+export const UpdateObservationCommentSchema = z.object({
+  text: z.string().min(1).max(10_000),
+})
+export type UpdateObservationCommentInput = z.infer<typeof UpdateObservationCommentSchema>

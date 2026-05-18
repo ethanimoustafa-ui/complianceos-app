@@ -34,7 +34,11 @@ export async function GET(_req: NextRequest, { params }: Params) {
     if (error) throw error
 
     return ok(data ?? [], {
-      cache: { sMaxAge: 60, tags: [cacheTags.observations(observationId)] },
+      cache: {
+        sMaxAge: 60,
+        staleWhileRevalidate: 300,
+        tags: [cacheTags.observations(observationId)],
+      },
     })
   } catch (e) {
     return handle(e)
@@ -83,7 +87,7 @@ export async function POST(req: NextRequest, { params }: Params) {
       }),
     ])
 
-    revalidateAll([cacheTags.observations(observationId)])
+    revalidateAll([cacheTags.observations(), cacheTags.observations(observationId)])
     return ok(data, { status: 201 })
   } catch (e) {
     return handle(e)

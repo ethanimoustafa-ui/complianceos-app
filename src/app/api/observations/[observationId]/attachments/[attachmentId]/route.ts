@@ -50,7 +50,7 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
       }),
     ])
 
-    revalidateAll([cacheTags.observations(observationId)])
+    revalidateAll([cacheTags.observations(), cacheTags.observations(observationId)])
     return ok({ id: attachmentId, deleted: true })
   } catch (e) {
     return handle(e)

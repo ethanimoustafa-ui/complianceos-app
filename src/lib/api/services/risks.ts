@@ -5,8 +5,14 @@ import { Conflict, NotFound } from '../errors'
 
 // --- selection lists ---------------------------------------------------------
 
+// List rows feed the Risk Register cards directly, so we ship the full set of
+// fields the card surfaces: title + description preview, scoring trio
+// (likelihood / impact / risk_score), workflow + status, owner pointer,
+// monitoring cadence, target date (`mitigation_deadline`), and last review
+// date. `description` is bounded by the column varchar so this stays cheap.
+// Matches the OBSERVATION_LIST_COLUMNS / POLICY_LIST_COLUMNS shape.
 export const RISK_LIST_COLUMNS =
-  'id, title, category, likelihood, impact, risk_score, status, owner_id, mitigation_progress, intended_department_id, mitigation_workflow_status, mitigation_deadline, monitoring_frequency, next_review_date, framework_ids, created_at, updated_at'
+  'id, title, description, category, likelihood, impact, risk_score, status, owner_id, mitigation_plan, mitigation_progress, intended_department_id, mitigation_workflow_status, mitigation_deadline, monitoring_frequency, last_review_date, next_review_date, sent_to_department_at, framework_ids, created_at, updated_at'
 
 export const RISK_DETAIL_COLUMNS =
   'id, title, description, category, likelihood, impact, risk_score, status, owner_id, mitigation_plan, mitigation_progress, monitoring_frequency, last_review_date, next_review_date, review_schedule, intended_department_id, mitigation_deadline, mitigation_workflow_status, sent_to_department_at, framework_ids, created_at, updated_at'
@@ -27,7 +33,6 @@ export async function assertRiskExists(
     .from('risks')
     .select('id')
     .eq('id', riskId)
-    .is('deleted_at', null)
     .maybeSingle<{ id: string }>()
   if (error) throw error
   if (!data) throw NotFound(`Risk ${riskId} not found`)
@@ -72,7 +77,6 @@ export async function getRiskDetail(
     .from('risks')
     .select(RISK_DETAIL_COLUMNS)
     .eq('id', riskId)
-    .is('deleted_at', null)
     .maybeSingle<Omit<RiskDetail, 'mitigation_checklist' | 'proposed_plan' | 'history'>>()
   if (error) throw error
   if (!risk) throw NotFound(`Risk ${riskId} not found`)

@@ -186,6 +186,13 @@ interface ObservationState {
   error: string | null
   lastFetched: number | null
 
+  // Detail-fetch tracker — populated once `fetchById(id)` resolves. The list
+  // response carries summary columns, but detail-only sub-resources
+  // (checklist, documents, updates, assignees, remediation plans, closure
+  // request/review, timeline) only appear after a detail fetch. UI uses
+  // `isDetailLoaded(id)` to gate skeleton vs real content on those sections.
+  detailLoadedIds: Record<string, true>
+
   fetchAll: () => Promise<void>
   fetchById: (id: string) => Promise<Observation | null>
   fetchTimeline: (id: string) => Promise<ObservationTimelineEntry[]>
@@ -228,6 +235,13 @@ interface ObservationState {
   setSort: (sort: SortState) => void
   setPage: (page: number) => void
   setPageSize: (pageSize: number) => void
+  /**
+   * Returns `true` after `fetchById(id)` has resolved successfully for this
+   * observation. Use to gate skeleton state on detail-only sections
+   * (checklist, comments, documents, remediation, closure, timeline). List
+   * rows alone do not carry those relations.
+   */
+  isDetailLoaded: (id: string) => boolean
   clearError: () => void
 }
 
@@ -270,6 +284,7 @@ export const useObservationStore = create<ObservationState>()((set, get) => ({
   isMutating: false,
   error: null,
   lastFetched: null,
+  detailLoadedIds: {},
 
   fetchAll: async () => {
     set({ isLoading: true, error: null })
@@ -450,6 +465,7 @@ export const useObservationStore = create<ObservationState>()((set, get) => ({
           ? s.observations.map((o) => (o.id === id ? observation : o))
           : s.observations,
         selectedObservation: observation,
+        detailLoadedIds: { ...s.detailLoadedIds, [id]: true },
         isLoading: false,
         lastFetched: Date.now(),
       }))
@@ -651,15 +667,24 @@ export const useObservationStore = create<ObservationState>()((set, get) => ({
 
   delete: async (id) => {
     requirePermission('Manage Audit Findings', { storeName: 'observation', actionName: 'delete', id })
-    // OPTIMISTIC: snapshot then remove immediately. Restore on failure.
+    // OPTIMISTIC HARD-DELETE: the server route soft-deletes via
+    // `deleted_at`, but from the client's perspective the row is gone for
+    // good — there is no resurrection path. Snapshot the row, its list
+    // index, selection state, and detail-loaded flag up front so we can
+    // splice it back in on failure.
     const snapshot = get().byId[id]
     const prevIndex = get().observations.findIndex((o) => o.id === id)
+    const wasSelected = get().selectedObservation?.id === id
+    const previousSelected = wasSelected ? get().selectedObservation : null
+    const wasDetailLoaded = Boolean(get().detailLoadedIds[id])
     set((s) => {
       const { [id]: _drop, ...rest } = s.byId
+      const { [id]: _dropDetail, ...restDetail } = s.detailLoadedIds
       return {
         observations: s.observations.filter((o) => o.id !== id),
         byId: rest,
-        selectedObservation: s.selectedObservation?.id === id ? null : s.selectedObservation,
+        selectedObservation: wasSelected ? null : s.selectedObservation,
+        detailLoadedIds: restDetail,
         isMutating: true,
         error: null,
       }
@@ -677,6 +702,10 @@ export const useObservationStore = create<ObservationState>()((set, get) => ({
           return {
             observations: list,
             byId: { ...s.byId, [id]: snapshot },
+            selectedObservation: wasSelected ? previousSelected : s.selectedObservation,
+            detailLoadedIds: wasDetailLoaded
+              ? { ...s.detailLoadedIds, [id]: true }
+              : s.detailLoadedIds,
             error: errorMessage(e, 'Failed to delete observation'),
             isMutating: false,
           }
@@ -693,6 +722,49 @@ export const useObservationStore = create<ObservationState>()((set, get) => ({
   // yet — those edits stay local-only with a timeline entry.
 
   addComment: async (observationId, content, author) => {
+    // OPTIMISTIC: insert a temp comment + timeline row immediately, swap
+    // for the server response on success, remove on failure.
+    const tempId = newTempId('temp-comment')
+    const optimisticComment: Comment = {
+      id: tempId,
+      content,
+      author,
+      createdAt: new Date().toISOString(),
+    }
+    const timelineEntry: ObservationTimelineEntry = {
+      id: crypto.randomUUID(),
+      date: new Date().toISOString(),
+      dateKey: 'today',
+      description: `${author.name} added a comment`,
+      descriptionAr: `أضاف ${author.name} تعليقاً`,
+      descriptionKey: 'observations.detail.timeline.commentAdded',
+      descriptionParams: { name: author.name },
+      userId: author.id,
+      userName: author.name,
+      userAvatar: author.avatar,
+      actionType: 'comment_add',
+    }
+    set((state) => {
+      const observations = state.observations.map((obs) =>
+        obs.id === observationId
+          ? { ...obs, timeline: [timelineEntry, ...(obs.timeline || [])] }
+          : obs,
+      )
+      let selectedObservation = state.selectedObservation
+      if (selectedObservation?.id === observationId) {
+        const existingComments = selectedObservation.comments || []
+        selectedObservation = {
+          ...selectedObservation,
+          comments: [...existingComments, optimisticComment],
+          timeline: [timelineEntry, ...(selectedObservation.timeline || [])],
+        }
+      }
+      const previous = state.byId[observationId]
+      const byId = previous
+        ? { ...state.byId, [observationId]: { ...previous, timeline: [timelineEntry, ...(previous.timeline || [])] } }
+        : state.byId
+      return { observations, byId, selectedObservation, isMutating: true, error: null }
+    })
     try {
       const created = await api.post<{
         id: string
@@ -709,48 +781,59 @@ export const useObservationStore = create<ObservationState>()((set, get) => ({
         author,
         createdAt: created.created_at,
       }
-      const timelineEntry: ObservationTimelineEntry = {
-        id: crypto.randomUUID(),
-        date: new Date().toISOString(),
-        dateKey: 'today',
-        description: `${author.name} added a comment`,
-        descriptionAr: `أضاف ${author.name} تعليقاً`,
-        descriptionKey: 'observations.detail.timeline.commentAdded',
-        descriptionParams: { name: author.name },
-        userId: author.id,
-        userName: author.name,
-        userAvatar: author.avatar,
-        actionType: 'comment_add',
-      }
+      // Swap the temp comment for the server response.
+      set((state) => {
+        let selectedObservation = state.selectedObservation
+        if (selectedObservation?.id === observationId) {
+          selectedObservation = {
+            ...selectedObservation,
+            comments: selectedObservation.comments?.map((c) => (c.id === tempId ? newComment : c)),
+          }
+        }
+        return { selectedObservation, isMutating: false }
+      })
+      return newComment
+    } catch (e) {
+      // Roll back: remove the optimistic comment and timeline entry.
       set((state) => {
         const observations = state.observations.map((obs) =>
           obs.id === observationId
-            ? { ...obs, timeline: [timelineEntry, ...(obs.timeline || [])] }
+            ? { ...obs, timeline: (obs.timeline || []).filter((t) => t.id !== timelineEntry.id) }
             : obs,
         )
         let selectedObservation = state.selectedObservation
         if (selectedObservation?.id === observationId) {
-          const existingComments = selectedObservation.comments || []
           selectedObservation = {
             ...selectedObservation,
-            comments: [...existingComments, newComment],
-            timeline: [timelineEntry, ...(selectedObservation.timeline || [])],
+            comments: selectedObservation.comments?.filter((c) => c.id !== tempId),
+            timeline: (selectedObservation.timeline || []).filter((t) => t.id !== timelineEntry.id),
           }
         }
         const previous = state.byId[observationId]
         const byId = previous
-          ? { ...state.byId, [observationId]: { ...previous, timeline: [timelineEntry, ...(previous.timeline || [])] } }
+          ? {
+              ...state.byId,
+              [observationId]: {
+                ...previous,
+                timeline: (previous.timeline || []).filter((t) => t.id !== timelineEntry.id),
+              },
+            }
           : state.byId
-        return { observations, byId, selectedObservation }
+        return {
+          observations,
+          byId,
+          selectedObservation,
+          isMutating: false,
+          error: errorMessage(e, 'Failed to add comment'),
+        }
       })
-      return newComment
-    } catch (e) {
-      set({ error: errorMessage(e, 'Failed to add comment') })
       throw e
     }
   },
 
-  // TODO(Phase 6): wire PATCH /api/observations/[id]/comments/[commentId].
+  // PATCH /api/observations/[id]/comments/[commentId]. OPTIMISTIC: apply
+  // the text change locally + timeline entry, reconcile with server stamps
+  // on success, restore snapshot on failure.
   editComment: async (observationId, commentId, newText, editor) => {
     const timelineEntry: ObservationTimelineEntry = {
       id: crypto.randomUUID(),
@@ -766,26 +849,91 @@ export const useObservationStore = create<ObservationState>()((set, get) => ({
       actionType: 'comment_edit',
       targetId: commentId,
     }
+    // Snapshot for rollback.
+    const prevSelected = get().selectedObservation
+    const prevById = get().byId[observationId]
     set((state) => {
-      if (state.selectedObservation?.id === observationId) {
-        const updates = state.selectedObservation.updates?.map((update) =>
-          update.id === commentId
-            ? { ...update, text: newText, isEdited: true, editedAt: new Date().toISOString() }
-            : update,
+      const patchUpdates = (
+        list: Observation['updates'] | undefined,
+      ): Observation['updates'] | undefined =>
+        list?.map((u) =>
+          u.id === commentId
+            ? { ...u, text: newText, isEdited: true, editedAt: new Date().toISOString() }
+            : u,
         )
-        return {
-          selectedObservation: {
-            ...state.selectedObservation,
-            updates,
-            timeline: [timelineEntry, ...(state.selectedObservation.timeline || [])],
-          },
+      const patchComments = (list: Comment[] | undefined): Comment[] | undefined =>
+        list?.map((c) => (c.id === commentId ? { ...c, content: newText } : c))
+
+      let selectedObservation = state.selectedObservation
+      if (selectedObservation?.id === observationId) {
+        selectedObservation = {
+          ...selectedObservation,
+          updates: patchUpdates(selectedObservation.updates),
+          comments: patchComments(selectedObservation.comments),
+          timeline: [timelineEntry, ...(selectedObservation.timeline || [])],
         }
       }
-      return state
+      const previous = state.byId[observationId]
+      const byId = previous
+        ? { ...state.byId, [observationId]: { ...previous, updates: patchUpdates(previous.updates) } }
+        : state.byId
+      return { byId, selectedObservation, isMutating: true, error: null }
     })
+    try {
+      const updated = await api.patch<{
+        id: string
+        text: string
+        is_edited: boolean
+        edited_at: string | null
+        created_at: string
+      }>(`/observations/${observationId}/comments/${commentId}`, { text: newText })
+      // Reconcile with the server's `edited_at` / `is_edited` stamps.
+      set((state) => {
+        const patchUpdates = (
+          list: Observation['updates'] | undefined,
+        ): Observation['updates'] | undefined =>
+          list?.map((u) =>
+            u.id === commentId
+              ? {
+                  ...u,
+                  text: updated.text,
+                  isEdited: updated.is_edited,
+                  editedAt: updated.edited_at ?? undefined,
+                }
+              : u,
+          )
+        const patchComments = (list: Comment[] | undefined): Comment[] | undefined =>
+          list?.map((c) => (c.id === commentId ? { ...c, content: updated.text } : c))
+
+        let selectedObservation = state.selectedObservation
+        if (selectedObservation?.id === observationId) {
+          selectedObservation = {
+            ...selectedObservation,
+            updates: patchUpdates(selectedObservation.updates),
+            comments: patchComments(selectedObservation.comments),
+          }
+        }
+        const previous = state.byId[observationId]
+        const byId = previous
+          ? { ...state.byId, [observationId]: { ...previous, updates: patchUpdates(previous.updates) } }
+          : state.byId
+        return { byId, selectedObservation, isMutating: false }
+      })
+    } catch (e) {
+      // Roll back to the pre-edit snapshot.
+      set((state) => ({
+        byId: prevById ? { ...state.byId, [observationId]: prevById } : state.byId,
+        selectedObservation:
+          state.selectedObservation?.id === observationId ? prevSelected : state.selectedObservation,
+        isMutating: false,
+        error: errorMessage(e, 'Failed to edit comment'),
+      }))
+      throw e
+    }
   },
 
-  // TODO(Phase 6): wire DELETE /api/observations/[id]/comments/[commentId].
+  // DELETE /api/observations/[id]/comments/[commentId]. OPTIMISTIC: drop
+  // the row from local state immediately, restore on failure.
   deleteComment: async (observationId, commentId, deleter) => {
     const timelineEntry: ObservationTimelineEntry = {
       id: crypto.randomUUID(),
@@ -801,21 +949,44 @@ export const useObservationStore = create<ObservationState>()((set, get) => ({
       actionType: 'comment_delete',
       targetId: commentId,
     }
+    // Snapshot for rollback.
+    const prevSelected = get().selectedObservation
+    const prevById = get().byId[observationId]
     set((state) => {
-      if (state.selectedObservation?.id === observationId) {
-        const updates = state.selectedObservation.updates?.filter(
-          (update) => update.id !== commentId,
-        )
-        return {
-          selectedObservation: {
-            ...state.selectedObservation,
-            updates,
-            timeline: [timelineEntry, ...(state.selectedObservation.timeline || [])],
-          },
+      let selectedObservation = state.selectedObservation
+      if (selectedObservation?.id === observationId) {
+        selectedObservation = {
+          ...selectedObservation,
+          updates: selectedObservation.updates?.filter((u) => u.id !== commentId),
+          comments: selectedObservation.comments?.filter((c) => c.id !== commentId),
+          timeline: [timelineEntry, ...(selectedObservation.timeline || [])],
         }
       }
-      return state
+      const previous = state.byId[observationId]
+      const byId = previous
+        ? {
+            ...state.byId,
+            [observationId]: {
+              ...previous,
+              updates: previous.updates?.filter((u) => u.id !== commentId),
+            },
+          }
+        : state.byId
+      return { byId, selectedObservation, isMutating: true, error: null }
     })
+    try {
+      await api.delete(`/observations/${observationId}/comments/${commentId}`)
+      set({ isMutating: false })
+    } catch (e) {
+      set((state) => ({
+        byId: prevById ? { ...state.byId, [observationId]: prevById } : state.byId,
+        selectedObservation:
+          state.selectedObservation?.id === observationId ? prevSelected : state.selectedObservation,
+        isMutating: false,
+        error: errorMessage(e, 'Failed to delete comment'),
+      }))
+      throw e
+    }
   },
 
   // ---- checklist ---------------------------------------------------------
@@ -1128,12 +1299,19 @@ export const useObservationStore = create<ObservationState>()((set, get) => ({
     })
   },
 
-  // TODO(Phase 6): wire PATCH /api/observations/[id]/remediation/[planId] review endpoint.
+  // PATCH /api/observations/[id]/remediation/[planId]. OPTIMISTIC: stamp
+  // the plan locally + emit timeline entry, reconcile with the server's
+  // canonical row on success, restore snapshot on failure.
   reviewRemediationPlan: async (observationId, approved, reviewer, notes) => {
     const observation = get().byId[observationId]
     if (!observation?.remediationPlan) return
-    const updatedPlan: RemediationPlan = {
-      ...observation.remediationPlan,
+    const plan = observation.remediationPlan
+    // Snapshot for rollback.
+    const prevObservations = get().observations
+    const prevByIdRow = get().byId[observationId]
+    const prevSelected = get().selectedObservation
+    const optimisticPlan: RemediationPlan = {
+      ...plan,
       status: approved ? 'approved' : 'rejected',
       reviewedAt: new Date().toISOString(),
       reviewedBy: reviewer.id,
@@ -1162,20 +1340,74 @@ export const useObservationStore = create<ObservationState>()((set, get) => ({
       const observations = state.observations.map((obs) => {
         if (obs.id !== observationId) return obs
         const newStatus = approved && obs.status === 'open' ? 'in_progress' : obs.status
-        return { ...obs, remediationPlan: updatedPlan, status: newStatus }
+        return { ...obs, remediationPlan: optimisticPlan, status: newStatus }
       })
       let selectedObservation = state.selectedObservation
       if (selectedObservation?.id === observationId) {
         const newStatus = approved && selectedObservation.status === 'open' ? 'in_progress' : selectedObservation.status
         selectedObservation = {
           ...selectedObservation,
-          remediationPlan: updatedPlan,
+          remediationPlan: optimisticPlan,
           status: newStatus,
           timeline: [timelineEntry, ...(selectedObservation.timeline || [])],
         }
       }
-      return { observations, selectedObservation }
+      const byId = prevByIdRow
+        ? {
+            ...state.byId,
+            [observationId]: {
+              ...prevByIdRow,
+              remediationPlan: optimisticPlan,
+              status: approved && prevByIdRow.status === 'open' ? 'in_progress' : prevByIdRow.status,
+            },
+          }
+        : state.byId
+      return { observations, byId, selectedObservation, isMutating: true, error: null }
     })
+    try {
+      const row = await api.patch<{
+        id: string
+        status: string
+        reviewed_at: string | null
+        reviewed_by: string | null
+        review_notes: string | null
+      }>(`/observations/${observationId}/remediation/${plan.id}`, {
+        approved,
+        ...(notes !== undefined ? { notes } : {}),
+      })
+      const reconciled: RemediationPlan = {
+        ...optimisticPlan,
+        status: row.status as RemediationPlan['status'],
+        reviewedAt: row.reviewed_at ?? optimisticPlan.reviewedAt,
+        reviewedBy: row.reviewed_by ?? optimisticPlan.reviewedBy,
+        reviewNotes: row.review_notes ?? optimisticPlan.reviewNotes,
+      }
+      set((state) => {
+        const observations = state.observations.map((obs) =>
+          obs.id === observationId ? { ...obs, remediationPlan: reconciled } : obs,
+        )
+        let selectedObservation = state.selectedObservation
+        if (selectedObservation?.id === observationId) {
+          selectedObservation = { ...selectedObservation, remediationPlan: reconciled }
+        }
+        const previous = state.byId[observationId]
+        const byId = previous
+          ? { ...state.byId, [observationId]: { ...previous, remediationPlan: reconciled } }
+          : state.byId
+        return { observations, byId, selectedObservation, isMutating: false }
+      })
+    } catch (e) {
+      // Roll back to pre-review snapshot.
+      set((state) => ({
+        observations: prevObservations,
+        byId: prevByIdRow ? { ...state.byId, [observationId]: prevByIdRow } : state.byId,
+        selectedObservation:
+          state.selectedObservation?.id === observationId ? prevSelected : state.selectedObservation,
+        isMutating: false,
+        error: errorMessage(e, 'Failed to review remediation plan'),
+      }))
+      throw e
+    }
   },
 
   requestClosure: async (observationId, requester, notes) => {
@@ -1298,24 +1530,11 @@ export const useObservationStore = create<ObservationState>()((set, get) => ({
   // ---- documents ---------------------------------------------------------
 
   addDocument: async (observationId, doc, uploader, addToRemediationPlan) => {
-    const newDocument = {
-      id: crypto.randomUUID(),
-      name: doc.name,
-      type: doc.type,
-    }
-    try {
-      const row = await api.post<{ id: string; name: string; type: 'pdf' | 'image' | 'doc' }>(
-        `/observations/${observationId}/evidence`,
-        {
-          name: doc.name,
-          type: doc.type,
-          storage_path: doc.storage_path ?? `observations/${observationId}/${doc.name}`,
-        },
-      )
-      newDocument.id = row.id
-    } catch (e) {
-      set({ error: errorMessage(e, 'Failed to add document') })
-    }
+    // OPTIMISTIC: insert a temp-id document immediately, swap with the
+    // server-confirmed row on success, roll back the whole snapshot on
+    // failure.
+    const tempId = newTempId('temp-doc')
+    const optimisticDocument = { id: tempId, name: doc.name, type: doc.type }
     const timelineEntry: ObservationTimelineEntry = {
       id: crypto.randomUUID(),
       date: new Date().toISOString(),
@@ -1335,16 +1554,20 @@ export const useObservationStore = create<ObservationState>()((set, get) => ({
       userAvatar: uploader.avatar,
       actionType: 'document_add',
     }
+    // Snapshot for rollback.
+    const prevObservations = get().observations
+    const prevByIdRow = get().byId[observationId]
+    const prevSelected = get().selectedObservation
     set((state) => {
       const observations = state.observations.map((obs) => {
         if (obs.id !== observationId) return obs
-        const documents = [...(obs.documents || []), newDocument]
+        const documents = [...(obs.documents || []), optimisticDocument]
         let remediationPlan = obs.remediationPlan
         if (addToRemediationPlan) {
           if (remediationPlan) {
             remediationPlan = {
               ...remediationPlan,
-              documents: [...(remediationPlan.documents || []), newDocument],
+              documents: [...(remediationPlan.documents || []), optimisticDocument],
             }
           } else {
             remediationPlan = {
@@ -1353,7 +1576,7 @@ export const useObservationStore = create<ObservationState>()((set, get) => ({
               description: '',
               dueDate: obs.dueDate || new Date().toISOString(),
               status: 'draft' as const,
-              documents: [newDocument],
+              documents: [optimisticDocument],
               createdAt: new Date().toISOString(),
             }
           }
@@ -1362,13 +1585,13 @@ export const useObservationStore = create<ObservationState>()((set, get) => ({
       })
       let selectedObservation = state.selectedObservation
       if (selectedObservation?.id === observationId) {
-        const documents = [...(selectedObservation.documents || []), newDocument]
+        const documents = [...(selectedObservation.documents || []), optimisticDocument]
         let remediationPlan = selectedObservation.remediationPlan
         if (addToRemediationPlan) {
           if (remediationPlan) {
             remediationPlan = {
               ...remediationPlan,
-              documents: [...(remediationPlan.documents || []), newDocument],
+              documents: [...(remediationPlan.documents || []), optimisticDocument],
             }
           } else {
             remediationPlan = {
@@ -1377,7 +1600,7 @@ export const useObservationStore = create<ObservationState>()((set, get) => ({
               description: '',
               dueDate: selectedObservation.dueDate || new Date().toISOString(),
               status: 'draft' as const,
-              documents: [newDocument],
+              documents: [optimisticDocument],
               createdAt: new Date().toISOString(),
             }
           }
@@ -1389,11 +1612,74 @@ export const useObservationStore = create<ObservationState>()((set, get) => ({
           timeline: [timelineEntry, ...(selectedObservation.timeline || [])],
         }
       }
-      return { observations, selectedObservation }
+      const byId = prevByIdRow
+        ? {
+            ...state.byId,
+            [observationId]: {
+              ...prevByIdRow,
+              documents: [...(prevByIdRow.documents || []), optimisticDocument],
+            },
+          }
+        : state.byId
+      return { observations, byId, selectedObservation, isMutating: true, error: null }
     })
+    try {
+      const row = await api.post<{ id: string; name: string; type: 'pdf' | 'image' | 'doc' }>(
+        `/observations/${observationId}/evidence`,
+        {
+          name: doc.name,
+          type: doc.type,
+          storage_path: doc.storage_path ?? `observations/${observationId}/${doc.name}`,
+        },
+      )
+      // Swap the temp id for the server id everywhere it appears.
+      const swapId = <T extends { id: string }>(list: T[] | undefined): T[] | undefined =>
+        list?.map((d) => (d.id === tempId ? { ...d, id: row.id } : d))
+      set((state) => {
+        const observations = state.observations.map((obs) => {
+          if (obs.id !== observationId) return obs
+          return {
+            ...obs,
+            documents: swapId(obs.documents),
+            remediationPlan: obs.remediationPlan
+              ? { ...obs.remediationPlan, documents: swapId(obs.remediationPlan.documents) }
+              : obs.remediationPlan,
+          }
+        })
+        let selectedObservation = state.selectedObservation
+        if (selectedObservation?.id === observationId) {
+          selectedObservation = {
+            ...selectedObservation,
+            documents: swapId(selectedObservation.documents),
+            remediationPlan: selectedObservation.remediationPlan
+              ? {
+                  ...selectedObservation.remediationPlan,
+                  documents: swapId(selectedObservation.remediationPlan.documents),
+                }
+              : selectedObservation.remediationPlan,
+          }
+        }
+        const previous = state.byId[observationId]
+        const byId = previous
+          ? { ...state.byId, [observationId]: { ...previous, documents: swapId(previous.documents) } }
+          : state.byId
+        return { observations, byId, selectedObservation, isMutating: false }
+      })
+    } catch (e) {
+      // Roll back to pre-upload snapshot.
+      set((state) => ({
+        observations: prevObservations,
+        byId: prevByIdRow ? { ...state.byId, [observationId]: prevByIdRow } : state.byId,
+        selectedObservation:
+          state.selectedObservation?.id === observationId ? prevSelected : state.selectedObservation,
+        isMutating: false,
+        error: errorMessage(e, 'Failed to add document'),
+      }))
+    }
   },
 
-  // TODO(Phase 6): wire DELETE /api/observations/[id]/evidence/[docId] (the route exists).
+  // DELETE /api/observations/[id]/evidence/[docId]. OPTIMISTIC: drop the
+  // row immediately, restore the snapshot on failure.
   removeDocument: async (observationId, documentId, documentName, user) => {
     const timelineEntry: ObservationTimelineEntry = {
       id: crypto.randomUUID(),
@@ -1409,11 +1695,10 @@ export const useObservationStore = create<ObservationState>()((set, get) => ({
       actionType: 'document_delete',
       targetId: documentId,
     }
-    try {
-      await api.delete(`/observations/${observationId}/evidence/${documentId}`)
-    } catch (e) {
-      set({ error: errorMessage(e, 'Failed to remove document') })
-    }
+    // Snapshot for rollback.
+    const prevObservations = get().observations
+    const prevByIdRow = get().byId[observationId]
+    const prevSelected = get().selectedObservation
     set((state) => {
       const observations = state.observations.map((obs) => {
         if (obs.id !== observationId) return obs
@@ -1444,8 +1729,30 @@ export const useObservationStore = create<ObservationState>()((set, get) => ({
           timeline: [timelineEntry, ...(selectedObservation.timeline || [])],
         }
       }
-      return { observations, selectedObservation }
+      const byId = prevByIdRow
+        ? {
+            ...state.byId,
+            [observationId]: {
+              ...prevByIdRow,
+              documents: (prevByIdRow.documents || []).filter((d) => d.id !== documentId),
+            },
+          }
+        : state.byId
+      return { observations, byId, selectedObservation, isMutating: true, error: null }
     })
+    try {
+      await api.delete(`/observations/${observationId}/evidence/${documentId}`)
+      set({ isMutating: false })
+    } catch (e) {
+      set((state) => ({
+        observations: prevObservations,
+        byId: prevByIdRow ? { ...state.byId, [observationId]: prevByIdRow } : state.byId,
+        selectedObservation:
+          state.selectedObservation?.id === observationId ? prevSelected : state.selectedObservation,
+        isMutating: false,
+        error: errorMessage(e, 'Failed to remove document'),
+      }))
+    }
   },
 
   getNextReference: () => {
@@ -1472,5 +1779,6 @@ export const useObservationStore = create<ObservationState>()((set, get) => ({
         totalPages: pageSize > 0 ? Math.max(1, Math.ceil(state.pagination.total / pageSize)) : 1,
       },
     })),
+  isDetailLoaded: (id) => Boolean(get().detailLoadedIds[id]),
   clearError: () => set({ error: null }),
 }))

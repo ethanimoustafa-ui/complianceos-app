@@ -27,7 +27,6 @@ export async function POST(_req: NextRequest, { params }: Params) {
       .from('risks')
       .select('id, mitigation_workflow_status, intended_department_id')
       .eq('id', riskId)
-      .is('deleted_at', null)
       .maybeSingle<{
         id: string
         mitigation_workflow_status: string
@@ -47,7 +46,6 @@ export async function POST(_req: NextRequest, { params }: Params) {
         sent_to_department_at: new Date().toISOString(),
       })
       .eq('id', riskId)
-      .is('deleted_at', null)
       .select(RISK_LIST_COLUMNS)
       .single()
     if (error || !data) throw error ?? NotFound('Transition returned no row')

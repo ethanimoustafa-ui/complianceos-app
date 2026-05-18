@@ -1,16 +1,21 @@
 'use client'
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Icon } from '@iconify/react'
 import { Modal } from '@/components/ui/modal'
 import { Button } from '@/components/ui/button'
+import { LoadingButton } from '@/components/ui/loading-button'
 import { Input } from '@/components/ui/input'
+import { DeleteConfirmationDialog } from '@/components/ui/delete-confirmation-dialog'
+import { EmptyState } from '@/components/ui/empty-state'
 import { useTranslation } from '@/i18n'
 import type { TranslationKey } from '@/i18n'
 import type { TrainingCourse, TrainingCategory } from '@/types'
 import { useTrainingCategoryStore } from '@/stores/training-category-store'
+import { useTrainingStore } from '@/stores/training-store'
 import { EditableSelect } from '@/components/ui/editable-select'
 import { getCategoryConfig } from '@/lib/category-config'
+import { formatTimelineDate } from '@/lib/format-date'
 
 interface TrainingManageModalProps {
   isOpen: boolean
@@ -28,7 +33,7 @@ export function TrainingManageModal({
 }: TrainingManageModalProps) {
   const { t, isRTL } = useTranslation()
   const [isAddFormOpen, setIsAddFormOpen] = useState(false)
-  const [courseToDelete, setCourseToDelete] = useState<string | null>(null)
+  const [courseToDelete, setCourseToDelete] = useState<TrainingCourse | null>(null)
   const [editingDeadline, setEditingDeadline] = useState<string | null>(null)
   const [newCourse, setNewCourse] = useState({ name: '', category: '' as TrainingCategory | '', dueDate: '', description: '' })
   // Editable training categories
@@ -36,6 +41,20 @@ export function TrainingManageModal({
   const addTrainingCategory = useTrainingCategoryStore((s) => s.add)
   const editTrainingCategory = useTrainingCategoryStore((s) => s.update)
   const removeTrainingCategory = useTrainingCategoryStore((s) => s.remove)
+
+  // Store-driven mutation flag — survives route changes and prevents the
+  // add / remove buttons from desyncing if the user re-opens the modal mid-flight.
+  const isMutating = useTrainingStore((s) => s.isMutating)
+
+  // Sort courses newest-first (rows without a usable date sink to the bottom).
+  // The shape only carries `dueDate`, so we treat that as the timeline anchor.
+  const sortedCourses = useMemo(() => {
+    return [...courses].sort((a, b) => {
+      const ad = a.dueDate ? new Date(a.dueDate).getTime() : 0
+      const bd = b.dueDate ? new Date(b.dueDate).getTime() : 0
+      return bd - ad
+    })
+  }, [courses])
 
   const stats = {
     totalCourses: courses.length,
@@ -58,9 +77,8 @@ export function TrainingManageModal({
     onToast(t('training.courseAdded' as TranslationKey))
   }
 
-  const handleRemove = (courseId: string) => {
+  const handleRemove = async (courseId: string) => {
     onRemoveCourse(courseId)
-    setCourseToDelete(null)
     onToast(t('training.courseRemoved' as TranslationKey))
   }
 
@@ -159,9 +177,14 @@ export function TrainingManageModal({
                   <Button variant="outline" size="sm" onClick={() => { setIsAddFormOpen(false); setNewCourse({ name: '', category: '', dueDate: '', description: '' }) }}>
                     {t('common.cancel')}
                   </Button>
-                  <Button size="sm" onClick={handleAddCourse} disabled={!newCourse.name || !newCourse.category || !newCourse.dueDate}>
+                  <LoadingButton
+                    size="sm"
+                    loading={isMutating}
+                    onClick={handleAddCourse}
+                    disabled={!newCourse.name || !newCourse.category || !newCourse.dueDate}
+                  >
                     {t('training.addCourse' as TranslationKey)}
-                  </Button>
+                  </LoadingButton>
                 </div>
               </div>
             </div>
@@ -169,21 +192,22 @@ export function TrainingManageModal({
 
           {/* Course List */}
           <div className="divide-y divide-slate-100 max-h-80 overflow-y-auto">
-            {courses.map((course) => (
+            {sortedCourses.length === 0 ? (
+              <div className="p-2">
+                <EmptyState
+                  icon="lucide:book-open"
+                  title={t('training.noCoursesTitle' as TranslationKey)}
+                  description={t('training.noCoursesDescription' as TranslationKey)}
+                  action={{
+                    label: t('training.addCourse' as TranslationKey),
+                    onClick: () => setIsAddFormOpen(true),
+                    icon: 'lucide:plus',
+                  }}
+                />
+              </div>
+            ) : sortedCourses.map((course) => (
               <div key={course.id} className="p-4 hover:bg-slate-50 transition-colors">
-                {courseToDelete === course.id ? (
-                  <div className="flex items-center justify-between">
-                    <p className="text-sm text-rose-600 font-medium">{t('training.confirmRemove' as TranslationKey)}</p>
-                    <div className="flex gap-2">
-                      <Button variant="ghost" size="sm" onClick={() => setCourseToDelete(null)}>
-                        {t('common.cancel')}
-                      </Button>
-                      <Button variant="outline" size="sm" className="border-rose-200 text-rose-600 hover:bg-rose-50" onClick={() => handleRemove(course.id)}>
-                        {t('common.delete')}
-                      </Button>
-                    </div>
-                  </div>
-                ) : (
+                {(
                   <div className="flex items-start justify-between">
                     <div className="flex-1">
                       <div className="flex items-center gap-2">
@@ -229,7 +253,7 @@ export function TrainingManageModal({
                           />
                         ) : (
                           <span className="text-xs text-slate-500">
-                            {t('training.dueDate' as TranslationKey)}: {course.dueDate}
+                            {t('training.dueDate' as TranslationKey)}: {course.dueDate ? formatTimelineDate(course.dueDate, isRTL) : '—'}
                           </span>
                         )}
                       </div>
@@ -250,7 +274,7 @@ export function TrainingManageModal({
                         <Icon icon="lucide:calendar-clock" className="w-4 h-4" />
                       </button>
                       <button
-                        onClick={() => setCourseToDelete(course.id)}
+                        onClick={() => setCourseToDelete(course)}
                         className="p-2 hover:bg-rose-50 rounded-lg text-slate-400 hover:text-rose-600 cursor-pointer"
                         title={t('training.removeCourse' as TranslationKey)}
                       >

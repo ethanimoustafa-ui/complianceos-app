@@ -1,8 +1,10 @@
 'use client'
 
-import { memo } from 'react'
+import { memo, useState } from 'react'
 import { Icon } from '@iconify/react'
 import { useTranslation } from '@/i18n'
+import { LoadingButton } from '@/components/ui/loading-button'
+import { Skeleton } from '@/components/ui/skeleton'
 import type { RemediationPlan, RemediationPlanStatus } from '@/types'
 
 interface Document {
@@ -14,9 +16,11 @@ interface Document {
 export interface RemediationStatusProps {
   plan: RemediationPlan | null | undefined
   canReview: boolean
-  onReview: (approved: boolean, notes?: string) => void
+  onReview: (approved: boolean, notes?: string) => Promise<void> | void
   documents: Document[]
   isRTL: boolean
+  /** Render skeleton when the detail GET hasn't resolved yet. */
+  isLoaded?: boolean
 }
 
 export const RemediationStatus = memo(function RemediationStatus({
@@ -24,8 +28,10 @@ export const RemediationStatus = memo(function RemediationStatus({
   canReview,
   onReview,
   documents,
+  isLoaded = true,
 }: RemediationStatusProps) {
   const { t } = useTranslation()
+  const [reviewing, setReviewing] = useState<'approve' | 'reject' | null>(null)
 
   const statusColors: Record<RemediationPlanStatus, string> = {
     draft: 'bg-slate-500',
@@ -36,8 +42,30 @@ export const RemediationStatus = memo(function RemediationStatus({
 
   const showReview = canReview && plan?.status === 'submitted'
   const hasRemediationDocs = documents.length > 0
-  // Only show plan UI when it's been submitted (not draft)
   const showPlanUI = plan && plan.status !== 'draft'
+
+  const handleReview = async (approved: boolean) => {
+    setReviewing(approved ? 'approve' : 'reject')
+    try {
+      await onReview(approved)
+    } finally {
+      setReviewing(null)
+    }
+  }
+
+  if (!isLoaded) {
+    return (
+      <div>
+        <h4 className={`text-xs font-black uppercase text-slate-500 tracking-widest mb-4`}>
+          {t('observations.detail.remediationPlan')}
+        </h4>
+        <div className="space-y-2" data-testid="observation-remediation-skeleton" aria-busy="true">
+          <Skeleton className="h-5 w-24 rounded" />
+          <Skeleton className="h-16 w-full rounded-lg" />
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div>
@@ -55,7 +83,6 @@ export const RemediationStatus = memo(function RemediationStatus({
             <p className="text-sm font-semibold text-slate-900">{plan.title}</p>
             <p className="text-xs text-slate-500 mt-1 line-clamp-2">{plan.description}</p>
           </div>
-          {/* Remediation Plan Documents */}
           {documents.length > 0 ? (
             <div className="space-y-2">
               <p className="text-[10px] font-bold text-slate-400 uppercase">{t('observations.detail.planDocuments')}</p>
@@ -78,18 +105,24 @@ export const RemediationStatus = memo(function RemediationStatus({
           ) : null}
           {showReview ? (
             <div className={`flex gap-2`}>
-              <button
-                onClick={() => onReview(true)}
-                className="flex-1 px-3 py-2 bg-emerald-600 text-white text-xs font-bold rounded-lg hover:bg-emerald-700 transition-colors"
+              <LoadingButton
+                variant="primary"
+                onClick={() => handleReview(true)}
+                loading={reviewing === 'approve'}
+                disabled={reviewing !== null}
+                className="flex-1 h-8 text-xs bg-emerald-600 hover:bg-emerald-700"
               >
                 {t('observations.detail.approvePlan')}
-              </button>
-              <button
-                onClick={() => onReview(false)}
-                className="flex-1 px-3 py-2 bg-rose-600 text-white text-xs font-bold rounded-lg hover:bg-rose-700 transition-colors"
+              </LoadingButton>
+              <LoadingButton
+                variant="primary"
+                onClick={() => handleReview(false)}
+                loading={reviewing === 'reject'}
+                disabled={reviewing !== null}
+                className="flex-1 h-8 text-xs bg-rose-600 hover:bg-rose-700"
               >
                 {t('observations.detail.rejectPlan')}
-              </button>
+              </LoadingButton>
             </div>
           ) : null}
           {plan.reviewNotes ? (
@@ -101,7 +134,6 @@ export const RemediationStatus = memo(function RemediationStatus({
           ) : null}
         </div>
       ) : hasRemediationDocs ? (
-        // Show remediation docs even without a formal plan
         <div className="space-y-2">
           <p className="text-[10px] font-bold text-slate-400 uppercase">{t('observations.detail.planDocuments')}</p>
           {documents.map((doc) => (

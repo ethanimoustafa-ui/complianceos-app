@@ -31,7 +31,6 @@ export async function POST(req: NextRequest, { params }: Params) {
       .from('observations')
       .select('id, status')
       .eq(idCol, observationIdParam)
-      .is('deleted_at', null)
       .maybeSingle<{ id: string; status: string }>()
     if (readErr) throw readErr
     if (!current) throw NotFound(`Observation ${observationIdParam} not found`)
@@ -57,7 +56,6 @@ export async function POST(req: NextRequest, { params }: Params) {
       .from('observations')
       .update({ status: 'closed', progress: 100 })
       .eq('id', observationId)
-      .is('deleted_at', null)
       .select(OBSERVATION_LIST_COLUMNS)
       .single()
     if (error || !data) throw error ?? Conflict('Transition returned no row')

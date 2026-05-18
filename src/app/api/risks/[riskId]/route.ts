@@ -55,7 +55,6 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       .from('risks')
       .update(update)
       .eq('id', riskId)
-      .is('deleted_at', null)
       .select(RISK_LIST_COLUMNS)
       .single()
     if (error || !data) throw error ?? NotFound('Update returned no row')
@@ -95,13 +94,10 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
     const { supabase, user, profile } = await requirePerm('audit:delete')
     await assertRiskExists(supabase, riskId)
 
-    const { error } = await supabase
-      .from('risks')
-      .update({ deleted_at: new Date().toISOString() })
-      .eq('id', riskId)
-      .is('deleted_at', null)
-    if (error) throw error
-
+    // Write the append-only audit-log entry FIRST so the compliance trail
+    // survives even if the row-delete fails. audit_logs.target_id is a
+    // polymorphic text/uuid pointer (NOT a FK) so it isn't cascade-cleared
+    // by the DELETE below — see migration 044 + HANDOFF §5 gotcha #7.
     await writeAudit({
       actor_id: user.id,
       actor_name: profile.name ?? profile.email ?? user.id,
@@ -110,6 +106,16 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
       entity_id: riskId,
       supabase,
     })
+
+    // Hard-delete. Migration 044 verified every child FK
+    // (risk_department_proposed_plan, risk_history, risk_mitigation_checklist)
+    // already specifies ON DELETE CASCADE, so children disappear in the
+    // same statement.
+    const { error } = await supabase
+      .from('risks')
+      .delete()
+      .eq('id', riskId)
+    if (error) throw error
 
     revalidateAll([cacheTags.risks(), cacheTags.risks(riskId)])
     revalidate(cacheTags.compliance())

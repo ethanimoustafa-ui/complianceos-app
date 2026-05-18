@@ -31,7 +31,6 @@ export async function POST(req: NextRequest, { params }: Params) {
         .from('observations')
         .update({ leader_id: input.leader_id ?? null })
         .eq('id', observationId)
-        .is('deleted_at', null)
       if (error) throw error
     }
 

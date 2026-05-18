@@ -33,7 +33,11 @@ export async function GET(req: NextRequest, { params }: Params) {
     if (error) throw error
 
     return ok(paginate(data ?? [], page, pageSize, count ?? 0), {
-      cache: { sMaxAge: 30, tags: [cacheTags.observations(observationId)] },
+      cache: {
+        sMaxAge: 60,
+        staleWhileRevalidate: 300,
+        tags: [cacheTags.observations(observationId)],
+      },
     })
   } catch (e) {
     return handle(e)

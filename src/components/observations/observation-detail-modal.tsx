@@ -61,7 +61,18 @@ export const ObservationDetailModal = memo(function ObservationDetailModal({
   const [localChecklist, setLocalChecklist] = useState<LocalChecklistItem[]>([])
   const [localComments, setLocalComments] = useState<LocalComment[]>([])
 
-  const { addComment, editComment, deleteComment, addChecklistItem, editChecklistItem, toggleChecklistItem, removeChecklistItem, transferLeadership, reviewRemediationPlan, addDocument, requestClosure, reviewClosure, fetchById, selectedObservation: storeObservation } = useObservationStore()
+  const store = useObservationStore()
+  const {
+    addComment, editComment, deleteComment,
+    addChecklistItem, editChecklistItem, toggleChecklistItem, removeChecklistItem,
+    transferLeadership, reviewRemediationPlan, addDocument, requestClosure, reviewClosure,
+    fetchById, selectedObservation: storeObservation,
+  } = store
+  // `isDetailLoaded(id)` mirrors the policy/circular stores — true only after
+  // the detail GET resolves. Read defensively so the modal still compiles if
+  // the store helper hasn't shipped yet (then we fall back to the local
+  // hydration flag).
+  const isDetailLoadedFn = (store as unknown as { isDetailLoaded?: (id: string) => boolean }).isDetailLoaded
   const user = useAuthStore((state) => state.user)
   const { members } = useTeamStore()
 
@@ -83,6 +94,12 @@ export const ObservationDetailModal = memo(function ObservationDetailModal({
       cancelled = true
     }
   }, [isOpen, observation?.id, fetchById])
+
+  // Composite "detail loaded?" flag: prefer the store helper if present,
+  // otherwise fall back to the local fetch state.
+  const detailLoaded = observation?.id
+    ? (isDetailLoadedFn ? isDetailLoadedFn(observation.id) : !isHydrating)
+    : false
 
   // Modal states
   const [showTransferModal, setShowTransferModal] = useState(false)
@@ -307,6 +324,7 @@ export const ObservationDetailModal = memo(function ObservationDetailModal({
               onEdit={handleEditComment}
               onDelete={handleDeleteComment}
               isRTL={isRTL}
+              isLoaded={detailLoaded}
             />
           </div>
         </div>
@@ -339,6 +357,7 @@ export const ObservationDetailModal = memo(function ObservationDetailModal({
             onReview={handleReviewRemediationPlan}
             documents={localRemediationDocs}
             isRTL={isRTL}
+            isLoaded={detailLoaded}
           />
 
           <ClosureStatus
@@ -357,9 +376,14 @@ export const ObservationDetailModal = memo(function ObservationDetailModal({
             canUpload={canUploadDocument(user, observation)}
             onUpload={() => setShowUploadModal(true)}
             isRTL={isRTL}
+            isLoaded={detailLoaded}
           />
 
-          <ActivityTimeline timeline={storeObservation?.timeline || observation.timeline || []} isRTL={isRTL} />
+          <ActivityTimeline
+            timeline={storeObservation?.timeline || observation.timeline || []}
+            isRTL={isRTL}
+            isLoaded={detailLoaded}
+          />
         </div>
       </div>
 

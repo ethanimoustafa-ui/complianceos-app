@@ -2,14 +2,18 @@
 
 import { useState, useEffect, useMemo, useRef } from 'react'
 import Link from 'next/link'
-import { useParams } from 'next/navigation'
+import { useParams, useRouter } from 'next/navigation'
 import { Icon } from '@iconify/react'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { LoadingButton } from '@/components/ui/loading-button'
+import { Skeleton } from '@/components/ui/skeleton'
 import { Modal } from '@/components/ui/modal'
+import { DeleteConfirmationDialog } from '@/components/ui/delete-confirmation-dialog'
 import { useTranslation } from '@/i18n'
 import { formatRelativeTime, formatLocalizedDateShort, calculateNextOccurrence, formatFutureCountdown } from '@/lib/time-utils'
+import { formatTimelineDate } from '@/lib/format-date'
 import { useAuditStore } from '@/stores/audit-store'
 import { useAuditLogStore, type AuditLog } from '@/stores/audit-log-store'
 import { useAuditTaskStore, type AuditTask } from '@/stores/audit-task-store'
@@ -49,6 +53,7 @@ const auditStatusConfig: Record<string, { label: string; variant: 'success' | 'w
 export default function AuditDetailPage() {
   const { t, isRTL } = useTranslation()
   const params = useParams()
+  const router = useRouter()
   const auditId = params.auditId as string
 
   // Audit type label resolver — handles 'internal' (fixed) plus any
@@ -85,7 +90,30 @@ export default function AuditDetailPage() {
   }
 
   // Stores
-  const { audits, fetchById, update, addDocument, removeDocument, addTeamMember, removeTeamMember, addComment, editComment, deleteComment, updateStatus, isLoading } = useAuditStore()
+  const auditStore = useAuditStore()
+  const {
+    audits,
+    fetchById,
+    update,
+    addDocument,
+    removeDocument,
+    addTeamMember,
+    removeTeamMember,
+    addComment,
+    editComment,
+    deleteComment,
+    updateStatus,
+    delete: deleteAudit,
+    isLoading,
+    isMutating,
+  } = auditStore
+  // `isDetailLoaded` is exposed by Agent AUDITS-STORE; guard the read so we
+  // never explode if the predicate is missing (returns `false` → skeletons render).
+  const detailLoadedFn = (auditStore as unknown as { isDetailLoaded?: (id: string) => boolean })
+    .isDetailLoaded
+  const detailLoaded: boolean = typeof detailLoadedFn === 'function'
+    ? detailLoadedFn(auditId)
+    : Boolean(audits.find((a) => a.id === auditId)?.team)
   const { getLogsByAuditId } = useAuditLogStore()
   const auditTaskStore = useAuditTaskStore()
   const { members: teamMembers } = useTeamStore()
@@ -275,7 +303,7 @@ export default function AuditDetailPage() {
       uploaded: t('auditDetail.actionUploaded'),
       commented: t('auditDetail.actionCommented'),
     }
-    return auditLogs.map((log, index) => ({
+    const items: TimelineItem[] = auditLogs.map((log, index) => ({
       id: index + 1,
       user: log.user.name,
       avatar: log.user.name.split(' ')[0] || 'User',
@@ -285,6 +313,9 @@ export default function AuditDetailPage() {
       type: log.action === 'created' || log.action === 'updated' || log.action === 'closed' ? 'completed' as const :
             log.action === 'uploaded' ? 'upload' as const : 'comment' as const,
     }))
+    // Sort newest-first by timestamp (mirrors the regulatory/policy timeline).
+    items.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())
+    return items
   }, [getLogsByAuditId, auditId, t])
 
   const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null)
@@ -301,6 +332,7 @@ export default function AuditDetailPage() {
   const [showTimelineModal, setShowTimelineModal] = useState(false)
   const [showUploadModal, setShowUploadModal] = useState(false)
   const [showScheduleNextModal, setShowScheduleNextModal] = useState(false)
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [selectedTimeline, setSelectedTimeline] = useState<TimelineItem | null>(null)
 
   // Add Task form state - category defaults to first option for current audit type
@@ -579,8 +611,11 @@ export default function AuditDetailPage() {
     return teamMembers.filter(m => m.status === 'active' && !addedIds.includes(m.id))
   }, [teamMembers, auditTeam])
 
-  // Loading state
-  if (isLoading) {
+  // First-load: the audit hasn't landed from either the list fetch or the
+  // detail fetch yet. Show a centered spinner only in that case; otherwise we
+  // render the header immediately and per-section skeletons cover deferred
+  // child collections (team/comments/documents/activity).
+  if (!audit && isLoading) {
     return (
       <div className="flex items-center justify-center h-full">
         <div className="text-center">
@@ -641,6 +676,14 @@ export default function AuditDetailPage() {
             <Icon icon="lucide:edit-3" />
             {t('auditDetail.editAudit')}
           </Button>
+          <Button
+            variant="outline"
+            className="border-rose-200 text-rose-600 hover:bg-rose-50"
+            onClick={() => setShowDeleteConfirm(true)}
+          >
+            <Icon icon="lucide:trash-2" />
+            {t('common.delete')}
+          </Button>
           <Button variant="primary" className="shadow-lg shadow-emerald-100" onClick={() => setShowShareModal(true)}>
             <Icon icon="lucide:share-2" />
             {t('auditDetail.shareProgress')}
@@ -699,7 +742,20 @@ export default function AuditDetailPage() {
                   </div>
                 </div>
                 <div className="divide-y divide-slate-100">
-                  {tasks.length === 0 ? (
+                  {!detailLoaded && tasks.length === 0 ? (
+                    <div className="p-6 space-y-3" data-testid="tasks-skeleton" aria-busy="true">
+                      {Array.from({ length: 3 }).map((_, i) => (
+                        <div key={i} className="flex items-start gap-4">
+                          <Skeleton className="w-5 h-5 rounded shrink-0" />
+                          <div className="flex-1 space-y-2">
+                            <Skeleton className="h-3.5 w-1/2" />
+                            <Skeleton className="h-3 w-3/4" />
+                          </div>
+                          <Skeleton className="w-6 h-6 shrink-0 !rounded-full" />
+                        </div>
+                      ))}
+                    </div>
+                  ) : tasks.length === 0 ? (
                     <div className="p-12 text-center">
                       <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
                         <Icon icon="lucide:clipboard-list" className="text-2xl text-slate-400" />
@@ -813,7 +869,19 @@ export default function AuditDetailPage() {
               {/* Activity Timeline */}
               <Card className="p-6">
                 <h3 className={`text-sm font-bold text-slate-900 mb-8`}>{t('auditDetail.auditActivityTimeline')}</h3>
-                {timelineItems.length === 0 ? (
+                {!detailLoaded ? (
+                  <div className="space-y-6" data-testid="activity-skeleton" aria-busy="true">
+                    {Array.from({ length: 4 }).map((_, i) => (
+                      <div key={i} className="flex gap-4">
+                        <Skeleton className="w-6 h-6 shrink-0 !rounded-full" />
+                        <div className="flex-1 space-y-2">
+                          <Skeleton className="h-3 w-2/3" />
+                          <Skeleton className="h-2.5 w-1/3" />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : timelineItems.length === 0 ? (
                   <div className="py-8 text-center">
                     <Icon icon="lucide:activity" className="text-3xl text-slate-300 mx-auto mb-3" />
                     <p className="text-sm text-slate-500">{t('auditDetail.noActivityYet')}</p>
@@ -842,7 +910,7 @@ export default function AuditDetailPage() {
                           {item.type === 'comment' && item.detail && (
                             <p className="text-xs text-slate-600 bg-slate-50 p-3 rounded-lg mt-2 italic">{item.detail}</p>
                           )}
-                          <p className="text-xs text-slate-400 mt-1">{formatRelativeTime(item.timestamp, t)}{item.type === 'completed' && ` - ${t('auditDetail.automatedEvidenceCaptured')}`}{item.type === 'upload' && ` - ${t('auditDetail.artifactStorage')}`}</p>
+                          <p className="text-xs text-slate-400 mt-1">{formatTimelineDate(item.timestamp, isRTL)}{item.type === 'completed' && ` - ${t('auditDetail.automatedEvidenceCaptured')}`}{item.type === 'upload' && ` - ${t('auditDetail.artifactStorage')}`}</p>
                         </div>
                       </div>
                     ))}
@@ -970,28 +1038,30 @@ export default function AuditDetailPage() {
                     {/* Action Buttons */}
                     <div className="flex gap-2">
                       {(audit?.status === 'pending' || audit?.status === 'overdue') && (
-                        <Button
+                        <LoadingButton
                           variant="primary"
                           size="sm"
                           className="flex-1"
+                          loading={isMutating}
                           onClick={() => handleStatusChange('in_progress')}
                         >
                           <Icon icon="lucide:play" />
                           {t('auditDetail.startAudit')}
-                        </Button>
+                        </LoadingButton>
                       )}
                       {audit?.status === 'in_progress' && (
-                        <Button
+                        <LoadingButton
                           variant="primary"
                           size="sm"
                           className="flex-1"
+                          loading={isMutating}
                           onClick={() => handleStatusChange('completed')}
                         >
                           <Icon icon="lucide:check-circle" />
                           {isOverdue
                             ? t('auditDetail.closeOverdue')
                             : t('auditDetail.markComplete')}
-                        </Button>
+                        </LoadingButton>
                       )}
                       {audit?.status === 'completed' && (
                         <div className={`flex-1 py-2 px-3 rounded-lg text-center ${
@@ -1085,7 +1155,19 @@ export default function AuditDetailPage() {
                   </button>
                 </div>
                 <div className="p-6 space-y-4">
-                  {auditTeam.length === 0 ? (
+                  {!detailLoaded ? (
+                    <div className="space-y-3" data-testid="team-skeleton" aria-busy="true">
+                      {Array.from({ length: 3 }).map((_, i) => (
+                        <div key={i} className="flex items-center gap-3">
+                          <Skeleton className="w-9 h-9 shrink-0 !rounded-full" />
+                          <div className="flex-1 space-y-1.5">
+                            <Skeleton className="h-3.5 w-1/2" />
+                            <Skeleton className="h-2.5 w-1/3" />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : auditTeam.length === 0 ? (
                     <div className="py-4 text-center">
                       <Icon icon="lucide:users" className="text-2xl text-slate-300 mx-auto mb-2" />
                       <p className="text-xs text-slate-500">{t('auditDetail.noTeamMembers')}</p>
@@ -1139,14 +1221,27 @@ export default function AuditDetailPage() {
                 </div>
                 <div className="p-6 space-y-4">
                   {/* Comments list */}
-                  {comments.length === 0 ? (
+                  {!detailLoaded ? (
+                    <div className="space-y-4" data-testid="comments-skeleton" aria-busy="true">
+                      {Array.from({ length: 2 }).map((_, i) => (
+                        <div key={i} className="flex items-start gap-3">
+                          <Skeleton className="w-8 h-8 shrink-0 !rounded-full" />
+                          <div className="flex-1 space-y-2">
+                            <Skeleton className="h-3 w-1/3" />
+                            <Skeleton className="h-3 w-full" />
+                            <Skeleton className="h-3 w-2/3" />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : comments.length === 0 ? (
                     <div className="py-4 text-center">
                       <Icon icon="lucide:message-square" className="text-2xl text-slate-300 mx-auto mb-2" />
                       <p className="text-xs text-slate-500">{t('auditDetail.noComments')}</p>
                     </div>
                   ) : (
                     <div className="space-y-4 max-h-[300px] overflow-y-auto hide-scrollbar">
-                      {comments.map((comment) => (
+                      {[...comments].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).map((comment) => (
                         <div key={comment.id} className="group">
                           <div className="flex items-start gap-3">
                             <img
@@ -1158,7 +1253,7 @@ export default function AuditDetailPage() {
                               <div className="flex items-center gap-2">
                                 <span className="text-sm font-bold text-slate-900">{comment.author.name}</span>
                                 <span className="text-xs text-slate-400">
-                                  {formatRelativeTime(new Date(comment.createdAt), t)}
+                                  {formatTimelineDate(comment.createdAt, isRTL)}
                                 </span>
                                 {comment.isEdited && (
                                   <span className="text-xs text-slate-400 italic">({t('common.edited')})</span>
@@ -1173,9 +1268,9 @@ export default function AuditDetailPage() {
                                     rows={2}
                                   />
                                   <div className="flex gap-2 mt-2">
-                                    <Button variant="primary" size="sm" onClick={() => handleEditComment(comment.id)}>
+                                    <LoadingButton variant="primary" size="sm" loading={isMutating} onClick={() => handleEditComment(comment.id)}>
                                       {t('common.save')}
-                                    </Button>
+                                    </LoadingButton>
                                     <Button variant="outline" size="sm" onClick={() => { setEditingCommentId(null); setEditingCommentContent('') }}>
                                       {t('common.cancel')}
                                     </Button>
@@ -1231,15 +1326,16 @@ export default function AuditDetailPage() {
                           rows={2}
                         />
                         <div className="flex justify-end mt-2">
-                          <Button
+                          <LoadingButton
                             variant="primary"
                             size="sm"
                             onClick={handleAddComment}
                             disabled={!newCommentContent.trim()}
+                            loading={isMutating}
                           >
                             <Icon icon="lucide:send" />
                             {t('auditDetail.submit')}
-                          </Button>
+                          </LoadingButton>
                         </div>
                       </div>
                     </div>
@@ -1254,7 +1350,13 @@ export default function AuditDetailPage() {
                   {t('auditDetail.quickAccessArtifacts')}
                 </h3>
                 <div className="space-y-3">
-                  {documents.length === 0 ? (
+                  {!detailLoaded ? (
+                    <div className="space-y-2" data-testid="documents-skeleton" aria-busy="true">
+                      {Array.from({ length: 2 }).map((_, i) => (
+                        <Skeleton key={i} className="h-12 w-full rounded-xl bg-slate-700/40" />
+                      ))}
+                    </div>
+                  ) : documents.length === 0 ? (
                     <p className="text-xs text-slate-400 text-center py-4">{t('auditDetail.noDocumentsYet')}</p>
                   ) : documents.map((doc) => (
                     <div
@@ -1423,7 +1525,7 @@ export default function AuditDetailPage() {
         </div>
         <div className={`mt-6 pt-6 border-t border-slate-100 flex justify-end gap-3`}>
           <Button variant="outline" onClick={() => setShowAddTaskModal(false)}>{t('common.cancel')}</Button>
-          <Button variant="primary" onClick={handleAddTask}>{t('auditDetail.createTask')}</Button>
+          <LoadingButton variant="primary" loading={isMutating} onClick={handleAddTask}>{t('auditDetail.createTask')}</LoadingButton>
         </div>
       </Modal>
 
@@ -1493,7 +1595,7 @@ export default function AuditDetailPage() {
         </div>
         <div className={`mt-6 pt-6 border-t border-slate-100 flex justify-end gap-3`}>
           <Button variant="outline" onClick={() => { setShowEditTaskModal(false); setEditingTask(null); }}>{t('common.cancel')}</Button>
-          <Button variant="primary" onClick={handleEditTask}>{t('auditDetail.updateTask')}</Button>
+          <LoadingButton variant="primary" loading={isMutating} onClick={handleEditTask}>{t('auditDetail.updateTask')}</LoadingButton>
         </div>
       </Modal>
 
@@ -1568,11 +1670,11 @@ export default function AuditDetailPage() {
           </div>
         </div>
         <div className={`mt-6 pt-6 border-t border-slate-100 flex justify-end gap-3`}>
-          <Button variant="outline" onClick={() => setShowAddMemberModal(false)}>{t('common.cancel')}</Button>
-          <Button variant="primary" onClick={handleAddTeamMember}>
+          <Button variant="outline" onClick={() => setShowAddMemberModal(false)} disabled={isMutating}>{t('common.cancel')}</Button>
+          <LoadingButton variant="primary" loading={isMutating} onClick={handleAddTeamMember}>
             <Icon icon="lucide:user-plus" />
             {t('auditDetail.addMember')}
-          </Button>
+          </LoadingButton>
         </div>
       </Modal>
 
@@ -1602,11 +1704,11 @@ export default function AuditDetailPage() {
           </div>
         </div>
         <div className={`mt-6 pt-6 border-t border-slate-100 flex justify-end gap-3`}>
-          <Button variant="outline" onClick={() => { setUploadFile(null); setShowUploadModal(false) }}>{t('common.cancel')}</Button>
-          <Button variant="primary" onClick={handleFileUpload} disabled={!uploadFile}>
+          <Button variant="outline" onClick={() => { setUploadFile(null); setShowUploadModal(false) }} disabled={isMutating}>{t('common.cancel')}</Button>
+          <LoadingButton variant="primary" loading={isMutating} onClick={handleFileUpload} disabled={!uploadFile}>
             <Icon icon="lucide:upload" />
             {t('auditDetail.upload')}
-          </Button>
+          </LoadingButton>
         </div>
       </Modal>
 
@@ -1643,6 +1745,20 @@ export default function AuditDetailPage() {
           </Button>
         </div>
       </Modal>
+
+      {/* Delete Audit Confirmation */}
+      <DeleteConfirmationDialog
+        isOpen={showDeleteConfirm}
+        onClose={() => setShowDeleteConfirm(false)}
+        onConfirm={async () => {
+          await deleteAudit(auditId)
+          router.push('/reports/audits')
+        }}
+        itemType={t('reports.audit')}
+        itemName={audit?.title || ''}
+        description={`This will permanently delete the audit and all its team assignments, comments, documents, findings, and activity. This cannot be undone.`}
+        requireConfirmation
+      />
 
       {/* Toast Notification */}
       <div

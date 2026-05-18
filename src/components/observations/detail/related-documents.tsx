@@ -3,6 +3,7 @@
 import { memo } from 'react'
 import { Icon } from '@iconify/react'
 import { useTranslation } from '@/i18n'
+import { Skeleton } from '@/components/ui/skeleton'
 
 interface Document {
   id: string
@@ -15,12 +16,15 @@ export interface RelatedDocumentsProps {
   canUpload: boolean
   onUpload: () => void
   isRTL?: boolean
+  /** Render skeleton rows when the detail GET hasn't resolved yet. */
+  isLoaded?: boolean
 }
 
 export const RelatedDocuments = memo(function RelatedDocuments({
   documents,
   canUpload,
   onUpload,
+  isLoaded = true,
 }: RelatedDocumentsProps) {
   const { t } = useTranslation()
 
@@ -29,7 +33,13 @@ export const RelatedDocuments = memo(function RelatedDocuments({
       <h4 className={`text-xs font-black uppercase text-slate-500 tracking-widest mb-4`}>
         {t('observations.detail.relatedDocuments')}
       </h4>
-      {documents.length > 0 ? (
+      {!isLoaded ? (
+        <div className="space-y-2 mb-3" data-testid="observation-documents-skeleton" aria-busy="true">
+          {Array.from({ length: 2 }).map((_, i) => (
+            <Skeleton key={i} className="h-9 w-full rounded-lg" />
+          ))}
+        </div>
+      ) : documents.length > 0 ? (
         <div className="space-y-2 mb-3">
           {documents.map((doc) => (
             <a
@@ -56,7 +66,7 @@ export const RelatedDocuments = memo(function RelatedDocuments({
           <Icon icon="lucide:upload" />
           {t('observations.detail.uploadDocument')}
         </button>
-      ) : documents.length === 0 ? (
+      ) : isLoaded && documents.length === 0 ? (
         <p className="text-xs text-slate-400 italic text-center">{t('observations.detail.noDocuments')}</p>
       ) : null}
     </div>

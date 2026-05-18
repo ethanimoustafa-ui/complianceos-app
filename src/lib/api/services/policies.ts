@@ -17,6 +17,8 @@ export const POLICY_WORKFLOW_STEP_COLUMNS =
 export const POLICY_ACTIVITY_COLUMNS =
   'id, policy_id, timestamp, date, type, text_en, text_ar, user_name, note'
 export const POLICY_REVIEW_CYCLE_COLUMNS = 'id, policy_id, label, initiated_at'
+export const POLICY_ATTACHMENT_COLUMNS =
+  'id, policy_id, name, storage_path, size, uploaded_at, uploaded_by'
 
 // --- assertions --------------------------------------------------------------
 

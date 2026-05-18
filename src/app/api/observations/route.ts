@@ -4,9 +4,9 @@ import type { NextRequest } from 'next/server'
 import { requirePerm, requireUser } from '@/lib/api/auth'
 import { handle, NotFound } from '@/lib/api/errors'
 import { ok, paginate } from '@/lib/api/response'
-import { parseJson } from '@/lib/api/validate'
+import { parseJson, parseQuery } from '@/lib/api/validate'
 import { rangeFor } from '@/lib/api/pagination'
-import { cacheTags, revalidate } from '@/lib/api/cache'
+import { cacheTags, revalidate, revalidateAll } from '@/lib/api/cache'
 import { writeAudit } from '@/lib/api/audit'
 import {
   CreateObservationSchema,
@@ -23,14 +23,14 @@ export const dynamic = 'force-dynamic'
 export async function GET(req: NextRequest) {
   try {
     const { supabase } = await requireUser()
-    const q = ListObservationsQuerySchema.parse(
-      Object.fromEntries(req.nextUrl.searchParams.entries()),
-    )
+    // parseQuery surfaces invalid filter values as a 400 (ValidationFailed);
+    // a raw schema.parse() throws a ZodError that the global error handler
+    // would surface as a 500. Match audits/circulars/policies.
+    const q = parseQuery(req.nextUrl.searchParams, ListObservationsQuerySchema)
 
     let query = supabase
       .from('observations')
       .select(OBSERVATION_LIST_COLUMNS, { count: 'exact' })
-      .is('deleted_at', null)
 
     if (q.id) query = query.eq('id', q.id)
     if (q.status) query = query.eq('status', q.status)
@@ -124,7 +124,7 @@ export async function POST(req: NextRequest) {
       }),
     ])
 
-    revalidate(cacheTags.observations())
+    revalidateAll([cacheTags.observations(), cacheTags.observations(created.id)])
     revalidate(cacheTags.compliance())
     return ok(data, { status: 201 })
   } catch (e) {

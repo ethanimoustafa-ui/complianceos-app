@@ -76,7 +76,7 @@ export async function PATCH(_req: NextRequest, { params }: Params) {
       }),
     ])
 
-    revalidateAll([cacheTags.observations(observationId)])
+    revalidateAll([cacheTags.observations(), cacheTags.observations(observationId)])
     return ok(data)
   } catch (e) {
     return handle(e)

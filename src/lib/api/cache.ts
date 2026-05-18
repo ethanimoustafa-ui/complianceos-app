@@ -31,6 +31,8 @@ export const cacheTags = {
   circulars: makeFactory('circulars'),
   circularImplementations: (circularId: string) => `circulars:${circularId}:implementations`,
   circularTimeline: (circularId: string) => `circulars:${circularId}:timeline`,
+  circularWorkflowSteps: (circularId: string) => `circulars:${circularId}:workflow-steps`,
+  policyAttachments: (policyId: string) => `policies:${policyId}:attachments`,
   letters: makeFactory('letters'),
   letterAttachments: (letterId: string) => `letters:${letterId}:attachments`,
   letterTimeline: (letterId: string) => `letters:${letterId}:timeline`,

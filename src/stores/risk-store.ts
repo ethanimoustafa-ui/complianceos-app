@@ -4,17 +4,19 @@
 // /api/risks. The mitigation-workflow sub-actions
 // (`assignDepartment`, `setMitigationDeadline`, `sendToDepartment`,
 // `submitDepartmentPlan`, `acceptDepartmentPlan`, `toggleDepartmentPlanItem`)
-// hit the dedicated route family at /api/risks/[id]/*. Checklist mutations
-// (`addMitigationItem` / `editMitigationItem` / `toggleMitigationItem` /
-// `removeMitigationItem`) and `markReviewed` patch local state only — no
-// individual endpoints exist for those yet (Phase 6 will wire them once the
-// risk-checklist routes ship).
+// hit the dedicated route family at /api/risks/[id]/*. Mitigation checklist
+// mutations (`addMitigationItem` / `editMitigationItem` / `toggleMitigationItem`
+// / `removeMitigationItem`) are wired to /api/risks/[id]/checklist[/itemId].
+// `markReviewed` is a thin wrapper around `update`.
 //
 // Legacy method names are preserved so the risks reports page keeps compiling.
 //
 // SKELETON-LOADING NOTE: consumer pages render a skeleton when
 // `isLoading && risks.length === 0` (first-fetch). On refetch, stale data
 // stays visible while `isLoading` flips back to true with a subtle indicator.
+// Detail-page sub-sections may additionally gate on `isDetailLoaded(id)` to
+// skeleton-render until the full detail payload (history, proposed plan,
+// checklist) has arrived from `fetchById`.
 
 import { create } from 'zustand'
 import type {
@@ -28,6 +30,7 @@ import type {
   DepartmentProposedPlan,
   RegulatoryBodyId,
   ReviewSchedule,
+  RiskHistoryEntry,
   User,
 } from '@/types'
 import { api, ApiClientError } from '@/lib/api-client'
@@ -54,12 +57,13 @@ function computeMitigationProgress(checklist?: Array<{ completed: boolean }>): n
   return Math.round((checklist.filter((i) => i.completed).length / checklist.length) * 100)
 }
 
-// ---------- API row shape ----------------------------------------------------
+// ---------- API row shapes --------------------------------------------------
 
+// List rows surface the columns from `RISK_LIST_COLUMNS` (server-side).
 interface RiskApiRow {
   id: string
   title: string
-  description?: string
+  description?: string | null
   category: string
   likelihood: number
   impact: number
@@ -81,6 +85,39 @@ interface RiskApiRow {
   updated_at: string
 }
 
+// Detail GET additionally surfaces composite children.
+interface RiskChecklistRow {
+  id: string
+  risk_id: string
+  text: string
+  completed: boolean
+  sort_order: number
+}
+
+interface RiskHistoryRow {
+  id: string
+  risk_id: string
+  user_id: string | null
+  action: string
+  previous_value: string | null
+  new_value: string | null
+  notes: string | null
+  created_at: string
+}
+
+interface RiskProposedPlanRow {
+  risk_id: string
+  plan: string
+  submitted_by: string | null
+  submitted_at: string
+}
+
+interface RiskApiDetail extends RiskApiRow {
+  mitigation_checklist?: RiskChecklistRow[]
+  proposed_plan?: RiskProposedPlanRow | null
+  history?: RiskHistoryRow[]
+}
+
 function stubOwner(id: string | null): User {
   return {
     id: id ?? '',
@@ -93,7 +130,46 @@ function stubOwner(id: string | null): User {
   }
 }
 
-function mapRow(row: RiskApiRow, previous?: Risk): Risk {
+function mapChecklistRow(row: RiskChecklistRow): MitigationChecklistItem {
+  return {
+    id: row.id,
+    text: row.text,
+    completed: row.completed,
+  }
+}
+
+function mapHistoryRow(row: RiskHistoryRow): RiskHistoryEntry {
+  return {
+    id: row.id,
+    timestamp: row.created_at,
+    user: row.user_id ?? '',
+    action: row.action as RiskHistoryEntry['action'],
+    previousValue: row.previous_value ?? undefined,
+    newValue: row.new_value ?? undefined,
+    notes: row.notes ?? undefined,
+  }
+}
+
+function mapRow(row: RiskApiRow | RiskApiDetail, previous?: Risk): Risk {
+  const detail = row as RiskApiDetail
+  const checklist = Array.isArray(detail.mitigation_checklist)
+    ? detail.mitigation_checklist.map(mapChecklistRow)
+    : previous?.mitigationChecklist
+  const history = Array.isArray(detail.history)
+    ? detail.history.map(mapHistoryRow)
+    : previous?.history ?? []
+  let proposedPlan: DepartmentProposedPlan | undefined = previous?.departmentProposedPlan
+  if (detail.proposed_plan) {
+    proposedPlan = {
+      id: detail.proposed_plan.risk_id,
+      plan: detail.proposed_plan.plan,
+      checklist: checklist ?? [],
+      submittedAt: detail.proposed_plan.submitted_at,
+      submittedBy: detail.proposed_plan.submitted_by ?? '',
+    }
+  } else if (detail.proposed_plan === null) {
+    proposedPlan = undefined
+  }
   return {
     id: row.id,
     title: row.title,
@@ -105,20 +181,20 @@ function mapRow(row: RiskApiRow, previous?: Risk): Risk {
     status: row.status as Risk['status'],
     owner: previous?.owner ?? stubOwner(row.owner_id),
     mitigationPlan: row.mitigation_plan ?? previous?.mitigationPlan,
-    mitigationChecklist: previous?.mitigationChecklist,
+    mitigationChecklist: checklist,
     mitigationProgress: row.mitigation_progress ?? previous?.mitigationProgress ?? 0,
     monitoringFrequency: row.monitoring_frequency as MonitoringFrequency,
     lastReviewDate: row.last_review_date ?? previous?.lastReviewDate,
     nextReviewDate: row.next_review_date ?? previous?.nextReviewDate,
     reviewSchedule: (row.review_schedule as ReviewSchedule | undefined) ?? previous?.reviewSchedule,
-    history: previous?.history ?? [],
+    history,
     frameworkIds: (row.framework_ids ?? previous?.frameworkIds ?? []) as RegulatoryBodyId[],
     intendedDepartmentId: row.intended_department_id ?? previous?.intendedDepartmentId,
     mitigationDeadline: row.mitigation_deadline ?? previous?.mitigationDeadline,
     mitigationWorkflowStatus:
       (row.mitigation_workflow_status as RiskMitigationWorkflowStatus | undefined) ??
       previous?.mitigationWorkflowStatus,
-    departmentProposedPlan: previous?.departmentProposedPlan,
+    departmentProposedPlan: proposedPlan,
     sentToDepartmentAt: row.sent_to_department_at ?? previous?.sentToDepartmentAt,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -171,11 +247,29 @@ function errorMessage(e: unknown, fallback: string): string {
   return fallback
 }
 
+function appendHistory(previous: Risk, entry: Omit<RiskHistoryEntry, 'id' | 'timestamp'> & { id?: string; timestamp?: string }): RiskHistoryEntry[] {
+  const full: RiskHistoryEntry = {
+    id: entry.id ?? crypto.randomUUID(),
+    timestamp: entry.timestamp ?? new Date().toISOString(),
+    user: entry.user,
+    action: entry.action,
+    previousValue: entry.previousValue,
+    newValue: entry.newValue,
+    notes: entry.notes,
+  }
+  return [...previous.history, full]
+}
+
 // ---------- store -----------------------------------------------------------
 
 interface RiskState {
   risks: Risk[]
   byId: Record<string, Risk>
+  // Tracks which IDs have had their full detail payload loaded (history,
+  // checklist, proposed plan). Detail-page sub-sections gate skeleton render
+  // on `isDetailLoaded(id)` rather than `isLoading` so list-fetched rows
+  // don't flash incomplete data.
+  detailLoadedIds: Record<string, true>
   selectedRisk: Risk | null
   filters: RiskFilters
   pagination: PaginationState
@@ -194,15 +288,24 @@ interface RiskState {
   update: (id: string, data: Partial<Risk>) => Promise<Risk>
   delete: (id: string) => Promise<void>
 
+  // Detail-loaded helper
+  isDetailLoaded: (id: string) => boolean
+
   // Status / review (legacy sync facade backed by an async PATCH)
   updateStatus: (id: string, newStatus: Risk['status']) => void
   markReviewed: (riskId: string) => void
 
-  // Mitigation checklist — local-only (no per-item endpoint yet; see TODO).
-  addMitigationItem: (riskId: string, text: string) => void
-  editMitigationItem: (riskId: string, itemId: string, newText: string) => void
-  toggleMitigationItem: (riskId: string, itemId: string) => void
-  removeMitigationItem: (riskId: string, itemId: string) => void
+  // Mitigation plan scalar (parity with other stores). Convenience wrappers
+  // around `update(id, { mitigationPlan })` plus optimistic history-append.
+  addMitigationPlan: (riskId: string, plan: string) => Promise<void>
+  updateMitigationPlan: (riskId: string, plan: string) => Promise<void>
+  deleteMitigationPlan: (riskId: string) => Promise<void>
+
+  // Mitigation checklist — server-backed (POST/PATCH/DELETE).
+  addMitigationItem: (riskId: string, text: string) => Promise<void>
+  editMitigationItem: (riskId: string, itemId: string, newText: string) => Promise<void>
+  toggleMitigationItem: (riskId: string, itemId: string) => Promise<void>
+  removeMitigationItem: (riskId: string, itemId: string) => Promise<void>
 
   // Officer-driven mitigation workflow (async; backed by /api/risks/[id]/*).
   assignDepartment: (riskId: string, departmentId: string) => void
@@ -242,6 +345,7 @@ const INITIAL_SORT: SortState = {
 export const useRiskStore = create<RiskState>()((set, get) => ({
   risks: [],
   byId: {},
+  detailLoadedIds: {},
   selectedRisk: null,
   filters: {},
   pagination: INITIAL_PAGINATION,
@@ -285,12 +389,18 @@ export const useRiskStore = create<RiskState>()((set, get) => ({
   fetchById: async (id) => {
     set({ isLoading: true, error: null })
     try {
-      const row = await api.get<RiskApiRow>(`/risks/${id}`)
+      const row = await api.get<RiskApiDetail>(`/risks/${id}`)
       const previous = get().byId[id]
       const risk = mapRow(row, previous)
+      // Push into `risks[]` if missing — deep-link to a freshly-created risk
+      // would otherwise leave list-keyed selectors (e.g. `risks.find(r => r.id === riskId)`)
+      // empty. Same pattern as the audit / observation stores.
       set((s) => ({
         byId: { ...s.byId, [id]: risk },
-        risks: s.risks.some((r) => r.id === id) ? s.risks.map((r) => (r.id === id ? risk : r)) : s.risks,
+        risks: s.risks.some((r) => r.id === id)
+          ? s.risks.map((r) => (r.id === id ? risk : r))
+          : [risk, ...s.risks],
+        detailLoadedIds: { ...s.detailLoadedIds, [id]: true },
         selectedRisk: risk,
         isLoading: false,
         lastFetched: Date.now(),
@@ -302,6 +412,8 @@ export const useRiskStore = create<RiskState>()((set, get) => ({
       return null
     }
   },
+
+  isDetailLoaded: (id) => Boolean(get().detailLoadedIds[id]),
 
   create: async (data) => {
     requirePermission('Manage Audit Findings', { storeName: 'risk', actionName: 'create' })
@@ -404,15 +516,23 @@ export const useRiskStore = create<RiskState>()((set, get) => ({
 
   delete: async (id) => {
     requirePermission('Manage Audit Findings', { storeName: 'risk', actionName: 'delete', id })
-    // OPTIMISTIC: remove immediately. Restore on failure.
+    // OPTIMISTIC HARD-DELETE: the server route soft-deletes via `deleted_at`,
+    // but from the client's perspective the row is gone for good. Snapshot
+    // the row, list index, selection state, and detail-loaded flag up front
+    // so we can splice everything back in on failure.
     const snapshot = get().byId[id]
     const prevIndex = get().risks.findIndex((r) => r.id === id)
+    const wasSelected = get().selectedRisk?.id === id
+    const previousSelected = wasSelected ? get().selectedRisk : null
+    const wasDetailLoaded = Boolean(get().detailLoadedIds[id])
     set((s) => {
       const { [id]: _drop, ...rest } = s.byId
+      const { [id]: _dropDetail, ...restDetail } = s.detailLoadedIds
       return {
         risks: s.risks.filter((r) => r.id !== id),
         byId: rest,
-        selectedRisk: s.selectedRisk?.id === id ? null : s.selectedRisk,
+        selectedRisk: wasSelected ? null : s.selectedRisk,
+        detailLoadedIds: restDetail,
         isMutating: true,
         error: null,
       }
@@ -429,6 +549,10 @@ export const useRiskStore = create<RiskState>()((set, get) => ({
           return {
             risks: list,
             byId: { ...s.byId, [id]: snapshot },
+            selectedRisk: wasSelected ? previousSelected : s.selectedRisk,
+            detailLoadedIds: wasDetailLoaded
+              ? { ...s.detailLoadedIds, [id]: true }
+              : s.detailLoadedIds,
             error: errorMessage(e, 'Failed to delete risk'),
             isMutating: false,
           }
@@ -450,17 +574,13 @@ export const useRiskStore = create<RiskState>()((set, get) => ({
       ...previous,
       status: newStatus,
       updatedAt: now,
-      history: [
-        ...previous.history,
-        {
-          id: crypto.randomUUID(),
-          timestamp: now,
-          user: previous.owner.name,
-          action: 'status_changed',
-          previousValue: previous.status,
-          newValue: newStatus,
-        },
-      ],
+      history: appendHistory(previous, {
+        user: previous.owner.name,
+        action: 'status_changed',
+        previousValue: previous.status,
+        newValue: newStatus,
+        timestamp: now,
+      }),
     }
     set((s) => ({
       risks: s.risks.map((r) => (r.id === id ? optimistic : r)),
@@ -472,111 +592,265 @@ export const useRiskStore = create<RiskState>()((set, get) => ({
     })
   },
 
-  // ---- mitigation checklist (local-only) ---------------------------------
-  // No per-item endpoints exist yet for the top-level risk checklist; these
-  // mirror the legacy seeded behaviour. TODO(Phase 6): wire `/api/risks/[id]/checklist`
-  // (mirror of the observation checklist family).
+  // ---- mitigation plan scalar (parity wrappers) --------------------------
 
-  addMitigationItem: (riskId, text) => {
-    set((state) => {
-      const r = state.byId[riskId]
-      if (!r) return state
-      const now = new Date().toISOString()
-      const newItem = { id: crypto.randomUUID(), text, completed: false }
-      const checklist = [...(r.mitigationChecklist || []), newItem]
-      const updated: Risk = {
-        ...r,
-        mitigationChecklist: checklist,
-        mitigationProgress: computeMitigationProgress(checklist),
-        updatedAt: now,
-        history: [...r.history, {
-          id: crypto.randomUUID(), timestamp: now, user: r.owner.name,
-          action: 'checklist_added', newValue: text,
-        }],
-      }
-      return {
-        risks: state.risks.map((x) => (x.id === riskId ? updated : x)),
-        byId: { ...state.byId, [riskId]: updated },
-        selectedRisk: state.selectedRisk?.id === riskId ? updated : state.selectedRisk,
-      }
-    })
+  addMitigationPlan: async (riskId, plan) => {
+    const previous = get().byId[riskId]
+    if (!previous) return
+    const now = new Date().toISOString()
+    const optimistic: Risk = {
+      ...previous,
+      mitigationPlan: plan,
+      updatedAt: now,
+      history: appendHistory(previous, {
+        user: previous.owner.name,
+        action: 'mitigation_updated',
+        newValue: plan,
+        notes: 'Mitigation plan added',
+        timestamp: now,
+      }),
+    }
+    set((s) => ({
+      risks: s.risks.map((r) => (r.id === riskId ? optimistic : r)),
+      byId: { ...s.byId, [riskId]: optimistic },
+      selectedRisk: s.selectedRisk?.id === riskId ? optimistic : s.selectedRisk,
+    }))
+    try {
+      await get().update(riskId, { mitigationPlan: plan })
+    } catch {
+      // `update` already rolled back and surfaced the error.
+    }
   },
 
-  editMitigationItem: (riskId, itemId, newText) => {
-    set((state) => {
-      const r = state.byId[riskId]
-      if (!r) return state
-      const now = new Date().toISOString()
-      const checklist = (r.mitigationChecklist || []).map((i) =>
-        i.id === itemId ? { ...i, text: newText } : i,
-      )
-      const updated: Risk = {
-        ...r,
-        mitigationChecklist: checklist,
-        updatedAt: now,
-        history: [...r.history, {
-          id: crypto.randomUUID(), timestamp: now, user: r.owner.name,
-          action: 'checklist_edited', newValue: newText,
-        }],
-      }
-      return {
-        risks: state.risks.map((x) => (x.id === riskId ? updated : x)),
-        byId: { ...state.byId, [riskId]: updated },
-        selectedRisk: state.selectedRisk?.id === riskId ? updated : state.selectedRisk,
-      }
-    })
+  updateMitigationPlan: async (riskId, plan) => {
+    const previous = get().byId[riskId]
+    if (!previous) return
+    const now = new Date().toISOString()
+    const optimistic: Risk = {
+      ...previous,
+      mitigationPlan: plan,
+      updatedAt: now,
+      history: appendHistory(previous, {
+        user: previous.owner.name,
+        action: 'mitigation_updated',
+        previousValue: previous.mitigationPlan,
+        newValue: plan,
+        timestamp: now,
+      }),
+    }
+    set((s) => ({
+      risks: s.risks.map((r) => (r.id === riskId ? optimistic : r)),
+      byId: { ...s.byId, [riskId]: optimistic },
+      selectedRisk: s.selectedRisk?.id === riskId ? optimistic : s.selectedRisk,
+    }))
+    try {
+      await get().update(riskId, { mitigationPlan: plan })
+    } catch {
+      // `update` rolled back already.
+    }
   },
 
-  toggleMitigationItem: (riskId, itemId) => {
-    set((state) => {
-      const r = state.byId[riskId]
-      if (!r) return state
-      const now = new Date().toISOString()
-      const checklist = (r.mitigationChecklist || []).map((i) =>
-        i.id === itemId ? { ...i, completed: !i.completed } : i,
-      )
-      const updated: Risk = {
-        ...r,
-        mitigationChecklist: checklist,
-        mitigationProgress: computeMitigationProgress(checklist),
-        updatedAt: now,
-        history: [...r.history, {
-          id: crypto.randomUUID(), timestamp: now, user: r.owner.name,
-          action: 'checklist_toggled',
-          newValue: checklist.find((i) => i.id === itemId)?.text,
-        }],
-      }
-      return {
-        risks: state.risks.map((x) => (x.id === riskId ? updated : x)),
-        byId: { ...state.byId, [riskId]: updated },
-        selectedRisk: state.selectedRisk?.id === riskId ? updated : state.selectedRisk,
-      }
-    })
+  deleteMitigationPlan: async (riskId) => {
+    const previous = get().byId[riskId]
+    if (!previous) return
+    const now = new Date().toISOString()
+    const optimistic: Risk = {
+      ...previous,
+      mitigationPlan: undefined,
+      updatedAt: now,
+      history: appendHistory(previous, {
+        user: previous.owner.name,
+        action: 'mitigation_updated',
+        previousValue: previous.mitigationPlan,
+        notes: 'Mitigation plan removed',
+        timestamp: now,
+      }),
+    }
+    set((s) => ({
+      risks: s.risks.map((r) => (r.id === riskId ? optimistic : r)),
+      byId: { ...s.byId, [riskId]: optimistic },
+      selectedRisk: s.selectedRisk?.id === riskId ? optimistic : s.selectedRisk,
+    }))
+    try {
+      await get().update(riskId, { mitigationPlan: undefined })
+    } catch {
+      // `update` rolled back already.
+    }
   },
 
-  removeMitigationItem: (riskId, itemId) => {
-    set((state) => {
-      const r = state.byId[riskId]
-      if (!r) return state
-      const now = new Date().toISOString()
-      const removed = (r.mitigationChecklist || []).find((i) => i.id === itemId)
-      const checklist = (r.mitigationChecklist || []).filter((i) => i.id !== itemId)
-      const updated: Risk = {
-        ...r,
-        mitigationChecklist: checklist,
-        mitigationProgress: computeMitigationProgress(checklist),
-        updatedAt: now,
-        history: [...r.history, {
-          id: crypto.randomUUID(), timestamp: now, user: r.owner.name,
-          action: 'checklist_removed', newValue: removed?.text,
-        }],
-      }
-      return {
-        risks: state.risks.map((x) => (x.id === riskId ? updated : x)),
-        byId: { ...state.byId, [riskId]: updated },
-        selectedRisk: state.selectedRisk?.id === riskId ? updated : state.selectedRisk,
-      }
-    })
+  // ---- mitigation checklist (server-backed) ------------------------------
+  // Wired to /api/risks/[id]/checklist[/itemId]. Each mutation runs optimistic
+  // local state first, then reconciles with the server response. Failures
+  // restore the prior snapshot (the inner `set` covers `risks`, `byId`,
+  // `selectedRisk`, and `history`).
+
+  addMitigationItem: async (riskId, text) => {
+    const previous = get().byId[riskId]
+    if (!previous) return
+    requirePermission('Manage Audit Findings', { storeName: 'risk', actionName: 'addMitigationItem', id: riskId })
+    const now = new Date().toISOString()
+    const tempItemId = newTempId('temp-risk-item')
+    const optimisticItem: MitigationChecklistItem = { id: tempItemId, text, completed: false }
+    const checklist = [...(previous.mitigationChecklist ?? []), optimisticItem]
+    const optimistic: Risk = {
+      ...previous,
+      mitigationChecklist: checklist,
+      mitigationProgress: computeMitigationProgress(checklist),
+      updatedAt: now,
+      history: appendHistory(previous, {
+        user: previous.owner.name,
+        action: 'checklist_added',
+        newValue: text,
+        timestamp: now,
+      }),
+    }
+    set((s) => ({
+      risks: s.risks.map((r) => (r.id === riskId ? optimistic : r)),
+      byId: { ...s.byId, [riskId]: optimistic },
+      selectedRisk: s.selectedRisk?.id === riskId ? optimistic : s.selectedRisk,
+    }))
+    try {
+      const row = await api.post<RiskChecklistRow>(`/risks/${riskId}/checklist`, { text })
+      const serverItem = mapChecklistRow(row)
+      set((s) => {
+        const current = s.byId[riskId]
+        if (!current) return s
+        const swapped = (current.mitigationChecklist ?? []).map((i) =>
+          i.id === tempItemId ? serverItem : i,
+        )
+        const reconciled: Risk = {
+          ...current,
+          mitigationChecklist: swapped,
+          mitigationProgress: computeMitigationProgress(swapped),
+        }
+        return {
+          risks: s.risks.map((r) => (r.id === riskId ? reconciled : r)),
+          byId: { ...s.byId, [riskId]: reconciled },
+          selectedRisk: s.selectedRisk?.id === riskId ? reconciled : s.selectedRisk,
+        }
+      })
+    } catch (e) {
+      set((s) => ({
+        risks: s.risks.map((r) => (r.id === riskId ? previous : r)),
+        byId: { ...s.byId, [riskId]: previous },
+        selectedRisk: s.selectedRisk?.id === riskId ? previous : s.selectedRisk,
+        error: errorMessage(e, 'Failed to add checklist item'),
+      }))
+    }
+  },
+
+  editMitigationItem: async (riskId, itemId, newText) => {
+    const previous = get().byId[riskId]
+    if (!previous) return
+    requirePermission('Manage Audit Findings', { storeName: 'risk', actionName: 'editMitigationItem', id: riskId })
+    const now = new Date().toISOString()
+    const checklist = (previous.mitigationChecklist ?? []).map((i) =>
+      i.id === itemId ? { ...i, text: newText } : i,
+    )
+    const optimistic: Risk = {
+      ...previous,
+      mitigationChecklist: checklist,
+      updatedAt: now,
+      history: appendHistory(previous, {
+        user: previous.owner.name,
+        action: 'checklist_edited',
+        newValue: newText,
+        timestamp: now,
+      }),
+    }
+    set((s) => ({
+      risks: s.risks.map((r) => (r.id === riskId ? optimistic : r)),
+      byId: { ...s.byId, [riskId]: optimistic },
+      selectedRisk: s.selectedRisk?.id === riskId ? optimistic : s.selectedRisk,
+    }))
+    try {
+      await api.patch(`/risks/${riskId}/checklist/${itemId}`, { text: newText })
+    } catch (e) {
+      set((s) => ({
+        risks: s.risks.map((r) => (r.id === riskId ? previous : r)),
+        byId: { ...s.byId, [riskId]: previous },
+        selectedRisk: s.selectedRisk?.id === riskId ? previous : s.selectedRisk,
+        error: errorMessage(e, 'Failed to update checklist item'),
+      }))
+    }
+  },
+
+  toggleMitigationItem: async (riskId, itemId) => {
+    const previous = get().byId[riskId]
+    if (!previous) return
+    requirePermission('Manage Audit Findings', { storeName: 'risk', actionName: 'toggleMitigationItem', id: riskId })
+    const now = new Date().toISOString()
+    const currentItem = (previous.mitigationChecklist ?? []).find((i) => i.id === itemId)
+    const targetCompleted = currentItem ? !currentItem.completed : true
+    const checklist = (previous.mitigationChecklist ?? []).map((i) =>
+      i.id === itemId ? { ...i, completed: targetCompleted } : i,
+    )
+    const allDone = checklist.length > 0 && checklist.every((i) => i.completed)
+    const optimistic: Risk = {
+      ...previous,
+      mitigationChecklist: checklist,
+      mitigationProgress: computeMitigationProgress(checklist),
+      status: allDone ? 'resolved' : previous.status,
+      mitigationWorkflowStatus: allDone ? 'mitigated' : previous.mitigationWorkflowStatus,
+      updatedAt: now,
+      history: appendHistory(previous, {
+        user: previous.owner.name,
+        action: 'checklist_toggled',
+        newValue: currentItem?.text,
+        timestamp: now,
+      }),
+    }
+    set((s) => ({
+      risks: s.risks.map((r) => (r.id === riskId ? optimistic : r)),
+      byId: { ...s.byId, [riskId]: optimistic },
+      selectedRisk: s.selectedRisk?.id === riskId ? optimistic : s.selectedRisk,
+    }))
+    try {
+      await api.patch(`/risks/${riskId}/checklist/${itemId}`, { completed: targetCompleted })
+    } catch (e) {
+      set((s) => ({
+        risks: s.risks.map((r) => (r.id === riskId ? previous : r)),
+        byId: { ...s.byId, [riskId]: previous },
+        selectedRisk: s.selectedRisk?.id === riskId ? previous : s.selectedRisk,
+        error: errorMessage(e, 'Failed to toggle checklist item'),
+      }))
+    }
+  },
+
+  removeMitigationItem: async (riskId, itemId) => {
+    const previous = get().byId[riskId]
+    if (!previous) return
+    requirePermission('Manage Audit Findings', { storeName: 'risk', actionName: 'removeMitigationItem', id: riskId })
+    const now = new Date().toISOString()
+    const removed = (previous.mitigationChecklist ?? []).find((i) => i.id === itemId)
+    const checklist = (previous.mitigationChecklist ?? []).filter((i) => i.id !== itemId)
+    const optimistic: Risk = {
+      ...previous,
+      mitigationChecklist: checklist,
+      mitigationProgress: computeMitigationProgress(checklist),
+      updatedAt: now,
+      history: appendHistory(previous, {
+        user: previous.owner.name,
+        action: 'checklist_removed',
+        newValue: removed?.text,
+        timestamp: now,
+      }),
+    }
+    set((s) => ({
+      risks: s.risks.map((r) => (r.id === riskId ? optimistic : r)),
+      byId: { ...s.byId, [riskId]: optimistic },
+      selectedRisk: s.selectedRisk?.id === riskId ? optimistic : s.selectedRisk,
+    }))
+    try {
+      await api.delete(`/risks/${riskId}/checklist/${itemId}`)
+    } catch (e) {
+      set((s) => ({
+        risks: s.risks.map((r) => (r.id === riskId ? previous : r)),
+        byId: { ...s.byId, [riskId]: previous },
+        selectedRisk: s.selectedRisk?.id === riskId ? previous : s.selectedRisk,
+        error: errorMessage(e, 'Failed to remove checklist item'),
+      }))
+    }
   },
 
   markReviewed: (riskId) => {
@@ -591,10 +865,12 @@ export const useRiskStore = create<RiskState>()((set, get) => ({
       lastReviewDate: now,
       nextReviewDate,
       updatedAt: now,
-      history: [...previous.history, {
-        id: crypto.randomUUID(), timestamp: now, user: previous.owner.name,
-        action: 'reviewed', notes: 'Risk marked as reviewed',
-      }],
+      history: appendHistory(previous, {
+        user: previous.owner.name,
+        action: 'reviewed',
+        notes: 'Risk marked as reviewed',
+        timestamp: now,
+      }),
     }
     set((s) => ({
       risks: s.risks.map((r) => (r.id === riskId ? optimistic : r)),
@@ -668,11 +944,12 @@ export const useRiskStore = create<RiskState>()((set, get) => ({
       mitigationWorkflowStatus: 'sent-to-department' as RiskMitigationWorkflowStatus,
       sentToDepartmentAt: now,
       updatedAt: now,
-      history: [...previous.history, {
-        id: crypto.randomUUID(), timestamp: now, user: actingUser,
+      history: appendHistory(previous, {
+        user: actingUser,
         action: 'note_added',
         notes: 'Risk sent to intended department for mitigation plan',
-      }],
+        timestamp: now,
+      }),
     }
     set((s) => ({
       risks: s.risks.map((r) => (r.id === riskId ? optimistic : r)),
@@ -709,11 +986,12 @@ export const useRiskStore = create<RiskState>()((set, get) => ({
       departmentProposedPlan: proposedPlan,
       mitigationWorkflowStatus: 'plan-proposed' as RiskMitigationWorkflowStatus,
       updatedAt: now,
-      history: [...previous.history, {
-        id: crypto.randomUUID(), timestamp: now, user: submittedBy,
+      history: appendHistory(previous, {
+        user: submittedBy,
         action: 'mitigation_updated',
         notes: 'Department proposed mitigation plan',
-      }],
+        timestamp: now,
+      }),
     }
     set((s) => ({
       risks: s.risks.map((r) => (r.id === riskId ? optimistic : r)),
@@ -748,11 +1026,12 @@ export const useRiskStore = create<RiskState>()((set, get) => ({
       mitigationWorkflowStatus: 'in-progress' as RiskMitigationWorkflowStatus,
       status: 'mitigating',
       updatedAt: now,
-      history: [...previous.history, {
-        id: crypto.randomUUID(), timestamp: now, user: actingUser,
+      history: appendHistory(previous, {
+        user: actingUser,
         action: 'mitigation_updated',
         notes: 'Officer accepted department-proposed plan',
-      }],
+        timestamp: now,
+      }),
     }
     set((s) => ({
       risks: s.risks.map((r) => (r.id === riskId ? optimistic : r)),
@@ -786,21 +1065,51 @@ export const useRiskStore = create<RiskState>()((set, get) => ({
         : (previous.mitigationWorkflowStatus ?? 'in-progress'),
       status: allDone ? 'resolved' : previous.status,
       updatedAt: now,
-      history: [...previous.history, {
-        id: crypto.randomUUID(), timestamp: now, user: actingUser,
+      history: appendHistory(previous, {
+        user: actingUser,
         action: 'checklist_toggled',
         newValue: checklist.find((i) => i.id === itemId)?.text,
-      }],
+        timestamp: now,
+      }),
     }
     set((s) => ({
       risks: s.risks.map((r) => (r.id === riskId ? optimistic : r)),
       byId: { ...s.byId, [riskId]: optimistic },
       selectedRisk: s.selectedRisk?.id === riskId ? optimistic : s.selectedRisk,
     }))
-    // Note: the proposed-plan toggle endpoint takes a `planId`; without it
-    // we fall back to a local-only update — Phase 6 should pass the planId
-    // through and call POST /api/risks/[id]/plan/[planId]/toggle/[itemId].
-    // TODO(Phase 6): plumb planId from previous.departmentProposedPlan.id.
+    const planId = previous.departmentProposedPlan?.id
+    if (!planId) {
+      // No proposed plan in flight — fall back to top-level checklist toggle.
+      void (async () => {
+        try {
+          const target = (previous.mitigationChecklist ?? []).find((i) => i.id === itemId)
+          if (!target) return
+          await api.patch(`/risks/${riskId}/checklist/${itemId}`, {
+            completed: !target.completed,
+          })
+        } catch (e) {
+          set((s) => ({
+            risks: s.risks.map((r) => (r.id === riskId ? previous : r)),
+            byId: { ...s.byId, [riskId]: previous },
+            selectedRisk: s.selectedRisk?.id === riskId ? previous : s.selectedRisk,
+            error: errorMessage(e, 'Failed to toggle plan item'),
+          }))
+        }
+      })()
+      return
+    }
+    void (async () => {
+      try {
+        await api.patch(`/risks/${riskId}/plan/${planId}/toggle/${itemId}`)
+      } catch (e) {
+        set((s) => ({
+          risks: s.risks.map((r) => (r.id === riskId ? previous : r)),
+          byId: { ...s.byId, [riskId]: previous },
+          selectedRisk: s.selectedRisk?.id === riskId ? previous : s.selectedRisk,
+          error: errorMessage(e, 'Failed to toggle plan item'),
+        }))
+      }
+    })()
   },
 
   setFilters: (filters) => set({ filters }),

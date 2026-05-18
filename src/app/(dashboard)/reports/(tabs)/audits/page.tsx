@@ -33,7 +33,7 @@ interface Audit {
   id: string
   name: string
   description: string
-  responsible: { name: string; avatar: string }
+  responsible: { name: string; avatar: string; department?: string }
   dueDate: Date
   status: AuditStatus
   priority: AuditPriority
@@ -196,6 +196,7 @@ export default function ReportsAuditsPage() {
         responsible: {
           name: audit.assignee?.name || 'Unassigned',
           avatar: dicebearAvatar(audit.assignee?.name || 'default'),
+          department: audit.assignee?.department || undefined,
         },
         dueDate: new Date(audit.dueDate),
         status: displayStatus,
@@ -502,7 +503,12 @@ export default function ReportsAuditsPage() {
                           <td className="px-6 py-4">
                             <div className="flex items-center gap-2">
                               <img src={audit.responsible.avatar} className="w-7 h-7 rounded-full bg-slate-100" alt={audit.responsible.name} />
-                              <span className="text-sm text-slate-600 font-medium">{audit.responsible.name}</span>
+                              <div className="leading-tight">
+                                <span className="text-sm text-slate-600 font-medium block">{audit.responsible.name}</span>
+                                {audit.responsible.department && (
+                                  <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider">{audit.responsible.department}</span>
+                                )}
+                              </div>
                             </div>
                           </td>
                           <td className="px-6 py-4">

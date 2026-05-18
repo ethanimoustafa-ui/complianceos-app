@@ -144,6 +144,30 @@ export type CreatePolicyCategoryInput = z.infer<typeof CreatePolicyCategorySchem
 export const UpdatePolicyCategorySchema = CreatePolicyCategorySchema.partial()
 export type UpdatePolicyCategoryInput = z.infer<typeof UpdatePolicyCategorySchema>
 
+// ---------- policy_workflow_steps PATCH ------------------------------------
+
+export const UpdatePolicyWorkflowStepSchema = z.object({
+  step: z.string().min(1).max(200).optional(),
+  description: z.string().max(2_000).nullable().optional(),
+  action_type: z.string().max(100).nullable().optional(),
+  step_state: WorkflowStepState.nullable().optional(),
+  status: WorkflowStepStatus.optional(),
+  sort_order: z.coerce.number().int().min(0).optional(),
+  note: z.string().max(5_000).nullable().optional(),
+  date: DateString.nullable().optional(),
+  user_name: z.string().max(200).nullable().optional(),
+})
+export type UpdatePolicyWorkflowStepInput = z.infer<typeof UpdatePolicyWorkflowStepSchema>
+
+// ---------- policy attachments --------------------------------------------
+
+export const CreatePolicyAttachmentSchema = z.object({
+  name: z.string().min(1).max(500),
+  storage_path: z.string().min(1).max(2_000),
+  size: z.coerce.number().int().min(0).optional(),
+})
+export type CreatePolicyAttachmentInput = z.infer<typeof CreatePolicyAttachmentSchema>
+
 // Re-export for workflow-step constants
 export const PolicyWorkflowStepStatus = WorkflowStepStatus
 export const PolicyWorkflowStepState = WorkflowStepState

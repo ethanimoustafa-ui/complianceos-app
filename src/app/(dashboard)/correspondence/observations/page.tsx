@@ -422,7 +422,9 @@ export default function ObservationsPage() {
         onSave={handleEditSave}
       />
 
-      {/* Delete Confirmation Dialog */}
+      {/* Delete Confirmation Dialog — strong confirm (mirrors policy/circular).
+          Requires typing "DELETE" before the action can fire because cascade
+          removes comments, documents, remediation plans, and activity. */}
       <DeleteConfirmationDialog
         isOpen={isDeleteDialogOpen}
         onClose={() => {
@@ -432,6 +434,13 @@ export default function ObservationsPage() {
         onConfirm={handleDeleteConfirm}
         itemType={t('observations.observation')}
         itemName={observations.find((o) => o.id === observationToDelete)?.title}
+        requireConfirmation
+        description={(() => {
+          const name = observations.find((o) => o.id === observationToDelete)?.title
+          return name
+            ? `This will permanently delete the observation "${name}" and all its comments, documents, remediation plans, and activity. This cannot be undone.`
+            : 'This will permanently delete the observation and all its comments, documents, remediation plans, and activity. This cannot be undone.'
+        })()}
       />
     </>
   )

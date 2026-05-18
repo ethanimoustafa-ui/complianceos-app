@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Icon } from '@iconify/react'
 import { Modal } from '@/components/ui/modal'
 import { Button } from '@/components/ui/button'
+import { LoadingButton } from '@/components/ui/loading-button'
 import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -45,7 +46,7 @@ interface EditAuditModalProps {
 
 export function EditAuditModal({ isOpen, onClose, audit, onSuccess, calculatedProgress }: EditAuditModalProps) {
   const { t, isRTL } = useTranslation()
-  const { update, isLoading } = useAuditStore()
+  const { update, isMutating } = useAuditStore()
   const { members } = useTeamStore()
   const currentUser = useAuthStore((state) => state.user)
   // Select stable framework list, then derive with useMemo. Filtering or
@@ -419,23 +420,17 @@ export function EditAuditModal({ isOpen, onClose, audit, onSuccess, calculatedPr
 
         {/* Footer */}
         <div className="p-8 bg-slate-50 border-t border-slate-200 flex justify-end gap-3">
-          <Button variant="ghost" onClick={handleClose} disabled={isLoading}>
+          <Button variant="ghost" onClick={handleClose} disabled={isMutating}>
             {t('common.cancel')}
           </Button>
-          <Button
+          <LoadingButton
             variant="primary"
+            loading={isMutating}
+            loadingLabel={t('auditDetail.saving')}
             onClick={handleSubmit(onSubmit)}
-            disabled={isLoading}
           >
-            {isLoading ? (
-              <>
-                <Icon icon="lucide:loader-2" className="animate-spin" />
-                {t('auditDetail.saving')}
-              </>
-            ) : (
-              t('auditDetail.saveChanges')
-            )}
-          </Button>
+            {t('auditDetail.saveChanges')}
+          </LoadingButton>
         </div>
       </div>
     </Modal>

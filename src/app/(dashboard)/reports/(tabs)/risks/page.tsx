@@ -5,6 +5,7 @@ import { usePathname, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { Icon } from '@iconify/react'
 import { Button } from '@/components/ui/button'
+import { LoadingButton } from '@/components/ui/loading-button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Drawer } from '@/components/ui/drawer'
 import { Modal } from '@/components/ui/modal'
@@ -12,7 +13,8 @@ import { DeleteConfirmationDialog } from '@/components/ui/delete-confirmation-di
 import { cn } from '@/lib/utils'
 import { useTranslation } from '@/i18n'
 import { useRiskStore } from '@/stores/risk-store'
-import { ListSkeleton } from '@/components/ui/skeleton'
+import { ListSkeleton, Skeleton } from '@/components/ui/skeleton'
+import { formatTimelineDate } from '@/lib/format-date'
 import { useTeamStore } from '@/stores/team-store'
 import { useDepartmentStore } from '@/stores/department-store'
 import { useAuthStore } from '@/stores/auth-store'
@@ -131,6 +133,21 @@ export default function ReportsRisksPage() {
 
   // Risk store
   const storeRisks = useRiskStore((s) => s.risks)
+  // `byId` is the authoritative read source for detail rendering — see the
+  // read-side defense further down (avoids the "Not Found" flash audits had
+  // when fetchById landed before the list refetch).
+  const risksById = useRiskStore((s) => s.byId)
+  const riskStore = useRiskStore()
+  const isMutating = useRiskStore((s) => s.isMutating)
+  const fetchRiskById = useRiskStore((s) => s.fetchById)
+  // RISKS-STORE may expose `isDetailLoaded` — guard the read so we never
+  // explode if the predicate is missing (returns `false` → skeletons render).
+  const isDetailLoadedFn = (riskStore as unknown as { isDetailLoaded?: (id: string) => boolean })
+    .isDetailLoaded
+  const isDetailLoaded = (id: string): boolean =>
+    typeof isDetailLoadedFn === 'function'
+      ? isDetailLoadedFn(id)
+      : Boolean(risksById[id]?.history && risksById[id]!.history.length > 0)
   const createRisk = useRiskStore((s) => s.create)
   const updateRisk = useRiskStore((s) => s.update)
   const updateRiskStatus = useRiskStore((s) => s.updateStatus)
@@ -295,15 +312,73 @@ export default function ReportsRisksPage() {
     }
   }, [risks]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Sync selectedRisk
+  // Sync selectedRisk.
+  // Read-side defense (mirrors audits' "Not Found" fix): prefer `byId[id]`
+  // (fresh from `fetchById`) over the list, fall back to `risks.find(...)`.
+  // This guarantees the drawer keeps rendering header info even if the
+  // list-refetch hasn't landed yet.
   useEffect(() => {
-    if (selectedRisk) {
-      const updated = risks.find(r => r.id === selectedRisk.id)
-      if (updated && (updated.status !== selectedRisk.status || updated.updatedAt.getTime() !== selectedRisk.updatedAt.getTime())) {
-        setSelectedRisk(updated)
-      }
+    if (!selectedRisk) return
+    const fromList = risks.find((r) => r.id === selectedRisk.id)
+    const fromById = risksById[selectedRisk.id]
+    // Prefer list-shape (already mapped to UI fields); only fall back to
+    // synthesising from byId when the list doesn't have it.
+    const updated =
+      fromList ??
+      (fromById
+        ? (() => {
+            const statusMap: Record<string, RiskStatus> = { identified: 'open', mitigating: 'mitigating', accepted: 'accepted', resolved: 'closed' }
+            return {
+              id: fromById.id,
+              name: fromById.title,
+              description: fromById.description,
+              category: fromById.category as RiskCategory,
+              likelihood: fromById.likelihood,
+              impact: fromById.impact,
+              owner: {
+                name: fromById.owner.name,
+                avatar: fromById.owner.avatar || '',
+                department: fromById.owner.department,
+              },
+              status: statusMap[fromById.status] || ('open' as RiskStatus),
+              mitigationPlan: fromById.mitigationPlan,
+              mitigationChecklist: fromById.mitigationChecklist,
+              mitigationProgress: fromById.mitigationProgress,
+              monitoringFrequency: fromById.monitoringFrequency,
+              lastReviewDate: fromById.lastReviewDate ? new Date(fromById.lastReviewDate) : undefined,
+              nextReviewDate: fromById.nextReviewDate ? new Date(fromById.nextReviewDate) : undefined,
+              reviewSchedule: fromById.reviewSchedule,
+              history: (fromById.history ?? []).map((h, idx) => ({
+                id: idx + 1,
+                timestamp: new Date(h.timestamp),
+                user: h.user,
+                action: h.action as HistoryAction,
+                previousValue: h.previousValue,
+                newValue: h.newValue,
+                notes: h.notes,
+              })),
+              createdAt: new Date(fromById.createdAt),
+              updatedAt: new Date(fromById.updatedAt),
+            } as RiskRegisterItem
+          })()
+        : null)
+    if (!updated) return
+    const changed =
+      updated.status !== selectedRisk.status ||
+      updated.updatedAt.getTime() !== selectedRisk.updatedAt.getTime() ||
+      updated.history.length !== selectedRisk.history.length ||
+      (updated.mitigationChecklist?.length ?? 0) !== (selectedRisk.mitigationChecklist?.length ?? 0)
+    if (changed) setSelectedRisk(updated)
+  }, [risks, risksById]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Detail hydration: when the drawer opens, fetch the full risk so
+  // detail-only sub-resources (history, checklist, dept proposed plan, etc.)
+  // land in `byId`. List rows alone don't carry those.
+  useEffect(() => {
+    if (isRiskDrawerOpen && selectedRisk?.id && !selectedRisk.id.startsWith('temp-')) {
+      void fetchRiskById(selectedRisk.id)
     }
-  }, [risks]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [isRiskDrawerOpen, selectedRisk?.id, fetchRiskById])
 
   const uiStatusToStoreStatus = (uiStatus: RiskStatus): 'identified' | 'mitigating' | 'accepted' | 'resolved' => {
     const map: Record<RiskStatus, 'identified' | 'mitigating' | 'accepted' | 'resolved'> = { open: 'identified', mitigating: 'mitigating', accepted: 'accepted', closed: 'resolved' }
@@ -1190,10 +1265,15 @@ export default function ReportsRisksPage() {
           <ReviewSchedulePicker value={newRiskSchedule} onChange={setNewRiskSchedule} t={t} isRTL={isRTL} />
           <FrameworkTagSelector value={frameworkIds} onChange={setFrameworkIds} label="Frameworks" />
           <div className="flex gap-3 mt-6">
-            <Button className="flex-1" disabled={!newRiskName || !newRiskCategory || !newRiskOwnerId || !newRiskDescription} onClick={handleCreateRisk}>
+            <LoadingButton
+              className="flex-1"
+              loading={isMutating}
+              disabled={!newRiskName || !newRiskCategory || !newRiskOwnerId || !newRiskDescription}
+              onClick={handleCreateRisk}
+            >
               <Icon icon={editingRiskId ? 'lucide:save' : 'lucide:plus'} />
               {editingRiskId ? t('common.saveChanges') : t('reports.createRisk' as TranslationKey)}
-            </Button>
+            </LoadingButton>
             <button onClick={() => { resetAddRiskForm(); setShowAddRiskModal(false) }} className="px-6 bg-slate-100 text-slate-700 py-3 rounded-lg font-bold hover:bg-slate-200 transition-colors cursor-pointer">{t('common.cancel')}</button>
           </div>
         </div>
@@ -1211,6 +1291,11 @@ export default function ReportsRisksPage() {
         }}
         itemType={t('reports.risk' as TranslationKey)}
         itemName={riskToDelete?.name || ''}
+        description={
+          riskToDelete
+            ? `This will permanently delete the risk "${riskToDelete.name}" and all its mitigation plans, checklist, history, and attachments. This cannot be undone.`
+            : undefined
+        }
       />
     </div>
   )

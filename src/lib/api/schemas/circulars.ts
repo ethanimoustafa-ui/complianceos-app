@@ -96,3 +96,68 @@ export type CreateImplementationInput = z.infer<typeof CreateImplementationSchem
 
 export const UpdateImplementationSchema = CreateImplementationSchema.partial()
 export type UpdateImplementationInput = z.infer<typeof UpdateImplementationSchema>
+
+// ---------- article checklist items ----------------------------------------
+
+export const CreateArticleChecklistItemSchema = z.object({
+  title: z.string().min(1).max(2_000),
+  completed: z.boolean().default(false),
+  sort_order: z.coerce.number().int().min(0).default(0),
+})
+export type CreateArticleChecklistItemInput = z.infer<typeof CreateArticleChecklistItemSchema>
+
+export const UpdateArticleChecklistItemSchema = z.object({
+  title: z.string().min(1).max(2_000).optional(),
+  completed: z.boolean().optional(),
+  sort_order: z.coerce.number().int().min(0).optional(),
+})
+export type UpdateArticleChecklistItemInput = z.infer<typeof UpdateArticleChecklistItemSchema>
+
+// ---------- workflow step CRUD ---------------------------------------------
+
+const CircularWorkflowStepStatus = z.enum(['pending', 'current', 'completed'])
+
+export const CreateCircularWorkflowStepSchema = z.object({
+  phase: z.coerce.number().int().min(0).max(10),
+  label: z.string().min(1).max(500),
+  label_ar: z.string().max(500).optional(),
+  action_label: z.string().min(1).max(200),
+  action_label_ar: z.string().min(1).max(200),
+  action_type: z.string().min(1).max(100),
+  requires_notes: z.boolean().default(false),
+  assigned_to: Uuid.optional(),
+  notes: z.string().max(5_000).optional(),
+  deadline: DateString.optional(),
+  sort_order: z.coerce.number().int().min(0).optional(),
+})
+export type CreateCircularWorkflowStepInput = z.infer<typeof CreateCircularWorkflowStepSchema>
+
+export const UpdateCircularWorkflowStepSchema = z.object({
+  label: z.string().min(1).max(500).optional(),
+  label_ar: z.string().max(500).optional(),
+  phase: z.coerce.number().int().min(0).max(10).optional(),
+  action_label: z.string().min(1).max(200).optional(),
+  action_label_ar: z.string().min(1).max(200).optional(),
+  action_type: z.string().min(1).max(100).optional(),
+  requires_notes: z.boolean().optional(),
+  status: CircularWorkflowStepStatus.optional(),
+  assigned_to: Uuid.nullable().optional(),
+  notes: z.string().max(5_000).nullable().optional(),
+  sort_order: z.coerce.number().int().min(0).optional(),
+  deadline: DateString.nullable().optional(),
+})
+export type UpdateCircularWorkflowStepInput = z.infer<typeof UpdateCircularWorkflowStepSchema>
+
+export const ReorderCircularWorkflowStepsSchema = z.object({
+  items: z
+    .array(
+      z.object({
+        id: Uuid,
+        sort_order: z.coerce.number().int().min(0),
+      }),
+    )
+    .min(1),
+})
+export type ReorderCircularWorkflowStepsInput = z.infer<
+  typeof ReorderCircularWorkflowStepsSchema
+>

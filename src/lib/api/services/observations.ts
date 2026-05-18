@@ -5,8 +5,14 @@ import { NotFound } from '../errors'
 
 // --- selection lists ---------------------------------------------------------
 
+// List columns mirror what the observation table row + detail modal show
+// without paying for a second detail GET. The card needs sub_title +
+// remediation_submission_due + a short description preview alongside the
+// scalar status/severity/source fields. The store's optimistic update path
+// also reads `description`, so we expose it on the list response — keep the
+// payload trim by avoiding heavy text columns we don't actually render.
 export const OBSERVATION_LIST_COLUMNS =
-  'id, reference, title, sub_title, source, severity, status, due_date, department, leader_id, creator_id, progress, framework_ids, created_at, updated_at'
+  'id, reference, title, sub_title, description, source, severity, status, due_date, remediation_submission_due, department, leader_id, creator_id, progress, framework_ids, created_at, updated_at'
 
 export const OBSERVATION_DETAIL_COLUMNS =
   'id, reference, title, sub_title, description, source, severity, status, due_date, remediation_submission_due, department, leader_id, creator_id, progress, framework_ids, created_at, updated_at'
@@ -22,6 +28,11 @@ export const OBSERVATION_TIMELINE_COLUMNS =
 
 export const REMEDIATION_PLAN_COLUMNS =
   'id, observation_id, title, description, due_date, status, submitted_at, submitted_by, reviewed_at, reviewed_by, review_notes, created_at'
+
+// `observation_updates` is the storage table for comments — the UI calls them
+// "updates" but the API surface uses "comments". Same columns either way.
+export const OBSERVATION_UPDATE_COLUMNS =
+  'id, observation_id, author_id, text, is_edited, edited_at, created_at'
 
 // --- assertions --------------------------------------------------------------
 
@@ -41,7 +52,6 @@ export async function assertObservationExists(
     .from('observations')
     .select('id')
     .eq(column, observationIdOrReference)
-    .is('deleted_at', null)
     .maybeSingle<{ id: string }>()
   if (error) throw error
   if (!data) throw NotFound(`Observation ${observationIdOrReference} not found`)
@@ -101,8 +111,7 @@ export async function getObservationDetail(
     .from('observations')
     .select(OBSERVATION_DETAIL_COLUMNS)
     .eq(column, observationIdOrReference)
-    .is('deleted_at', null)
-    .maybeSingle<Omit<ObservationDetail, 'assignees' | 'checklist' | 'documents' | 'remediation_plans' | 'closure_request' | 'closure_review'>>()
+    .maybeSingle<Omit<ObservationDetail, 'assignees' | 'checklist' | 'documents' | 'updates' | 'remediation_plans' | 'closure_request' | 'closure_review'>>()
   if (error) throw error
   if (!obs) throw NotFound(`Observation ${observationIdOrReference} not found`)
   const observationId = obs.id

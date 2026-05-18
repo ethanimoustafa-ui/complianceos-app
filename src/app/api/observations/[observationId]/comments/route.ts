@@ -62,7 +62,7 @@ export async function POST(req: NextRequest, { params }: Params) {
       }),
     ])
 
-    revalidateAll([cacheTags.observations(observationId)])
+    revalidateAll([cacheTags.observations(), cacheTags.observations(observationId)])
     return ok(data, { status: 201 })
   } catch (e) {
     return handle(e)

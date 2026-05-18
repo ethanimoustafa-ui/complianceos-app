@@ -30,7 +30,6 @@ export async function POST(req: NextRequest, { params }: Params) {
       .from('risks')
       .update({ mitigation_deadline: input.mitigation_deadline })
       .eq('id', riskId)
-      .is('deleted_at', null)
       .select(RISK_LIST_COLUMNS)
       .single()
     if (error || !data) throw error ?? NotFound('Update returned no row')

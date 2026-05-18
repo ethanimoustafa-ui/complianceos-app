@@ -3,6 +3,7 @@
 import { memo, useState } from 'react'
 import { Icon } from '@iconify/react'
 import { useTranslation } from '@/i18n'
+import { LoadingButton } from '@/components/ui/loading-button'
 import type { ObservationStatus, ClosureRequest, ClosureReview } from '@/types'
 
 export interface ClosureStatusProps {
@@ -11,8 +12,8 @@ export interface ClosureStatusProps {
   closureReview: ClosureReview | null | undefined
   canRequestClosure: boolean
   canReviewClosure: boolean
-  onRequestClosure: (notes?: string) => void
-  onReviewClosure: (approved: boolean, notes?: string) => void
+  onRequestClosure: (notes?: string) => Promise<void> | void
+  onReviewClosure: (approved: boolean, notes?: string) => Promise<void> | void
   isRTL: boolean
 }
 
@@ -30,6 +31,8 @@ export const ClosureStatus = memo(function ClosureStatus({
   const [showReviewForm, setShowReviewForm] = useState(false)
   const [requestNotes, setRequestNotes] = useState('')
   const [reviewNotes, setReviewNotes] = useState('')
+  const [submittingRequest, setSubmittingRequest] = useState(false)
+  const [reviewingClosure, setReviewingClosure] = useState<'approve' | 'reject' | null>(null)
 
   // Show "Request Closure" button when status is in_progress and user can request
   const showRequestButton = status === 'in_progress' && canRequestClosure && !closureRequest
@@ -43,16 +46,26 @@ export const ClosureStatus = memo(function ClosureStatus({
   // Show closure result when status is closed
   const showClosedInfo = status === 'closed' && closureReview
 
-  const handleRequestSubmit = () => {
-    onRequestClosure(requestNotes || undefined)
-    setShowRequestForm(false)
-    setRequestNotes('')
+  const handleRequestSubmit = async () => {
+    setSubmittingRequest(true)
+    try {
+      await onRequestClosure(requestNotes || undefined)
+      setShowRequestForm(false)
+      setRequestNotes('')
+    } finally {
+      setSubmittingRequest(false)
+    }
   }
 
-  const handleReviewSubmit = (approved: boolean) => {
-    onReviewClosure(approved, reviewNotes || undefined)
-    setShowReviewForm(false)
-    setReviewNotes('')
+  const handleReviewSubmit = async (approved: boolean) => {
+    setReviewingClosure(approved ? 'approve' : 'reject')
+    try {
+      await onReviewClosure(approved, reviewNotes || undefined)
+      setShowReviewForm(false)
+      setReviewNotes('')
+    } finally {
+      setReviewingClosure(null)
+    }
   }
 
   // Don't render anything if observation is open
@@ -82,22 +95,26 @@ export const ClosureStatus = memo(function ClosureStatus({
             value={requestNotes}
             onChange={(e) => setRequestNotes(e.target.value)}
             placeholder={t('observations.detail.closureNotesPlaceholder')}
-            className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+            disabled={submittingRequest}
+            className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none disabled:opacity-60"
             rows={3}
           />
           <div className={`flex gap-2`}>
-            <button
+            <LoadingButton
+              variant="primary"
               onClick={handleRequestSubmit}
-              className="flex-1 px-3 py-2 bg-blue-600 text-white text-xs font-bold rounded-lg hover:bg-blue-700 transition-colors"
+              loading={submittingRequest}
+              className="flex-1 h-8 text-xs bg-blue-600 hover:bg-blue-700"
             >
               {t('observations.detail.submitRequest')}
-            </button>
+            </LoadingButton>
             <button
               onClick={() => {
                 setShowRequestForm(false)
                 setRequestNotes('')
               }}
-              className="px-3 py-2 bg-slate-200 text-slate-700 text-xs font-bold rounded-lg hover:bg-slate-300 transition-colors"
+              disabled={submittingRequest}
+              className="px-3 py-2 bg-slate-200 text-slate-700 text-xs font-bold rounded-lg hover:bg-slate-300 transition-colors disabled:opacity-50"
             >
               {t('common.cancel')}
             </button>
@@ -141,29 +158,37 @@ export const ClosureStatus = memo(function ClosureStatus({
                 value={reviewNotes}
                 onChange={(e) => setReviewNotes(e.target.value)}
                 placeholder={t('observations.detail.reviewNotesPlaceholder')}
-                className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                disabled={reviewingClosure !== null}
+                className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none disabled:opacity-60"
                 rows={2}
               />
               <div className={`flex gap-2`}>
-                <button
+                <LoadingButton
+                  variant="primary"
                   onClick={() => handleReviewSubmit(true)}
-                  className="flex-1 px-3 py-2 bg-emerald-600 text-white text-xs font-bold rounded-lg hover:bg-emerald-700 transition-colors"
+                  loading={reviewingClosure === 'approve'}
+                  disabled={reviewingClosure !== null}
+                  className="flex-1 h-8 text-xs bg-emerald-600 hover:bg-emerald-700"
                 >
                   {t('observations.detail.approveClosure')}
-                </button>
-                <button
+                </LoadingButton>
+                <LoadingButton
+                  variant="primary"
                   onClick={() => handleReviewSubmit(false)}
-                  className="flex-1 px-3 py-2 bg-rose-600 text-white text-xs font-bold rounded-lg hover:bg-rose-700 transition-colors"
+                  loading={reviewingClosure === 'reject'}
+                  disabled={reviewingClosure !== null}
+                  className="flex-1 h-8 text-xs bg-rose-600 hover:bg-rose-700"
                 >
                   {t('observations.detail.rejectClosure')}
-                </button>
+                </LoadingButton>
               </div>
               <button
                 onClick={() => {
                   setShowReviewForm(false)
                   setReviewNotes('')
                 }}
-                className="w-full px-3 py-2 bg-slate-200 text-slate-700 text-xs font-bold rounded-lg hover:bg-slate-300 transition-colors"
+                disabled={reviewingClosure !== null}
+                className="w-full px-3 py-2 bg-slate-200 text-slate-700 text-xs font-bold rounded-lg hover:bg-slate-300 transition-colors disabled:opacity-50"
               >
                 {t('common.cancel')}
               </button>

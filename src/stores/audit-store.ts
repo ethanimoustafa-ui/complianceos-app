@@ -364,9 +364,12 @@ export const useAuditStore = create<AuditState>()((set, get) => ({
       const audit = mapAuditRow(row, previous)
       set((state) => ({
         byId: { ...state.byId, [id]: audit },
+        // If the row isn't in `audits[]` yet (deep-link to a freshly-created
+        // audit), prepend it so detail-page selectors using
+        // `audits.find(a => a.id === auditId)` can resolve it.
         audits: state.audits.some((a) => a.id === id)
           ? state.audits.map((a) => (a.id === id ? audit : a))
-          : state.audits,
+          : [audit, ...state.audits],
         selectedAudit: audit,
         isLoading: false,
         lastFetched: Date.now(),

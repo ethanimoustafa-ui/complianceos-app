@@ -64,7 +64,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       }),
     ])
 
-    revalidateAll([cacheTags.observations(observationId)])
+    revalidateAll([cacheTags.observations(), cacheTags.observations(observationId)])
     return ok(data)
   } catch (e) {
     return handle(e)
@@ -105,7 +105,7 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
       }),
     ])
 
-    revalidateAll([cacheTags.observations(observationId)])
+    revalidateAll([cacheTags.observations(), cacheTags.observations(observationId)])
     return ok({ id: itemId, deleted: true })
   } catch (e) {
     return handle(e)

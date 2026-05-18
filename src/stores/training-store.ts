@@ -15,6 +15,20 @@
 // SKELETON-LOADING NOTE: render a skeleton when
 //   `isLoading && courses.length === 0 && employees.length === 0` for the
 //   team-training page (first-fetch).
+//
+// PARITY NOTES (matches circular-store / audit-store / observation-store):
+//   - `detailLoadedIds` + `isDetailLoaded(id)` flag which course rows have had
+//     their full detail fetched (so per-course detail screens can skip the
+//     skeleton on subsequent visits and gate sub-section reads).
+//   - `fetchCourseById` prepends to `courses[]` when the id isn't in the list
+//     yet (e.g. deep-link to a freshly created course), mirroring the audit
+//     store.
+//   - Hard-delete actions (`removeCourse`, `removeEnrollment`) snapshot the
+//     row + index, optimistically remove from the list, and splice back in on
+//     failure.
+//   - Hot mutations (`updateCourse`, `assignCourseToEmployee`,
+//     `updateEnrollment`) apply the patch optimistically and roll back from a
+//     snapshot if the server rejects it.
 
 import { create } from 'zustand'
 import type {
@@ -61,18 +75,29 @@ interface TrainingEmployeeApiRow {
   updated_at: string
 }
 
-function mapCourseRow(row: TrainingCourseApiRow): TrainingCourse {
+interface EnrollmentApiRow {
+  id: string
+  employee_id: string
+  course_id: string
+  status: string
+  progress: number
+  score: number | null
+  completed_date: string | null
+  due_date: string | null
+}
+
+function mapCourseRow(row: TrainingCourseApiRow, previous?: TrainingCourse): TrainingCourse {
   return {
     id: row.id,
     name: row.name,
     category: row.category,
-    dueDate: row.due_date ?? '',
-    description: row.description ?? undefined,
-    assignedCount: row.assigned_count ?? 0,
-    completedCount: row.completed_count ?? 0,
-    overdueCount: row.overdue_count ?? 0,
-    inProgressCount: row.in_progress_count ?? 0,
-    frameworkIds: (row.framework_ids ?? []) as RegulatoryBodyId[],
+    dueDate: row.due_date ?? previous?.dueDate ?? '',
+    description: row.description ?? previous?.description ?? undefined,
+    assignedCount: row.assigned_count ?? previous?.assignedCount ?? 0,
+    completedCount: row.completed_count ?? previous?.completedCount ?? 0,
+    overdueCount: row.overdue_count ?? previous?.overdueCount ?? 0,
+    inProgressCount: row.in_progress_count ?? previous?.inProgressCount ?? 0,
+    frameworkIds: (row.framework_ids ?? previous?.frameworkIds ?? []) as RegulatoryBodyId[],
   }
 }
 
@@ -81,9 +106,9 @@ function mapEmployeeRow(row: TrainingEmployeeApiRow, previous?: TrainingEmployee
     id: row.id,
     name: row.name,
     email: row.email,
-    department: row.department ?? '',
-    isSaudi: row.is_saudi ?? false,
-    overallProgress: row.overall_progress ?? 0,
+    department: row.department ?? previous?.department ?? '',
+    isSaudi: row.is_saudi ?? previous?.isSaudi ?? false,
+    overallProgress: row.overall_progress ?? previous?.overallProgress ?? 0,
     courses: previous?.courses ?? [],
   }
 }
@@ -111,6 +136,10 @@ interface TrainingState {
   departmentProgress: DepartmentTraining[]
   overviewStats: TrainingOverviewStats
 
+  // Detail-loaded marker: ids of course rows that have had their full detail
+  // hydrated via `fetchCourseById`. Gates per-course detail-page skeletons.
+  detailLoadedIds: Record<string, true>
+
   // Status.
   isLoading: boolean
   isMutating: boolean
@@ -133,11 +162,22 @@ interface TrainingState {
   // Team-training page actions.
   fetchEmployees: () => Promise<void>
   fetchCourses: () => Promise<void>
+  fetchCourseById: (id: string) => Promise<TrainingCourse | null>
+  isDetailLoaded: (id: string) => boolean
   addEmployee: (employee: TrainingEmployee) => void
   updateEmployee: (id: string, data: Partial<TrainingEmployee>) => void
   removeEmployee: (id: string) => void
   assignCourseToEmployee: (employeeId: string, course: CourseProgress) => void
   bulkAssignCourse: (employeeIds: string[], course: CourseProgress) => void
+  // Per-enrollment hot mutations (optimistic). The enrollment id is the
+  // `employee_course_progress.id` returned by the server; courses on the
+  // employee record carry this id once the row has been persisted.
+  updateEnrollment: (
+    employeeId: string,
+    enrollmentId: string,
+    data: Partial<CourseProgress>,
+  ) => void
+  removeEnrollment: (employeeId: string, enrollmentId: string) => void
   addCourse: (course: TrainingCourse) => void
   updateCourse: (id: string, data: Partial<TrainingCourse>) => void
   removeCourse: (id: string) => void
@@ -169,6 +209,14 @@ const INITIAL_OVERVIEW: TrainingOverviewStats = {
   inProgressCourses: 0,
 }
 
+// Recompute an employee's `overallProgress` from their course list using the
+// same shape both `assignCourseToEmployee` and `updateEnrollment` need.
+function recomputeOverallProgress(courses: CourseProgress[]): number {
+  if (courses.length === 0) return 0
+  const completed = courses.filter((c) => c.status === 'completed').length
+  return Math.round((completed / courses.length) * 100)
+}
+
 export const useTrainingStore = create<TrainingState>()((set, get) => ({
   trainings: [],
   selectedTraining: null,
@@ -181,6 +229,8 @@ export const useTrainingStore = create<TrainingState>()((set, get) => ({
   saudizationMetrics: INITIAL_SAUDIZATION,
   departmentProgress: [],
   overviewStats: INITIAL_OVERVIEW,
+
+  detailLoadedIds: {},
 
   isLoading: false,
   isMutating: false,
@@ -283,8 +333,9 @@ export const useTrainingStore = create<TrainingState>()((set, get) => ({
         total: number
         totalPages: number
       }>('/training/courses', { pageSize: 100, _ts: Date.now() })
+      const previousById = new Map(get().courses.map((c) => [c.id, c]))
       set({
-        courses: result.items.map(mapCourseRow),
+        courses: result.items.map((row) => mapCourseRow(row, previousById.get(row.id))),
         isLoading: false,
         lastFetched: Date.now(),
       })
@@ -314,6 +365,33 @@ export const useTrainingStore = create<TrainingState>()((set, get) => ({
       set({ error: errorMessage(e, 'Failed to fetch training employees'), isLoading: false })
     }
   },
+
+  fetchCourseById: async (id) => {
+    // Mirrors audit-store / observation-store `fetchById`. If the row is not
+    // already in `courses[]` (e.g. deep-link to a freshly created course),
+    // prepend it so list-driven selectors can still resolve the id.
+    set({ isLoading: true, error: null })
+    try {
+      const row = await api.get<TrainingCourseApiRow>(`/training/courses/${id}`)
+      const previous = get().courses.find((c) => c.id === id)
+      const course = mapCourseRow(row, previous)
+      set((state) => ({
+        courses: state.courses.some((c) => c.id === id)
+          ? state.courses.map((c) => (c.id === id ? course : c))
+          : [course, ...state.courses],
+        detailLoadedIds: { ...state.detailLoadedIds, [id]: true },
+        isLoading: false,
+        lastFetched: Date.now(),
+      }))
+      return course
+    } catch (e) {
+      set({ error: errorMessage(e, 'Failed to fetch training course'), isLoading: false })
+      if (e instanceof ApiClientError && e.code === 'not_found') return null
+      return null
+    }
+  },
+
+  isDetailLoaded: (id) => Boolean(get().detailLoadedIds[id]),
 
   addEmployee: (employee) => {
     // Optimistic insert; fire-and-forget POST. On success, swap the optimistic
@@ -348,6 +426,8 @@ export const useTrainingStore = create<TrainingState>()((set, get) => ({
   },
 
   updateEmployee: (id, data) => {
+    // OPTIMISTIC update with snapshot-restore on failure.
+    const snapshot = get().employees.find((e) => e.id === id)
     set((s) => ({
       employees: s.employees.map((e) => (e.id === id ? { ...e, ...data } : e)),
       isMutating: true,
@@ -366,55 +446,133 @@ export const useTrainingStore = create<TrainingState>()((set, get) => ({
         }
         set({ isMutating: false })
       } catch (e) {
-        set({ error: errorMessage(e, 'Failed to update training employee'), isMutating: false })
-      }
-    })()
-  },
-
-  removeEmployee: (id) => {
-    const existing = get().employees.find((e) => e.id === id)
-    set((s) => ({ employees: s.employees.filter((e) => e.id !== id), isMutating: true, error: null }))
-    void (async () => {
-      try {
-        await api.delete(`/training/employees/${id}`)
-        set({ isMutating: false })
-      } catch (e) {
-        // Roll back.
+        // Roll back to the snapshot.
         set((s) => ({
-          employees: existing ? [...s.employees, existing] : s.employees,
-          error: errorMessage(e, 'Failed to remove training employee'),
+          employees: snapshot
+            ? s.employees.map((emp) => (emp.id === id ? snapshot : emp))
+            : s.employees,
+          error: errorMessage(e, 'Failed to update training employee'),
           isMutating: false,
         }))
       }
     })()
   },
 
-  assignCourseToEmployee: (employeeId, course) =>
+  removeEmployee: (id) => {
+    // OPTIMISTIC hard-delete: snapshot the row + its index, splice back in on
+    // failure. Mirrors observation-store and audit-store delete semantics.
+    const existing = get().employees.find((e) => e.id === id)
+    const prevIndex = get().employees.findIndex((e) => e.id === id)
+    set((s) => ({ employees: s.employees.filter((e) => e.id !== id), isMutating: true, error: null }))
+    void (async () => {
+      try {
+        await api.delete(`/training/employees/${id}`)
+        set({ isMutating: false })
+      } catch (e) {
+        if (existing) {
+          set((s) => {
+            const list = [...s.employees]
+            const insertAt = prevIndex >= 0 && prevIndex <= list.length ? prevIndex : list.length
+            list.splice(insertAt, 0, existing)
+            return {
+              employees: list,
+              error: errorMessage(e, 'Failed to remove training employee'),
+              isMutating: false,
+            }
+          })
+        } else {
+          set({ error: errorMessage(e, 'Failed to remove training employee'), isMutating: false })
+        }
+      }
+    })()
+  },
+
+  assignCourseToEmployee: (employeeId, course) => {
+    // OPTIMISTIC: insert the course into the employee's local list with a
+    // temporary id (the `course.id` passed in is the *course* uuid, not the
+    // enrollment uuid). After the server creates the enrollment, swap the
+    // temp row's id for the persisted enrollment id so subsequent
+    // updateEnrollment / removeEnrollment calls hit the right row.
+    const snapshot = get().employees.find((e) => e.id === employeeId)
+    const tempEnrollmentId = `temp-enrollment-${crypto.randomUUID()}`
+    const optimisticCourse: CourseProgress = { ...course, id: tempEnrollmentId }
     set((state) => ({
       employees: state.employees.map((e) => {
         if (e.id !== employeeId) return e
-        const updatedCourses = [...e.courses, course]
-        const total = updatedCourses.length
-        const completed = updatedCourses.filter((c) => c.status === 'completed').length
+        const updatedCourses = [...e.courses, optimisticCourse]
         return {
           ...e,
           courses: updatedCourses,
-          overallProgress: total > 0 ? Math.round((completed / total) * 100) : 0,
+          overallProgress: recomputeOverallProgress(updatedCourses),
         }
       }),
-    })),
+      isMutating: true,
+      error: null,
+    }))
+
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(course.id)
+    if (!isUuid) {
+      // No server round-trip possible without a real course uuid — treat as a
+      // local-only assignment (legacy seed data path).
+      set({ isMutating: false })
+      return
+    }
+
+    void (async () => {
+      try {
+        const row = await api.post<EnrollmentApiRow>(
+          `/training/employees/${employeeId}/enrollments`,
+          {
+            course_id: course.id,
+            status: course.status,
+            progress: course.progress,
+            due_date: course.dueDate || undefined,
+          },
+        )
+        set((state) => ({
+          employees: state.employees.map((e) => {
+            if (e.id !== employeeId) return e
+            return {
+              ...e,
+              courses: e.courses.map((c) =>
+                c.id === tempEnrollmentId
+                  ? {
+                      ...c,
+                      id: row.id,
+                      status: (row.status as CourseProgress['status']) ?? c.status,
+                      progress: row.progress ?? c.progress,
+                      score: row.score ?? c.score,
+                      completedDate: row.completed_date ?? c.completedDate,
+                      dueDate: row.due_date ?? c.dueDate,
+                    }
+                  : c,
+              ),
+            }
+          }),
+          isMutating: false,
+        }))
+      } catch (e) {
+        // Roll back to the snapshot.
+        set((state) => ({
+          employees: snapshot
+            ? state.employees.map((emp) => (emp.id === employeeId ? snapshot : emp))
+            : state.employees,
+          error: errorMessage(e, 'Failed to assign course'),
+          isMutating: false,
+        }))
+      }
+    })()
+  },
 
   bulkAssignCourse: (employeeIds, course) => {
     set((state) => ({
       employees: state.employees.map((e) => {
         if (!employeeIds.includes(e.id)) return e
         const updatedCourses = [...e.courses, { ...course, id: `${course.id}-${e.id}` }]
-        const total = updatedCourses.length
-        const completed = updatedCourses.filter((c) => c.status === 'completed').length
         return {
           ...e,
           courses: updatedCourses,
-          overallProgress: total > 0 ? Math.round((completed / total) * 100) : 0,
+          overallProgress: recomputeOverallProgress(updatedCourses),
         }
       }),
     }))
@@ -429,6 +587,117 @@ export const useTrainingStore = create<TrainingState>()((set, get) => ({
         })
       } catch (e) {
         set({ error: errorMessage(e, 'Failed to assign course'), isMutating: false })
+      }
+    })()
+  },
+
+  updateEnrollment: (employeeId, enrollmentId, data) => {
+    // OPTIMISTIC per-enrollment toggle (e.g. mark complete, bump progress).
+    // Snapshot the employee so we can restore on failure.
+    const snapshot = get().employees.find((e) => e.id === employeeId)
+    const isTemp = enrollmentId.startsWith('temp-enrollment-')
+
+    set((state) => ({
+      employees: state.employees.map((e) => {
+        if (e.id !== employeeId) return e
+        const updatedCourses = e.courses.map((c) => {
+          if (c.id !== enrollmentId) return c
+          const next: CourseProgress = { ...c, ...data }
+          // If the patch flips status -> completed and doesn't set progress
+          // explicitly, mirror the route handler's auto-100% behaviour.
+          if (data.status === 'completed' && data.progress === undefined) {
+            next.progress = 100
+          }
+          if (data.status === 'completed' && data.completedDate === undefined) {
+            next.completedDate = new Date().toISOString().slice(0, 10)
+          }
+          return next
+        })
+        return {
+          ...e,
+          courses: updatedCourses,
+          overallProgress: recomputeOverallProgress(updatedCourses),
+        }
+      }),
+      isMutating: true,
+      error: null,
+    }))
+
+    // Skip the server call for optimistic temp rows — the original
+    // `assignCourseToEmployee` flow swaps the id once the enrollment lands.
+    if (isTemp) {
+      set({ isMutating: false })
+      return
+    }
+
+    void (async () => {
+      try {
+        const body: Record<string, unknown> = {}
+        if (data.status !== undefined) body.status = data.status
+        if (data.progress !== undefined) body.progress = data.progress
+        if (data.score !== undefined) body.score = data.score
+        if (data.completedDate !== undefined) body.completed_date = data.completedDate || undefined
+        if (data.dueDate !== undefined) body.due_date = data.dueDate || undefined
+        if (Object.keys(body).length > 0) {
+          await api.patch(
+            `/training/employees/${employeeId}/enrollments/${enrollmentId}`,
+            body,
+          )
+        }
+        set({ isMutating: false })
+      } catch (e) {
+        // Roll back the entire employee to the pre-patch snapshot. Replacing
+        // the whole record (vs. unwinding the single course) keeps the
+        // derived `overallProgress` consistent with what the server still has.
+        set((state) => ({
+          employees: snapshot
+            ? state.employees.map((emp) => (emp.id === employeeId ? snapshot : emp))
+            : state.employees,
+          error: errorMessage(e, 'Failed to update enrollment'),
+          isMutating: false,
+        }))
+      }
+    })()
+  },
+
+  removeEnrollment: (employeeId, enrollmentId) => {
+    // OPTIMISTIC hard-delete: snapshot the employee, drop the enrollment, and
+    // restore the snapshot on failure. Mirrors the audit/observation delete
+    // pattern.
+    const snapshot = get().employees.find((e) => e.id === employeeId)
+    const isTemp = enrollmentId.startsWith('temp-enrollment-')
+
+    set((state) => ({
+      employees: state.employees.map((e) => {
+        if (e.id !== employeeId) return e
+        const updatedCourses = e.courses.filter((c) => c.id !== enrollmentId)
+        return {
+          ...e,
+          courses: updatedCourses,
+          overallProgress: recomputeOverallProgress(updatedCourses),
+        }
+      }),
+      isMutating: true,
+      error: null,
+    }))
+
+    if (isTemp) {
+      set({ isMutating: false })
+      return
+    }
+
+    void (async () => {
+      try {
+        await api.delete(`/training/employees/${employeeId}/enrollments/${enrollmentId}`)
+        set({ isMutating: false })
+      } catch (e) {
+        set((state) => ({
+          employees: snapshot
+            ? state.employees.map((emp) => (emp.id === employeeId ? snapshot : emp))
+            : state.employees,
+          error: errorMessage(e, 'Failed to remove enrollment'),
+          isMutating: false,
+        }))
       }
     })()
   },
@@ -464,6 +733,9 @@ export const useTrainingStore = create<TrainingState>()((set, get) => ({
   },
 
   updateCourse: (id, data) => {
+    // OPTIMISTIC update with snapshot-restore on failure. Mirrors the
+    // circular-store / audit-store update semantics.
+    const snapshot = get().courses.find((c) => c.id === id)
     set((s) => ({
       courses: s.courses.map((c) => (c.id === id ? { ...c, ...data } : c)),
       isMutating: true,
@@ -478,28 +750,64 @@ export const useTrainingStore = create<TrainingState>()((set, get) => ({
         if (data.dueDate !== undefined) body.due_date = data.dueDate || undefined
         if (data.frameworkIds !== undefined) body.framework_ids = data.frameworkIds
         if (Object.keys(body).length > 0) {
-          await api.patch(`/training/courses/${id}`, body)
+          const row = await api.patch<TrainingCourseApiRow>(`/training/courses/${id}`, body)
+          // Re-map from the server response so derived counts stay aligned.
+          const mapped = mapCourseRow(row, get().courses.find((c) => c.id === id))
+          set((s) => ({
+            courses: s.courses.map((c) => (c.id === id ? mapped : c)),
+            isMutating: false,
+          }))
+        } else {
+          set({ isMutating: false })
         }
-        set({ isMutating: false })
       } catch (e) {
-        set({ error: errorMessage(e, 'Failed to update training course'), isMutating: false })
+        set((s) => ({
+          courses: snapshot ? s.courses.map((c) => (c.id === id ? snapshot : c)) : s.courses,
+          error: errorMessage(e, 'Failed to update training course'),
+          isMutating: false,
+        }))
       }
     })()
   },
 
   removeCourse: (id) => {
+    // OPTIMISTIC hard-delete: snapshot row + index + detail-loaded flag, drop
+    // immediately, and splice back in on failure. Mirrors the
+    // observation-store and audit-store delete shape.
     const existing = get().courses.find((c) => c.id === id)
-    set((s) => ({ courses: s.courses.filter((c) => c.id !== id), isMutating: true, error: null }))
+    const prevIndex = get().courses.findIndex((c) => c.id === id)
+    const wasDetailLoaded = Boolean(get().detailLoadedIds[id])
+    set((s) => {
+      const { [id]: _dropDetail, ...restDetail } = s.detailLoadedIds
+      return {
+        courses: s.courses.filter((c) => c.id !== id),
+        detailLoadedIds: restDetail,
+        isMutating: true,
+        error: null,
+      }
+    })
     void (async () => {
       try {
         await api.delete(`/training/courses/${id}`)
         set({ isMutating: false })
       } catch (e) {
-        set((s) => ({
-          courses: existing ? [...s.courses, existing] : s.courses,
-          error: errorMessage(e, 'Failed to remove training course'),
-          isMutating: false,
-        }))
+        if (existing) {
+          set((s) => {
+            const list = [...s.courses]
+            const insertAt = prevIndex >= 0 && prevIndex <= list.length ? prevIndex : list.length
+            list.splice(insertAt, 0, existing)
+            return {
+              courses: list,
+              detailLoadedIds: wasDetailLoaded
+                ? { ...s.detailLoadedIds, [id]: true }
+                : s.detailLoadedIds,
+              error: errorMessage(e, 'Failed to remove training course'),
+              isMutating: false,
+            }
+          })
+        } else {
+          set({ error: errorMessage(e, 'Failed to remove training course'), isMutating: false })
+        }
       }
     })()
   },
