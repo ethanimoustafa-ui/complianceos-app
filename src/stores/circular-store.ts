@@ -2,19 +2,12 @@
 //
 // Read `.planning/09-store-pattern.md` before editing.
 // Endpoints: /api/circulars (GET list, POST create),
-//            /api/circulars/[circularId] (GET detail, PATCH, DELETE).
+//            /api/circulars/[circularId] (GET detail, PATCH, DELETE),
+//            /api/circulars/[circularId]/implementations[/[id][/checklist[/itemId]]],
+//            /api/circulars/[circularId]/workflow/advance,
+//            /api/circulars/[circularId]/workflow/steps[/[stepId][/reorder]].
 //
 // Reference numbers (e.g. SAMA-2026-001) are server-generated on POST.
-//
-// Article CRUD, workflow steps, attachments, timeline events, edit-approval
-// workflow and PDF tracking all stay local-only for now — Phase 4 only
-// shipped the top-level circular CRUD plus a workflow-advance route, and the
-// existing UI surfaces (articles, attachments, edit-approval) lean heavily on
-// in-memory state. A follow-up phase wires those to the corresponding
-// `/api/circulars/[circularId]/...` sub-routes (`/implementations`,
-// `/timeline`, `/workflow/advance`, etc.). Local-only actions are tagged with
-// a TODO comment and mutate `byId` / `circulars` so the UI continues to
-// respond.
 //
 // SKELETON-LOADING NOTE: render skeleton when
 // `isLoading && circulars.length === 0` (first fetch).
@@ -77,6 +70,38 @@ interface CircularApiRow {
   timeline?: unknown[]
 }
 
+interface ImplementationApiRow {
+  id: string
+  circular_id: string
+  article_number: string
+  title: string
+  description: string | null
+  risk_level: string
+  responsible_department: string | null
+  compliance_status: string
+  assigned_to: string | null
+  notes: string | null
+  sort_order: number
+}
+
+interface WorkflowStepApiRow {
+  id: string
+  circular_id: string
+  phase: number
+  label: string
+  label_ar: string | null
+  status: 'pending' | 'current' | 'completed'
+  date: string | null
+  user_name: string | null
+  notes: string | null
+  action_label: string
+  action_label_ar: string
+  requires_notes: boolean
+  action_type: string
+  sort_order: number
+  deadline?: string | null
+}
+
 // ---------- workflow step defaults ------------------------------------------
 
 export function buildInitialWorkflowSteps(): CircularWorkflowStep[] {
@@ -133,11 +158,28 @@ function mapRow(row: CircularApiRow, previous?: Circular): Circular {
     dueDate: row.due_date,
     capStatus: row.cap_status as CAPStatus,
     capDueDate: row.cap_due_date ?? previous?.capDueDate ?? undefined,
-    articles: previous?.articles ?? [],
+    // Detail-only children — when the row comes from `/api/circulars/[id]`
+    // the response carries `implementations`, `workflow_steps`, `timeline`
+    // arrays; surface them here so the UI doesn't fall back to client-only
+    // defaults. Sort timeline newest-first so consumers can render in array
+    // order.
+    articles: Array.isArray(row.implementations) && row.implementations.length > 0
+      ? row.implementations.map((r) => mapImplementationRow(r as ImplementationApiRow))
+      : previous?.articles ?? [],
     description: row.description ?? previous?.description ?? undefined,
     pdfUrl: row.pdf_url ?? previous?.pdfUrl ?? undefined,
-    workflowSteps: previous?.workflowSteps ?? buildInitialWorkflowSteps(),
-    timeline: previous?.timeline ?? [],
+    workflowSteps: Array.isArray(row.workflow_steps) && row.workflow_steps.length > 0
+      ? (row.workflow_steps as WorkflowStepApiRow[]).map(mapWorkflowStepRow)
+      : previous?.workflowSteps ?? buildInitialWorkflowSteps(),
+    timeline: Array.isArray(row.timeline)
+      ? [...row.timeline]
+          .map(mapTimelineRow)
+          .sort((a, b) => {
+            const ta = a.date ? Date.parse(a.date) : 0
+            const tb = b.date ? Date.parse(b.date) : 0
+            return (Number.isNaN(tb) ? 0 : tb) - (Number.isNaN(ta) ? 0 : ta)
+          })
+      : previous?.timeline ?? [],
     versions: previous?.versions ?? [
       {
         version: 1,
@@ -157,6 +199,61 @@ function mapRow(row: CircularApiRow, previous?: Circular): Circular {
     frameworkIds: (row.framework_ids ?? previous?.frameworkIds ?? []) as RegulatoryBodyId[],
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+  }
+}
+
+function mapImplementationRow(row: ImplementationApiRow, previous?: CircularArticle): CircularArticle {
+  return {
+    id: row.id,
+    articleNumber: row.article_number,
+    title: row.title,
+    description: row.description ?? undefined,
+    riskLevel: row.risk_level as CircularArticle['riskLevel'],
+    responsibleDepartment: row.responsible_department ?? '',
+    complianceStatus: row.compliance_status as CircularArticle['complianceStatus'],
+    assignedTo: row.assigned_to ?? undefined,
+    notes: row.notes ?? undefined,
+    checklist: previous?.checklist ?? [],
+    attachments: previous?.attachments ?? [],
+    versions: previous?.versions,
+    timeline: previous?.timeline,
+  }
+}
+
+function mapTimelineRow(row: unknown): CircularTimelineEvent {
+  const r = row as {
+    id: string
+    title: string
+    title_ar?: string | null
+    date: string
+    user_name?: string | null
+    status?: string | null
+  }
+  return {
+    id: r.id,
+    title: r.title,
+    titleAr: r.title_ar ?? undefined,
+    date: r.date,
+    user: r.user_name ?? undefined,
+    status: (r.status as CircularTimelineEvent['status']) ?? 'completed',
+  }
+}
+
+function mapWorkflowStepRow(row: WorkflowStepApiRow): CircularWorkflowStep {
+  return {
+    id: row.id,
+    phase: (row.phase as 0 | 1 | 2),
+    label: row.label,
+    labelAr: row.label_ar ?? row.label,
+    status: row.status,
+    date: row.date ?? undefined,
+    user: row.user_name ?? undefined,
+    notes: row.notes ?? undefined,
+    actionLabel: row.action_label,
+    actionLabelAr: row.action_label_ar,
+    requiresNotes: row.requires_notes,
+    actionType: row.action_type as CircularWorkflowStep['actionType'],
+    deadline: row.deadline ?? undefined,
   }
 }
 
@@ -216,7 +313,7 @@ function toUpdatePayload(patch: Partial<Circular>): Record<string, unknown> {
   if (patch.remediationDeadline !== undefined)
     out.remediation_deadline = patch.remediationDeadline || undefined
   if (patch.description !== undefined) out.description = patch.description || undefined
-  if (patch.pdfUrl !== undefined) out.pdf_url = patch.pdfUrl || undefined
+  if (patch.pdfUrl !== undefined) out.pdf_url = patch.pdfUrl ?? ''
   if (patch.referenceUrl !== undefined) out.reference_url = patch.referenceUrl || undefined
   if (patch.frameworkIds !== undefined) out.framework_ids = patch.frameworkIds
   return out
@@ -260,24 +357,28 @@ interface CircularState {
   clearFilters: () => void
   clearError: () => void
 
-  // Local-only sub-resource mutations (Phase 4 backend not yet shipped).
-  assignBusinessOwner: (id: string, dept: string) => void
-  setPdfUrl: (circularId: string, dataUrl: string) => void
-  clearPdfUrl: (circularId: string) => void
+  // Sub-resource mutations (now wired to API).
+  assignBusinessOwner: (id: string, dept: string) => Promise<void>
+  setPdfUrl: (circularId: string, dataUrl: string) => Promise<void>
+  clearPdfUrl: (circularId: string) => Promise<void>
 
-  addArticle: (circularId: string, article: Omit<CircularArticle, 'id'>) => void
-  updateArticle: (circularId: string, articleId: string, data: Partial<CircularArticle>) => void
-  deleteArticle: (circularId: string, articleId: string) => void
-  toggleChecklistItem: (circularId: string, articleId: string, itemId: string) => void
-  addChecklistItem: (circularId: string, articleId: string, title: string) => void
-  deleteChecklistItem: (circularId: string, articleId: string, itemId: string) => void
+  addArticle: (circularId: string, article: Omit<CircularArticle, 'id'>) => Promise<CircularArticle>
+  updateArticle: (
+    circularId: string,
+    articleId: string,
+    data: Partial<CircularArticle>,
+  ) => Promise<void>
+  deleteArticle: (circularId: string, articleId: string) => Promise<void>
+  toggleChecklistItem: (circularId: string, articleId: string, itemId: string) => Promise<void>
+  addChecklistItem: (circularId: string, articleId: string, title: string) => Promise<void>
+  deleteChecklistItem: (circularId: string, articleId: string, itemId: string) => Promise<void>
   addArticleTimelineEvent: (
     circularId: string,
     articleId: string,
     event: Omit<ArticleTimelineEvent, 'id'>,
   ) => void
 
-  advanceWorkflowStep: (circularId: string, stepId: string, notes?: string) => void
+  advanceWorkflowStep: (circularId: string, stepId: string, notes?: string) => Promise<void>
   setRuleStepDeadline: (
     circularId: string,
     stepIndex: number,
@@ -293,22 +394,22 @@ interface CircularState {
       actionType?: CircularWorkflowStep['actionType']
     },
     actingUser: string,
-  ) => void
+  ) => Promise<void>
   renameWorkflowStep: (
     circularId: string,
     stepIndex: number,
     newLabel: string,
     actingUser: string,
-  ) => void
-  removeWorkflowStep: (circularId: string, stepIndex: number, actingUser: string) => void
+  ) => Promise<void>
+  removeWorkflowStep: (circularId: string, stepIndex: number, actingUser: string) => Promise<void>
   reorderWorkflowSteps: (
     circularId: string,
     fromIndex: number,
     toIndex: number,
     actingUser: string,
-  ) => void
+  ) => Promise<void>
 
-  requestCircularEdit: (circularId: string, editData: Partial<Circular>) => void
+  requestCircularEdit: (circularId: string, editData: Partial<Circular>) => Promise<void>
   approveCircularEditStep: (circularId: string, approvalId: string, notes: string) => void
   rejectCircularEditStep: (circularId: string, approvalId: string, notes: string) => void
 
@@ -324,6 +425,22 @@ interface CircularState {
   removeRemediationAttachment: (circularId: string, attachmentId: string) => void
 
   addTimelineEvent: (circularId: string, event: Omit<CircularTimelineEvent, 'id'>) => void
+}
+
+// ---------- helpers ---------------------------------------------------------
+
+function applyCircular(
+  state: CircularState,
+  circularId: string,
+  mutator: (c: Circular) => Circular,
+): Pick<CircularState, 'circulars' | 'byId' | 'selectedCircular'> {
+  const circulars = state.circulars.map((c) => (c.id === circularId ? mutator(c) : c))
+  const updated = circulars.find((c) => c.id === circularId)
+  return {
+    circulars,
+    byId: updated ? { ...state.byId, [circularId]: updated } : state.byId,
+    selectedCircular: syncSelected(state.selectedCircular, circulars, circularId),
+  }
 }
 
 export const useCircularStore = create<CircularState>()((set, get) => ({
@@ -394,12 +511,13 @@ export const useCircularStore = create<CircularState>()((set, get) => ({
     try {
       const row = await api.post<CircularApiRow>('/circulars', toCreatePayload(data))
       const created = mapRow(row)
+      // Optimistic-prepend: surface immediately so UI doesn't need a reload.
       set((state) => ({
-        circulars: [created, ...state.circulars],
+        circulars: [created, ...state.circulars.filter((c) => c.id !== created.id)],
         byId: { ...state.byId, [created.id]: created },
+        selectedCircular: created,
         isMutating: false,
       }))
-      void get().fetchAll()
       return created
     } catch (e) {
       set({ error: errorMessage(e, 'Failed to create circular'), isMutating: false })
@@ -451,88 +569,31 @@ export const useCircularStore = create<CircularState>()((set, get) => ({
   clearFilters: () => set({ filters: {} }),
   clearError: () => set({ error: null }),
 
-  // ── Local-only mutations (backend not yet shipped) ──────────────────────
+  // ── Wired sub-resource mutations ─────────────────────────────────────────
 
-  assignBusinessOwner: (id, dept) => {
-    const now = new Date().toISOString()
-    set((state) => ({
-      circulars: state.circulars.map((c) =>
-        c.id === id ? { ...c, businessOwnerDepartment: dept, updatedAt: now } : c,
-      ),
-      byId: state.byId[id]
-        ? {
-            ...state.byId,
-            [id]: { ...state.byId[id], businessOwnerDepartment: dept, updatedAt: now },
-          }
-        : state.byId,
-      selectedCircular:
-        state.selectedCircular?.id === id
-          ? { ...state.selectedCircular, businessOwnerDepartment: dept, updatedAt: now }
-          : state.selectedCircular,
-    }))
+  assignBusinessOwner: async (id, dept) => {
+    await get().update(id, { businessOwnerDepartment: dept })
   },
 
-  setPdfUrl: (circularId, dataUrl) => {
-    const now = new Date().toISOString()
-    const today = now.slice(0, 10)
-    const newEvent: CircularTimelineEvent = {
-      id: nanoid(),
-      title: 'PDF Uploaded',
-      titleAr: 'تم رفع ملف PDF',
-      date: today,
-      user: 'Current User',
-      status: 'completed',
-    }
-    set((state) => {
-      const circulars = state.circulars.map((c) =>
-        c.id === circularId
-          ? { ...c, pdfUrl: dataUrl, timeline: [...(c.timeline ?? []), newEvent], updatedAt: now }
-          : c,
-      )
-      return {
-        circulars,
-        byId: state.byId[circularId]
-          ? { ...state.byId, [circularId]: circulars.find((c) => c.id === circularId)! }
-          : state.byId,
-        selectedCircular: syncSelected(state.selectedCircular, circulars, circularId),
-      }
-    })
+  setPdfUrl: async (circularId, dataUrl) => {
+    await get().update(circularId, { pdfUrl: dataUrl })
   },
 
-  clearPdfUrl: (circularId) => {
-    const now = new Date().toISOString()
-    const today = now.slice(0, 10)
-    const newEvent: CircularTimelineEvent = {
-      id: nanoid(),
-      title: 'PDF Removed',
-      titleAr: 'تم حذف ملف PDF',
-      date: today,
-      user: 'Current User',
-      status: 'completed',
-    }
-    set((state) => {
-      const circulars = state.circulars.map((c) =>
-        c.id === circularId
-          ? { ...c, pdfUrl: undefined, timeline: [...(c.timeline ?? []), newEvent], updatedAt: now }
-          : c,
-      )
-      return {
-        circulars,
-        byId: state.byId[circularId]
-          ? { ...state.byId, [circularId]: circulars.find((c) => c.id === circularId)! }
-          : state.byId,
-        selectedCircular: syncSelected(state.selectedCircular, circulars, circularId),
-      }
-    })
+  clearPdfUrl: async (circularId) => {
+    await get().update(circularId, { pdfUrl: '' })
   },
 
-  addArticle: (circularId, article) => {
+  addArticle: async (circularId, article) => {
+    const snapshot = get().byId[circularId]
+    const tempId = `temp-${nanoid()}`
+    const today = new Date().toISOString().slice(0, 10)
     const now = new Date().toISOString()
-    const today = now.slice(0, 10)
-    const newArticle: CircularArticle = {
+    const optimistic: CircularArticle = {
       ...article,
-      id: crypto.randomUUID(),
-      versions: [
+      id: tempId,
+      checklist: article.checklist ?? [],
+      attachments: article.attachments ?? [],
+      versions: article.versions ?? [
         {
           version: 1,
           date: today,
@@ -542,7 +603,7 @@ export const useCircularStore = create<CircularState>()((set, get) => ({
           approved: true,
         },
       ],
-      timeline: [
+      timeline: article.timeline ?? [
         {
           id: nanoid(),
           title: 'Article Created',
@@ -553,27 +614,80 @@ export const useCircularStore = create<CircularState>()((set, get) => ({
         },
       ],
     }
-    set((state) => {
-      const circulars = state.circulars.map((c) => {
-        if (c.id !== circularId) return c
-        const updated = { ...c, articles: [...c.articles, newArticle], updatedAt: now }
+    // Optimistic insert.
+    set((state) =>
+      applyCircular(state, circularId, (c) => {
+        const updated = { ...c, articles: [...c.articles, optimistic], updatedAt: now }
         return { ...updated, progress: recalcProgress(updated) }
-      })
-      const updatedCircular = circulars.find((c) => c.id === circularId)
-      return {
-        circulars,
-        byId: updatedCircular ? { ...state.byId, [circularId]: updatedCircular } : state.byId,
-        selectedCircular: syncSelected(state.selectedCircular, circulars, circularId),
+      }),
+    )
+
+    try {
+      const payload = {
+        article_number: article.articleNumber,
+        title: article.title,
+        description: article.description,
+        risk_level: article.riskLevel,
+        compliance_status: article.complianceStatus,
+        responsible_department: article.responsibleDepartment,
+        assigned_to: article.assignedTo,
+        notes: article.notes,
+        sort_order: (snapshot?.articles.length ?? 0),
       }
-    })
+      const row = await api.post<ImplementationApiRow>(
+        `/circulars/${circularId}/implementations`,
+        payload,
+      )
+      const real = mapImplementationRow(row, optimistic)
+      // Swap temp row for server row.
+      set((state) =>
+        applyCircular(state, circularId, (c) => {
+          const updated = {
+            ...c,
+            articles: c.articles.map((a) => (a.id === tempId ? real : a)),
+          }
+          return { ...updated, progress: recalcProgress(updated) }
+        }),
+      )
+
+      // Persist any optimistic checklist items the user added during creation.
+      const seedItems = article.checklist ?? []
+      if (seedItems.length > 0) {
+        for (const item of seedItems) {
+          try {
+            await api.post(
+              `/circulars/${circularId}/implementations/${real.id}/checklist`,
+              { title: item.title, completed: !!item.completed },
+            )
+          } catch {
+            // Swallow per-item errors so the parent succeeds; user can retry.
+          }
+        }
+      }
+
+      return real
+    } catch (e) {
+      // Restore snapshot.
+      if (snapshot) {
+        set((state) => ({
+          circulars: state.circulars.map((c) => (c.id === circularId ? snapshot : c)),
+          byId: { ...state.byId, [circularId]: snapshot },
+          selectedCircular:
+            state.selectedCircular?.id === circularId ? snapshot : state.selectedCircular,
+        }))
+      }
+      set({ error: errorMessage(e, 'Failed to add article') })
+      throw e
+    }
   },
 
-  updateArticle: (circularId, articleId, updates) => {
+  updateArticle: async (circularId, articleId, updates) => {
+    const snapshot = get().byId[circularId]
     const now = new Date().toISOString()
     const today = now.slice(0, 10)
-    set((state) => {
-      const circulars = state.circulars.map((c) => {
-        if (c.id !== circularId) return c
+    // Optimistic patch.
+    set((state) =>
+      applyCircular(state, circularId, (c) => {
         const articles = c.articles.map((a) => {
           if (a.id !== articleId) return a
           const trackedFields = [
@@ -612,49 +726,94 @@ export const useCircularStore = create<CircularState>()((set, get) => ({
         })
         const updated = { ...c, articles, updatedAt: now }
         return { ...updated, progress: recalcProgress(updated) }
-      })
-      const updatedCircular = circulars.find((c) => c.id === circularId)
-      return {
-        circulars,
-        byId: updatedCircular ? { ...state.byId, [circularId]: updatedCircular } : state.byId,
-        selectedCircular: syncSelected(state.selectedCircular, circulars, circularId),
+      }),
+    )
+
+    // Skip server call for un-persisted (temp) rows.
+    if (articleId.startsWith('temp-')) return
+
+    try {
+      const payload: Record<string, unknown> = {}
+      if (updates.articleNumber !== undefined) payload.article_number = updates.articleNumber
+      if (updates.title !== undefined) payload.title = updates.title
+      if (updates.description !== undefined) payload.description = updates.description ?? null
+      if (updates.riskLevel !== undefined) payload.risk_level = updates.riskLevel
+      if (updates.complianceStatus !== undefined) payload.compliance_status = updates.complianceStatus
+      if (updates.responsibleDepartment !== undefined) payload.responsible_department = updates.responsibleDepartment
+      if (updates.assignedTo !== undefined) payload.assigned_to = updates.assignedTo ?? null
+      if (updates.notes !== undefined) payload.notes = updates.notes ?? null
+      const row = await api.patch<ImplementationApiRow>(
+        `/circulars/${circularId}/implementations/${articleId}`,
+        payload,
+      )
+      const real = mapImplementationRow(row, get().byId[circularId]?.articles.find((a) => a.id === articleId))
+      set((state) =>
+        applyCircular(state, circularId, (c) => ({
+          ...c,
+          articles: c.articles.map((a) =>
+            a.id === articleId ? { ...a, ...real, versions: a.versions, timeline: a.timeline, checklist: a.checklist } : a,
+          ),
+          updatedAt: now,
+        })),
+      )
+    } catch (e) {
+      if (snapshot) {
+        set((state) => ({
+          circulars: state.circulars.map((c) => (c.id === circularId ? snapshot : c)),
+          byId: { ...state.byId, [circularId]: snapshot },
+          selectedCircular:
+            state.selectedCircular?.id === circularId ? snapshot : state.selectedCircular,
+        }))
       }
-    })
+      set({ error: errorMessage(e, 'Failed to update article') })
+      throw e
+    }
   },
 
-  deleteArticle: (circularId, articleId) => {
+  deleteArticle: async (circularId, articleId) => {
+    const snapshot = get().byId[circularId]
     const now = new Date().toISOString()
-    set((state) => {
-      const circulars = state.circulars.map((c) => {
-        if (c.id !== circularId) return c
+    set((state) =>
+      applyCircular(state, circularId, (c) => {
         const updated = {
           ...c,
           articles: c.articles.filter((a) => a.id !== articleId),
           updatedAt: now,
         }
         return { ...updated, progress: recalcProgress(updated) }
-      })
-      const updatedCircular = circulars.find((c) => c.id === circularId)
-      return {
-        circulars,
-        byId: updatedCircular ? { ...state.byId, [circularId]: updatedCircular } : state.byId,
-        selectedCircular: syncSelected(state.selectedCircular, circulars, circularId),
+      }),
+    )
+    if (articleId.startsWith('temp-')) return
+
+    try {
+      await api.delete(`/circulars/${circularId}/implementations/${articleId}`)
+    } catch (e) {
+      if (snapshot) {
+        set((state) => ({
+          circulars: state.circulars.map((c) => (c.id === circularId ? snapshot : c)),
+          byId: { ...state.byId, [circularId]: snapshot },
+          selectedCircular:
+            state.selectedCircular?.id === circularId ? snapshot : state.selectedCircular,
+        }))
       }
-    })
+      set({ error: errorMessage(e, 'Failed to delete article') })
+      throw e
+    }
   },
 
-  toggleChecklistItem: (circularId, articleId, itemId) => {
+  toggleChecklistItem: async (circularId, articleId, itemId) => {
+    const snapshot = get().byId[circularId]
+    const article = snapshot?.articles.find((a) => a.id === articleId)
+    const item = article?.checklist.find((i) => i.id === itemId)
+    const newCompleted = item ? !item.completed : true
     const now = new Date().toISOString()
     const today = now.slice(0, 10)
-    set((state) => {
-      const circulars = state.circulars.map((c) => {
-        if (c.id !== circularId) return c
+    set((state) =>
+      applyCircular(state, circularId, (c) => {
         const updated = {
           ...c,
           articles: c.articles.map((a) => {
             if (a.id !== articleId) return a
-            const item = a.checklist.find((i) => i.id === itemId)
-            const newCompleted = item ? !item.completed : false
             const newEvent: ArticleTimelineEvent = {
               id: nanoid(),
               title: `Checklist item ${newCompleted ? 'completed' : 'unchecked'}: ${item?.title ?? itemId}`,
@@ -666,7 +825,7 @@ export const useCircularStore = create<CircularState>()((set, get) => ({
             return {
               ...a,
               checklist: a.checklist.map((i) =>
-                i.id === itemId ? { ...i, completed: !i.completed } : i,
+                i.id === itemId ? { ...i, completed: newCompleted } : i,
               ),
               timeline: [...(a.timeline ?? []), newEvent],
             }
@@ -674,21 +833,37 @@ export const useCircularStore = create<CircularState>()((set, get) => ({
           updatedAt: now,
         }
         return { ...updated, progress: recalcProgress(updated) }
-      })
-      const updatedCircular = circulars.find((c) => c.id === circularId)
-      return {
-        circulars,
-        byId: updatedCircular ? { ...state.byId, [circularId]: updatedCircular } : state.byId,
-        selectedCircular: syncSelected(state.selectedCircular, circulars, circularId),
+      }),
+    )
+
+    if (itemId.startsWith('temp-') || articleId.startsWith('temp-')) return
+
+    try {
+      await api.patch(
+        `/circulars/${circularId}/implementations/${articleId}/checklist/${itemId}`,
+        { completed: newCompleted },
+      )
+    } catch (e) {
+      if (snapshot) {
+        set((state) => ({
+          circulars: state.circulars.map((c) => (c.id === circularId ? snapshot : c)),
+          byId: { ...state.byId, [circularId]: snapshot },
+          selectedCircular:
+            state.selectedCircular?.id === circularId ? snapshot : state.selectedCircular,
+        }))
       }
-    })
+      set({ error: errorMessage(e, 'Failed to update checklist item') })
+      throw e
+    }
   },
 
-  addChecklistItem: (circularId, articleId, title) => {
+  addChecklistItem: async (circularId, articleId, title) => {
+    const snapshot = get().byId[circularId]
+    const tempId = `temp-${nanoid()}`
     const now = new Date().toISOString()
     const today = now.slice(0, 10)
     const newItem: ChecklistItem = {
-      id: crypto.randomUUID(),
+      id: tempId,
       title,
       completed: false,
       order: Date.now(),
@@ -701,42 +876,70 @@ export const useCircularStore = create<CircularState>()((set, get) => ({
       user: 'Current User',
       status: 'completed',
     }
-    set((state) => {
-      const circulars = state.circulars.map((c) => {
-        if (c.id !== circularId) return c
-        return {
+    set((state) =>
+      applyCircular(state, circularId, (c) => ({
+        ...c,
+        articles: c.articles.map((a) => {
+          if (a.id !== articleId) return a
+          return {
+            ...a,
+            checklist: [...a.checklist, newItem],
+            timeline: [...(a.timeline ?? []), newEvent],
+          }
+        }),
+        updatedAt: now,
+      })),
+    )
+
+    if (articleId.startsWith('temp-')) return
+
+    try {
+      const row = await api.post<{ id: string; text: string; completed: boolean; sort_order: number }>(
+        `/circulars/${circularId}/implementations/${articleId}/checklist`,
+        { title },
+      )
+      set((state) =>
+        applyCircular(state, circularId, (c) => ({
           ...c,
           articles: c.articles.map((a) => {
             if (a.id !== articleId) return a
             return {
               ...a,
-              checklist: [...a.checklist, newItem],
-              timeline: [...(a.timeline ?? []), newEvent],
+              checklist: a.checklist.map((i) =>
+                i.id === tempId
+                  ? { id: row.id, title: row.text, completed: row.completed, order: row.sort_order }
+                  : i,
+              ),
             }
           }),
-          updatedAt: now,
-        }
-      })
-      const updatedCircular = circulars.find((c) => c.id === circularId)
-      return {
-        circulars,
-        byId: updatedCircular ? { ...state.byId, [circularId]: updatedCircular } : state.byId,
-        selectedCircular: syncSelected(state.selectedCircular, circulars, circularId),
+        })),
+      )
+    } catch (e) {
+      if (snapshot) {
+        set((state) => ({
+          circulars: state.circulars.map((c) => (c.id === circularId ? snapshot : c)),
+          byId: { ...state.byId, [circularId]: snapshot },
+          selectedCircular:
+            state.selectedCircular?.id === circularId ? snapshot : state.selectedCircular,
+        }))
       }
-    })
+      set({ error: errorMessage(e, 'Failed to add checklist item') })
+      throw e
+    }
   },
 
-  deleteChecklistItem: (circularId, articleId, itemId) => {
+  deleteChecklistItem: async (circularId, articleId, itemId) => {
+    const snapshot = get().byId[circularId]
     const now = new Date().toISOString()
     const today = now.slice(0, 10)
-    set((state) => {
-      const circulars = state.circulars.map((c) => {
-        if (c.id !== circularId) return c
+    const article = snapshot?.articles.find((a) => a.id === articleId)
+    const item = article?.checklist.find((i) => i.id === itemId)
+    set((state) =>
+      applyCircular(state, circularId, (c) => {
         const updated = {
           ...c,
           articles: c.articles.map((a) => {
             if (a.id !== articleId) return a
-            const item = a.checklist.find((i) => i.id === itemId)
             const newEvent: ArticleTimelineEvent = {
               id: nanoid(),
               title: `Checklist item deleted: ${item?.title ?? itemId}`,
@@ -754,46 +957,49 @@ export const useCircularStore = create<CircularState>()((set, get) => ({
           updatedAt: now,
         }
         return { ...updated, progress: recalcProgress(updated) }
-      })
-      const updatedCircular = circulars.find((c) => c.id === circularId)
-      return {
-        circulars,
-        byId: updatedCircular ? { ...state.byId, [circularId]: updatedCircular } : state.byId,
-        selectedCircular: syncSelected(state.selectedCircular, circulars, circularId),
+      }),
+    )
+
+    if (itemId.startsWith('temp-') || articleId.startsWith('temp-')) return
+
+    try {
+      await api.delete(`/circulars/${circularId}/implementations/${articleId}/checklist/${itemId}`)
+    } catch (e) {
+      if (snapshot) {
+        set((state) => ({
+          circulars: state.circulars.map((c) => (c.id === circularId ? snapshot : c)),
+          byId: { ...state.byId, [circularId]: snapshot },
+          selectedCircular:
+            state.selectedCircular?.id === circularId ? snapshot : state.selectedCircular,
+        }))
       }
-    })
+      set({ error: errorMessage(e, 'Failed to delete checklist item') })
+      throw e
+    }
   },
 
   addArticleTimelineEvent: (circularId, articleId, event) => {
     const now = new Date().toISOString()
     const newEvent: ArticleTimelineEvent = { id: nanoid(), ...event }
-    set((state) => {
-      const circulars = state.circulars.map((c) => {
-        if (c.id !== circularId) return c
-        return {
-          ...c,
-          articles: c.articles.map((a) => {
-            if (a.id !== articleId) return a
-            return { ...a, timeline: [...(a.timeline ?? []), newEvent] }
-          }),
-          updatedAt: now,
-        }
-      })
-      const updatedCircular = circulars.find((c) => c.id === circularId)
-      return {
-        circulars,
-        byId: updatedCircular ? { ...state.byId, [circularId]: updatedCircular } : state.byId,
-        selectedCircular: syncSelected(state.selectedCircular, circulars, circularId),
-      }
-    })
+    set((state) =>
+      applyCircular(state, circularId, (c) => ({
+        ...c,
+        articles: c.articles.map((a) => {
+          if (a.id !== articleId) return a
+          return { ...a, timeline: [...(a.timeline ?? []), newEvent] }
+        }),
+        updatedAt: now,
+      })),
+    )
   },
 
-  advanceWorkflowStep: (circularId, stepId, notes) => {
+  advanceWorkflowStep: async (circularId, stepId, notes) => {
+    const snapshot = get().byId[circularId]
     const now = new Date().toISOString()
     const today = now.slice(0, 10)
-    set((state) => {
-      const circulars = state.circulars.map((c) => {
-        if (c.id !== circularId) return c
+    // Optimistic advance.
+    set((state) =>
+      applyCircular(state, circularId, (c) => {
         const steps = (c.workflowSteps ?? buildInitialWorkflowSteps()).map((s) => {
           if (s.id === stepId) {
             return { ...s, status: 'completed' as const, date: today, user: 'Current User', notes }
@@ -827,14 +1033,26 @@ export const useCircularStore = create<CircularState>()((set, get) => ({
           timeline: [...(c.timeline ?? []), newEvent],
           updatedAt: now,
         }
+      }),
+    )
+
+    try {
+      await api.post(`/circulars/${circularId}/workflow/advance`, {
+        step_id: stepId,
+        notes,
       })
-      const updatedCircular = circulars.find((c) => c.id === circularId)
-      return {
-        circulars,
-        byId: updatedCircular ? { ...state.byId, [circularId]: updatedCircular } : state.byId,
-        selectedCircular: syncSelected(state.selectedCircular, circulars, circularId),
+    } catch (e) {
+      if (snapshot) {
+        set((state) => ({
+          circulars: state.circulars.map((c) => (c.id === circularId ? snapshot : c)),
+          byId: { ...state.byId, [circularId]: snapshot },
+          selectedCircular:
+            state.selectedCircular?.id === circularId ? snapshot : state.selectedCircular,
+        }))
       }
-    })
+      set({ error: errorMessage(e, 'Failed to advance workflow step') })
+      throw e
+    }
   },
 
   setRuleStepDeadline: (circularId, stepIndex, deadline, actingUser) => {
@@ -887,35 +1105,38 @@ export const useCircularStore = create<CircularState>()((set, get) => ({
       type: action,
     }
     const now = new Date().toISOString()
-    set((state) => {
-      const circulars = state.circulars.map((c) =>
-        c.id === circularId
-          ? {
-              ...c,
-              workflowSteps: newSteps,
-              timeline: [...(c.timeline ?? []), event],
-              updatedAt: now,
-            }
-          : c,
-      )
-      const updatedCircular = circulars.find((c) => c.id === circularId)
-      return {
-        circulars,
-        byId: updatedCircular ? { ...state.byId, [circularId]: updatedCircular } : state.byId,
-        selectedCircular: syncSelected(state.selectedCircular, circulars, circularId),
-      }
-    })
+    set((state) =>
+      applyCircular(state, circularId, (c) => ({
+        ...c,
+        workflowSteps: newSteps,
+        timeline: [...(c.timeline ?? []), event],
+        updatedAt: now,
+      })),
+    )
+    // Fire-and-forget API call so the inline picker stays synchronous and
+    // returns the boolean shape its caller expects. Errors surface via store.error.
+    if (step.id && !step.id.startsWith('temp-')) {
+      void api
+        .patch(`/circulars/${circularId}/workflow/steps/${step.id}`, {
+          deadline: deadline ?? null,
+        })
+        .catch((e) => {
+          set({ error: errorMessage(e, 'Failed to update step deadline') })
+        })
+    }
     return { ok: true }
   },
 
-  addWorkflowStep: (circularId, payload, actingUser) => {
-    const circular = get().circulars.find((c) => c.id === circularId)
+  addWorkflowStep: async (circularId, payload, actingUser) => {
+    const snapshot = get().byId[circularId]
+    const circular = snapshot
     if (!circular) return
     const existingSteps = circular.workflowSteps ?? buildInitialWorkflowSteps()
     const currentStep = existingSteps.find((s) => s.status === 'current')
     const phase = (payload.phase ?? currentStep?.phase ?? 2) as 0 | 1 | 2
+    const tempId = `temp-${nanoid()}`
     const newStep: CircularWorkflowStep = {
-      id: nanoid(),
+      id: tempId,
       phase,
       label: payload.label.trim(),
       labelAr: (payload.labelAr ?? payload.label).trim(),
@@ -938,28 +1159,55 @@ export const useCircularStore = create<CircularState>()((set, get) => ({
       type: 'step_added',
     }
     const now = new Date().toISOString()
-    set((state) => {
-      const circulars = state.circulars.map((c) =>
-        c.id === circularId
-          ? {
-              ...c,
-              workflowSteps: [...existingSteps, newStep],
-              timeline: [...(c.timeline ?? []), event],
-              updatedAt: now,
-            }
-          : c,
+    // Optimistic append.
+    set((state) =>
+      applyCircular(state, circularId, (c) => ({
+        ...c,
+        workflowSteps: [...existingSteps, newStep],
+        timeline: [...(c.timeline ?? []), event],
+        updatedAt: now,
+      })),
+    )
+
+    try {
+      const row = await api.post<WorkflowStepApiRow>(
+        `/circulars/${circularId}/workflow/steps`,
+        {
+          phase,
+          label: newStep.label,
+          label_ar: newStep.labelAr,
+          action_label: newStep.actionLabel,
+          action_label_ar: newStep.actionLabelAr,
+          action_type: newStep.actionType,
+          requires_notes: newStep.requiresNotes,
+          sort_order: existingSteps.length,
+        },
       )
-      const updatedCircular = circulars.find((c) => c.id === circularId)
-      return {
-        circulars,
-        byId: updatedCircular ? { ...state.byId, [circularId]: updatedCircular } : state.byId,
-        selectedCircular: syncSelected(state.selectedCircular, circulars, circularId),
+      const real = mapWorkflowStepRow(row)
+      // Swap temp row for server row.
+      set((state) =>
+        applyCircular(state, circularId, (c) => ({
+          ...c,
+          workflowSteps: (c.workflowSteps ?? []).map((s) => (s.id === tempId ? real : s)),
+        })),
+      )
+    } catch (e) {
+      if (snapshot) {
+        set((state) => ({
+          circulars: state.circulars.map((c) => (c.id === circularId ? snapshot : c)),
+          byId: { ...state.byId, [circularId]: snapshot },
+          selectedCircular:
+            state.selectedCircular?.id === circularId ? snapshot : state.selectedCircular,
+        }))
       }
-    })
+      set({ error: errorMessage(e, 'Failed to add workflow step') })
+      throw e
+    }
   },
 
-  renameWorkflowStep: (circularId, stepIndex, newLabel, actingUser) => {
-    const circular = get().circulars.find((c) => c.id === circularId)
+  renameWorkflowStep: async (circularId, stepIndex, newLabel, actingUser) => {
+    const snapshot = get().byId[circularId]
+    const circular = snapshot
     if (!circular) return
     const steps = circular.workflowSteps ?? []
     if (stepIndex < 0 || stepIndex >= steps.length) return
@@ -984,34 +1232,46 @@ export const useCircularStore = create<CircularState>()((set, get) => ({
       type: 'step_renamed',
     }
     const now = new Date().toISOString()
-    set((state) => {
-      const circulars = state.circulars.map((c) =>
-        c.id === circularId
-          ? {
-              ...c,
-              workflowSteps: newSteps,
-              timeline: [...(c.timeline ?? []), event],
-              updatedAt: now,
-            }
-          : c,
-      )
-      const updatedCircular = circulars.find((c) => c.id === circularId)
-      return {
-        circulars,
-        byId: updatedCircular ? { ...state.byId, [circularId]: updatedCircular } : state.byId,
-        selectedCircular: syncSelected(state.selectedCircular, circulars, circularId),
+    set((state) =>
+      applyCircular(state, circularId, (c) => ({
+        ...c,
+        workflowSteps: newSteps,
+        timeline: [...(c.timeline ?? []), event],
+        updatedAt: now,
+      })),
+    )
+
+    if (step.id.startsWith('temp-')) return
+
+    try {
+      await api.patch(`/circulars/${circularId}/workflow/steps/${step.id}`, {
+        label: trimmed,
+        label_ar: trimmed,
+      })
+    } catch (e) {
+      if (snapshot) {
+        set((state) => ({
+          circulars: state.circulars.map((c) => (c.id === circularId ? snapshot : c)),
+          byId: { ...state.byId, [circularId]: snapshot },
+          selectedCircular:
+            state.selectedCircular?.id === circularId ? snapshot : state.selectedCircular,
+        }))
       }
-    })
+      set({ error: errorMessage(e, 'Failed to rename workflow step') })
+      throw e
+    }
   },
 
-  removeWorkflowStep: (circularId, stepIndex, actingUser) => {
-    const circular = get().circulars.find((c) => c.id === circularId)
+  removeWorkflowStep: async (circularId, stepIndex, actingUser) => {
+    const snapshot = get().byId[circularId]
+    const circular = snapshot
     if (!circular) return
     const steps = circular.workflowSteps ?? []
     if (stepIndex < 0 || stepIndex >= steps.length) return
     const step = steps[stepIndex]
     if (step.status === 'completed') return
     const removed = step.label
+    const removedId = step.id
     const filtered = steps.filter((_, i) => i !== stepIndex)
     let foundCurrent = false
     const restated = filtered.map((s) => {
@@ -1035,29 +1295,37 @@ export const useCircularStore = create<CircularState>()((set, get) => ({
       type: 'step_removed',
     }
     const now = new Date().toISOString()
-    set((state) => {
-      const circulars = state.circulars.map((c) =>
-        c.id === circularId
-          ? {
-              ...c,
-              workflowSteps: restated,
-              timeline: [...(c.timeline ?? []), event],
-              updatedAt: now,
-            }
-          : c,
-      )
-      const updatedCircular = circulars.find((c) => c.id === circularId)
-      return {
-        circulars,
-        byId: updatedCircular ? { ...state.byId, [circularId]: updatedCircular } : state.byId,
-        selectedCircular: syncSelected(state.selectedCircular, circulars, circularId),
+    set((state) =>
+      applyCircular(state, circularId, (c) => ({
+        ...c,
+        workflowSteps: restated,
+        timeline: [...(c.timeline ?? []), event],
+        updatedAt: now,
+      })),
+    )
+
+    if (removedId.startsWith('temp-')) return
+
+    try {
+      await api.delete(`/circulars/${circularId}/workflow/steps/${removedId}`)
+    } catch (e) {
+      if (snapshot) {
+        set((state) => ({
+          circulars: state.circulars.map((c) => (c.id === circularId ? snapshot : c)),
+          byId: { ...state.byId, [circularId]: snapshot },
+          selectedCircular:
+            state.selectedCircular?.id === circularId ? snapshot : state.selectedCircular,
+        }))
       }
-    })
+      set({ error: errorMessage(e, 'Failed to remove workflow step') })
+      throw e
+    }
   },
 
-  reorderWorkflowSteps: (circularId, fromIndex, toIndex, actingUser) => {
+  reorderWorkflowSteps: async (circularId, fromIndex, toIndex, actingUser) => {
     if (fromIndex === toIndex) return
-    const circular = get().circulars.find((c) => c.id === circularId)
+    const snapshot = get().byId[circularId]
+    const circular = snapshot
     if (!circular) return
     const steps = circular.workflowSteps ?? []
     if (fromIndex < 0 || fromIndex >= steps.length) return
@@ -1090,93 +1358,49 @@ export const useCircularStore = create<CircularState>()((set, get) => ({
       type: 'steps_reordered',
     }
     const now = new Date().toISOString()
-    set((state) => {
-      const circulars = state.circulars.map((c) =>
-        c.id === circularId
-          ? {
-              ...c,
-              workflowSteps: restated,
-              timeline: [...(c.timeline ?? []), event],
-              updatedAt: now,
-            }
-          : c,
-      )
-      const updatedCircular = circulars.find((c) => c.id === circularId)
-      return {
-        circulars,
-        byId: updatedCircular ? { ...state.byId, [circularId]: updatedCircular } : state.byId,
-        selectedCircular: syncSelected(state.selectedCircular, circulars, circularId),
+    set((state) =>
+      applyCircular(state, circularId, (c) => ({
+        ...c,
+        workflowSteps: restated,
+        timeline: [...(c.timeline ?? []), event],
+        updatedAt: now,
+      })),
+    )
+
+    const reorderItems = restated
+      .filter((s) => !s.id.startsWith('temp-'))
+      .map((s, idx) => ({ id: s.id, sort_order: idx }))
+    if (reorderItems.length === 0) return
+
+    try {
+      await api.post(`/circulars/${circularId}/workflow/steps/reorder`, {
+        items: reorderItems,
+      })
+    } catch (e) {
+      if (snapshot) {
+        set((state) => ({
+          circulars: state.circulars.map((c) => (c.id === circularId ? snapshot : c)),
+          byId: { ...state.byId, [circularId]: snapshot },
+          selectedCircular:
+            state.selectedCircular?.id === circularId ? snapshot : state.selectedCircular,
+        }))
       }
-    })
+      set({ error: errorMessage(e, 'Failed to reorder workflow steps') })
+      throw e
+    }
   },
 
-  requestCircularEdit: (circularId, editData) => {
-    const now = new Date().toISOString()
-    const today = now.slice(0, 10)
-    const currentCircular = get().circulars.find((c) => c.id === circularId)
-    const fieldChanges: Record<string, { from: string; to: string }> = {}
-    if (currentCircular) {
-      const scalarFields = [
-        'title', 'authority', 'priority', 'issuanceDate', 'dueDate',
-        'capDeadline', 'description', 'businessOwnerDepartment', 'referenceUrl',
-      ] as const
-      for (const field of scalarFields) {
-        const from = String(currentCircular[field] ?? '')
-        const to = String(
-          (editData as Record<string, unknown>)[field] ??
-            currentCircular[field] ??
-            '',
-        )
-        if (from !== to) fieldChanges[field] = { from, to }
-      }
-      const fromDepts = (currentCircular.departments ?? []).join(', ')
-      const toDepts = (editData.departments ?? currentCircular.departments ?? []).join(', ')
-      if (fromDepts !== toDepts) fieldChanges['departments'] = { from: fromDepts, to: toDepts }
-    }
-    const pendingEdit: CircularPendingEdit = {
-      data: editData,
-      requestedBy: 'Current User',
-      requestedAt: now,
-      status: 'pending',
-      fieldChanges: Object.keys(fieldChanges).length > 0 ? fieldChanges : undefined,
-      approvals: [
-        { id: nanoid(), role: 'Compliance Officer', roleAr: 'مسؤول الامتثال', status: 'pending' },
-        { id: nanoid(), role: 'Compliance Manager', roleAr: 'مدير الامتثال', status: 'pending' },
-      ],
-    }
-    const newEvent: CircularTimelineEvent = {
-      id: nanoid(),
-      title: 'Edit Submitted for Approval',
-      titleAr: 'طلب تعديل للاعتماد',
-      date: today,
-      user: 'Current User',
-      status: 'active',
-    }
-    set((state) => {
-      const circulars = state.circulars.map((c) => {
-        if (c.id !== circularId) return c
-        return {
-          ...c,
-          pendingEdit,
-          timeline: [...(c.timeline ?? []), newEvent],
-          updatedAt: now,
-        }
-      })
-      const updatedCircular = circulars.find((c) => c.id === circularId)
-      return {
-        circulars,
-        byId: updatedCircular ? { ...state.byId, [circularId]: updatedCircular } : state.byId,
-        selectedCircular: syncSelected(state.selectedCircular, circulars, circularId),
-      }
-    })
+  requestCircularEdit: async (circularId, editData) => {
+    // Per HANDOFF §11 Wave 3 #5 the multi-stage approval workflow is deferred;
+    // route edits straight through to PATCH so they actually persist.
+    await get().update(circularId, editData)
   },
 
   approveCircularEditStep: (circularId, approvalId, notes) => {
     const now = new Date().toISOString()
     const today = now.slice(0, 10)
-    set((state) => {
-      const circulars = state.circulars.map((c) => {
-        if (c.id !== circularId) return c
+    set((state) =>
+      applyCircular(state, circularId, (c) => {
         if (!c.pendingEdit) return c
         const updatedApprovals = c.pendingEdit.approvals.map((ap) =>
           ap.id === approvalId
@@ -1231,22 +1455,15 @@ export const useCircularStore = create<CircularState>()((set, get) => ({
           timeline: [...(c.timeline ?? []), approvedEvent],
           updatedAt: now,
         }
-      })
-      const updatedCircular = circulars.find((c) => c.id === circularId)
-      return {
-        circulars,
-        byId: updatedCircular ? { ...state.byId, [circularId]: updatedCircular } : state.byId,
-        selectedCircular: syncSelected(state.selectedCircular, circulars, circularId),
-      }
-    })
+      }),
+    )
   },
 
   rejectCircularEditStep: (circularId, approvalId, notes) => {
     const now = new Date().toISOString()
     const today = now.slice(0, 10)
-    set((state) => {
-      const circulars = state.circulars.map((c) => {
-        if (c.id !== circularId) return c
+    set((state) =>
+      applyCircular(state, circularId, (c) => {
         if (!c.pendingEdit) return c
         const updatedApprovals = c.pendingEdit.approvals.map((ap) =>
           ap.id === approvalId
@@ -1277,14 +1494,8 @@ export const useCircularStore = create<CircularState>()((set, get) => ({
           timeline: [...(c.timeline ?? []), rejectedEvent],
           updatedAt: now,
         }
-      })
-      const updatedCircular = circulars.find((c) => c.id === circularId)
-      return {
-        circulars,
-        byId: updatedCircular ? { ...state.byId, [circularId]: updatedCircular } : state.byId,
-        selectedCircular: syncSelected(state.selectedCircular, circulars, circularId),
-      }
-    })
+      }),
+    )
   },
 
   addCAPAttachment: (circularId, file) => {
@@ -1299,23 +1510,13 @@ export const useCircularStore = create<CircularState>()((set, get) => ({
       uploadedAt: now,
       uploadedBy: 'Current User',
     }
-    set((state) => {
-      const circulars = state.circulars.map((c) =>
-        c.id === circularId
-          ? {
-              ...c,
-              capAttachments: [...(c.capAttachments ?? []), attachment],
-              updatedAt: now,
-            }
-          : c,
-      )
-      const updatedCircular = circulars.find((c) => c.id === circularId)
-      return {
-        circulars,
-        byId: updatedCircular ? { ...state.byId, [circularId]: updatedCircular } : state.byId,
-        selectedCircular: syncSelected(state.selectedCircular, circulars, circularId),
-      }
-    })
+    set((state) =>
+      applyCircular(state, circularId, (c) => ({
+        ...c,
+        capAttachments: [...(c.capAttachments ?? []), attachment],
+        updatedAt: now,
+      })),
+    )
   },
 
   addRemediationAttachment: (circularId, file) => {
@@ -1330,84 +1531,52 @@ export const useCircularStore = create<CircularState>()((set, get) => ({
       uploadedAt: now,
       uploadedBy: 'Current User',
     }
-    set((state) => {
-      const circulars = state.circulars.map((c) =>
-        c.id === circularId
-          ? {
-              ...c,
-              remediationAttachments: [...(c.remediationAttachments ?? []), attachment],
-              updatedAt: now,
-            }
-          : c,
-      )
-      const updatedCircular = circulars.find((c) => c.id === circularId)
-      return {
-        circulars,
-        byId: updatedCircular ? { ...state.byId, [circularId]: updatedCircular } : state.byId,
-        selectedCircular: syncSelected(state.selectedCircular, circulars, circularId),
-      }
-    })
+    set((state) =>
+      applyCircular(state, circularId, (c) => ({
+        ...c,
+        remediationAttachments: [...(c.remediationAttachments ?? []), attachment],
+        updatedAt: now,
+      })),
+    )
   },
 
   removeCAPAttachment: (circularId, attachmentId) => {
     const now = new Date().toISOString()
-    set((state) => {
-      const circulars = state.circulars.map((c) =>
-        c.id === circularId
-          ? {
-              ...c,
-              capAttachments: (c.capAttachments ?? []).filter((a) => a.id !== attachmentId),
-              updatedAt: now,
-            }
-          : c,
-      )
-      const updatedCircular = circulars.find((c) => c.id === circularId)
-      return {
-        circulars,
-        byId: updatedCircular ? { ...state.byId, [circularId]: updatedCircular } : state.byId,
-        selectedCircular: syncSelected(state.selectedCircular, circulars, circularId),
-      }
-    })
+    set((state) =>
+      applyCircular(state, circularId, (c) => ({
+        ...c,
+        capAttachments: (c.capAttachments ?? []).filter((a) => a.id !== attachmentId),
+        updatedAt: now,
+      })),
+    )
   },
 
   removeRemediationAttachment: (circularId, attachmentId) => {
     const now = new Date().toISOString()
-    set((state) => {
-      const circulars = state.circulars.map((c) =>
-        c.id === circularId
-          ? {
-              ...c,
-              remediationAttachments: (c.remediationAttachments ?? []).filter(
-                (a) => a.id !== attachmentId,
-              ),
-              updatedAt: now,
-            }
-          : c,
-      )
-      const updatedCircular = circulars.find((c) => c.id === circularId)
-      return {
-        circulars,
-        byId: updatedCircular ? { ...state.byId, [circularId]: updatedCircular } : state.byId,
-        selectedCircular: syncSelected(state.selectedCircular, circulars, circularId),
-      }
-    })
+    set((state) =>
+      applyCircular(state, circularId, (c) => ({
+        ...c,
+        remediationAttachments: (c.remediationAttachments ?? []).filter(
+          (a) => a.id !== attachmentId,
+        ),
+        updatedAt: now,
+      })),
+    )
   },
 
   addTimelineEvent: (circularId, event) => {
     const newEvent: CircularTimelineEvent = { ...event, id: nanoid() }
     const now = new Date().toISOString()
-    set((state) => {
-      const circulars = state.circulars.map((c) =>
-        c.id === circularId
-          ? { ...c, timeline: [...(c.timeline ?? []), newEvent], updatedAt: now }
-          : c,
-      )
-      const updatedCircular = circulars.find((c) => c.id === circularId)
-      return {
-        circulars,
-        byId: updatedCircular ? { ...state.byId, [circularId]: updatedCircular } : state.byId,
-        selectedCircular: syncSelected(state.selectedCircular, circulars, circularId),
-      }
-    })
+    set((state) =>
+      applyCircular(state, circularId, (c) => ({
+        ...c,
+        timeline: [...(c.timeline ?? []), newEvent],
+        updatedAt: now,
+      })),
+    )
   },
 }))
+
+// Suppress "unused" lint for the CircularPendingEdit type while the approval
+// workflow is deferred (still referenced by other modules / future wiring).
+export type { CircularPendingEdit }

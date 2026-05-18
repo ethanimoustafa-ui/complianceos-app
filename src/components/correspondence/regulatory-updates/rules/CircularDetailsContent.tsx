@@ -3,6 +3,7 @@
 import { useState, useRef } from 'react'
 import { Icon } from '@iconify/react'
 import { Button } from '@/components/ui/button'
+import { Modal } from '@/components/ui/modal'
 import { cn } from '@/lib/utils'
 import { useCircularStore } from '@/stores/circular-store'
 import { useFrameworkConfigStore } from '@/stores/framework-config-store'
@@ -10,7 +11,7 @@ import { useAuthStore } from '@/stores/auth-store'
 import { useCan } from '@/lib/permissions'
 import { resolveAuthorityLabel } from '@/lib/authority-display'
 import { InlineDeadlinePicker } from '@/components/ui/inline-deadline-picker'
-import type { Circular, CircularArticle } from '@/types'
+import type { Circular, CircularArticle, CircularWorkflowStep } from '@/types'
 import { AdvanceWorkflowModal } from './AdvanceWorkflowModal'
 import { ArticleDetailModal } from './ArticleDetailModal'
 import { downloadFile, normalizeUrl, readFileAsDataUrl, getBONotifyLabel } from './utils'
@@ -50,7 +51,10 @@ export function CircularDetailsContent({ circular, onClose, onOpenBOModal, onEdi
   const [dragOverId, setDragOverId] = useState<string | null>(null)
   const [showAddStep, setShowAddStep] = useState(false)
   const [newStepLabel, setNewStepLabel] = useState('')
+  const [newStepPhase, setNewStepPhase] = useState<0 | 1 | 2>(2)
+  const [newStepActionType, setNewStepActionType] = useState<CircularWorkflowStep['actionType']>('advance')
   const [deadlineError, setDeadlineError] = useState<string | null>(null)
+  const [pendingDeleteStepId, setPendingDeleteStepId] = useState<string | null>(null)
 
   const {
     circulars: allCirculars,
@@ -402,6 +406,37 @@ export function CircularDetailsContent({ circular, onClose, onOpenBOModal, onEdi
                                   </p>
                                   {!isCompleted && (
                                     <>
+                                      {/* Up/down chevron reorder buttons. Use
+                                          flatIdx in the master workflowSteps
+                                          array so reorderWorkflowSteps does the
+                                          right thing for fromIndex/toIndex. */}
+                                      <button
+                                        type="button"
+                                        disabled={flatIdx <= 0}
+                                        onClick={() => {
+                                          if (flatIdx > 0) {
+                                            void reorderWorkflowSteps(freshCircular.id, flatIdx, flatIdx - 1, actingUser)
+                                          }
+                                        }}
+                                        title={t('regulatoryUpdates.moveStepUp')}
+                                        className="opacity-0 group-hover/row:opacity-100 transition-opacity p-0.5 rounded hover:bg-slate-200 text-slate-400 hover:text-slate-600 disabled:opacity-30 disabled:hover:bg-transparent disabled:cursor-not-allowed"
+                                      >
+                                        <Icon icon="lucide:chevron-up" className="text-[10px]" />
+                                      </button>
+                                      <button
+                                        type="button"
+                                        disabled={flatIdx === -1 || flatIdx >= (freshCircular.workflowSteps?.length ?? 0) - 1}
+                                        onClick={() => {
+                                          const total = freshCircular.workflowSteps?.length ?? 0
+                                          if (flatIdx !== -1 && flatIdx < total - 1) {
+                                            void reorderWorkflowSteps(freshCircular.id, flatIdx, flatIdx + 1, actingUser)
+                                          }
+                                        }}
+                                        title={t('regulatoryUpdates.moveStepDown')}
+                                        className="opacity-0 group-hover/row:opacity-100 transition-opacity p-0.5 rounded hover:bg-slate-200 text-slate-400 hover:text-slate-600 disabled:opacity-30 disabled:hover:bg-transparent disabled:cursor-not-allowed"
+                                      >
+                                        <Icon icon="lucide:chevron-down" className="text-[10px]" />
+                                      </button>
                                       <button
                                         type="button"
                                         onClick={() => {
@@ -415,11 +450,7 @@ export function CircularDetailsContent({ circular, onClose, onOpenBOModal, onEdi
                                       </button>
                                       <button
                                         type="button"
-                                        onClick={() => {
-                                          if (flatIdx !== -1) {
-                                            removeWorkflowStep(freshCircular.id, flatIdx, actingUser)
-                                          }
-                                        }}
+                                        onClick={() => setPendingDeleteStepId(step.id)}
                                         title={t('regulatoryUpdates.deleteStep')}
                                         className="opacity-0 group-hover/row:opacity-100 transition-opacity p-0.5 rounded hover:bg-rose-100 text-slate-400 hover:text-rose-600"
                                       >
@@ -492,27 +523,74 @@ export function CircularDetailsContent({ circular, onClose, onOpenBOModal, onEdi
               </div>
             )}
             {showAddStep ? (
-              <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
-                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                  {t('regulatoryUpdates.addStepName')}
-                </label>
-                <input
-                  autoFocus
-                  className="flex h-9 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
-                  placeholder={t('regulatoryUpdates.addStepPlaceholder')}
-                  value={newStepLabel}
-                  onChange={(e) => setNewStepLabel(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && newStepLabel.trim()) {
-                      addWorkflowStep(freshCircular.id, { label: newStepLabel.trim() }, actingUser)
-                      setNewStepLabel('')
-                      setShowAddStep(false)
-                    } else if (e.key === 'Escape') {
-                      setShowAddStep(false)
-                      setNewStepLabel('')
-                    }
-                  }}
-                />
+              <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-3">
+                {/* Phase selector */}
+                <div>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">
+                    {t('regulatoryUpdates.addStepPhase')}
+                  </label>
+                  <select
+                    value={newStepPhase}
+                    onChange={(e) => setNewStepPhase(Number(e.target.value) as 0 | 1 | 2)}
+                    className="flex h-9 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                  >
+                    <option value={0}>{phaseLabels[0]}</option>
+                    <option value={1}>{phaseLabels[1]}</option>
+                    <option value={2}>{phaseLabels[2]}</option>
+                  </select>
+                </div>
+
+                {/* Action-type selector */}
+                <div>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">
+                    {t('regulatoryUpdates.addStepActionType')}
+                  </label>
+                  <select
+                    value={newStepActionType}
+                    onChange={(e) => setNewStepActionType(e.target.value as CircularWorkflowStep['actionType'])}
+                    className="flex h-9 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                  >
+                    <option value="approve">{t('regulatoryUpdates.actionTypeApprove')}</option>
+                    <option value="notify-bo">{t('regulatoryUpdates.actionTypeNotifyBo')}</option>
+                    <option value="notify-authority">{t('regulatoryUpdates.actionTypeNotifyAuthority')}</option>
+                    <option value="advance">{t('regulatoryUpdates.actionTypeAdvance')}</option>
+                    <option value="submit">{t('regulatoryUpdates.actionTypeSubmit')}</option>
+                    <option value="acknowledge">{t('regulatoryUpdates.actionTypeAcknowledge')}</option>
+                    <option value="start">{t('regulatoryUpdates.actionTypeStart')}</option>
+                    <option value="complete">{t('regulatoryUpdates.actionTypeComplete')}</option>
+                    <option value="review">{t('regulatoryUpdates.actionTypeReview')}</option>
+                  </select>
+                </div>
+
+                {/* Label input */}
+                <div>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">
+                    {t('regulatoryUpdates.addStepName')}
+                  </label>
+                  <input
+                    autoFocus
+                    className="flex h-9 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                    placeholder={t('regulatoryUpdates.addStepPlaceholder')}
+                    value={newStepLabel}
+                    onChange={(e) => setNewStepLabel(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && newStepLabel.trim()) {
+                        void addWorkflowStep(
+                          freshCircular.id,
+                          { label: newStepLabel.trim(), phase: newStepPhase, actionType: newStepActionType },
+                          actingUser,
+                        )
+                        setNewStepLabel('')
+                        setNewStepPhase(2)
+                        setNewStepActionType('advance')
+                        setShowAddStep(false)
+                      } else if (e.key === 'Escape') {
+                        setShowAddStep(false)
+                        setNewStepLabel('')
+                      }
+                    }}
+                  />
+                </div>
                 <div className="flex justify-end gap-2">
                   <Button variant="ghost" className="h-8 text-xs" onClick={() => { setShowAddStep(false); setNewStepLabel('') }}>
                     {t('common.cancel')}
@@ -522,8 +600,14 @@ export function CircularDetailsContent({ circular, onClose, onOpenBOModal, onEdi
                     className="h-8 text-xs"
                     disabled={!newStepLabel.trim()}
                     onClick={() => {
-                      addWorkflowStep(freshCircular.id, { label: newStepLabel.trim() }, actingUser)
+                      void addWorkflowStep(
+                        freshCircular.id,
+                        { label: newStepLabel.trim(), phase: newStepPhase, actionType: newStepActionType },
+                        actingUser,
+                      )
                       setNewStepLabel('')
+                      setNewStepPhase(2)
+                      setNewStepActionType('advance')
                       setShowAddStep(false)
                     }}
                   >
@@ -944,6 +1028,43 @@ export function CircularDetailsContent({ circular, onClose, onOpenBOModal, onEdi
         isRTL={isRTL}
         t={t}
       />
+
+      {/* ── Delete Workflow Step Confirm Modal (Story 11) ──────────────────── */}
+      <Modal
+        isOpen={pendingDeleteStepId !== null}
+        onClose={() => setPendingDeleteStepId(null)}
+        title={t('regulatoryUpdates.deleteStepConfirmTitle')}
+        size="sm"
+      >
+        <div className="space-y-4">
+          <div className="flex items-start gap-3 p-3 bg-rose-50 border border-rose-100 rounded-xl">
+            <Icon icon="lucide:alert-triangle" className="text-rose-600 text-lg shrink-0 mt-0.5" />
+            <p className="text-sm text-rose-700 leading-relaxed">
+              {t('regulatoryUpdates.deleteStepConfirmBody')}
+            </p>
+          </div>
+          <div className={`flex justify-end gap-3`}>
+            <Button variant="ghost" onClick={() => setPendingDeleteStepId(null)}>
+              {t('common.cancel')}
+            </Button>
+            <Button
+              variant="outline"
+              className="border-rose-200 text-rose-600 hover:bg-rose-50"
+              onClick={() => {
+                const id = pendingDeleteStepId
+                if (id) {
+                  const idx = (freshCircular.workflowSteps ?? []).findIndex(s => s.id === id)
+                  if (idx !== -1) removeWorkflowStep(freshCircular.id, idx, actingUser)
+                }
+                setPendingDeleteStepId(null)
+              }}
+            >
+              <Icon icon="lucide:trash-2" className="w-4 h-4" />
+              {t('common.delete')}
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   )
 }

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Modal } from '@/components/ui/modal'
@@ -42,13 +42,51 @@ export function EditCircularModal({ circular, isOpen, onClose, onSaved, t, isRTL
   const [formAssignedTo, setFormAssignedTo] = useState(circular.assignedTo ?? '')
   const [frameworkIds, setFrameworkIds] = useState<RegulatoryBodyId[]>(circular.frameworkIds ?? [])
 
+  // Re-sync form state from the circular prop whenever the modal opens or the
+  // underlying record changes (e.g. fetchById fills in description /
+  // referenceUrl that weren't on the list response). Without this, opening the
+  // Edit modal would keep stale state from the first time it mounted.
+  useEffect(() => {
+    if (!isOpen) return
+    setFormTitle(circular.title)
+    setFormAuthority(circular.authority)
+    setFormPriority(circular.priority)
+    setFormIssuanceDate(circular.issuanceDate)
+    setFormDueDate(circular.dueDate)
+    setFormCapDeadline(circular.capDeadline ?? '')
+    setFormReferenceUrl(circular.referenceUrl ?? '')
+    setFormDepartments(circular.departments)
+    setFormDescription(circular.description ?? '')
+    setFormBODept(circular.businessOwnerDepartment ?? '')
+    setFormAssignedTo(circular.assignedTo ?? '')
+    setFrameworkIds(circular.frameworkIds ?? [])
+  }, [
+    isOpen,
+    circular.id,
+    circular.title,
+    circular.authority,
+    circular.priority,
+    circular.issuanceDate,
+    circular.dueDate,
+    circular.capDeadline,
+    circular.referenceUrl,
+    circular.departments,
+    circular.description,
+    circular.businessOwnerDepartment,
+    circular.assignedTo,
+    circular.frameworkIds,
+  ])
+
   // Options = enabled correspondence-based frameworks. The current selection
   // is always included so editing a circular whose authority was later
   // disabled doesn't silently switch the value.
   const frameworksAll = useFrameworkConfigStore((s) => s.frameworks)
   const authorityOptions = useMemo(() => {
+    // Drop the `enabled` constraint — all correspondence-based authorities
+    // (SAMA, CMA, IA, ZATCA, MISA, CITC, SAFIU, Sharia Board, …) should be
+    // selectable here even if not yet enabled in the org's framework config.
     const base = frameworksAll
-      .filter((f) => f.enabled && f.correspondenceBased)
+      .filter((f) => f.correspondenceBased)
       .map((f) => ({ value: f.id as string, label: isRTL ? f.nameAr : f.name }))
     if (formAuthority && !base.some((o) => o.value === formAuthority)) {
       const match = frameworksAll.find((f) => f.id === formAuthority)

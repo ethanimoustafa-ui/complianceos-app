@@ -189,11 +189,20 @@ function CircularCardContent({ circular, t }: { circular: Circular; t: RegDocCar
               target="_blank"
               rel="noopener noreferrer"
               onClick={(e) => e.stopPropagation()}
-              className="inline-flex items-center gap-1 text-xs text-emerald-600 hover:text-emerald-700 shrink-0"
+              title={t('regulatoryUpdates.viewOnline')}
+              className="inline-flex items-center justify-center w-6 h-6 rounded-md text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 shrink-0"
             >
-              <Icon icon="lucide:external-link" className="text-xs" />
-              {t('regulatoryUpdates.viewOnline')}
+              <Icon icon="lucide:external-link" className="text-sm" />
             </a>
+          )}
+          {circular.pdfUrl && (
+            <span
+              title={t('regulatoryUpdates.pdfAttachedBadge')}
+              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0 bg-emerald-50 text-emerald-700 border border-emerald-100"
+            >
+              <Icon icon="lucide:paperclip" className="text-[10px]" />
+              {t('regulatoryUpdates.pdfAttachedBadge')}
+            </span>
           )}
         </div>
         <div className={cn('flex items-center gap-2', )}>
@@ -213,14 +222,66 @@ function CircularCardContent({ circular, t }: { circular: Circular; t: RegDocCar
             <span className="text-slate-400 text-xs">—</span>
           )}
         </div>
+        {/* Department chips */}
+        {circular.departments && circular.departments.length > 0 && (
+          <div className={cn('flex items-center gap-1.5 flex-wrap')}>
+            {circular.departments.slice(0, 3).map((dept) => (
+              <span
+                key={dept}
+                className="inline-flex items-center px-2 py-0.5 bg-slate-100 text-slate-700 rounded-full text-[10px] font-bold"
+              >
+                {getDeptLabel(dept)}
+              </span>
+            ))}
+            {circular.departments.length > 3 && (
+              <span className="text-[10px] font-bold text-slate-500">
+                +{circular.departments.length - 3} more
+              </span>
+            )}
+          </div>
+        )}
+        {/* Framework tags */}
+        {circular.frameworkIds && circular.frameworkIds.length > 0 && (
+          <div className={cn('flex items-center gap-1.5 flex-wrap')}>
+            {circular.frameworkIds.slice(0, 4).map((fid) => {
+              const fw = frameworks.find((f) => f.id === fid)
+              const label = fw ? (rtl ? fw.nameAr : fw.name) : String(fid)
+              return (
+                <span
+                  key={fid}
+                  className="inline-flex items-center gap-1 px-2 py-0.5 bg-indigo-50 text-indigo-700 border border-indigo-100 rounded-full text-[10px] font-bold"
+                >
+                  <Icon icon="lucide:tag" className="text-[9px]" />
+                  {label}
+                </span>
+              )
+            })}
+            {circular.frameworkIds.length > 4 && (
+              <span className="text-[10px] font-bold text-slate-500">
+                +{circular.frameworkIds.length - 4}
+              </span>
+            )}
+          </div>
+        )}
         {/* Deadlines row */}
         {(circular.capDeadline || circular.remediationDeadline) && (
           <div className={cn('flex items-center gap-2 flex-wrap', )}>
-            {circular.capDeadline && (
-              <span className="bg-amber-50 text-amber-700 border border-amber-100 text-[10px] font-medium px-2 py-0.5 rounded-full">
-                {t('regulatoryUpdates.capDeadline')}: {circular.capDeadline} ({differenceInCalendarDays(new Date(circular.capDeadline), new Date())}d)
-              </span>
-            )}
+            {circular.capDeadline && (() => {
+              const days = differenceInCalendarDays(new Date(circular.capDeadline), new Date())
+              const overdue = days < 0
+              return (
+                <span
+                  className={cn(
+                    'border text-[10px] font-medium px-2 py-0.5 rounded-full',
+                    overdue
+                      ? 'bg-rose-50 text-rose-700 border-rose-100'
+                      : 'bg-amber-50 text-amber-700 border-amber-100',
+                  )}
+                >
+                  {t('regulatoryUpdates.capDeadline')}: {circular.capDeadline} ({days}d)
+                </span>
+              )
+            })()}
             {circular.remediationDeadline && (
               <span className="bg-rose-50 text-rose-700 border border-rose-100 text-[10px] font-medium px-2 py-0.5 rounded-full">
                 {t('regulatoryUpdates.remediationDeadline')}: {circular.remediationDeadline} ({differenceInCalendarDays(new Date(circular.remediationDeadline), new Date())}d)

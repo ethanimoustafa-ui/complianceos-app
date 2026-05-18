@@ -400,6 +400,22 @@ export function ArticleDetailModal({ circularId, article, mode, onClose, t, isRT
           </div>
         )}
 
+        {/* Missing-required hint — only shown in create/edit mode, matches the
+            Register modal's pattern (Story 5 #5.4). */}
+        {isEditable && (() => {
+          const missing = [
+            !artNumber && t('regulatoryUpdates.articleNumber'),
+            !artDept && t('regulatoryUpdates.responsibleDepartment'),
+            !artTitle && t('regulatoryUpdates.articleTitle'),
+          ].filter(Boolean) as string[]
+          if (missing.length === 0) return null
+          return (
+            <p className="text-xs text-rose-600 text-right pt-1">
+              {t('regulatoryUpdates.missingRequired')}: {missing.join(', ')}
+            </p>
+          )
+        })()}
+
         {/* Action buttons */}
         <div className={`flex justify-between items-center pt-4 border-t border-slate-100`}>
           <div className={`flex gap-2`}>

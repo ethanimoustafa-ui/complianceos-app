@@ -48,9 +48,19 @@ function RegulatoryUpdatesRulesPageContent() {
 
   // Hydrate server-state on mount (Fix-1).
   const fetchCirculars = useCircularStore((s) => s.fetchAll)
+  const fetchCircularById = useCircularStore((s) => s.fetchById)
   useEffect(() => {
     void fetchCirculars()
   }, [fetchCirculars])
+
+  // When a circular is selected, fetch its full detail (description,
+  // reference_url, pdf_url, cap_deadline, timeline, etc.) — the list response
+  // is intentionally narrow.
+  const selectedCircularId = selectedCircular?.id ?? null
+  useEffect(() => {
+    if (!selectedCircularId) return
+    void fetchCircularById(selectedCircularId)
+  }, [selectedCircularId, fetchCircularById])
 
   const [searchQuery, setSearchQuery] = useState('')
   const [authorityFilter, setAuthorityFilter] = useState<CircularAuthority | 'all'>('all')
@@ -77,16 +87,20 @@ function RegulatoryUpdatesRulesPageContent() {
   }, [searchParams, circulars, setSelected])
 
   const filteredCirculars = useMemo(() => {
-    return circulars.filter((c) => {
-      const matchesSearch =
-        c.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        c.reference.toLowerCase().includes(searchQuery.toLowerCase())
-      const matchesAuthority = authorityFilter === 'all' || c.authority === authorityFilter
-      const matchesDept =
-        departmentFilter === 'all' ||
-        c.departments.some((d) => d.toLowerCase() === departmentFilter.toLowerCase())
-      return matchesSearch && matchesAuthority && matchesDept
-    })
+    return circulars
+      .filter((c) => {
+        const matchesSearch =
+          c.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          c.reference.toLowerCase().includes(searchQuery.toLowerCase())
+        const matchesAuthority = authorityFilter === 'all' || c.authority === authorityFilter
+        const matchesDept =
+          departmentFilter === 'all' ||
+          c.departments.some((d) => d.toLowerCase() === departmentFilter.toLowerCase())
+        return matchesSearch && matchesAuthority && matchesDept
+      })
+      // Newest-first by created_at so a freshly-registered circular lands at
+      // the top of the list after the post-create refetch (Story 1 bug #15).
+      .sort((a, b) => (b.createdAt ?? '').localeCompare(a.createdAt ?? ''))
   }, [circulars, searchQuery, authorityFilter, departmentFilter])
 
   const { items: paginatedCirculars, totalPages } = useMemo(
@@ -151,7 +165,7 @@ function RegulatoryUpdatesRulesPageContent() {
           <button
             type="button"
             className="p-2.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-all cursor-pointer"
-            title={t('regulatoryUpdates.exportRules' as any)}
+            title={t('regulatoryUpdates.exportRules')}
             onClick={() => exportRulesLocalized(filteredCirculars, 'rules', t, isRTL)}
           >
             <Icon icon="lucide:download-cloud" className="text-lg" />
@@ -214,6 +228,15 @@ function RegulatoryUpdatesRulesPageContent() {
           />
         ) : (
           <>
+            {/* Showing X–Y of Z range — always rendered when there is at least
+                one match, not just when pagination is active (Story 4 #4.2). */}
+            <p className="text-xs text-slate-500 mb-3">
+              {t('regulatoryUpdates.showingRange', {
+                from: String((currentPage - 1) * PAGE_SIZE + 1),
+                to: String(Math.min(currentPage * PAGE_SIZE, filteredCirculars.length)),
+                total: String(filteredCirculars.length),
+              })}
+            </p>
             <div className="grid grid-cols-1 gap-4">
               {paginatedCirculars.map((c) => (
                 <RegDocCard
@@ -229,7 +252,11 @@ function RegulatoryUpdatesRulesPageContent() {
             {totalPages > 1 && (
               <div className="flex items-center justify-between mt-6 pt-4 border-t border-slate-100">
                 <p className="text-xs text-slate-500">
-                  Showing {(currentPage - 1) * PAGE_SIZE + 1}–{Math.min(currentPage * PAGE_SIZE, filteredCirculars.length)} of {filteredCirculars.length}
+                  {t('regulatoryUpdates.showingRange', {
+                    from: String((currentPage - 1) * PAGE_SIZE + 1),
+                    to: String(Math.min(currentPage * PAGE_SIZE, filteredCirculars.length)),
+                    total: String(filteredCirculars.length),
+                  })}
                 </p>
                 <div className="flex items-center gap-1">
                   <button disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)}

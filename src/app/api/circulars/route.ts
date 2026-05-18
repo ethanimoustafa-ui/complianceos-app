@@ -17,6 +17,7 @@ import {
   insertCircularTimeline,
   nextCircularReference,
 } from '@/lib/api/services/circulars'
+import { buildDefaultWorkflowStepRows } from '@/lib/workflow-defaults'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -138,6 +139,14 @@ export async function POST(req: NextRequest) {
         'completed',
       ),
     ])
+
+    const rows = buildDefaultWorkflowStepRows(created.id)
+    const { error: seedErr } = await supabase.from('circular_workflow_steps').insert(rows)
+    if (seedErr) {
+      // eslint-disable-next-line no-console
+      console.error('[api/circulars] workflow step seed failed', { error: seedErr, circular_id: created.id })
+      // non-fatal — the circular itself succeeded
+    }
 
     revalidate(cacheTags.circulars())
     return ok(inserted, { status: 201 })

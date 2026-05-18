@@ -31,7 +31,12 @@ export function DeleteConfirmModal({ isOpen, onClose, targetId, onDeleted, t }: 
       size="sm"
     >
       <div className="space-y-4">
-        <p className="text-sm text-slate-600">{t('regulatoryUpdates.confirmDelete')}</p>
+        <div className="flex items-start gap-3 p-3 bg-rose-50 border border-rose-100 rounded-xl">
+          <Icon icon="lucide:alert-triangle" className="text-rose-600 text-lg shrink-0 mt-0.5" />
+          <p className="text-sm text-rose-700 leading-relaxed">
+            {t('regulatoryUpdates.deleteCircularCascadeWarning')}
+          </p>
+        </div>
         <div className={`flex justify-end gap-3`}>
           <Button variant="ghost" onClick={onClose}>{t('common.cancel')}</Button>
           <Button

@@ -3,7 +3,6 @@
 import { useState, useRef, useMemo } from 'react'
 import { Icon } from '@iconify/react'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { Modal } from '@/components/ui/modal'
 import { useCircularStore } from '@/stores/circular-store'
 import type { CircularAuthority, CircularPriority, CircularStatus, CircularApplicability, CAPStatus } from '@/types'
@@ -51,10 +50,13 @@ export function RegisterCircularModal({ isOpen, onClose, onCreated, t }: Props) 
   // Selecting the stable frameworks ref then deriving via useMemo avoids the
   // Zustand getServerSnapshot infinite-loop warning.
   const frameworksAll = useFrameworkConfigStore((s) => s.frameworks)
+  // Drop the `enabled` constraint — all correspondence-based authorities
+  // (SAMA, CMA, IA, ZATCA, MISA, CITC, SAFIU, Sharia Board, …) should be
+  // selectable here even if not yet enabled in the org's framework config.
   const authorityOptions = useMemo(
     () =>
       frameworksAll
-        .filter((f) => f.enabled && f.correspondenceBased)
+        .filter((f) => f.correspondenceBased)
         .map((f) => ({ value: f.id, label: isRTL ? f.nameAr : f.name })),
     [frameworksAll, isRTL]
   )
@@ -66,7 +68,16 @@ export function RegisterCircularModal({ isOpen, onClose, onCreated, t }: Props) 
   }
 
   async function handleCreate() {
-    if (!formAuthority || !formTitle || !formDueDate || !formCapDeadline) return
+    if (
+      !formAuthority ||
+      !formTitle ||
+      !formIssuanceDate ||
+      !formDueDate ||
+      !formCapDeadline ||
+      formDepartments.length === 0
+    ) {
+      return
+    }
     const created = await create({
       authority: formAuthority as CircularAuthority,
       title: formTitle,
@@ -205,12 +216,17 @@ export function RegisterCircularModal({ isOpen, onClose, onCreated, t }: Props) 
             </div>
 
             <div className="grid grid-cols-2 gap-4">
-              <Input
-                label={t('regulatoryUpdates.issuanceDate')}
-                type="date"
-                value={formIssuanceDate}
-                onChange={(e) => setFormIssuanceDate(e.target.value)}
-              />
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1.5">
+                  {t('regulatoryUpdates.issuanceDate')} <span className="text-rose-500 ml-1">*</span>
+                </label>
+                <input
+                  type="date"
+                  value={formIssuanceDate}
+                  onChange={(e) => setFormIssuanceDate(e.target.value)}
+                  className="flex h-11 w-full rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                />
+              </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1.5">
                   {t('regulatoryUpdates.implementationDeadline')} <span className="text-rose-500 ml-1">*</span>
@@ -253,20 +269,53 @@ export function RegisterCircularModal({ isOpen, onClose, onCreated, t }: Props) 
           {/* Right column */}
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('regulatoryUpdates.affectedDepartments')}</label>
-              <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-2 max-h-40 overflow-y-auto">
-                {allDepartments.map((dept) => (
-                  <label key={dept.id} className={`flex items-center gap-3 cursor-pointer`}>
-                    <input
-                      type="checkbox"
-                      className="rounded text-emerald-600 focus:ring-emerald-500"
-                      checked={formDepartments.includes(dept.name)}
-                      onChange={() => toggleDepartment(dept.name)}
-                    />
-                    <span className="text-sm">{dept.name}</span>
-                  </label>
-                ))}
+              <label className="block text-sm font-medium text-slate-700 mb-1.5">
+                {t('regulatoryUpdates.affectedDepartments')} <span className="text-rose-500 ml-1">*</span>
+              </label>
+              {/* Multi-pick chip selector (Story 1 #1.4). Clicking a chip
+                  toggles selection; selected chips show below as removable
+                  pills. Min-one validation is enforced by handleCreate +
+                  surfaced in the "Missing required" hint. */}
+              <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl">
+                <div className="flex flex-wrap gap-1.5">
+                  {allDepartments.map((dept) => {
+                    const selected = formDepartments.includes(dept.name)
+                    return (
+                      <button
+                        type="button"
+                        key={dept.id}
+                        onClick={() => toggleDepartment(dept.name)}
+                        className={
+                          selected
+                            ? 'px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-600 text-white border border-emerald-600 cursor-pointer transition-colors'
+                            : 'px-2.5 py-1 rounded-full text-xs font-medium bg-white text-slate-600 border border-slate-200 hover:border-emerald-300 hover:text-emerald-700 cursor-pointer transition-colors'
+                        }
+                      >
+                        {isRTL ? dept.nameAr : dept.name}
+                      </button>
+                    )
+                  })}
+                </div>
               </div>
+              {formDepartments.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 mt-2">
+                  {formDepartments.map((dept) => (
+                    <span
+                      key={dept}
+                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-100"
+                    >
+                      {dept}
+                      <button
+                        type="button"
+                        onClick={() => toggleDepartment(dept)}
+                        className="text-emerald-600 hover:text-rose-600 cursor-pointer"
+                      >
+                        <Icon icon="lucide:x" className="text-[10px]" />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
 
             <div>
@@ -333,15 +382,17 @@ export function RegisterCircularModal({ isOpen, onClose, onCreated, t }: Props) 
         <div className={`flex flex-col gap-3 pt-4 border-t border-slate-100`}>
           {(() => {
             const missing = [
-              !formAuthority && 'Authority',
-              !formTitle && 'Rule Title',
-              !formDueDate && 'Implementation Deadline',
-              !formCapDeadline && 'CAP Submission Deadline',
+              !formAuthority && t('regulatoryUpdates.authority'),
+              !formTitle && t('regulatoryUpdates.ruleTitle'),
+              !formIssuanceDate && t('regulatoryUpdates.issuanceDate'),
+              !formDueDate && t('regulatoryUpdates.implementationDeadline'),
+              !formCapDeadline && t('regulatoryUpdates.capDeadline'),
+              formDepartments.length === 0 && t('regulatoryUpdates.affectedDepartments'),
             ].filter(Boolean) as string[]
             if (missing.length === 0) return null
             return (
               <p className="text-xs text-rose-600 self-end">
-                Missing required: {missing.join(', ')}
+                {t('regulatoryUpdates.missingRequired')}: {missing.join(', ')}
               </p>
             )
           })()}
@@ -351,7 +402,14 @@ export function RegisterCircularModal({ isOpen, onClose, onCreated, t }: Props) 
               variant="primary"
               className="shadow-lg shadow-emerald-100"
               onClick={handleCreate}
-              disabled={!formAuthority || !formTitle || !formDueDate || !formCapDeadline}
+              disabled={
+                !formAuthority ||
+                !formTitle ||
+                !formIssuanceDate ||
+                !formDueDate ||
+                !formCapDeadline ||
+                formDepartments.length === 0
+              }
             >
               {t('regulatoryUpdates.initiateTracker')}
             </Button>

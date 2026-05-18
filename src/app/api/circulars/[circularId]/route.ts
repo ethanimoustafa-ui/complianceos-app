@@ -125,13 +125,7 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
     const { supabase, user, profile } = await requirePerm('delete')
     await assertCircularExists(supabase, circularId)
 
-    const { error } = await supabase
-      .from('circulars')
-      .update({ deleted_at: new Date().toISOString() })
-      .eq('id', circularId)
-      .is('deleted_at', null)
-    if (error) throw error
-
+    // Write the audit row BEFORE the delete so it survives the FK cascade.
     await writeAudit({
       actor_id: user.id,
       actor_name: profile.name ?? profile.email ?? user.id,
@@ -140,6 +134,12 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
       entity_id: circularId,
       supabase,
     })
+
+    const { error } = await supabase
+      .from('circulars')
+      .delete()
+      .eq('id', circularId)
+    if (error) throw error
 
     revalidateAll([cacheTags.circulars(), cacheTags.circulars(circularId)])
     revalidate(cacheTags.compliance())
