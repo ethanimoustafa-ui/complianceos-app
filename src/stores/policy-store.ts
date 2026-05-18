@@ -181,7 +181,7 @@ interface PolicyStoreState {
   lastFetched: number | null
 
   // Legacy sync signatures preserved for consumer pages.
-  fetchAll: () => void
+  fetchAll: (force?: boolean) => void
   fetchById: (id: string) => Policy | null
   getNextId: () => string
 
@@ -234,7 +234,12 @@ export const usePolicyStore = create<PolicyStoreState>()((set, get) => ({
   error: null,
   lastFetched: null,
 
-  fetchAll: () => {
+  fetchAll: (force = false) => {
+    const state = get()
+    // Skip if a fresh fetch completed in the last 30s, unless force=true.
+    if (!force && state.lastFetched && Date.now() - state.lastFetched < 30_000) {
+      return
+    }
     set({ isLoading: true, error: null })
     void (async () => {
       try {

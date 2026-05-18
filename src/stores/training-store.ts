@@ -147,7 +147,7 @@ interface TrainingState {
   lastFetched: number | null
 
   // Compliance-engine actions (local-only shims).
-  fetchAll: () => Promise<void>
+  fetchAll: (force?: boolean) => Promise<void>
   fetchById: (id: string) => Promise<Training | null>
   create: (data: Omit<Training, 'id' | 'createdAt' | 'updatedAt'>) => Promise<Training>
   update: (id: string, data: Partial<Training>) => Promise<Training>
@@ -239,7 +239,14 @@ export const useTrainingStore = create<TrainingState>()((set, get) => ({
 
   // ---------- Compliance-engine slice (local-only) -------------------------
 
-  fetchAll: async () => {
+  fetchAll: async (force = false) => {
+    const current = get()
+    // Skip if a fresh fetch completed in the last 30s, unless force=true.
+    // Prevents widget-fanout on the dashboard from triggering N background
+    // refreshes of `/api/training/courses` + `/api/training/employees`.
+    if (!force && current.lastFetched && Date.now() - current.lastFetched < 30_000) {
+      return
+    }
     // No backend route for the compliance-engine `Training` resource yet.
     // Re-derive pagination from local state for back-compat.
     set((state) => ({

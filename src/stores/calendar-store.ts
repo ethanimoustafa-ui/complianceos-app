@@ -144,7 +144,7 @@ interface CalendarState {
   error: string | null
   lastFetched: number | null
 
-  fetchAll: () => Promise<void>
+  fetchAll: (force?: boolean) => Promise<void>
   fetchById: (id: string) => Promise<CalendarEvent | null>
   isDetailLoaded: (id: string) => boolean
   createEvent: (data: Omit<CalendarEvent, 'id' | 'createdAt' | 'updatedAt'>) => CalendarEvent
@@ -180,7 +180,12 @@ export const useCalendarStore = create<CalendarState>()((set, get) => ({
   error: null,
   lastFetched: null,
 
-  fetchAll: async () => {
+  fetchAll: async (force = false) => {
+    const state = get()
+    // Skip if a fresh fetch completed in the last 30s, unless force=true.
+    if (!force && state.lastFetched && Date.now() - state.lastFetched < 30_000) {
+      return
+    }
     set({ isLoading: true, error: null })
     try {
       const result = await api.get<{

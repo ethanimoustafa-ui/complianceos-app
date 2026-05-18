@@ -282,7 +282,7 @@ interface RiskState {
   lastFetched: number | null
 
   // Async CRUD
-  fetchAll: () => Promise<void>
+  fetchAll: (force?: boolean) => Promise<void>
   fetchById: (id: string) => Promise<Risk | null>
   create: (data: Omit<Risk, 'id' | 'riskScore' | 'createdAt' | 'updatedAt' | 'history'>) => Promise<Risk>
   update: (id: string, data: Partial<Risk>) => Promise<Risk>
@@ -355,7 +355,12 @@ export const useRiskStore = create<RiskState>()((set, get) => ({
   error: null,
   lastFetched: null,
 
-  fetchAll: async () => {
+  fetchAll: async (force = false) => {
+    const state = get()
+    // Skip if a fresh fetch completed in the last 30s, unless force=true.
+    if (!force && state.lastFetched && Date.now() - state.lastFetched < 30_000) {
+      return
+    }
     set({ isLoading: true, error: null })
     try {
       const result = await api.get<{

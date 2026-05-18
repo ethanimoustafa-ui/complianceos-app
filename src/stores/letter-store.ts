@@ -314,6 +314,7 @@ interface LetterState {
     page?: number
     pageSize?: number
     filters?: Partial<LetterFilters>
+    force?: boolean
   }) => Promise<void>
   fetchById: (id: string) => Promise<Letter | null>
   // Removed: `getNextReference()` — the server assigns the reference on POST.
@@ -375,6 +376,22 @@ export const useLetterStore = create<LetterState>()((set, get) => ({
     const page = opts?.page ?? current.pagination.page
     const pageSize = opts?.pageSize ?? current.pagination.pageSize
     const filters = opts?.filters ? { ...current.filters, ...opts.filters } : current.filters
+
+    // Skip if a fresh fetch completed in the last 30s and no opts override
+    // page/pageSize/filters (which would change the result set). Callers can
+    // pass `force: true` to bypass the TTL.
+    const hasOverride =
+      opts?.page !== undefined ||
+      opts?.pageSize !== undefined ||
+      opts?.filters !== undefined
+    if (
+      !opts?.force &&
+      !hasOverride &&
+      current.lastFetched &&
+      Date.now() - current.lastFetched < 30_000
+    ) {
+      return
+    }
 
     set({ isLoading: true, error: null })
     try {

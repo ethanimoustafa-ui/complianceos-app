@@ -193,7 +193,7 @@ interface ObservationState {
   // `isDetailLoaded(id)` to gate skeleton vs real content on those sections.
   detailLoadedIds: Record<string, true>
 
-  fetchAll: () => Promise<void>
+  fetchAll: (force?: boolean) => Promise<void>
   fetchById: (id: string) => Promise<Observation | null>
   fetchTimeline: (id: string) => Promise<ObservationTimelineEntry[]>
   create: (data: Omit<Observation, 'id' | 'createdAt' | 'updatedAt'>, creator?: User) => Promise<Observation>
@@ -286,7 +286,12 @@ export const useObservationStore = create<ObservationState>()((set, get) => ({
   lastFetched: null,
   detailLoadedIds: {},
 
-  fetchAll: async () => {
+  fetchAll: async (force = false) => {
+    const state = get()
+    // Skip if a fresh fetch completed in the last 30s, unless force=true.
+    if (!force && state.lastFetched && Date.now() - state.lastFetched < 30_000) {
+      return
+    }
     set({ isLoading: true, error: null })
     try {
       const result = await api.get<{

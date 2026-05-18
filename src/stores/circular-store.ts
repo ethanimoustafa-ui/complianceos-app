@@ -243,7 +243,7 @@ interface CircularState {
   lastFetched: number | null
 
   // Async actions
-  fetchAll: () => Promise<void>
+  fetchAll: (force?: boolean) => Promise<void>
   fetchById: (id: string) => Promise<Circular | null>
   create: (
     data: Omit<Circular, 'id' | 'reference' | 'createdAt' | 'updatedAt'> & {
@@ -336,7 +336,12 @@ export const useCircularStore = create<CircularState>()((set, get) => ({
   error: null,
   lastFetched: null,
 
-  fetchAll: async () => {
+  fetchAll: async (force = false) => {
+    const state = get()
+    // Skip if a fresh fetch completed in the last 30s, unless force=true.
+    if (!force && state.lastFetched && Date.now() - state.lastFetched < 30_000) {
+      return
+    }
     set({ isLoading: true, error: null })
     try {
       const result = await api.get<{

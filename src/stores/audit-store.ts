@@ -228,6 +228,7 @@ interface AuditState {
     page?: number
     pageSize?: number
     filters?: Partial<AuditFilters>
+    force?: boolean
   }) => Promise<void>
   fetchById: (id: string) => Promise<Audit | null>
   create: (data: Omit<Audit, 'id' | 'createdAt' | 'updatedAt'>) => Promise<Audit>
@@ -311,6 +312,22 @@ export const useAuditStore = create<AuditState>()((set, get) => ({
     const filters = opts?.filters
       ? { ...current.filters, ...opts.filters }
       : current.filters
+
+    // Skip if a fresh fetch completed in the last 30s and no opts override
+    // page/pageSize/filters (which would change the result set). Callers can
+    // pass `force: true` to bypass the TTL.
+    const hasOverride =
+      opts?.page !== undefined ||
+      opts?.pageSize !== undefined ||
+      opts?.filters !== undefined
+    if (
+      !opts?.force &&
+      !hasOverride &&
+      current.lastFetched &&
+      Date.now() - current.lastFetched < 30_000
+    ) {
+      return
+    }
 
     set({ isLoading: true, error: null })
     try {
