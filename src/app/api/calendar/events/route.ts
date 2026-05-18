@@ -4,7 +4,7 @@ import type { NextRequest } from 'next/server'
 import { requirePerm, requireUser } from '@/lib/api/auth'
 import { handle, NotFound } from '@/lib/api/errors'
 import { ok, paginate } from '@/lib/api/response'
-import { parseJson } from '@/lib/api/validate'
+import { parseJson, parseQuery } from '@/lib/api/validate'
 import { rangeFor } from '@/lib/api/pagination'
 import { cacheTags, revalidate } from '@/lib/api/cache'
 import { writeAudit } from '@/lib/api/audit'
@@ -20,14 +20,13 @@ export const dynamic = 'force-dynamic'
 export async function GET(req: NextRequest) {
   try {
     const { supabase } = await requireUser()
-    const q = ListCalendarEventsQuerySchema.parse(
-      Object.fromEntries(req.nextUrl.searchParams.entries()),
-    )
+    // parseQuery → ValidationFailed (400) on bad input. Direct .parse() would
+    // throw ZodError and collapse to 500 via handle()'s fall-through.
+    const q = parseQuery(req.nextUrl.searchParams, ListCalendarEventsQuerySchema)
 
     let query = supabase
       .from('calendar_events')
       .select(CALENDAR_EVENT_LIST_COLUMNS, { count: 'exact' })
-      .is('deleted_at', null)
     if (q.start_date) query = query.gte('date', q.start_date)
     if (q.end_date) query = query.lte('date', q.end_date)
     if (q.source_type) query = query.eq('related_entity_type', q.source_type)

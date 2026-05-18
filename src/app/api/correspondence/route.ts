@@ -4,9 +4,9 @@ import type { NextRequest } from 'next/server'
 import { requirePerm, requireUser } from '@/lib/api/auth'
 import { handle, NotFound } from '@/lib/api/errors'
 import { ok, paginate } from '@/lib/api/response'
-import { parseJson } from '@/lib/api/validate'
+import { parseJson, parseQuery } from '@/lib/api/validate'
 import { rangeFor } from '@/lib/api/pagination'
-import { cacheTags, revalidate } from '@/lib/api/cache'
+import { cacheTags, revalidateAll } from '@/lib/api/cache'
 import { writeAudit } from '@/lib/api/audit'
 import {
   CreateCorrespondenceSchema,
@@ -23,14 +23,14 @@ export const dynamic = 'force-dynamic'
 export async function GET(req: NextRequest) {
   try {
     const { supabase } = await requireUser()
-    const q = ListCorrespondenceQuerySchema.parse(
-      Object.fromEntries(req.nextUrl.searchParams.entries()),
-    )
+    // parseQuery → ValidationFailed (HTTP 400) on malformed query strings.
+    // A raw `.parse(...)` would throw ZodError → 500 in the generic-error
+    // branch of `handle()`.
+    const q = parseQuery(req.nextUrl.searchParams, ListCorrespondenceQuerySchema)
 
     let query = supabase
       .from('correspondence')
       .select(CORRESPONDENCE_LIST_COLUMNS, { count: 'exact' })
-      .is('deleted_at', null)
 
     if (q.type) query = query.eq('type', q.type)
     if (q.status) query = query.eq('status', q.status)
@@ -74,7 +74,29 @@ export async function GET(req: NextRequest) {
       .range(from, to)
     if (error) throw error
 
-    return ok(paginate(data ?? [], q.page, q.pageSize, count ?? 0), {
+    // Decorate list rows with attachment_count + has_pdf for card rendering.
+    const pageRows = (data ?? []) as Array<Record<string, unknown> & { id: string }>
+    const attachmentCount = new Map<string, number>()
+    if (pageRows.length > 0) {
+      const pageIds = pageRows.map((r) => r.id)
+      const { data: atts } = await supabase
+        .from('correspondence_attachments')
+        .select('correspondence_id')
+        .in('correspondence_id', pageIds)
+      for (const a of ((atts ?? []) as { correspondence_id: string }[])) {
+        attachmentCount.set(
+          a.correspondence_id,
+          (attachmentCount.get(a.correspondence_id) ?? 0) + 1,
+        )
+      }
+    }
+    const decorated = pageRows.map((r) => ({
+      ...r,
+      attachment_count: attachmentCount.get(r.id) ?? 0,
+      has_pdf: (attachmentCount.get(r.id) ?? 0) > 0,
+    }))
+
+    return ok(paginate(decorated, q.page, q.pageSize, count ?? 0), {
       cache: { sMaxAge: 60, staleWhileRevalidate: 300, tags: [cacheTags.correspondence()] },
     })
   } catch (e) {
@@ -129,7 +151,7 @@ export async function POST(req: NextRequest) {
       supabase,
     })
 
-    revalidate(cacheTags.correspondence())
+    revalidateAll([cacheTags.correspondence(), cacheTags.correspondence(created.id)])
     return ok(inserted, { status: 201 })
   } catch (e) {
     return handle(e)

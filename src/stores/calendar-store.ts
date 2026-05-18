@@ -8,16 +8,23 @@
 //
 // SKELETON-LOADING NOTE: render a skeleton when
 //   `isLoading && events.length === 0` (first-fetch). Subsequent refetches
-//   keep the prior list visible.
+//   keep the prior list visible. Detail-page sub-sections may additionally
+//   gate on `isDetailLoaded(id)` so list-fetched rows don't flash incomplete
+//   data while the full payload streams in.
 //
 // COMPAT SHIM: legacy `createEvent` / `updateEvent` / `deleteEvent` were
 // synchronous and callers consume the returned `CalendarEvent`. We keep that
 // sync signature: optimistic local mutation returns the local row immediately,
 // and a background `api.*` call reconciles or rolls back. Errors surface via
 // `error` on the store.
+//
+// Hard-delete restore: server soft-deletes via `deleted_at`, but the client
+// treats the row as gone. We snapshot the row, list index, selection state
+// and detail-loaded flag up front so a failure splices the row back into the
+// exact same slot.
 
 import { create } from 'zustand'
-import type { CalendarEvent, RegulatoryBodyId } from '@/types'
+import type { CalendarEvent, RegulatoryBodyId, Reminder } from '@/types'
 import { api, ApiClientError } from '@/lib/api-client'
 
 type CalendarView = 'month' | 'week' | 'day' | 'agenda'
@@ -51,25 +58,25 @@ interface CalendarEventApiRow {
   updated_at: string
 }
 
-function mapRow(row: CalendarEventApiRow): CalendarEvent {
+function mapRow(row: CalendarEventApiRow, previous?: CalendarEvent): CalendarEvent {
   return {
     id: row.id,
     title: row.title,
     type: row.type,
     date: row.date,
-    startTime: row.start_time ?? undefined,
-    endTime: row.end_time ?? undefined,
-    attendees: row.attendees ?? [],
-    relatedEntityId: row.related_entity_id ?? undefined,
-    relatedEntityType: (row.related_entity_type ?? undefined) as CalendarEvent['relatedEntityType'],
-    reminders: (row.reminders as CalendarEvent['reminders']) ?? [],
-    description: row.description ?? undefined,
-    location: row.location ?? undefined,
-    completed: row.completed ?? undefined,
-    completedAt: row.completed_at ?? undefined,
-    agency: (row.agency ?? null) as CalendarEvent['agency'],
-    severity: (row.severity ?? undefined) as CalendarEvent['severity'],
-    frameworkIds: (row.framework_ids ?? []) as RegulatoryBodyId[],
+    startTime: row.start_time ?? previous?.startTime ?? undefined,
+    endTime: row.end_time ?? previous?.endTime ?? undefined,
+    attendees: row.attendees ?? previous?.attendees ?? [],
+    relatedEntityId: row.related_entity_id ?? previous?.relatedEntityId ?? undefined,
+    relatedEntityType: (row.related_entity_type ?? previous?.relatedEntityType ?? undefined) as CalendarEvent['relatedEntityType'],
+    reminders: (row.reminders as CalendarEvent['reminders']) ?? previous?.reminders ?? [],
+    description: row.description ?? previous?.description ?? undefined,
+    location: row.location ?? previous?.location ?? undefined,
+    completed: row.completed ?? previous?.completed ?? undefined,
+    completedAt: row.completed_at ?? previous?.completedAt ?? undefined,
+    agency: (row.agency ?? previous?.agency ?? null) as CalendarEvent['agency'],
+    severity: (row.severity ?? previous?.severity ?? undefined) as CalendarEvent['severity'],
+    frameworkIds: (row.framework_ids ?? previous?.frameworkIds ?? []) as RegulatoryBodyId[],
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }
@@ -123,6 +130,10 @@ function errorMessage(e: unknown, fallback: string): string {
 interface CalendarState {
   events: CalendarEvent[]
   byId: Record<string, CalendarEvent>
+  // Tracks which IDs have had their full detail payload loaded. Detail-page
+  // sub-sections gate skeleton render on `isDetailLoaded(id)` rather than
+  // `isLoading` so list-fetched rows don't flash incomplete data.
+  detailLoadedIds: Record<string, true>
   selectedEvent: CalendarEvent | null
   selectedDate: Date
   view: CalendarView
@@ -135,9 +146,18 @@ interface CalendarState {
 
   fetchAll: () => Promise<void>
   fetchById: (id: string) => Promise<CalendarEvent | null>
+  isDetailLoaded: (id: string) => boolean
   createEvent: (data: Omit<CalendarEvent, 'id' | 'createdAt' | 'updatedAt'>) => CalendarEvent
   updateEvent: (id: string, data: Partial<CalendarEvent>) => CalendarEvent | null
   deleteEvent: (id: string) => void
+
+  // Optimistic hot mutations — each PATCHes the same row but expresses
+  // intent at the call site and snapshots/rolls back the relevant slice.
+  addAttendee: (id: string, attendee: string) => void
+  removeAttendee: (id: string, attendee: string) => void
+  setReminders: (id: string, reminders: Reminder[]) => void
+  setCompleted: (id: string, completed: boolean) => void
+
   setSelectedEvent: (event: CalendarEvent | null) => void
   setSelectedDate: (date: Date) => void
   setView: (view: CalendarView) => void
@@ -149,6 +169,7 @@ interface CalendarState {
 export const useCalendarStore = create<CalendarState>()((set, get) => ({
   events: [],
   byId: {},
+  detailLoadedIds: {},
   selectedEvent: null,
   selectedDate: new Date(),
   view: 'month',
@@ -169,7 +190,8 @@ export const useCalendarStore = create<CalendarState>()((set, get) => ({
         total: number
         totalPages: number
       }>('/calendar/events', { pageSize: 500 })
-      const events = result.items.map(mapRow)
+      const previousById = get().byId
+      const events = result.items.map((row) => mapRow(row, previousById[row.id]))
       const byId: Record<string, CalendarEvent> = {}
       for (const e of events) byId[e.id] = e
       set({ events, byId, isLoading: false, lastFetched: Date.now() })
@@ -182,10 +204,18 @@ export const useCalendarStore = create<CalendarState>()((set, get) => ({
     set({ isLoading: true, error: null })
     try {
       const row = await api.get<CalendarEventApiRow>(`/calendar/events/${id}`)
-      const event = mapRow(row)
+      const previous = get().byId[id]
+      const event = mapRow(row, previous)
       set((s) => ({
         byId: { ...s.byId, [id]: event },
-        events: s.events.some((e) => e.id === id) ? s.events.map((e) => (e.id === id ? event : e)) : s.events,
+        // Prepend when the row isn't already in `events` so the detail page
+        // doesn't have to await a full `fetchAll` to surface freshly loaded
+        // entities in the list view.
+        events: s.events.some((e) => e.id === id)
+          ? s.events.map((e) => (e.id === id ? event : e))
+          : [event, ...s.events],
+        detailLoadedIds: { ...s.detailLoadedIds, [id]: true },
+        selectedEvent: s.selectedEvent?.id === id ? event : s.selectedEvent,
         isLoading: false,
         lastFetched: Date.now(),
       }))
@@ -196,6 +226,8 @@ export const useCalendarStore = create<CalendarState>()((set, get) => ({
       return null
     }
   },
+
+  isDetailLoaded: (id) => Boolean(get().detailLoadedIds[id]),
 
   createEvent: (data) => {
     const now = new Date().toISOString()
@@ -260,7 +292,8 @@ export const useCalendarStore = create<CalendarState>()((set, get) => ({
     void (async () => {
       try {
         const row = await api.patch<CalendarEventApiRow>(`/calendar/events/${id}`, toUpdatePayload(data))
-        const updated = mapRow(row)
+        const previous = get().byId[id]
+        const updated = mapRow(row, previous)
         set((s) => ({
           events: s.events.map((e) => (e.id === id ? updated : e)),
           byId: { ...s.byId, [id]: updated },
@@ -282,14 +315,23 @@ export const useCalendarStore = create<CalendarState>()((set, get) => ({
   },
 
   deleteEvent: (id) => {
-    const existing = get().byId[id]
-    if (!existing) return
+    // HARD-DELETE snapshot-restore: snapshot the row, its list index, the
+    // selection state and the detail-loaded flag so we can splice everything
+    // back in on failure.
+    const snapshot = get().byId[id]
+    if (!snapshot) return
+    const prevIndex = get().events.findIndex((e) => e.id === id)
+    const wasSelected = get().selectedEvent?.id === id
+    const previousSelected = wasSelected ? get().selectedEvent : null
+    const wasDetailLoaded = Boolean(get().detailLoadedIds[id])
     set((s) => {
       const { [id]: _drop, ...rest } = s.byId
+      const { [id]: _dropDetail, ...restDetail } = s.detailLoadedIds
       return {
         events: s.events.filter((e) => e.id !== id),
         byId: rest,
-        selectedEvent: s.selectedEvent?.id === id ? null : s.selectedEvent,
+        detailLoadedIds: restDetail,
+        selectedEvent: wasSelected ? null : s.selectedEvent,
         isMutating: true,
         error: null,
       }
@@ -303,15 +345,57 @@ export const useCalendarStore = create<CalendarState>()((set, get) => ({
         await api.delete(`/calendar/events/${id}`)
         set({ isMutating: false })
       } catch (e) {
-        // Restore the removed event.
-        set((s) => ({
-          events: [...s.events, existing],
-          byId: { ...s.byId, [id]: existing },
-          error: errorMessage(e, 'Failed to delete calendar event'),
-          isMutating: false,
-        }))
+        set((s) => {
+          const list = [...s.events]
+          const insertAt = prevIndex >= 0 && prevIndex <= list.length ? prevIndex : list.length
+          list.splice(insertAt, 0, snapshot)
+          return {
+            events: list,
+            byId: { ...s.byId, [id]: snapshot },
+            selectedEvent: wasSelected ? previousSelected : s.selectedEvent,
+            detailLoadedIds: wasDetailLoaded
+              ? { ...s.detailLoadedIds, [id]: true }
+              : s.detailLoadedIds,
+            error: errorMessage(e, 'Failed to delete calendar event'),
+            isMutating: false,
+          }
+        })
       }
     })()
+  },
+
+  // ── Optimistic hot mutations ─────────────────────────────────────────────
+
+  addAttendee: (id, attendee) => {
+    const existing = get().byId[id]
+    if (!existing) return
+    if (existing.attendees.includes(attendee)) return
+    const next = [...existing.attendees, attendee]
+    get().updateEvent(id, { attendees: next })
+  },
+
+  removeAttendee: (id, attendee) => {
+    const existing = get().byId[id]
+    if (!existing) return
+    const next = existing.attendees.filter((a) => a !== attendee)
+    if (next.length === existing.attendees.length) return
+    get().updateEvent(id, { attendees: next })
+  },
+
+  setReminders: (id, reminders) => {
+    const existing = get().byId[id]
+    if (!existing) return
+    get().updateEvent(id, { reminders })
+  },
+
+  setCompleted: (id, completed) => {
+    const existing = get().byId[id]
+    if (!existing) return
+    const now = new Date().toISOString()
+    get().updateEvent(id, {
+      completed,
+      completedAt: completed ? now : undefined,
+    })
   },
 
   setSelectedEvent: (event) => set({ selectedEvent: event }),

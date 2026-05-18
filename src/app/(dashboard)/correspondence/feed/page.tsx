@@ -147,6 +147,12 @@ export default function CorrespondenceFeedPage() {
   const [correspondenceFilter, setCorrespondenceFilter] = useState<'active' | 'archived' | 'all'>('active')
   const [typeFilter, setTypeFilter] = useState<Correspondence['type'] | 'all'>('all')
 
+  // Mutation busy states (parity with circulars/policies — every save
+  // surfaces an inline spinner and disables to prevent double-fire).
+  const [sendBusy, setSendBusy] = useState(false)
+  const [saveDraftBusy, setSaveDraftBusy] = useState(false)
+  const [archiveBusy, setArchiveBusy] = useState(false)
+
   const showToast = useCallback((message: string) => {
     setToastMessage(message)
   }, [])
@@ -305,11 +311,25 @@ export default function CorrespondenceFeedPage() {
     setIsLetterDetailOpen(true)
   }
 
-  const handleArchive = (letterId: string) => {
+  // Defensive read pattern: the byId map wins, falling back to the array
+  // index, then the local `selectedLetter` state. Avoids the "Not Found"
+  // flash on freshly-created rows.
+  const detailLetter: Correspondence | null = selectedLetter
+    ? (correspondenceStore.byId[selectedLetter.id]
+        ?? correspondenceStore.correspondence.find((l) => l.id === selectedLetter.id)
+        ?? selectedLetter)
+    : null
+
+  const handleArchive = async (letterId: string) => {
     const letter = correspondenceStore.correspondence.find(l => l.id === letterId)
     if (letter) {
-      correspondenceStore.update(letterId, { archived: !letter.archived })
-      showToast(letter.archived ? t('correspondence.letterUnarchived') : t('correspondence.letterArchived'))
+      setArchiveBusy(true)
+      try {
+        await correspondenceStore.update(letterId, { archived: !letter.archived })
+        showToast(letter.archived ? t('correspondence.letterUnarchived') : t('correspondence.letterArchived'))
+      } finally {
+        setArchiveBusy(false)
+      }
     }
     setIsLetterDetailOpen(false)
   }
@@ -857,51 +877,65 @@ export default function CorrespondenceFeedPage() {
           </div>
           <div className={`flex gap-3 mt-6`}>
             <button
-              onClick={() => {
+              disabled={sendBusy || saveDraftBusy}
+              aria-busy={sendBusy || undefined}
+              onClick={async () => {
                 if (!newCorrespondenceSubject || !newCorrespondenceTo) {
                   showToast(t('correspondence.fillRequiredFields'))
                   return
                 }
-                correspondenceStore.create({
-                  subject: newCorrespondenceSubject,
-                  from: authStore.user?.name || 'Compliance Department',
-                  to: [newCorrespondenceTo],
-                  date: new Date().toISOString(),
-                  type: newCorrespondenceType,
-                  assignee: newCorrespondenceAssignee || undefined,
-                  status: 'sent',
-                  body: newCorrespondenceBody,
-                  attachments: [],
-                  archived: false,
-                })
-                setNewCorrespondenceTo('')
-                setNewCorrespondenceSubject('')
-                setNewCorrespondenceBody('')
-                setNewCorrespondenceType('internal')
-                setNewCorrespondenceAssignee('')
-                setIsNewCorrespondenceOpen(false)
-                showToast(t('correspondence.correspondenceSent'))
-              }}
-              className={`flex-1 bg-emerald-600 text-white py-3 rounded-lg font-bold hover:bg-emerald-700 transition-colors flex items-center justify-center gap-2 cursor-pointer`}
-            >
-              <Icon icon="lucide:send" className="text-lg" />
-              {t('correspondence.send')}
-            </button>
-            <button
-              onClick={() => {
-                if (newCorrespondenceSubject) {
-                  correspondenceStore.create({
+                setSendBusy(true)
+                try {
+                  await correspondenceStore.create({
                     subject: newCorrespondenceSubject,
                     from: authStore.user?.name || 'Compliance Department',
-                    to: newCorrespondenceTo ? [newCorrespondenceTo] : [],
+                    to: [newCorrespondenceTo],
                     date: new Date().toISOString(),
                     type: newCorrespondenceType,
                     assignee: newCorrespondenceAssignee || undefined,
-                    status: 'draft',
+                    status: 'sent',
                     body: newCorrespondenceBody,
                     attachments: [],
                     archived: false,
                   })
+                  setNewCorrespondenceTo('')
+                  setNewCorrespondenceSubject('')
+                  setNewCorrespondenceBody('')
+                  setNewCorrespondenceType('internal')
+                  setNewCorrespondenceAssignee('')
+                  setIsNewCorrespondenceOpen(false)
+                  showToast(t('correspondence.correspondenceSent'))
+                } finally {
+                  setSendBusy(false)
+                }
+              }}
+              className={`flex-1 bg-emerald-600 text-white py-3 rounded-lg font-bold hover:bg-emerald-700 transition-colors flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60`}
+            >
+              <Icon icon={sendBusy ? 'lucide:loader-2' : 'lucide:send'} className={`text-lg ${sendBusy ? 'animate-spin' : ''}`} />
+              {t('correspondence.send')}
+            </button>
+            <button
+              disabled={sendBusy || saveDraftBusy}
+              aria-busy={saveDraftBusy || undefined}
+              onClick={async () => {
+                if (newCorrespondenceSubject) {
+                  setSaveDraftBusy(true)
+                  try {
+                    await correspondenceStore.create({
+                      subject: newCorrespondenceSubject,
+                      from: authStore.user?.name || 'Compliance Department',
+                      to: newCorrespondenceTo ? [newCorrespondenceTo] : [],
+                      date: new Date().toISOString(),
+                      type: newCorrespondenceType,
+                      assignee: newCorrespondenceAssignee || undefined,
+                      status: 'draft',
+                      body: newCorrespondenceBody,
+                      attachments: [],
+                      archived: false,
+                    })
+                  } finally {
+                    setSaveDraftBusy(false)
+                  }
                 }
                 setNewCorrespondenceTo('')
                 setNewCorrespondenceSubject('')
@@ -911,8 +945,9 @@ export default function CorrespondenceFeedPage() {
                 setIsNewCorrespondenceOpen(false)
                 showToast(t('correspondence.saveAsDraft'))
               }}
-              className="px-6 bg-slate-100 text-slate-700 py-3 rounded-lg font-bold hover:bg-slate-200 transition-colors cursor-pointer"
+              className="px-6 bg-slate-100 text-slate-700 py-3 rounded-lg font-bold hover:bg-slate-200 transition-colors cursor-pointer disabled:opacity-60 inline-flex items-center gap-2"
             >
+              {saveDraftBusy && <Icon icon="lucide:loader-2" className="animate-spin" />}
               {t('correspondence.saveAsDraft')}
             </button>
           </div>
@@ -1087,36 +1122,39 @@ export default function CorrespondenceFeedPage() {
       <Modal
         isOpen={isLetterDetailOpen}
         onClose={() => setIsLetterDetailOpen(false)}
-        title={selectedLetter?.subject || t('correspondence.letterDetails')}
-        subtitle={selectedLetter ? `REF: ${selectedLetter.reference || selectedLetter.id}` : undefined}
+        title={detailLetter?.subject || t('correspondence.letterDetails')}
+        subtitle={detailLetter ? `REF: ${detailLetter.reference || detailLetter.id}` : undefined}
         size="lg"
       >
-        {selectedLetter && (
+        {detailLetter && (
           <div className="space-y-4">
             <div className={`bg-slate-50 p-4 rounded-lg`}>
               <p className="text-xs font-bold text-slate-500 uppercase mb-1">{t('common.status')}</p>
-              <p className="text-sm font-bold text-slate-900">{selectedLetter.status === 'sent' ? t('correspondence.sentToSama') : t('common.draft')}</p>
+              <p className="text-sm font-bold text-slate-900">{detailLetter.status === 'sent' ? t('correspondence.sentToSama') : t('common.draft')}</p>
             </div>
             <div className={`bg-slate-50 p-4 rounded-lg`}>
               <p className="text-xs font-bold text-slate-500 uppercase mb-1">{t('common.date')}</p>
-              <p className="text-sm font-bold text-slate-900">{formatDate(selectedLetter.date)}</p>
+              <p className="text-sm font-bold text-slate-900">{formatDate(detailLetter.date)}</p>
             </div>
             <div className={`bg-slate-50 p-4 rounded-lg`}>
               <p className="text-xs font-bold text-slate-500 uppercase mb-1">{t('correspondence.content')}</p>
-              <p className="text-sm text-slate-700">{selectedLetter.body}</p>
+              <p className="text-sm text-slate-700">{detailLetter.body}</p>
             </div>
-            {selectedLetter.assignee && (
+            {detailLetter.assignee && (
               <div className={`bg-emerald-50 p-4 rounded-lg`}>
                 <p className="text-xs font-bold text-emerald-600 uppercase mb-1">{t('correspondence.assignedTo')}</p>
-                <p className="text-sm font-bold text-slate-900">{selectedLetter.assignee}</p>
+                <p className="text-sm font-bold text-slate-900">{detailLetter.assignee}</p>
               </div>
             )}
             <div className={`flex gap-3 pt-4`}>
               <button
-                onClick={() => handleArchive(selectedLetter.id)}
-                className="flex-1 bg-slate-100 text-slate-700 py-3 rounded-lg font-bold hover:bg-slate-200 transition-colors cursor-pointer"
+                onClick={() => handleArchive(detailLetter.id)}
+                disabled={archiveBusy}
+                aria-busy={archiveBusy || undefined}
+                className="flex-1 bg-slate-100 text-slate-700 py-3 rounded-lg font-bold hover:bg-slate-200 transition-colors cursor-pointer disabled:opacity-60 inline-flex items-center justify-center gap-2"
               >
-                {selectedLetter.archived ? t('correspondence.unarchive') : t('correspondence.archive')}
+                {archiveBusy && <Icon icon="lucide:loader-2" className="animate-spin" />}
+                {detailLetter.archived ? t('correspondence.unarchive') : t('correspondence.archive')}
               </button>
             </div>
           </div>

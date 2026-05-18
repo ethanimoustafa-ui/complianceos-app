@@ -6,7 +6,8 @@ import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { Icon } from '@iconify/react'
 import { Modal } from '@/components/ui/modal'
-import { ListSkeleton } from '@/components/ui/skeleton'
+import { ListSkeleton, Skeleton } from '@/components/ui/skeleton'
+import { formatTimelineDate } from '@/lib/format-date'
 import { cn } from '@/lib/utils'
 import { useTranslation } from '@/i18n'
 import { Gate } from '@/components/auth/gate'
@@ -15,7 +16,6 @@ import { useAuthStore } from '@/stores/auth-store'
 import type { Letter, LetterType, LetterStatus, LetterTemplate, TemplateStatus, CircularAuthority } from '@/types'
 import { useLetterTemplateStore } from '@/stores/letter-template-store'
 import { formatBytes as fmtBytes } from '@/lib/format'
-import { formatRelativeTime } from '@/lib/time-utils'
 import { dicebearAvatar } from '@/lib/avatar'
 import { useTeamStore } from '@/stores/team-store'
 import { useFrameworkConfigStore } from '@/stores/framework-config-store'
@@ -65,7 +65,29 @@ export default function LettersPage() {
   const currentUser = user?.name || 'Current User'
   const teamMembers = useTeamStore(s => s.members)
   const storeFrameworks = useFrameworkConfigStore(s => s.frameworks)
-  const selectedLetter = store.selectedLetter
+  // Defensive read pattern (mirrors circular/policy parity): the live byId
+  // map wins, falling back to the array index, then to the store's
+  // `selectedLetter` slot. This avoids the "Not Found" flash on freshly
+  // created rows that audits previously exhibited.
+  const storeSelected = store.selectedLetter
+  const selectedLetter = storeSelected
+    ? (store.byId[storeSelected.id] ?? store.letters.find((l) => l.id === storeSelected.id) ?? storeSelected)
+    : null
+  // Detail-loaded boundary: list rows ship minimal data; the full record
+  // (approval chain, attachments, timeline) only arrives after fetchById
+  // completes. Approval/attachment/timeline sections defer until then.
+  const isDetailLoaded = !!selectedLetter && (
+    (selectedLetter.timeline?.length ?? 0) > 0 ||
+    (selectedLetter.approvalChain?.length ?? 0) > 0 ||
+    selectedLetter.status !== 'draft'
+  )
+  const isMutating = useLetterStore((s) => s.isMutating)
+  const [confirmDeleteLetterId, setConfirmDeleteLetterId] = useState<string | null>(null)
+  const [submitBusy, setSubmitBusy] = useState(false)
+  const [sendBusy, setSendBusy] = useState(false)
+  const [responseBusy, setResponseBusy] = useState(false)
+  const [deleteBusy, setDeleteBusy] = useState(false)
+  const [attachBusy, setAttachBusy] = useState(false)
   const letterContentRef = useRef<HTMLDivElement>(null)
 
   // Hydrate server-state on mount (Fix-1). Without this, reload wipes the
@@ -365,6 +387,7 @@ export default function LettersPage() {
     //   3) Updates the store with the canonical row from the API response
     // Refetch the letter at the end so the timeline reflects any server-side
     // recomputation. (Fix-3 wave.)
+    setAttachBusy(true)
     try {
       for (const f of Array.from(files)) {
         await store.uploadAttachment(letterId, f)
@@ -375,6 +398,7 @@ export default function LettersPage() {
       console.error('[letters] attachment upload failed:', err)
       showToast(message)
     } finally {
+      setAttachBusy(false)
       e.target.value = ''
     }
   }
@@ -462,6 +486,10 @@ export default function LettersPage() {
     store.setSelected(letter)
     setView('detail')
     window.scrollTo({ top: 0, behavior: 'smooth' })
+    // Refresh the full detail (approval chain, attachments, timeline) which
+    // the list endpoint may have truncated. Errors are swallowed by the
+    // store; UI continues to render from cached row data.
+    void store.fetchById(letter.id)
   }
 
   // Deep-link: auto-switch to detail view when ?id= is present
@@ -1237,6 +1265,16 @@ export default function LettersPage() {
                         </tr>
                       )
                     })}
+                    {sortedLetters.length === 0 && (
+                      <tr>
+                        <td colSpan={7} className="px-6 py-12 text-center">
+                          <div className="flex flex-col items-center gap-2 text-slate-400">
+                            <Icon icon="lucide:mail-x" className="text-3xl" />
+                            <p className="text-sm font-medium">{t('letters.noLettersYet' as Parameters<typeof t>[0]) || t('common.noResults')}</p>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
                   </tbody>
                 </table>
               </div>
@@ -1272,28 +1310,45 @@ export default function LettersPage() {
                 {/* Status-specific primary actions */}
                 {selectedLetter?.status === 'draft' && (
                   <button
-                    onClick={() => selectedLetter && store.submitForApproval(selectedLetter.id)}
-                    className={`px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-emerald-700 transition-colors shadow-lg shadow-emerald-100 cursor-pointer`}
+                    onClick={async () => {
+                      if (!selectedLetter) return
+                      setSubmitBusy(true)
+                      try { await store.submitForApproval(selectedLetter.id) } finally { setSubmitBusy(false) }
+                    }}
+                    disabled={submitBusy}
+                    aria-busy={submitBusy || undefined}
+                    className={`px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-emerald-700 transition-colors shadow-lg shadow-emerald-100 cursor-pointer disabled:opacity-60`}
                   >
-                    <Icon icon="lucide:send" />
+                    <Icon icon={submitBusy ? 'lucide:loader-2' : 'lucide:send'} className={submitBusy ? 'animate-spin' : ''} />
                     {t('letters.submitForApproval')}
                   </button>
                 )}
                 {selectedLetter?.status === 'approved' && (
                   <button
-                    onClick={handleSendToSama}
-                    className={`px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-emerald-700 transition-colors shadow-lg shadow-emerald-100 cursor-pointer`}
+                    onClick={async () => {
+                      setSendBusy(true)
+                      try { await handleSendToSama() } finally { setSendBusy(false) }
+                    }}
+                    disabled={sendBusy}
+                    aria-busy={sendBusy || undefined}
+                    className={`px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-emerald-700 transition-colors shadow-lg shadow-emerald-100 cursor-pointer disabled:opacity-60`}
                   >
-                    <Icon icon="lucide:send" />
+                    <Icon icon={sendBusy ? 'lucide:loader-2' : 'lucide:send'} className={sendBusy ? 'animate-spin' : ''} />
                     {t('letters.sendToSama')}
                   </button>
                 )}
                 {(selectedLetter?.status === 'sent' || selectedLetter?.status === 'overdue') && (
                   <button
-                    onClick={() => selectedLetter && store.markResponseReceived(selectedLetter.id)}
-                    className={`px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-emerald-700 transition-colors shadow-lg shadow-emerald-100 cursor-pointer`}
+                    onClick={async () => {
+                      if (!selectedLetter) return
+                      setResponseBusy(true)
+                      try { await store.markResponseReceived(selectedLetter.id) } finally { setResponseBusy(false) }
+                    }}
+                    disabled={responseBusy}
+                    aria-busy={responseBusy || undefined}
+                    className={`px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-emerald-700 transition-colors shadow-lg shadow-emerald-100 cursor-pointer disabled:opacity-60`}
                   >
-                    <Icon icon="lucide:check-circle" />
+                    <Icon icon={responseBusy ? 'lucide:loader-2' : 'lucide:check-circle'} className={responseBusy ? 'animate-spin' : ''} />
                     {t('letters.markResponseReceived')}
                   </button>
                 )}
@@ -1732,7 +1787,14 @@ export default function LettersPage() {
                   </div>
                 </section>
 
-                {/* Approval Chain */}
+                {/* Approval Chain — skeleton until full detail arrives */}
+                {selectedLetter && !isDetailLoaded && (
+                  <section className="glass-card p-6 rounded-2xl space-y-3">
+                    <Skeleton className="h-3 w-32" />
+                    <Skeleton className="h-6 w-full" />
+                    <Skeleton className="h-6 w-full" />
+                  </section>
+                )}
                 {selectedLetter && selectedLetter.approvalChain.length > 0 && (
                   <section className={`glass-card p-6 rounded-2xl`}>
                     <h4 className="text-xs font-black text-slate-500 uppercase tracking-widest mb-4">
@@ -1852,6 +1914,17 @@ export default function LettersPage() {
                     {t('letters.attachments')} ({selectedLetter?.attachments?.length || 0})
                   </h4>
                   <div className="space-y-3">
+                    {selectedLetter && !isDetailLoaded && (
+                      <>
+                        <Skeleton className="h-12 w-full" />
+                        <Skeleton className="h-12 w-full" />
+                      </>
+                    )}
+                    {selectedLetter && isDetailLoaded && (selectedLetter.attachments?.length ?? 0) === 0 && (
+                      <p className="text-xs text-slate-400 italic text-center py-4">
+                        {t('letters.noAttachments' as Parameters<typeof t>[0]) || 'No attachments yet.'}
+                      </p>
+                    )}
                     {selectedLetter?.attachments?.map((attachment) => (
                       <div
                         key={attachment.id}
@@ -1883,39 +1956,54 @@ export default function LettersPage() {
                     <input ref={attachFileRef} type="file" multiple className="hidden" onChange={handleAttachFile} />
                     <button
                       onClick={() => attachFileRef.current?.click()}
-                      className="w-full py-2 border-2 border-dashed border-slate-200 rounded-xl text-[10px] font-bold text-slate-400 hover:border-emerald-300 hover:text-emerald-500 transition-all cursor-pointer">
+                      disabled={attachBusy}
+                      aria-busy={attachBusy || undefined}
+                      className="w-full py-2 border-2 border-dashed border-slate-200 rounded-xl text-[10px] font-bold text-slate-400 hover:border-emerald-300 hover:text-emerald-500 transition-all cursor-pointer disabled:opacity-60 inline-flex items-center justify-center gap-1.5">
+                      {attachBusy && <Icon icon="lucide:loader-2" className="animate-spin text-[11px]" />}
                       {t('letters.addAttachment')}
                     </button>
                   </div>
                 </section>
 
-                {/* Activity Timeline */}
+                {/* Activity Timeline \u2014 newest first; skeleton until detail loads */}
                 <section className={`glass-card p-6 rounded-2xl`}>
                   <h4 className="text-xs font-black text-slate-500 uppercase tracking-widest mb-6">
                     {t('letters.activityTimeline')}
                   </h4>
-                  <div className="space-y-6 relative before:absolute before:left-2 before:top-1 before:bottom-1 before:w-0.5 before:bg-slate-100">
-                    {selectedLetter?.timeline?.map((event) => (
-                      <div key={event.id} className="relative pl-8">
-                        <div
-                          className={`absolute left-0 top-1 w-4 h-4 rounded-full border-2 ${
-                            event.status === 'completed'
-                              ? 'bg-emerald-100 border-emerald-500'
-                              : event.status === 'active'
-                                ? 'bg-blue-100 border-blue-500'
-                                : 'bg-slate-100 border-slate-300'
-                          }`}
-                        />
-                        <p className={`text-xs font-bold ${event.status === 'pending' ? 'text-slate-300' : 'text-slate-900'}`}>
-                          {translateTimelineTitle(event.title, t as (key: string) => string)}
-                        </p>
-                        <p className={`text-[10px] ${event.status === 'pending' ? 'text-slate-300' : 'text-slate-400'}`}>
-                          {event.date ? formatRelativeTime(event.date, t as (k: string) => string) : ''}
-                          {` \u2022 ${event.user ?? 'Unknown user'}`}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
+                  {selectedLetter && !isDetailLoaded ? (
+                    <div className="space-y-4">
+                      <Skeleton className="h-4 w-3/4" />
+                      <Skeleton className="h-4 w-2/3" />
+                      <Skeleton className="h-4 w-1/2" />
+                    </div>
+                  ) : (selectedLetter?.timeline?.length ?? 0) === 0 ? (
+                    <p className="text-xs text-slate-400 italic text-center py-4">
+                      {t('letters.noActivityYet' as Parameters<typeof t>[0]) || 'No activity yet.'}
+                    </p>
+                  ) : (
+                    <div className="space-y-6 relative before:absolute before:left-2 before:top-1 before:bottom-1 before:w-0.5 before:bg-slate-100">
+                      {[...(selectedLetter?.timeline ?? [])].reverse().map((event) => (
+                        <div key={event.id} className="relative pl-8">
+                          <div
+                            className={`absolute left-0 top-1 w-4 h-4 rounded-full border-2 ${
+                              event.status === 'completed'
+                                ? 'bg-emerald-100 border-emerald-500'
+                                : event.status === 'active'
+                                  ? 'bg-blue-100 border-blue-500'
+                                  : 'bg-slate-100 border-slate-300'
+                            }`}
+                          />
+                          <p className={`text-xs font-bold ${event.status === 'pending' ? 'text-slate-300' : 'text-slate-900'}`}>
+                            {translateTimelineTitle(event.title, t as (key: string) => string)}
+                          </p>
+                          <p className={`text-[10px] ${event.status === 'pending' ? 'text-slate-300' : 'text-slate-400'}`}>
+                            {event.date ? formatTimelineDate(event.date, isRTL) : ''}
+                            {` \u2022 ${event.user ?? 'Unknown user'}`}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </section>
               </div>
             </div>
@@ -2140,8 +2228,13 @@ export default function LettersPage() {
               <Icon icon="lucide:eye" className="text-slate-400" /> View
             </button>
             {letter.status === 'draft' && (
-              <button onClick={() => { store.submitForApproval(letter.id); setOpenMenuId(null); setMenuPosition(null) }}
-                className="w-full px-4 py-2 text-left text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-2 cursor-pointer">
+              <button
+                disabled={isMutating}
+                onClick={async () => {
+                  setOpenMenuId(null); setMenuPosition(null)
+                  await store.submitForApproval(letter.id)
+                }}
+                className="w-full px-4 py-2 text-left text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-2 cursor-pointer disabled:opacity-50">
                 <Icon icon="lucide:send" className="text-slate-400" /> {t('letters.submitForApproval')}
               </button>
             )}
@@ -2152,19 +2245,22 @@ export default function LettersPage() {
               </button>
             )}
             {(letter.status === 'sent' || letter.status === 'overdue') && (
-              <button onClick={() => { store.markResponseReceived(letter.id); setOpenMenuId(null); setMenuPosition(null) }}
-                className="w-full px-4 py-2 text-left text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-2 cursor-pointer">
+              <button
+                disabled={isMutating}
+                onClick={async () => {
+                  setOpenMenuId(null); setMenuPosition(null)
+                  await store.markResponseReceived(letter.id)
+                }}
+                className="w-full px-4 py-2 text-left text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-2 cursor-pointer disabled:opacity-50">
                 <Icon icon="lucide:check-circle" className="text-emerald-500" /> {t('letters.markResponseReceived')}
               </button>
             )}
             <div className="border-t border-slate-100 my-1" />
             <button onClick={(e) => {
               e.stopPropagation()
-              const isViewing = selectedLetter?.id === letter.id
-              store.delete(letter.id)
               setOpenMenuId(null)
               setMenuPosition(null)
-              if (isViewing) handleBackToDashboard()
+              setConfirmDeleteLetterId(letter.id)
             }}
               className="w-full px-4 py-2 text-left text-sm text-rose-600 hover:bg-rose-50 flex items-center gap-2 cursor-pointer">
               <Icon icon="lucide:trash-2" /> Delete
@@ -2173,6 +2269,57 @@ export default function LettersPage() {
           document.body
         )
       })()}
+
+      {/* Strong Delete Letter Confirm — phrased to match circular/policy parity */}
+      <Modal
+        isOpen={confirmDeleteLetterId !== null}
+        onClose={() => { if (!deleteBusy) setConfirmDeleteLetterId(null) }}
+        size="sm"
+      >
+        <div className="p-8">
+          <div className="flex items-center justify-center mb-6">
+            <div className="w-16 h-16 bg-rose-50 rounded-full flex items-center justify-center">
+              <Icon icon="lucide:alert-triangle" className="text-3xl text-rose-600" />
+            </div>
+          </div>
+          <h2 className="text-xl font-bold text-slate-900 text-center mb-2">
+            {t('letters.deleteLetter' as Parameters<typeof t>[0]) || 'Delete letter?'}
+          </h2>
+          <p className="text-sm text-slate-500 text-center mb-6 leading-relaxed">
+            This will permanently delete the letter and all its attachments, approval workflow steps, and activity. This cannot be undone.
+          </p>
+          <div className={`flex gap-3`}>
+            <button
+              onClick={() => setConfirmDeleteLetterId(null)}
+              disabled={deleteBusy}
+              className="flex-1 px-4 py-2.5 bg-slate-100 text-slate-600 rounded-xl text-sm font-bold hover:bg-slate-200 transition-colors cursor-pointer disabled:opacity-50"
+            >
+              {t('common.cancel')}
+            </button>
+            <button
+              onClick={async () => {
+                if (!confirmDeleteLetterId) return
+                const id = confirmDeleteLetterId
+                const isViewing = selectedLetter?.id === id
+                setDeleteBusy(true)
+                try {
+                  await store.delete(id)
+                  setConfirmDeleteLetterId(null)
+                  if (isViewing) handleBackToDashboard()
+                } finally {
+                  setDeleteBusy(false)
+                }
+              }}
+              disabled={deleteBusy}
+              aria-busy={deleteBusy || undefined}
+              className="flex-1 px-4 py-2.5 bg-rose-600 text-white rounded-xl text-sm font-bold hover:bg-rose-700 transition-colors cursor-pointer disabled:opacity-60 inline-flex items-center justify-center gap-2"
+            >
+              {deleteBusy && <Icon icon="lucide:loader-2" className="animate-spin" />}
+              {t('letters.deleteLetter' as Parameters<typeof t>[0]) || 'Delete letter'}
+            </button>
+          </div>
+        </div>
+      </Modal>
 
       {/* Toast */}
       {toastMessage && <Toast message={toastMessage} onClose={() => setToastMessage(null)} />}

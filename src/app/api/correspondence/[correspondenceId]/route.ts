@@ -114,13 +114,7 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
     const { supabase, user, profile } = await requirePerm('delete')
     await assertCorrespondenceExists(supabase, correspondenceId)
 
-    const { error } = await supabase
-      .from('correspondence')
-      .update({ deleted_at: new Date().toISOString() })
-      .eq('id', correspondenceId)
-      .is('deleted_at', null)
-    if (error) throw error
-
+    // Audit FIRST — append-only trail survives even if cascade is interrupted.
     await writeAudit({
       actor_id: user.id,
       actor_name: profile.name ?? profile.email ?? user.id,
@@ -129,6 +123,13 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
       entity_id: correspondenceId,
       supabase,
     })
+
+    // Hard-delete — FK cascade (migration 046) clears correspondence_attachments.
+    const { error } = await supabase
+      .from('correspondence')
+      .delete()
+      .eq('id', correspondenceId)
+    if (error) throw error
 
     revalidateAll([cacheTags.correspondence(), cacheTags.correspondence(correspondenceId)])
     return ok({ id: correspondenceId, deleted: true })

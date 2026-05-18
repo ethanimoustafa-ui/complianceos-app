@@ -32,7 +32,11 @@ export async function GET(_req: NextRequest, { params }: Params) {
       .order('uploaded_at', { ascending: false })
     if (error) throw error
     return ok(data ?? [], {
-      cache: { sMaxAge: 60, tags: [cacheTags.letterAttachments(letterId)] },
+      cache: {
+        sMaxAge: 60,
+        staleWhileRevalidate: 300,
+        tags: [cacheTags.letterAttachments(letterId)],
+      },
     })
   } catch (e) {
     return handle(e)
@@ -75,6 +79,7 @@ export async function POST(req: NextRequest, { params }: Params) {
     })
 
     revalidateAll([
+      cacheTags.letters(),
       cacheTags.letters(letterId),
       cacheTags.letterAttachments(letterId),
     ])

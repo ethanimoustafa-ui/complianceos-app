@@ -3,14 +3,30 @@
 // Read `.planning/09-store-pattern.md` before editing.
 // Endpoints: GET/POST /api/correspondence,
 //            GET/PATCH/DELETE /api/correspondence/[correspondenceId]
+//            POST /api/correspondence/[correspondenceId]/archive
+//            POST /api/correspondence/[correspondenceId]/unarchive
+//            GET/POST /api/correspondence/[correspondenceId]/attachments
+//            DELETE  /api/correspondence/[correspondenceId]/attachments/[attachmentId]
 //
 // Reference numbers are server-generated on POST.
+//
+// CIRCULAR PARITY (matches src/stores/circular-store.ts patterns):
+//   - `detailLoadedIds` + `isDetailLoaded(id)` — selectors can decide whether
+//     to render a skeleton or display cached detail while a refetch lands.
+//   - Hard-delete keeps an optimistic snapshot so failures restore the row at
+//     its original index.
+//   - `fetchById` prepends to `correspondence[]` when the row isn't already in
+//     the list (deep-linked detail page on a fresh tab).
+//   - Hot mutations (`update`, `archive`, `unarchive`, attachment add/remove)
+//     mutate `byId` / `correspondence` / `selectedCorrespondence` immediately
+//     and roll back on server error.
 //
 // SKELETON-LOADING NOTE: render skeleton when
 // `isLoading && correspondence.length === 0` (first fetch).
 
 import { create } from 'zustand'
-import type { Correspondence, PaginationState, SortState } from '@/types'
+import { nanoid } from 'nanoid'
+import type { Attachment, Correspondence, PaginationState, SortState } from '@/types'
 import { api, ApiClientError } from '@/lib/api-client'
 
 interface CorrespondenceFilters {
@@ -31,13 +47,39 @@ interface CorrespondenceApiRow {
   date: string
   type: string
   status: 'draft' | 'sent' | 'received'
-  body?: string
+  body?: string | null
   thread_id: string | null
   archived: boolean
   assignee_id: string | null
-  framework_ids?: string[]
+  framework_ids?: string[] | null
   created_at: string
   updated_at: string
+  // Detail-only:
+  attachments?: AttachmentApiRow[]
+  thread?: unknown[]
+}
+
+interface AttachmentApiRow {
+  id: string
+  correspondence_id: string
+  name: string
+  storage_path: string
+  type: string | null
+  size: number | null
+  uploaded_at: string
+  uploaded_by: string | null
+}
+
+function mapAttachment(row: AttachmentApiRow): Attachment {
+  return {
+    id: row.id,
+    name: row.name,
+    url: row.storage_path,
+    type: (row.type ?? 'application/octet-stream') as Attachment['type'],
+    size: row.size ?? 0,
+    uploadedAt: row.uploaded_at,
+    uploadedBy: row.uploaded_by ?? '',
+  }
 }
 
 function mapRow(row: CorrespondenceApiRow, previous?: Correspondence): Correspondence {
@@ -50,7 +92,9 @@ function mapRow(row: CorrespondenceApiRow, previous?: Correspondence): Correspon
     type: row.type,
     status: row.status,
     body: row.body ?? previous?.body ?? '',
-    attachments: previous?.attachments ?? [],
+    attachments: row.attachments
+      ? row.attachments.map(mapAttachment)
+      : previous?.attachments ?? [],
     threadId: row.thread_id ?? undefined,
     archived: row.archived,
     reference: row.reference,
@@ -115,6 +159,12 @@ interface CorrespondenceState {
   error: string | null
   lastFetched: number | null
 
+  // Detail-loaded tracking — set by `fetchById` only. Lets selectors decide
+  // whether the nested arrays (`attachments`) are authoritative or stale from
+  // a list-only fetch.
+  detailLoadedIds: Record<string, true>
+  isDetailLoaded: (id: string) => boolean
+
   fetchAll: (opts?: {
     page?: number
     pageSize?: number
@@ -126,6 +176,21 @@ interface CorrespondenceState {
   ) => Promise<Correspondence>
   update: (id: string, data: Partial<Correspondence>) => Promise<Correspondence>
   delete: (id: string) => Promise<void>
+
+  // Workflow / hot mutations (optimistic).
+  archive: (id: string) => Promise<void>
+  unarchive: (id: string) => Promise<void>
+
+  // Attachments — optimistic add/remove. `addAttachment` accepts an
+  // already-uploaded storage path; the caller (component) is responsible for
+  // putting bytes into the `correspondence_attachments` Supabase Storage
+  // bucket before registering the metadata row.
+  addAttachment: (
+    id: string,
+    file: { name: string; storage_path: string; type?: string; size?: number },
+  ) => Promise<Attachment | null>
+  removeAttachment: (correspondenceId: string, attachmentId: string) => Promise<void>
+
   setFilters: (filters: CorrespondenceFilters) => void
   clearFilters: () => void
   setSelected: (correspondence: Correspondence | null) => void
@@ -158,6 +223,9 @@ export const useCorrespondenceStore = create<CorrespondenceState>()((set, get) =
   isMutating: false,
   error: null,
   lastFetched: null,
+  detailLoadedIds: {},
+
+  isDetailLoaded: (id) => Boolean(get().detailLoadedIds[id]),
 
   fetchAll: async (opts) => {
     const current = get()
@@ -215,10 +283,14 @@ export const useCorrespondenceStore = create<CorrespondenceState>()((set, get) =
       const item = mapRow(row, previous)
       set((state) => ({
         byId: { ...state.byId, [id]: item },
+        // If the row isn't in `correspondence[]` yet (deep-link to a freshly-
+        // created item), prepend it so list-based selectors using
+        // `correspondence.find(c => c.id === id)` can resolve it.
         correspondence: state.correspondence.some((c) => c.id === id)
           ? state.correspondence.map((c) => (c.id === id ? item : c))
-          : state.correspondence,
+          : [item, ...state.correspondence],
         selectedCorrespondence: item,
+        detailLoadedIds: { ...state.detailLoadedIds, [id]: true },
         isLoading: false,
         lastFetched: Date.now(),
       }))
@@ -258,7 +330,27 @@ export const useCorrespondenceStore = create<CorrespondenceState>()((set, get) =
   },
 
   update: async (id, data) => {
-    set({ isMutating: true, error: null })
+    // OPTIMISTIC: snapshot, apply patch, restore on failure.
+    const snapshot = get().byId[id]
+    if (snapshot) {
+      const optimistic: Correspondence = {
+        ...snapshot,
+        ...data,
+        updatedAt: new Date().toISOString(),
+      }
+      set((state) => ({
+        correspondence: state.correspondence.map((c) => (c.id === id ? optimistic : c)),
+        byId: { ...state.byId, [id]: optimistic },
+        selectedCorrespondence:
+          state.selectedCorrespondence?.id === id
+            ? optimistic
+            : state.selectedCorrespondence,
+        isMutating: true,
+        error: null,
+      }))
+    } else {
+      set({ isMutating: true, error: null })
+    }
     try {
       const row = await api.patch<CorrespondenceApiRow>(
         `/correspondence/${id}`,
@@ -277,35 +369,324 @@ export const useCorrespondenceStore = create<CorrespondenceState>()((set, get) =
       }))
       return updated
     } catch (e) {
-      set({
-        error: errorMessage(e, 'Failed to update correspondence'),
-        isMutating: false,
-      })
+      if (snapshot) {
+        set((state) => ({
+          correspondence: state.correspondence.map((c) => (c.id === id ? snapshot : c)),
+          byId: { ...state.byId, [id]: snapshot },
+          selectedCorrespondence:
+            state.selectedCorrespondence?.id === id
+              ? snapshot
+              : state.selectedCorrespondence,
+          error: errorMessage(e, 'Failed to update correspondence'),
+          isMutating: false,
+        }))
+      } else {
+        set({
+          error: errorMessage(e, 'Failed to update correspondence'),
+          isMutating: false,
+        })
+      }
       throw e
     }
   },
 
   delete: async (id) => {
-    set({ isMutating: true, error: null })
+    // OPTIMISTIC hard-delete: remove immediately, restore on failure.
+    const snapshot = get().byId[id]
+    const prevIndex = get().correspondence.findIndex((c) => c.id === id)
+    set((state) => {
+      const { [id]: _removed, ...rest } = state.byId
+      const { [id]: _drop, ...restDetail } = state.detailLoadedIds
+      return {
+        correspondence: state.correspondence.filter((c) => c.id !== id),
+        byId: rest,
+        detailLoadedIds: restDetail,
+        selectedCorrespondence:
+          state.selectedCorrespondence?.id === id
+            ? null
+            : state.selectedCorrespondence,
+        isMutating: true,
+        error: null,
+      }
+    })
     try {
       await api.delete(`/correspondence/${id}`)
-      set((state) => {
-        const { [id]: _removed, ...rest } = state.byId
-        return {
-          correspondence: state.correspondence.filter((c) => c.id !== id),
-          byId: rest,
+      set({ isMutating: false })
+    } catch (e) {
+      if (snapshot) {
+        set((state) => {
+          const list = [...state.correspondence]
+          const insertAt = prevIndex >= 0 && prevIndex <= list.length ? prevIndex : list.length
+          list.splice(insertAt, 0, snapshot)
+          return {
+            correspondence: list,
+            byId: { ...state.byId, [id]: snapshot },
+            error: errorMessage(e, 'Failed to delete correspondence'),
+            isMutating: false,
+          }
+        })
+      } else {
+        set({
+          error: errorMessage(e, 'Failed to delete correspondence'),
+          isMutating: false,
+        })
+      }
+      throw e
+    }
+  },
+
+  archive: async (id) => {
+    // OPTIMISTIC: flip flag immediately, restore on failure.
+    const snapshot = get().byId[id]
+    if (snapshot) {
+      const optimistic: Correspondence = {
+        ...snapshot,
+        archived: true,
+        updatedAt: new Date().toISOString(),
+      }
+      set((state) => ({
+        correspondence: state.correspondence.map((c) => (c.id === id ? optimistic : c)),
+        byId: { ...state.byId, [id]: optimistic },
+        selectedCorrespondence:
+          state.selectedCorrespondence?.id === id
+            ? optimistic
+            : state.selectedCorrespondence,
+        isMutating: true,
+        error: null,
+      }))
+    } else {
+      set({ isMutating: true, error: null })
+    }
+    try {
+      const row = await api.post<CorrespondenceApiRow>(`/correspondence/${id}/archive`)
+      const previous = get().byId[id]
+      const updated = mapRow(row, previous)
+      set((state) => ({
+        correspondence: state.correspondence.map((c) => (c.id === id ? updated : c)),
+        byId: { ...state.byId, [id]: updated },
+        selectedCorrespondence:
+          state.selectedCorrespondence?.id === id
+            ? updated
+            : state.selectedCorrespondence,
+        isMutating: false,
+      }))
+    } catch (e) {
+      if (snapshot) {
+        set((state) => ({
+          correspondence: state.correspondence.map((c) => (c.id === id ? snapshot : c)),
+          byId: { ...state.byId, [id]: snapshot },
           selectedCorrespondence:
             state.selectedCorrespondence?.id === id
-              ? null
+              ? snapshot
+              : state.selectedCorrespondence,
+          error: errorMessage(e, 'Failed to archive correspondence'),
+          isMutating: false,
+        }))
+      } else {
+        set({
+          error: errorMessage(e, 'Failed to archive correspondence'),
+          isMutating: false,
+        })
+      }
+      throw e
+    }
+  },
+
+  unarchive: async (id) => {
+    const snapshot = get().byId[id]
+    if (snapshot) {
+      const optimistic: Correspondence = {
+        ...snapshot,
+        archived: false,
+        updatedAt: new Date().toISOString(),
+      }
+      set((state) => ({
+        correspondence: state.correspondence.map((c) => (c.id === id ? optimistic : c)),
+        byId: { ...state.byId, [id]: optimistic },
+        selectedCorrespondence:
+          state.selectedCorrespondence?.id === id
+            ? optimistic
+            : state.selectedCorrespondence,
+        isMutating: true,
+        error: null,
+      }))
+    } else {
+      set({ isMutating: true, error: null })
+    }
+    try {
+      const row = await api.post<CorrespondenceApiRow>(`/correspondence/${id}/unarchive`)
+      const previous = get().byId[id]
+      const updated = mapRow(row, previous)
+      set((state) => ({
+        correspondence: state.correspondence.map((c) => (c.id === id ? updated : c)),
+        byId: { ...state.byId, [id]: updated },
+        selectedCorrespondence:
+          state.selectedCorrespondence?.id === id
+            ? updated
+            : state.selectedCorrespondence,
+        isMutating: false,
+      }))
+    } catch (e) {
+      if (snapshot) {
+        set((state) => ({
+          correspondence: state.correspondence.map((c) => (c.id === id ? snapshot : c)),
+          byId: { ...state.byId, [id]: snapshot },
+          selectedCorrespondence:
+            state.selectedCorrespondence?.id === id
+              ? snapshot
+              : state.selectedCorrespondence,
+          error: errorMessage(e, 'Failed to unarchive correspondence'),
+          isMutating: false,
+        }))
+      } else {
+        set({
+          error: errorMessage(e, 'Failed to unarchive correspondence'),
+          isMutating: false,
+        })
+      }
+      throw e
+    }
+  },
+
+  addAttachment: async (id, file) => {
+    // OPTIMISTIC: insert a temp attachment immediately, swap on success.
+    const tempId = `temp-att-${nanoid()}`
+    const now = new Date().toISOString()
+    const optimistic: Attachment = {
+      id: tempId,
+      name: file.name,
+      url: file.storage_path,
+      type: (file.type ?? 'application/octet-stream') as Attachment['type'],
+      size: file.size ?? 0,
+      uploadedAt: now,
+      uploadedBy: '',
+    }
+    const snapshot = get().byId[id]
+    const previousAttachments = snapshot?.attachments ?? []
+    if (snapshot) {
+      const next: Correspondence = {
+        ...snapshot,
+        attachments: [optimistic, ...previousAttachments],
+        updatedAt: now,
+      }
+      set((state) => ({
+        correspondence: state.correspondence.map((c) => (c.id === id ? next : c)),
+        byId: { ...state.byId, [id]: next },
+        selectedCorrespondence:
+          state.selectedCorrespondence?.id === id
+            ? next
+            : state.selectedCorrespondence,
+        isMutating: true,
+        error: null,
+      }))
+    } else {
+      set({ isMutating: true, error: null })
+    }
+    try {
+      const row = await api.post<AttachmentApiRow>(
+        `/correspondence/${id}/attachments`,
+        {
+          name: file.name,
+          storage_path: file.storage_path,
+          type: file.type,
+          size: file.size,
+        },
+      )
+      const attachment = mapAttachment(row)
+      set((state) => {
+        const existing = state.byId[id]
+        if (!existing) return { isMutating: false }
+        const updated: Correspondence = {
+          ...existing,
+          attachments: [
+            attachment,
+            ...(existing.attachments ?? []).filter((a) => a.id !== tempId),
+          ],
+          updatedAt: new Date().toISOString(),
+        }
+        return {
+          correspondence: state.correspondence.map((c) => (c.id === id ? updated : c)),
+          byId: { ...state.byId, [id]: updated },
+          selectedCorrespondence:
+            state.selectedCorrespondence?.id === id
+              ? updated
               : state.selectedCorrespondence,
           isMutating: false,
         }
       })
+      return attachment
     } catch (e) {
-      set({
-        error: errorMessage(e, 'Failed to delete correspondence'),
-        isMutating: false,
-      })
+      if (snapshot) {
+        const restored: Correspondence = { ...snapshot, attachments: previousAttachments }
+        set((state) => ({
+          correspondence: state.correspondence.map((c) => (c.id === id ? restored : c)),
+          byId: { ...state.byId, [id]: restored },
+          selectedCorrespondence:
+            state.selectedCorrespondence?.id === id
+              ? restored
+              : state.selectedCorrespondence,
+          error: errorMessage(e, 'Failed to add attachment'),
+          isMutating: false,
+        }))
+      } else {
+        set({
+          error: errorMessage(e, 'Failed to add attachment'),
+          isMutating: false,
+        })
+      }
+      return null
+    }
+  },
+
+  removeAttachment: async (correspondenceId, attachmentId) => {
+    // OPTIMISTIC removal — snapshot the attachment list to restore on failure.
+    const snapshot = get().byId[correspondenceId]
+    const previousAttachments = snapshot?.attachments ?? []
+    if (snapshot) {
+      const next: Correspondence = {
+        ...snapshot,
+        attachments: previousAttachments.filter((a) => a.id !== attachmentId),
+        updatedAt: new Date().toISOString(),
+      }
+      set((state) => ({
+        correspondence: state.correspondence.map((c) =>
+          c.id === correspondenceId ? next : c,
+        ),
+        byId: { ...state.byId, [correspondenceId]: next },
+        selectedCorrespondence:
+          state.selectedCorrespondence?.id === correspondenceId
+            ? next
+            : state.selectedCorrespondence,
+        isMutating: true,
+        error: null,
+      }))
+    } else {
+      set({ isMutating: true, error: null })
+    }
+    try {
+      await api.delete(`/correspondence/${correspondenceId}/attachments/${attachmentId}`)
+      set({ isMutating: false })
+    } catch (e) {
+      if (snapshot) {
+        const restored: Correspondence = { ...snapshot, attachments: previousAttachments }
+        set((state) => ({
+          correspondence: state.correspondence.map((c) =>
+            c.id === correspondenceId ? restored : c,
+          ),
+          byId: { ...state.byId, [correspondenceId]: restored },
+          selectedCorrespondence:
+            state.selectedCorrespondence?.id === correspondenceId
+              ? restored
+              : state.selectedCorrespondence,
+          error: errorMessage(e, 'Failed to remove attachment'),
+          isMutating: false,
+        }))
+      } else {
+        set({
+          error: errorMessage(e, 'Failed to remove attachment'),
+          isMutating: false,
+        })
+      }
       throw e
     }
   },

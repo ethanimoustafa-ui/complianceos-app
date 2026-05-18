@@ -37,6 +37,7 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
     })
 
     revalidateAll([
+      cacheTags.correspondence(),
       cacheTags.correspondence(correspondenceId),
       cacheTags.correspondenceAttachments(correspondenceId),
     ])

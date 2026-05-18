@@ -26,7 +26,11 @@ export async function GET(_req: NextRequest, { params }: Params) {
     if (error) throw error
 
     return ok(data ?? [], {
-      cache: { sMaxAge: 30, tags: [cacheTags.letterTimeline(letterId)] },
+      cache: {
+        sMaxAge: 60,
+        staleWhileRevalidate: 300,
+        tags: [cacheTags.letterTimeline(letterId)],
+      },
     })
   } catch (e) {
     return handle(e)

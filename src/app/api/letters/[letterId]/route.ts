@@ -130,13 +130,9 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
     const { supabase, user, profile } = await requirePerm('delete')
     await assertLetterExists(supabase, letterId)
 
-    const { error } = await supabase
-      .from('letters')
-      .update({ deleted_at: new Date().toISOString() })
-      .eq('id', letterId)
-      .is('deleted_at', null)
-    if (error) throw error
-
+    // Audit FIRST so the append-only trail survives even if the cascade
+    // delete is interrupted. `audit_logs.entity_id` is polymorphic (not a FK)
+    // so the record won't be cascade-deleted along with the row.
     await writeAudit({
       actor_id: user.id,
       actor_name: profile.name ?? profile.email ?? user.id,
@@ -145,6 +141,11 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
       entity_id: letterId,
       supabase,
     })
+
+    // Hard-delete — FK cascade (migration 046) clears letter_attachments,
+    // letter_approval_steps, letter_observations, letter_timeline.
+    const { error } = await supabase.from('letters').delete().eq('id', letterId)
+    if (error) throw error
 
     revalidateAll([cacheTags.letters(), cacheTags.letters(letterId)])
     return ok({ id: letterId, deleted: true })

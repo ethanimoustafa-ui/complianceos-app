@@ -30,7 +30,11 @@ export async function GET(_req: NextRequest, { params }: Params) {
       .order('uploaded_at', { ascending: false })
     if (error) throw error
     return ok(data ?? [], {
-      cache: { sMaxAge: 60, tags: [cacheTags.correspondenceAttachments(correspondenceId)] },
+      cache: {
+        sMaxAge: 60,
+        staleWhileRevalidate: 300,
+        tags: [cacheTags.correspondenceAttachments(correspondenceId)],
+      },
     })
   } catch (e) {
     return handle(e)
@@ -70,6 +74,7 @@ export async function POST(req: NextRequest, { params }: Params) {
     })
 
     revalidateAll([
+      cacheTags.correspondence(),
       cacheTags.correspondence(correspondenceId),
       cacheTags.correspondenceAttachments(correspondenceId),
     ])

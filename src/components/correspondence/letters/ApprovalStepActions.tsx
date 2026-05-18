@@ -18,25 +18,39 @@ export function ApprovalStepActions({
 }) {
   const { t, isRTL } = useTranslation()
   const store = useLetterStore()
+  const isMutating = useLetterStore((s) => s.isMutating)
   const [notes, setNotes] = useState('')
   const [showNotes, setShowNotes] = useState(false)
+  const [busy, setBusy] = useState<'approve' | 'reject' | null>(null)
   const canApprove = useCan('Approve SAMA Letters')
 
-  const handleApprove = () => {
+  const handleApprove = async () => {
     // Round 4 Phase 6: store derives approver name from auth user; legacy
     // `approverName` arg dropped. The local `approverName` prop stays for
     // display purposes elsewhere in the component.
     void approverName
-    store.approveStep(letterId, step, notes || undefined)
-    setNotes('')
-    setShowNotes(false)
+    setBusy('approve')
+    try {
+      await store.approveStep(letterId, step, notes || undefined)
+      setNotes('')
+      setShowNotes(false)
+    } finally {
+      setBusy(null)
+    }
   }
 
-  const handleReject = () => {
-    store.rejectStep(letterId, step, notes)
-    setNotes('')
-    setShowNotes(false)
+  const handleReject = async () => {
+    setBusy('reject')
+    try {
+      await store.rejectStep(letterId, step, notes)
+      setNotes('')
+      setShowNotes(false)
+    } finally {
+      setBusy(null)
+    }
   }
+
+  const isBusy = busy !== null || isMutating
 
   return (
     <div className={`ml-9 space-y-2 ${isRTL ? 'mr-9 ml-0' : ''}`}>
@@ -52,18 +66,22 @@ export function ApprovalStepActions({
       <div className={`flex gap-2`}>
         <button
           onClick={handleApprove}
-          disabled={!canApprove}
+          disabled={!canApprove || isBusy}
+          aria-busy={busy === 'approve' || undefined}
           title={canApprove ? '' : t('rbac.deniedTooltip')}
-          className="flex-1 py-1.5 bg-emerald-600 text-white rounded-lg text-xs font-bold hover:bg-emerald-700 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+          className="flex-1 py-1.5 bg-emerald-600 text-white rounded-lg text-xs font-bold hover:bg-emerald-700 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center justify-center gap-1.5"
         >
+          {busy === 'approve' && <Icon icon="lucide:loader-2" className="animate-spin text-xs" />}
           {t('letters.approveStep')}
         </button>
         <button
           onClick={handleReject}
-          disabled={!canApprove}
+          disabled={!canApprove || isBusy}
+          aria-busy={busy === 'reject' || undefined}
           title={canApprove ? '' : t('rbac.deniedTooltip')}
-          className="flex-1 py-1.5 bg-rose-100 text-rose-700 rounded-lg text-xs font-bold hover:bg-rose-200 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+          className="flex-1 py-1.5 bg-rose-100 text-rose-700 rounded-lg text-xs font-bold hover:bg-rose-200 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center justify-center gap-1.5"
         >
+          {busy === 'reject' && <Icon icon="lucide:loader-2" className="animate-spin text-xs" />}
           {t('letters.rejectStep')}
         </button>
         <button

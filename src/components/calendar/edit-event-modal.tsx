@@ -4,6 +4,7 @@ import { useEffect } from 'react'
 import { Icon } from '@iconify/react'
 import { Modal } from '@/components/ui/modal'
 import { Button } from '@/components/ui/button'
+import { LoadingButton } from '@/components/ui/loading-button'
 import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -35,7 +36,10 @@ interface EditEventModalProps {
 }
 
 export function EditEventModal({ isOpen, onClose, event, onSuccess }: EditEventModalProps) {
-  const { updateEvent, isLoading } = useCalendarStore()
+  // `isMutating` (not `isLoading`) is the source of truth for the inline
+  // update — circular/policy parity. `isLoading` reflects refetches.
+  const updateEvent = useCalendarStore((s) => s.updateEvent)
+  const isMutating = useCalendarStore((s) => s.isMutating)
   const { isRTL } = useTranslation()
   const eventTypes = useCalendarEventTypeStore((s) => s.types)
   const addEventType = useCalendarEventTypeStore((s) => s.add)
@@ -265,23 +269,17 @@ export function EditEventModal({ isOpen, onClose, event, onSuccess }: EditEventM
 
         {/* Footer */}
         <div className="p-8 bg-slate-50 border-t border-slate-200 flex justify-end gap-3">
-          <Button variant="ghost" onClick={handleClose} disabled={isLoading}>
+          <Button variant="ghost" onClick={handleClose} disabled={isMutating}>
             Cancel
           </Button>
-          <Button
+          <LoadingButton
             variant="primary"
             onClick={handleSubmit(onSubmit)}
-            disabled={isLoading}
+            loading={isMutating}
+            loadingLabel="Saving..."
           >
-            {isLoading ? (
-              <>
-                <Icon icon="lucide:loader-2" className="animate-spin" />
-                Saving...
-              </>
-            ) : (
-              'Save Changes'
-            )}
-          </Button>
+            Save Changes
+          </LoadingButton>
         </div>
       </div>
     </Modal>

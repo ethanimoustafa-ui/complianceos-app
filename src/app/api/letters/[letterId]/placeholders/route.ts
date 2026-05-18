@@ -41,7 +41,11 @@ export async function GET(_req: NextRequest, { params }: Params) {
         values: (data as { placeholder_values: unknown }).placeholder_values ?? {},
       },
       {
-        cache: { sMaxAge: 60, tags: [cacheTags.letterPlaceholders(letterId)] },
+        cache: {
+          sMaxAge: 60,
+          staleWhileRevalidate: 300,
+          tags: [cacheTags.letterPlaceholders(letterId)],
+        },
       },
     )
   } catch (e) {

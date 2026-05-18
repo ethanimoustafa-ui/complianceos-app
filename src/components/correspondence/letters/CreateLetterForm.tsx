@@ -242,10 +242,19 @@ export function CreateLetterForm({
     }
   }
 
-  const handleSaveDraft = () => {
-    store.create(letterBaseData())
-    if (template?.id) templateStore.incrementUsage(template.id)
-    onSuccess()
+  const [isSavingDraft, setIsSavingDraft] = useState(false)
+
+  const handleSaveDraft = async () => {
+    setIsSavingDraft(true)
+    try {
+      await store.create(letterBaseData())
+      if (template?.id) templateStore.incrementUsage(template.id)
+    } catch (err) {
+      console.error('Failed to save letter draft', err)
+    } finally {
+      setIsSavingDraft(false)
+      onSuccess()
+    }
   }
 
   const handleSubmit = async () => {
@@ -555,13 +564,17 @@ export function CreateLetterForm({
         <div className={`flex gap-3`}>
           <button
             onClick={handleSaveDraft}
-            className="px-6 py-3 bg-slate-100 text-slate-600 rounded-xl text-sm font-bold hover:bg-slate-200 transition-colors cursor-pointer"
+            disabled={isSavingDraft || isSubmitting}
+            aria-busy={isSavingDraft || undefined}
+            className="px-6 py-3 bg-slate-100 text-slate-600 rounded-xl text-sm font-bold hover:bg-slate-200 transition-colors cursor-pointer disabled:opacity-50 inline-flex items-center gap-2"
           >
+            {isSavingDraft && <Icon icon="lucide:loader-2" className="animate-spin" />}
             {t('letters.saveAsDraft')}
           </button>
           <button
             onClick={handleSubmit}
-            disabled={isSubmitting}
+            disabled={isSubmitting || isSavingDraft}
+            aria-busy={isSubmitting || undefined}
             className={`px-8 py-3 bg-emerald-600 text-white rounded-xl text-sm font-bold hover:bg-emerald-700 transition-colors shadow-lg shadow-emerald-100 disabled:opacity-50 flex items-center gap-2 cursor-pointer`}
           >
             {isSubmitting ? (

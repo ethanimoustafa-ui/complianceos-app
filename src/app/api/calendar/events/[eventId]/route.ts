@@ -26,7 +26,6 @@ export async function GET(_req: NextRequest, { params }: Params) {
       .from('calendar_events')
       .select(CALENDAR_EVENT_DETAIL_COLUMNS)
       .eq('id', eventId)
-      .is('deleted_at', null)
       .maybeSingle()
     if (error) throw error
     if (!data) throw NotFound(`Calendar event ${eventId} not found`)
@@ -58,7 +57,6 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       .from('calendar_events')
       .update(update)
       .eq('id', eventId)
-      .is('deleted_at', null)
       .select(CALENDAR_EVENT_DETAIL_COLUMNS)
       .single()
     if (error || !data) throw error ?? NotFound('Update returned no row')
@@ -84,11 +82,13 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
     const { eventId } = await params
     const { supabase, user, profile } = await requirePerm('delete')
     await assertCalendarEventExists(supabase, eventId)
+    // Hard-delete (migration 047). No child tables — `attendees` and
+    // `reminders` are columns on the event row itself, so the row vanishes
+    // cleanly. Audit log entry below preserves the compliance trail.
     const { error } = await supabase
       .from('calendar_events')
-      .update({ deleted_at: new Date().toISOString() })
+      .delete()
       .eq('id', eventId)
-      .is('deleted_at', null)
     if (error) throw error
     await writeAudit({
       actor_id: user.id,

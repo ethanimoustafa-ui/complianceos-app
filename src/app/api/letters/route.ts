@@ -4,9 +4,9 @@ import type { NextRequest } from 'next/server'
 import { requirePerm, requireUser } from '@/lib/api/auth'
 import { handle, NotFound } from '@/lib/api/errors'
 import { ok, paginate } from '@/lib/api/response'
-import { parseJson } from '@/lib/api/validate'
+import { parseJson, parseQuery } from '@/lib/api/validate'
 import { rangeFor } from '@/lib/api/pagination'
-import { cacheTags, revalidate } from '@/lib/api/cache'
+import { cacheTags, revalidateAll } from '@/lib/api/cache'
 import { writeAudit } from '@/lib/api/audit'
 import {
   CreateLetterSchema,
@@ -24,14 +24,14 @@ export const dynamic = 'force-dynamic'
 export async function GET(req: NextRequest) {
   try {
     const { supabase } = await requireUser()
-    const q = ListLettersQuerySchema.parse(
-      Object.fromEntries(req.nextUrl.searchParams.entries()),
-    )
+    // parseQuery → ValidationFailed (HTTP 400) on malformed query strings.
+    // Previously a raw `.parse(...)` would throw a ZodError which fell into
+    // `handle()`'s generic-Error branch and surfaced as a 500.
+    const q = parseQuery(req.nextUrl.searchParams, ListLettersQuerySchema)
 
     let query = supabase
       .from('letters')
       .select(LETTER_LIST_COLUMNS, { count: 'exact' })
-      .is('deleted_at', null)
 
     if (q.status) query = query.eq('status', q.status)
     const authority = q.authority ?? q.authority_id
@@ -49,25 +49,26 @@ export async function GET(req: NextRequest) {
     // unless a future column is added. Leaving as a no-op keeps the surface
     // forward-compatible.
 
-    // has_attachments — derive via an inner-join with letter_attachments.
-    if (q.has_attachments === 'true') {
-      const { data: ids } = await supabase
-        .from('letter_attachments')
-        .select('letter_id')
-      const set = new Set(((ids ?? []) as { letter_id: string }[]).map((r) => r.letter_id))
-      if (set.size === 0) {
-        return ok(paginate([], q.page, q.pageSize, 0), {
-          cache: { sMaxAge: 60, staleWhileRevalidate: 300, tags: [cacheTags.letters()] },
-        })
-      }
-      query = query.in('id', Array.from(set))
-    } else if (q.has_attachments === 'false') {
-      const { data: ids } = await supabase
-        .from('letter_attachments')
-        .select('letter_id')
-      const set = new Set(((ids ?? []) as { letter_id: string }[]).map((r) => r.letter_id))
-      if (set.size > 0) {
-        query = query.not('id', 'in', `(${Array.from(set).join(',')})`)
+    // has_attachments — derive via the letter_attachments parent set.
+    let attachmentLetterIds: Set<string> | null = null
+    if (q.has_attachments === 'true' || q.has_attachments === 'false') {
+      const { data: ids } = await supabase.from('letter_attachments').select('letter_id')
+      attachmentLetterIds = new Set(
+        ((ids ?? []) as { letter_id: string }[]).map((r) => r.letter_id),
+      )
+      if (q.has_attachments === 'true') {
+        if (attachmentLetterIds.size === 0) {
+          return ok(paginate([], q.page, q.pageSize, 0), {
+            cache: {
+              sMaxAge: 60,
+              staleWhileRevalidate: 300,
+              tags: [cacheTags.letters()],
+            },
+          })
+        }
+        query = query.in('id', Array.from(attachmentLetterIds))
+      } else if (attachmentLetterIds.size > 0) {
+        query = query.not('id', 'in', `(${Array.from(attachmentLetterIds).join(',')})`)
       }
     }
 
@@ -77,7 +78,28 @@ export async function GET(req: NextRequest) {
       .range(from, to)
     if (error) throw error
 
-    return ok(paginate(data ?? [], q.page, q.pageSize, count ?? 0), {
+    // Decorate list rows with attachment_count (and has_pdf as a derived
+    // boolean for card rendering). Single fan-out query gated to the page's
+    // ids — keeps us inside the per-page request budget (≤20).
+    const pageRows = (data ?? []) as Array<Record<string, unknown> & { id: string }>
+    const attachmentCount = new Map<string, number>()
+    if (pageRows.length > 0) {
+      const pageIds = pageRows.map((r) => r.id)
+      const { data: atts } = await supabase
+        .from('letter_attachments')
+        .select('letter_id, type')
+        .in('letter_id', pageIds)
+      for (const a of ((atts ?? []) as { letter_id: string; type: string | null }[])) {
+        attachmentCount.set(a.letter_id, (attachmentCount.get(a.letter_id) ?? 0) + 1)
+      }
+    }
+    const decorated = pageRows.map((r) => ({
+      ...r,
+      attachment_count: attachmentCount.get(r.id) ?? 0,
+      has_pdf: (attachmentCount.get(r.id) ?? 0) > 0,
+    }))
+
+    return ok(paginate(decorated, q.page, q.pageSize, count ?? 0), {
       cache: { sMaxAge: 60, staleWhileRevalidate: 300, tags: [cacheTags.letters()] },
     })
   } catch (e) {
@@ -173,7 +195,7 @@ export async function POST(req: NextRequest) {
       ),
     ])
 
-    revalidate(cacheTags.letters())
+    revalidateAll([cacheTags.letters(), cacheTags.letters(created.id)])
     return ok(inserted, { status: 201 })
   } catch (e) {
     return handle(e)

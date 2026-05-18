@@ -136,12 +136,26 @@ export default function RegistryPage() {
     })
   }, [registryRows, searchTerm, statusFilter, kindFilter])
 
-  // Full object for the preview panel
+  // Full object for the preview panel (defensive read: byId map wins,
+  // falling back to the list — avoids a "Not Found" flash on freshly
+  // created rows, mirroring the audit-page fix).
+  const circularById = useCircularStore((s) => s.byId)
+  const policyById = usePolicyStore((s) => s.byId)
   const previewItem = useMemo(() => {
     if (!previewRow) return null
-    if (previewRow.kind === 'rule') return circulars.find(c => c.id === previewRow.id) as Circular | undefined
-    return policies.find(p => p.id === previewRow.id) as Policy | undefined
-  }, [previewRow, circulars, policies])
+    if (previewRow.kind === 'rule') {
+      return (
+        circularById[previewRow.id]
+        ?? circulars.find((c) => c.id === previewRow.id)
+        ?? null
+      ) as Circular | null
+    }
+    return (
+      policyById[previewRow.id]
+      ?? policies.find((p) => p.id === previewRow.id)
+      ?? null
+    ) as Policy | null
+  }, [previewRow, circulars, policies, circularById, policyById])
 
   function openFullDetail() {
     if (!previewRow || !previewItem) return

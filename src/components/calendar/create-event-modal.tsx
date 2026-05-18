@@ -6,6 +6,7 @@ import { useTranslation } from '@/i18n'
 import { useCalendarStore } from '@/stores/calendar-store'
 import { useCalendarEventTypeStore } from '@/stores/calendar-event-type-store'
 import { EditableSelect } from '@/components/ui/editable-select'
+import { LoadingButton } from '@/components/ui/loading-button'
 
 interface CreateEventModalProps {
   isOpen: boolean
@@ -16,6 +17,10 @@ interface CreateEventModalProps {
 export function CreateEventModal({ isOpen, onClose, onSuccess }: CreateEventModalProps) {
   const { t, isRTL } = useTranslation()
   const createEvent = useCalendarStore((s) => s.createEvent)
+  // Pull `isMutating` from the store (not local state) so the same in-flight
+  // create disables every trigger pointing at it. Pattern matches the
+  // circular / policy create modals.
+  const isMutating = useCalendarStore((s) => s.isMutating)
 
   // Event type ids come from useCalendarEventTypeStore (seeded with the four
   // legacy literals). The widened CalendarEvent.type accepts any string id.
@@ -148,16 +153,20 @@ export function CreateEventModal({ isOpen, onClose, onSuccess }: CreateEventModa
         <div className={`p-6 bg-slate-50 flex gap-3`}>
           <button
             onClick={handleClose}
-            className="flex-1 py-2.5 text-sm font-bold text-slate-600 hover:bg-slate-200 rounded-lg transition-colors cursor-pointer"
+            disabled={isMutating}
+            className="flex-1 py-2.5 text-sm font-bold text-slate-600 hover:bg-slate-200 rounded-lg transition-colors cursor-pointer disabled:opacity-50"
           >
             {t('common.cancel')}
           </button>
-          <button
+          <LoadingButton
             onClick={handleSubmit}
-            className="flex-1 py-2.5 text-sm font-bold bg-emerald-600 text-white hover:bg-emerald-700 rounded-lg transition-colors shadow-lg shadow-emerald-100 cursor-pointer"
+            loading={isMutating}
+            disabled={!form.title || !form.date}
+            variant="primary"
+            className="flex-1 py-2.5 text-sm font-bold bg-emerald-600 hover:bg-emerald-700 rounded-lg shadow-lg shadow-emerald-100"
           >
             {t('calendar.createTask')}
-          </button>
+          </LoadingButton>
         </div>
       </div>
     </div>

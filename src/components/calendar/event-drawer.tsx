@@ -1,15 +1,18 @@
 'use client'
 
-import { useEffect, useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Icon } from '@iconify/react'
 import { cn } from '@/lib/utils'
 import { useTranslation } from '@/i18n'
 import type { TranslationKey } from '@/i18n'
-import type { UnifiedCalendarItem } from '@/types'
+import type { CalendarEvent, UnifiedCalendarItem } from '@/types'
 import type { CalendarType } from './calendar-types'
 import { toHijri, getHijriMonthsFull, getDueStatus, SOURCE_COLORS, SOURCE_LABEL_KEYS, PRIORITY_COLORS } from './calendar-utils'
 import { useCalendarStore } from '@/stores/calendar-store'
+import { LoadingButton } from '@/components/ui/loading-button'
+import { Modal } from '@/components/ui/modal'
+import { formatTimelineDate } from '@/lib/format-date'
 
 function exportItemsToCsv(items: UnifiedCalendarItem[], dateLabel: string) {
   const headers = ['Title', 'Source Type', 'Date', 'Status', 'Priority', 'Subtitle', 'Assignee', 'Route']
@@ -48,13 +51,23 @@ export function EventDrawer({ selectedDayKey, items, calendarType, onClose }: Ev
   const { t, isRTL } = useTranslation()
   const router = useRouter()
   const calendarEvents = useCalendarStore((s) => s.events)
+  const calendarById = useCalendarStore((s) => s.byId)
   const updateEvent = useCalendarStore((s) => s.updateEvent)
   // Delete is optimistic: the store removes the row locally + fires the
   // DELETE request, rolling back if it fails. We surface failures via a
   // simple alert() because the EventDrawer has no toast slot of its own.
   const deleteEvent = useCalendarStore((s) => s.deleteEvent)
+  const isMutating = useCalendarStore((s) => s.isMutating)
   const calendarError = useCalendarStore((s) => s.error)
   const clearCalendarError = useCalendarStore((s) => s.clearError)
+
+  // Strong delete confirmation — circular/policy parity. We hold the user-event
+  // id that's pending confirmation so the user can't accidentally hit the
+  // trash icon and lose attendees/reminders/attachments in one click.
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
+  const pendingDeleteEvent: CalendarEvent | null = confirmDeleteId
+    ? (calendarById[confirmDeleteId] ?? calendarEvents.find((e) => e.id === confirmDeleteId) ?? null)
+    : null
 
   const dayItems = useMemo(() => {
     if (!selectedDayKey) return []
@@ -117,7 +130,12 @@ export function EventDrawer({ selectedDayKey, items, calendarType, onClose }: Ev
             </h3>
             <div className="space-y-3">
               {dayItems.length === 0 && (
-                <p className="text-xs text-slate-400 italic text-center py-10">{t('calendar.noEventsForDay')}</p>
+                <div className="flex flex-col items-center justify-center py-10 text-center">
+                  <div className="w-12 h-12 bg-slate-100 rounded-full flex items-center justify-center mb-3">
+                    <Icon icon="lucide:calendar-x" className="text-2xl text-slate-400" />
+                  </div>
+                  <p className="text-xs text-slate-400 italic">{t('calendar.noEventsForDay')}</p>
+                </div>
               )}
               {dayItems.map(item => {
                 const colors = SOURCE_COLORS[item.sourceType]
@@ -162,57 +180,107 @@ export function EventDrawer({ selectedDayKey, items, calendarType, onClose }: Ev
                     )}
                     {item.sourceType === 'user-event' && (() => {
                       const calEventId = item.id.replace(/^cal-/, '')
-                      const calEvent = calendarEvents.find(e => e.id === calEventId)
+                      // Defensive lookup — circular/policy parity. Hit byId
+                      // first (O(1)), then fall back to the events array,
+                      // then null. Keeps the row visible even if the maps
+                      // briefly drift during an optimistic update.
+                      const calEvent: CalendarEvent | null =
+                        calendarById[calEventId] ?? calendarEvents.find((e) => e.id === calEventId) ?? null
                       const isCompleted = calEvent?.completed
 
+                      // Lazy detail block — attendees, reminders, and the
+                      // completed-at timestamp are detail-payload fields. If
+                      // the row isn't in `byId` yet (e.g. mid-fetch), show a
+                      // skeleton placeholder instead of rendering empty arrays
+                      // as "0 attendees" / etc.
+                      const detailLoaded = calEvent !== null
+                      const attendeesCount = calEvent?.attendees?.length ?? 0
+                      const remindersCount = calEvent?.reminders?.length ?? 0
+
                       const handleDelete = () => {
-                        // Optimistic remove + background DELETE — `useCalendarStore.deleteEvent`
-                        // rolls back if the network call fails and surfaces the
-                        // error via `error`. We pick it up in the effect below
-                        // and pop an alert().
-                        deleteEvent(calEventId)
+                        // Open the strong-confirm modal instead of firing the
+                        // optimistic delete immediately — calendar events can
+                        // carry attendees / reminders / completion history
+                        // that we don't want to nuke on a single misclick.
+                        setConfirmDeleteId(calEventId)
                       }
 
                       const deleteBtn = (
-                        <button
+                        <LoadingButton
                           onClick={handleDelete}
-                          aria-label="Delete event"
+                          loading={isMutating && confirmDeleteId === calEventId}
+                          aria-label={t('common.delete' as TranslationKey)}
                           title={t('common.delete' as TranslationKey)}
+                          variant="ghost"
+                          size="sm"
                           className={cn(
-                            'mt-1 shrink-0 px-3 text-xs font-bold py-2 rounded-lg border transition-colors cursor-pointer flex items-center justify-center gap-2',
+                            'mt-1 shrink-0 px-3 text-xs font-bold py-2 rounded-lg border',
                             'bg-white text-rose-600 border-rose-200 hover:bg-rose-50 hover:border-rose-300'
                           )}
                         >
                           <Icon icon="lucide:trash-2" className="text-sm" />
-                        </button>
+                        </LoadingButton>
                       )
 
-                      if (isCompleted) {
-                        return (
-                          <div className="mt-1 flex items-center gap-2">
-                            <div className={cn('flex-1 flex items-center justify-center gap-2 py-2 text-xs font-bold text-emerald-600')}>
-                              <Icon icon="lucide:check-circle-2" className="text-base" />
-                              <span>{t('calendar.markAsComplete' as TranslationKey)}</span>
-                            </div>
-                            {deleteBtn}
-                          </div>
-                        )
-                      }
-
                       return (
-                        <div className="mt-1 flex items-center gap-2">
-                          <button
-                            onClick={() => updateEvent(calEventId, { completed: true, completedAt: new Date().toISOString() })}
-                            className={cn(
-                              'flex-1 text-xs font-bold py-2 rounded-lg border transition-colors cursor-pointer flex items-center justify-center gap-2',
-                              'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100 hover:border-emerald-300'
-                            )}
-                          >
-                            <Icon icon="lucide:check-circle-2" className="text-sm" />
-                            {t('calendar.markAsComplete' as TranslationKey)}
-                          </button>
-                          {deleteBtn}
-                        </div>
+                        <>
+                          {/* Lazy detail block — kept compact; defers
+                              attendees/reminders meta until the row is in
+                              `byId`. */}
+                          {!detailLoaded ? (
+                            <div className="mt-1 space-y-1.5">
+                              <div className="h-3 w-32 bg-slate-200/60 rounded animate-pulse" />
+                              <div className="h-3 w-20 bg-slate-200/60 rounded animate-pulse" />
+                            </div>
+                          ) : (
+                            <div className="mt-1 flex items-center gap-3 text-[10px] text-slate-500">
+                              {attendeesCount > 0 && (
+                                <span className="flex items-center gap-1">
+                                  <Icon icon="lucide:users" className="text-xs" />
+                                  {attendeesCount}
+                                </span>
+                              )}
+                              {remindersCount > 0 && (
+                                <span className="flex items-center gap-1">
+                                  <Icon icon="lucide:bell" className="text-xs" />
+                                  {remindersCount}
+                                </span>
+                              )}
+                              {calEvent.completedAt && (
+                                <span className="flex items-center gap-1">
+                                  <Icon icon="lucide:check" className="text-xs" />
+                                  {formatTimelineDate(calEvent.completedAt, isRTL)}
+                                </span>
+                              )}
+                            </div>
+                          )}
+                          {isCompleted ? (
+                            <div className="mt-1 flex items-center gap-2">
+                              <div className={cn('flex-1 flex items-center justify-center gap-2 py-2 text-xs font-bold text-emerald-600')}>
+                                <Icon icon="lucide:check-circle-2" className="text-base" />
+                                <span>{t('calendar.markAsComplete' as TranslationKey)}</span>
+                              </div>
+                              {deleteBtn}
+                            </div>
+                          ) : (
+                            <div className="mt-1 flex items-center gap-2">
+                              <LoadingButton
+                                onClick={() => updateEvent(calEventId, { completed: true, completedAt: new Date().toISOString() })}
+                                loading={isMutating}
+                                variant="ghost"
+                                size="sm"
+                                className={cn(
+                                  'flex-1 text-xs font-bold py-2 rounded-lg border',
+                                  'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100 hover:border-emerald-300'
+                                )}
+                              >
+                                <Icon icon="lucide:check-circle-2" className="text-sm" />
+                                {t('calendar.markAsComplete' as TranslationKey)}
+                              </LoadingButton>
+                              {deleteBtn}
+                            </div>
+                          )}
+                        </>
                       )
                     })()}
                   </div>
@@ -274,6 +342,59 @@ export function EventDrawer({ selectedDayKey, items, calendarType, onClose }: Ev
           </button>
         </div>
       </div>
+
+      {/* Strong Delete Event Confirm — circular/policy parity. We don't reuse
+          DeleteConfirmationDialog here because the drawer surfaces inline
+          mutations and we want the language to spell out exactly what's
+          cascading: attendees + reminders + attachments. */}
+      <Modal
+        isOpen={confirmDeleteId !== null}
+        onClose={() => { if (!isMutating) setConfirmDeleteId(null) }}
+        size="sm"
+      >
+        <div className="p-8">
+          <div className="flex items-center justify-center mb-6">
+            <div className="w-16 h-16 bg-rose-50 rounded-full flex items-center justify-center">
+              <Icon icon="lucide:alert-triangle" className="text-3xl text-rose-600" />
+            </div>
+          </div>
+          <h2 className="text-xl font-bold text-slate-900 text-center mb-2">
+            {t('calendar.deleteEventTitle' as TranslationKey) || 'Delete event?'}
+          </h2>
+          {pendingDeleteEvent?.title && (
+            <p className="text-sm font-semibold text-slate-700 text-center mb-2 truncate">
+              {pendingDeleteEvent.title}
+            </p>
+          )}
+          <p className="text-sm text-slate-500 text-center mb-6 leading-relaxed">
+            This will permanently delete the event and all its attendees, reminders, and attachments. This cannot be undone.
+          </p>
+          <div className="flex gap-3">
+            <button
+              onClick={() => setConfirmDeleteId(null)}
+              disabled={isMutating}
+              className="flex-1 px-4 py-2.5 bg-slate-100 text-slate-600 rounded-xl text-sm font-bold hover:bg-slate-200 transition-colors cursor-pointer disabled:opacity-50"
+            >
+              {t('common.cancel')}
+            </button>
+            <LoadingButton
+              loading={isMutating}
+              onClick={() => {
+                if (!confirmDeleteId) return
+                // Optimistic remove + background DELETE — `deleteEvent`
+                // rolls back if the network call fails. Errors surface via
+                // the calendarError effect above.
+                deleteEvent(confirmDeleteId)
+                setConfirmDeleteId(null)
+              }}
+              variant="danger"
+              className="flex-1 px-4 py-2.5 rounded-xl text-sm font-bold"
+            >
+              {t('common.delete' as TranslationKey)}
+            </LoadingButton>
+          </div>
+        </div>
+      </Modal>
     </aside>
   )
 }
