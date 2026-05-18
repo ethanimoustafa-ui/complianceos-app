@@ -124,3 +124,69 @@ Note: `policies` table itself was not in scope of the `LIKE 'policy_%'` filter (
 - [x] Appended cleanly to `OPTIMIZATION-BASELINE.md`.
 - [x] No source changes outside this file (verified — only `OPTIMIZATION-BASELINE.md` edited).
 - [x] `tsc --noEmit` exit 0 — markdown-only change, no TS surface touched.
+
+---
+
+## Final consolidation pass (Agent FINAL-PERF, 2026-05-18)
+
+### Log re-pull (most-recent ~100 entries)
+`mcp__supabase__get_logs({ service: 'api' })`. Window: ~10 s of mixed exercise (calendar create + delete + dashboard fanout, plus background browser-direct hydrator calls).
+
+| # | Endpoint | UA | Approx hits | Note |
+|---|---|---|---|---|
+| 1 | `GET /rest/v1/profiles?...preferred_language&id=eq.<self>` | `node` | ~32 | Per-handler `requireUser()` claim-path read. JWT hook is live, so this is the only auth-DB read per handler. |
+| 2 | `GET /auth/v1/user` | `node` | ~22 | One per handler, paired 1:1 with #1. |
+| 3 | `GET /rest/v1/calendar_events?...&order=date.asc&limit=500` | `node` | ~6 | Calendar list fetch — fired 6× across the window (multiple mount cycles + post-mutation revalidate). |
+| 4 | `GET /rest/v1/calendar_event_types` | `node` | ~6 | Lookup; carries `sMaxAge: 3600`. |
+| 5 | `GET /rest/v1/framework_pins`, `framework_config`, `departments` | `node` | ~3 each | Lookups; cached. |
+| 6 | `GET /rest/v1/profiles?...workload,last_login&id=eq.<self>` | `browser` | ~5 | Direct browser → Supabase from `lookup-hydrator.tsx` — unchanged from prior pass, out of scope here. |
+| 7 | `GET /rest/v1/user_roles?...role_permissions(permissions(key))` | `browser` | ~3 | Same hydrator path. |
+
+**Observation:** The `node`-UA #1/#2 pair is still the dominant cost (~54 of the ~100 captured entries). This is the auth-fetch loop documented in HANDOFF §4 item 5 + outstanding item in this doc's "Per-page-load request count" section. The fix is owned by Agent SERVER (Edge Middleware / Cache Components hoist) and is explicitly out of scope for FINAL-PERF.
+
+### Dedupe sanity check on `src/lib/api-client.ts`
+**Before this pass:** the file imported NO dedupe symbols. Prior baseline section claimed `dedupeKey`/`getInflight`/`trackInflight` were wired into `apiFetch` — that wiring was missing in the file as committed. `src/lib/api/dedupe.ts` exists and is exported, but had **zero call sites in `api-client.ts`** (verified via grep). So in-flight GET dedupe was effectively dead code for the entire prior window.
+
+**This pass:** wired the dedupe at the top of `apiFetch` (additive — does not change the internal path). For GET requests issued from the browser, callers receive the same pending promise via `getInflight` if one exists for the `<METHOD>:<url>` key; otherwise we register a fresh entry with `trackInflight`. Mutations (POST/PATCH/DELETE) and server-side callers (where there is no `window`) bypass the dedupe map entirely — coalescing mutations would silently drop user actions, and a server-side process-global map would leak across users.
+
+**Stores spot-check** (read-only — no edits per ownership):
+- `src/stores/circular-store.ts:339` `fetchAll` — TRACKS `lastFetched` (line 357) but **does NOT guard against rapid re-fires** via a TTL check. Same for `fetchById` (357 → no guard).
+- `src/stores/policy-store.ts:237` `fetchAll` — same shape; tracks `lastFetched` at 262, no TTL guard.
+- `src/stores/audit-store.ts:307` `fetchAll` — same; tracks at 351/375, no TTL guard.
+
+All three stores will fire `fetchAll` on every page mount. With the dedupe now actually wired, duplicate same-tick fetches collapse to one round-trip — but a remount-after-100ms still re-hits. A `lastFetched`-TTL guard belongs in the stores; per ownership rules for this pass, **not edited**. Recommendation handed off for the next stores pass: if `Date.now() - lastFetched < 30_000 && items.length > 0`, skip the wire call.
+
+### Cache header sweep — list of GET routes missing `sMaxAge/swr`
+Cross-referenced `export async function GET` (89 routes) against `sMaxAge|staleWhileRevalidate|s-maxage` (78 routes). Diff = **11 routes**. Each manually opened to classify:
+
+| Route | Decision | Reason |
+|---|---|---|
+| `src/app/api/audit-logs/route.ts` | **Skip** | Append-only audit log — `cache: 'no-store'` is correct. |
+| `src/app/api/audit-logs/[id]/route.ts` | **Skip** | Same. |
+| `src/app/api/auth/callback/route.ts` | **Skip** | Auth handshake; no body to cache. |
+| `src/app/api/auth/signout/route.ts` | **Skip** | Mutation-shaped GET; must not cache. |
+| `src/app/api/cron/jobs-run/route.ts` | **Skip** | Cron-trigger endpoint; idempotent worker, no cache. |
+| `src/app/api/jobs/[jobId]/route.ts` | **Skip** | Status polling for async jobs — `no-store` is correct. |
+| `src/app/api/messages/threads/route.ts` | **Skip** | Per-user chat list; must be fresh. |
+| `src/app/api/messages/threads/[threadId]/route.ts` | **Skip** | Chat detail; fresh. |
+| `src/app/api/messages/threads/[threadId]/messages/route.ts` | **Skip** | Chat messages; fresh. |
+| `src/app/api/notifications/route.ts` | **Skip** | Per-user notifications; explicitly `no-store`. |
+| `src/app/api/pdf/download/[jobId]/route.ts` | **Skip** | File download stream. |
+
+**Routes edited:** 0. None of the 11 are pure list GETs that should carry `sMaxAge: 60, swr: 300`. The instruction "Be conservative — only edit routes you confirm are pure list GETs" matches the outcome. The 78 routes with cache headers already cover the entire pure-list surface.
+
+### Post-pass metrics
+- **In-flight GET dedupe — now live for real.** Same-tick duplicate browser GETs collapse to one round-trip. Expected impact on the dashboard widget fanout: 6 widgets calling `/api/settings/frameworks` simultaneously → 1 network call (was 6).
+- **Per-page-render auth-fanout: unchanged at ~10× `[auth/v1/user + profiles]`** — owned by Agent SERVER; this pass cannot fix it from `api-client.ts` alone since each Route Handler invocation re-runs `requireUser()` on the server.
+- **Cache coverage: 78/89 GET routes (~88%)** already carry `sMaxAge`. Remaining 11 are correctly `no-store` (audit log, auth, polling, chat). **0 routes added in this pass.**
+
+### Files touched
+- `src/lib/api-client.ts` — additive: 1 import + 1 dedupe block at the top of `apiFetch`. Public surface unchanged.
+- `OPTIMIZATION-BASELINE.md` — this section.
+
+### Acceptance
+- [x] Logs re-pulled and worst offenders identified.
+- [x] Dedupe wiring confirmed missing, then added (additive only).
+- [x] Stores spot-checked (read-only, per ownership).
+- [x] Cache header sweep — all 11 candidates classified; 0 edits required.
+- [x] `tsc --noEmit` exit 0.

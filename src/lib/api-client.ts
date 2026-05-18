@@ -19,6 +19,8 @@
 //
 // See `.planning/09-store-pattern.md` for the store migration recipe.
 
+import { dedupeKey, getInflight, trackInflight } from '@/lib/api/dedupe'
+
 export type ApiSuccess<T> = { data: T }
 export type ApiErrorEnvelope = {
   error: { code: string; message: string; details?: unknown }
@@ -123,6 +125,24 @@ interface FetchAttemptOptions {
  * the request ONCE. If the refresh fails, the user is redirected to /sign-in.
  */
 export async function apiFetch<T>(path: string, init: FetchInit = {}): Promise<T> {
+  // In-flight GET dedupe: when multiple callers fire the same GET in the same
+  // tick (typical dashboard fan-out: 6 widgets, 6 identical /api/lookups
+  // calls), we hand them all the same pending promise so only one round-trip
+  // hits the network. Entries are wiped on settle in `trackInflight`, so a
+  // refetch-after-mutation still goes to the wire.
+  //
+  // Only applies to GETs from the browser. Mutations MUST always go to the
+  // wire (coalescing them would silently drop user actions). Server-side
+  // callers skip dedupe too — each request has its own React `cache()` scope
+  // and a process-global map would leak across users.
+  const method = (init.method ?? 'GET').toUpperCase()
+  if (method === 'GET' && typeof window !== 'undefined') {
+    const url = `/api${path}${buildQuery(init.params)}`
+    const key = dedupeKey(method, url)
+    const existing = getInflight<T>(key)
+    if (existing) return existing
+    return trackInflight(key, apiFetchInternal<T>(path, init, {}))
+  }
   return apiFetchInternal<T>(path, init, {})
 }
 

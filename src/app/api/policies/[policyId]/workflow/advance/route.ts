@@ -20,6 +20,7 @@ import {
   assertPolicyExists,
   writePolicyActivity,
 } from '@/lib/api/services/policies'
+import { notifyPolicyStepAssignee } from '@/lib/api/services/notifications'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -68,14 +69,52 @@ export async function POST(req: NextRequest, { params }: Params) {
         throw Conflict(`Unknown workflow action: ${input.action}`)
     }
 
-    // Optionally bump the targeted step.
+    // Optionally bump the targeted step, promote the next pending step to
+    // 'current' (mirrors circular workflow advance), and notify its assignee.
+    let promotedStep:
+      | {
+          id: string
+          step: string
+          note: string | null
+          assigned_to: string | null
+        }
+      | null = null
     if (input.step_id) {
-      const stepRes = await supabase
+      const { data: completedStep, error: stepErr } = await supabase
         .from('policy_workflow_steps')
         .update({ status: 'completed', user_name: actor, note: input.note ?? null })
         .eq('id', input.step_id)
         .eq('policy_id', policyId)
-      if (stepRes.error) throw stepRes.error
+        .select('id, sort_order')
+        .single<{ id: string; sort_order: number }>()
+      if (stepErr) throw stepErr
+
+      // Promote the next pending step by sort_order to 'current'.
+      const { data: nextRows, error: nextErr } = await supabase
+        .from('policy_workflow_steps')
+        .select('id, step, note, sort_order')
+        .eq('policy_id', policyId)
+        .eq('status', 'pending')
+        .gt('sort_order', completedStep?.sort_order ?? 0)
+        .order('sort_order', { ascending: true })
+        .limit(1)
+      if (nextErr) throw nextErr
+      const next = (nextRows ?? [])[0] as
+        | { id: string; step: string; note: string | null; assigned_to?: string | null }
+        | undefined
+      if (next) {
+        const { error: promoteErr } = await supabase
+          .from('policy_workflow_steps')
+          .update({ status: 'current' })
+          .eq('id', next.id)
+        if (promoteErr) throw promoteErr
+        promotedStep = {
+          id: next.id,
+          step: next.step,
+          note: next.note ?? null,
+          assigned_to: next.assigned_to ?? null,
+        }
+      }
     }
 
     const { data, error } = await supabase
@@ -107,6 +146,24 @@ export async function POST(req: NextRequest, { params }: Params) {
         note: input.note,
       }),
     ])
+
+    if (promotedStep) {
+      const policyHeader = data as { id: string; ref_code: string | null; name: string }
+      await notifyPolicyStepAssignee(supabase, {
+        policy: {
+          id: policyHeader.id,
+          ref_code: policyHeader.ref_code ?? null,
+          name: policyHeader.name,
+        },
+        step: {
+          id: promotedStep.id,
+          label: promotedStep.step,
+          note: promotedStep.note,
+          assigned_to: promotedStep.assigned_to,
+        },
+        actor: { id: user.id, name: actor },
+      })
+    }
 
     revalidateAll([cacheTags.policies(), cacheTags.policies(policyId)])
     revalidate(cacheTags.compliance())

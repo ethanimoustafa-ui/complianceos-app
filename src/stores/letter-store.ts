@@ -422,9 +422,12 @@ export const useLetterStore = create<LetterState>()((set, get) => ({
       const letter = mapRow(row, previous)
       set((state) => ({
         byId: { ...state.byId, [id]: letter },
+        // If the row isn't in `letters[]` yet (deep-link to a freshly-created
+        // letter), prepend it so list-based selectors using
+        // `letters.find(l => l.id === id)` can resolve it.
         letters: state.letters.some((l) => l.id === id)
           ? state.letters.map((l) => (l.id === id ? letter : l))
-          : state.letters,
+          : [letter, ...state.letters],
         selectedLetter: letter,
         isLoading: false,
         lastFetched: Date.now(),
