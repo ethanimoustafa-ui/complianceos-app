@@ -1,3 +1,5 @@
+export {} // make this file a module so its `main()` is locally scoped
+
 /**
  * Post-test log pull.
  *

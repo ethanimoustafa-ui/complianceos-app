@@ -1,3 +1,14 @@
+/**
+ * NEVER inline enum labels — always go through `formatEnum`
+ * (`src/lib/format/enum.ts`).
+ *
+ * Status/priority/applicability/risk-level/compliance-status/action-type
+ * chips MUST resolve their text via `formatStatus(t, value)` etc. — never
+ * via an inline `{ pending: t('regulatoryUpdates.statusPending'), ... }`
+ * map in the component. Drift across components is the regression
+ * Wave-17 (W17-3) closed; please don't reintroduce it.
+ */
+
 import { cva, type VariantProps } from 'class-variance-authority'
 import { cn } from '@/lib/utils'
 

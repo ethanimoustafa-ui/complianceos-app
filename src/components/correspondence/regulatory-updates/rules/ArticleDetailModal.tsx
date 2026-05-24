@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Icon } from '@iconify/react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -11,6 +11,15 @@ import type { CircularArticle, ArticleRiskLevel, ArticleComplianceStatus } from 
 import { useDepartmentStore } from '@/stores/department-store'
 import { useTeamStore } from '@/stores/team-store'
 import { EditableSelect } from '@/components/ui/editable-select'
+import { TimelineMeta } from './CircularDetailsContent'
+import { VersionHistoryList } from './VersionHistoryList'
+import { TimelineLoadMore } from './TimelineLoadMore'
+// W17-3: single shared enum formatter. Never inline an enum label.
+import {
+  formatRiskLevel,
+  formatComplianceStatus,
+  formatDepartment,
+} from '@/lib/format/enum'
 
 type ArticleTab = 'details' | 'versions' | 'activity'
 
@@ -24,9 +33,27 @@ type Props = {
 }
 
 export function ArticleDetailModal({ circularId, article, mode, onClose, t, isRTL }: Props) {
-  const { addArticle, updateArticle, deleteArticle, toggleChecklistItem, addChecklistItem, deleteChecklistItem } = useCircularStore()
+  const { addArticle, updateArticle, deleteArticle, toggleChecklistItem, addChecklistItem, deleteChecklistItem, loadArticleTimeline, loadMoreArticleTimeline, loadArticleVersions, loadMoreArticleVersions } = useCircularStore()
   const { departments: allDepartments, addDepartment, updateDepartment, removeDepartment } = useDepartmentStore()
   const teamMembers = useTeamStore(s => s.members)
+  // GAP-15: per-article Activity timeline pagination state.
+  const articleTimelinePage = useCircularStore((s) =>
+    article ? s.articleTimelinePagination[`${circularId}:${article.id}`] : undefined,
+  )
+  // W15-5: per-article Version History pagination state.
+  const articleVersionPage = useCircularStore((s) =>
+    article ? s.articleVersionPagination[`${circularId}:${article.id}`] : undefined,
+  )
+
+  // GAP-15 / W15-5: lazily load the first page of the article Activity timeline
+  // AND Version History when the modal is open in view mode for a persisted
+  // article (no-ops when `fetchById` already seeded the pagination state).
+  useEffect(() => {
+    if (mode === 'view' && article) {
+      void loadArticleTimeline(circularId, article.id)
+      void loadArticleVersions(circularId, article.id)
+    }
+  }, [mode, article, circularId, loadArticleTimeline, loadArticleVersions])
 
   const [currentMode, setCurrentMode] = useState(mode)
   const [activeArticleTab, setActiveArticleTab] = useState<ArticleTab>('details')
@@ -40,9 +67,16 @@ export function ArticleDetailModal({ circularId, article, mode, onClose, t, isRT
   const [localChecklist, setLocalChecklist] = useState(article?.checklist ?? [])
   const [newChecklistTitle, setNewChecklistTitle] = useState('')
   const [deleteConfirm, setDeleteConfirm] = useState(false)
-  const [expandedArticleVersion, setExpandedArticleVersion] = useState<number | null>(null)
 
   const isEditable = currentMode === 'edit' || currentMode === 'create'
+
+  // Side-bug: `assignedTo` is a team-member UUID on the server. Resolve it to a
+  // display name for view mode; show "Unassigned" when null/empty.
+  const assignedMemberName = (() => {
+    if (!artAssignedTo) return t('common.unassigned')
+    const member = teamMembers.find((m) => m.id === artAssignedTo)
+    return member ? member.name : artAssignedTo
+  })()
 
   const riskColors: Record<string, string> = {
     critical: 'bg-rose-100 text-rose-700',
@@ -56,6 +90,12 @@ export function ArticleDetailModal({ circularId, article, mode, onClose, t, isRT
     'non-compliant': 'bg-rose-100 text-rose-700',
     'not-started': 'bg-slate-100 text-slate-600',
   }
+  // W17-3: route every enum render through the shared formatter
+  // (`src/lib/format/enum.ts`). Per-component label maps are gone.
+  const riskLabel = (v: string) => formatRiskLevel(t, v)
+  const complianceLabel = (v: string) => formatComplianceStatus(t, v)
+  const deptLabel = (name: string) =>
+    formatDepartment(t, name, allDepartments, isRTL ? 'ar' : 'en')
 
   function handleSave() {
     const data = {
@@ -84,8 +124,11 @@ export function ArticleDetailModal({ circularId, article, mode, onClose, t, isRT
     if (article) {
       addChecklistItem(circularId, article.id, newChecklistTitle.trim())
     } else {
+      // GAP-20: prefix the client placeholder id with `temp-` so the store's
+      // persisted-id guards unambiguously treat it as not-yet-persisted until
+      // `addArticle` swaps in the server UUID.
       setLocalChecklist(prev => [...prev, {
-        id: Math.random().toString(36).slice(2),
+        id: `temp-${Math.random().toString(36).slice(2)}`,
         title: newChecklistTitle.trim(),
         completed: false,
         order: prev.length,
@@ -106,8 +149,8 @@ export function ArticleDetailModal({ circularId, article, mode, onClose, t, isRT
         {currentMode === 'view' && article && (
           <div className={`flex items-center gap-2 flex-wrap`}>
             <span className="text-xs font-bold text-emerald-600">{article.articleNumber}</span>
-            <span className={cn('px-2 py-0.5 rounded-full text-xs font-bold', riskColors[article.riskLevel])}>{article.riskLevel}</span>
-            <span className={cn('px-2 py-0.5 rounded-full text-xs font-bold', complianceColors[article.complianceStatus])}>{article.complianceStatus}</span>
+            <span className={cn('px-2 py-0.5 rounded-full text-xs font-bold', riskColors[article.riskLevel])}>{riskLabel(article.riskLevel)}</span>
+            <span className={cn('px-2 py-0.5 rounded-full text-xs font-bold', complianceColors[article.complianceStatus])}>{complianceLabel(article.complianceStatus)}</span>
           </div>
         )}
 
@@ -167,7 +210,7 @@ export function ArticleDetailModal({ circularId, article, mode, onClose, t, isRT
                     isRTL={isRTL}
                   />
                 ) : (
-                  <p className="text-sm text-slate-700">{artDept || '—'}</p>
+                  <p className="text-sm text-slate-700">{artDept ? deptLabel(artDept) : '—'}</p>
                 )}
               </div>
             </div>
@@ -182,13 +225,15 @@ export function ArticleDetailModal({ circularId, article, mode, onClose, t, isRT
                     // Send the team-member UUID, not the name — assigned_to
                     // is a UUID column on the server (HANDOFF #15).
                     id: m.id,
-                    label: `${m.name} — ${m.department}`,
+                    // Cosmetic: only append "— department" when the member has
+                    // one; otherwise the label trails a dangling separator.
+                    label: m.department ? `${m.name} — ${m.department}` : m.name,
                   }))}
                   placeholder={t('common.select' as any)}
                   isRTL={isRTL}
                 />
               ) : (
-                <p className="text-sm text-slate-700">{artAssignedTo || '—'}</p>
+                <p className="text-sm text-slate-700">{assignedMemberName}</p>
               )}
             </div>
 
@@ -231,7 +276,7 @@ export function ArticleDetailModal({ circularId, article, mode, onClose, t, isRT
                     isRTL={isRTL}
                   />
                 ) : (
-                  <span className={cn('px-2 py-0.5 rounded-full text-xs font-bold', riskColors[artRiskLevel])}>{artRiskLevel}</span>
+                  <span className={cn('px-2 py-0.5 rounded-full text-xs font-bold', riskColors[artRiskLevel])}>{riskLabel(artRiskLevel)}</span>
                 )}
               </div>
               <div>
@@ -250,7 +295,7 @@ export function ArticleDetailModal({ circularId, article, mode, onClose, t, isRT
                     isRTL={isRTL}
                   />
                 ) : (
-                  <span className={cn('px-2 py-0.5 rounded-full text-xs font-bold', complianceColors[artComplianceStatus])}>{artComplianceStatus}</span>
+                  <span className={cn('px-2 py-0.5 rounded-full text-xs font-bold', complianceColors[artComplianceStatus])}>{complianceLabel(artComplianceStatus)}</span>
                 )}
               </div>
             </div>
@@ -330,74 +375,78 @@ export function ArticleDetailModal({ circularId, article, mode, onClose, t, isRT
           </div>
         )}
 
-        {/* Versions tab */}
+        {/* Versions tab — GAP-19: shared Version History list.
+            W15-5: paginated 10/page via the shared Load More control. */}
         {activeArticleTab === 'versions' && currentMode === 'view' && article && (
-          <div className="space-y-2">
-            {(article.versions?.length ?? 0) > 0 ? (
-              [...(article.versions ?? [])].reverse().map((ver) => (
-                <div key={ver.version}>
-                  <button
-                    onClick={() => setExpandedArticleVersion(expandedArticleVersion === ver.version ? null : ver.version)}
-                    className="w-full flex items-start gap-3 p-3 bg-slate-50 rounded-xl hover:bg-slate-100 transition-colors cursor-pointer text-left"
-                  >
-                    <span className="px-2 py-0.5 bg-slate-200 text-slate-700 rounded text-xs font-bold font-mono shrink-0">v{ver.version}</span>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs font-bold text-slate-700">{ver.summary}</p>
-                      <p className="text-[10px] text-slate-400 mt-0.5">{ver.date} • {ver.author}</p>
-                    </div>
-                    {ver.approved && <Icon icon="lucide:check-circle" className="text-emerald-500 text-sm shrink-0 mt-0.5" />}
-                    <Icon icon={expandedArticleVersion === ver.version ? 'lucide:chevron-up' : 'lucide:chevron-down'} className="text-slate-400 text-sm shrink-0 mt-0.5" />
-                  </button>
-                  {expandedArticleVersion === ver.version && Object.keys(ver.fieldChanges ?? {}).length > 0 && (
-                    <div className="bg-amber-50 rounded-xl p-3 mt-1 space-y-1.5">
-                      <div className="grid grid-cols-3 gap-1 text-[10px] font-black text-slate-500 uppercase tracking-wider border-b border-amber-100 pb-1">
-                        <span>{t('regulatoryUpdates.fieldChanged')}</span>
-                        <span>{t('regulatoryUpdates.changedFrom')}</span>
-                        <span>{t('regulatoryUpdates.changedTo')}</span>
-                      </div>
-                      {Object.entries(ver.fieldChanges ?? {}).map(([field, diff]) => (
-                        <div key={field} className="grid grid-cols-3 gap-1 text-[10px]">
-                          <span className="font-bold text-slate-600">{field}</span>
-                          <span className="text-rose-600 line-through truncate">{diff.from || '—'}</span>
-                          <span className="text-emerald-600 truncate">{diff.to || '—'}</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                  {expandedArticleVersion === ver.version && Object.keys(ver.fieldChanges ?? {}).length === 0 && (
-                    <div className="bg-slate-50 rounded-xl p-3 mt-1">
-                      <p className="text-xs text-slate-400">{ver.summary}</p>
-                    </div>
-                  )}
-                </div>
-              ))
-            ) : (
-              <p className="text-sm text-slate-400">—</p>
+          <>
+            <VersionHistoryList
+              items={(article.versions ?? []).map((ver) => ({
+                version: ver.version,
+                date: ver.date,
+                author: ver.author,
+                // Wave-19.4 / Item-3 — dual-store: pick the locale column.
+                summary: isRTL ? ver.textAr : ver.textEn,
+                fieldChanges: ver.fieldChanges ?? [],
+                approved: ver.approved,
+              }))}
+              t={t}
+            />
+            {articleVersionPage?.hasMore && (
+              <div className="mt-3">
+                <TimelineLoadMore
+                  loading={!!articleVersionPage?.loadingMore}
+                  onClick={() => void loadMoreArticleVersions(circularId, article.id)}
+                  label={t('regulatoryUpdates.loadMoreActivity')}
+                  loadingLabel={t('regulatoryUpdates.loadingActivity')}
+                />
+              </div>
             )}
-          </div>
+          </>
         )}
 
-        {/* Activity tab — Fix 4: RTL-aware timeline */}
+        {/* Activity tab — GAP-15: newest-at-top, lazy-loaded, paginated. */}
         {activeArticleTab === 'activity' && currentMode === 'view' && article && (
           <div>
             {(article.timeline?.length ?? 0) > 0 ? (
-              <div className={`space-y-4 relative before:absolute ${isRTL ? 'before:right-2' : 'before:left-2'} before:top-1 before:bottom-1 before:w-0.5 before:bg-slate-100`}>
-                {[...(article.timeline ?? [])].reverse().map((event) => (
-                  <div key={event.id} className={`relative ${isRTL ? 'pr-8' : 'pl-8'}`}>
-                    <div className={`absolute ${isRTL ? 'right-0' : 'left-0'} top-1 w-4 h-4 rounded-full border-2 ${
-                      event.status === 'completed' ? 'bg-emerald-100 border-emerald-500' :
-                      event.status === 'active' ? 'bg-blue-100 border-blue-500' :
-                      'bg-slate-100 border-slate-300'
-                    }`} />
-                    <p className={`text-xs font-bold ${event.status === 'pending' ? 'text-slate-300' : 'text-slate-900'}`}>
-                      {isRTL && event.titleAr ? event.titleAr : event.title}
-                    </p>
-                    <p className={`text-[10px] ${event.status === 'pending' ? 'text-slate-300' : 'text-slate-400'}`}>
-                      {event.date}{event.user && ` • ${event.user}`}
-                    </p>
+              <>
+                <div className={`space-y-4 relative before:absolute ${isRTL ? 'before:right-2' : 'before:left-2'} before:top-1 before:bottom-1 before:w-0.5 before:bg-slate-100`}>
+                  {(article.timeline ?? []).map((event) => (
+                    <div key={event.id} className={`relative ${isRTL ? 'pr-8' : 'pl-8'}`}>
+                      <div className={`absolute ${isRTL ? 'right-0' : 'left-0'} top-1 w-4 h-4 rounded-full border-2 ${
+                        event.status === 'completed' ? 'bg-emerald-100 border-emerald-500' :
+                        event.status === 'active' ? 'bg-blue-100 border-blue-500' :
+                        'bg-slate-100 border-slate-300'
+                      }`} />
+                      <p className={`text-xs font-bold ${event.status === 'pending' ? 'text-slate-300' : 'text-slate-900'}`}>
+                        {/* Wave-19.1 / Q8 — dual-store: pick the column for
+                            the current locale. Legacy/optimistic rows fall
+                            back to `title` / `titleAr`. */}
+                        {(isRTL
+                          ? event.textAr || event.titleAr || event.title
+                          : event.textEn || event.title) || ''}
+                      </p>
+                      <TimelineMeta
+                        date={event.date}
+                        user={event.user}
+                        isRTL={isRTL}
+                        muted={event.status === 'pending'}
+                      />
+                    </div>
+                  ))}
+                </div>
+                {articleTimelinePage?.hasMore && (
+                  <div className="mt-4">
+                    <TimelineLoadMore
+                      loading={!!articleTimelinePage?.loadingMore}
+                      onClick={() => void loadMoreArticleTimeline(circularId, article.id)}
+                      label={t('regulatoryUpdates.loadMoreActivity')}
+                      loadingLabel={t('regulatoryUpdates.loadingActivity')}
+                    />
                   </div>
-                ))}
-              </div>
+                )}
+              </>
+            ) : articleTimelinePage?.loadingMore ? (
+              <p className="text-sm text-slate-400">{t('regulatoryUpdates.loadingActivity')}</p>
             ) : (
               <p className="text-sm text-slate-400">—</p>
             )}
@@ -437,7 +486,14 @@ export function ArticleDetailModal({ circularId, article, mode, onClose, t, isRT
                 ) : (
                   <div className="flex items-center gap-2">
                     <span className="text-xs text-rose-600 font-bold">{t('common.confirm')}?</span>
-                    <Button variant="outline" className="border-rose-200 text-rose-600 hover:bg-rose-50" onClick={async () => { try { await deleteArticle(circularId, article.id) } finally { onClose() } }}>
+                    <Button variant="outline" className="border-rose-200 text-rose-600 hover:bg-rose-50" onClick={() => {
+                      // Close-on-click: close the modal the same tick. The
+                      // store drops the article optimistically (and adjusts
+                      // Implementation Progress), runs the DELETE in the
+                      // background, and reverts + toasts on failure.
+                      onClose()
+                      void Promise.resolve(deleteArticle(circularId, article.id)).catch(() => {})
+                    }}>
                       {t('common.delete')}
                     </Button>
                     <Button variant="ghost" onClick={() => setDeleteConfirm(false)}>{t('common.cancel')}</Button>

@@ -11,13 +11,14 @@ import type { NextRequest } from 'next/server'
 import { requirePerm } from '@/lib/api/auth'
 import { handle, NotFound, Conflict } from '@/lib/api/errors'
 import { ok } from '@/lib/api/response'
-import { parseJson } from '@/lib/api/validate'
+import { assertUuid, parseJson } from '@/lib/api/validate'
 import { cacheTags, revalidate, revalidateAll } from '@/lib/api/cache'
 import { writeAudit } from '@/lib/api/audit'
 import { AdvancePolicyWorkflowSchema } from '@/lib/api/schemas/policies'
 import {
   POLICY_LIST_COLUMNS,
   assertPolicyExists,
+  recomputePolicyStatus,
   writePolicyActivity,
 } from '@/lib/api/services/policies'
 import { notifyPolicyStepAssignee } from '@/lib/api/services/notifications'
@@ -30,6 +31,7 @@ type Params = { params: Promise<{ policyId: string }> }
 export async function POST(req: NextRequest, { params }: Params) {
   try {
     const { policyId } = await params
+    assertUuid(policyId)
     const { supabase, user, profile } = await requirePerm('settings:edit')
     await assertPolicyExists(supabase, policyId)
     const input = await parseJson(req, AdvancePolicyWorkflowSchema)
@@ -164,6 +166,9 @@ export async function POST(req: NextRequest, { params }: Params) {
         actor: { id: user.id, name: actor },
       })
     }
+
+    // §2-7: server-authoritative recompute after every status-affecting mutation.
+    await recomputePolicyStatus(supabase, policyId)
 
     revalidateAll([cacheTags.policies(), cacheTags.policies(policyId)])
     revalidate(cacheTags.compliance())

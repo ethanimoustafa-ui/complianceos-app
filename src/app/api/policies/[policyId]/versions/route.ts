@@ -1,10 +1,12 @@
-// /api/policies/[policyId]/versions — list / publish new version.
+// /api/policies/[policyId]/versions — list (paginated newest-first) +
+// publish a new version. Wave-18: GAP-15 pagination + no-store.
 
 import type { NextRequest } from 'next/server'
 import { requirePerm, requireUser } from '@/lib/api/auth'
 import { handle, NotFound } from '@/lib/api/errors'
-import { ok } from '@/lib/api/response'
-import { parseJson } from '@/lib/api/validate'
+import { ok, paginate } from '@/lib/api/response'
+import { parsePagination, rangeFor } from '@/lib/api/pagination'
+import { assertUuid, parseJson } from '@/lib/api/validate'
 import { cacheTags, revalidateAll } from '@/lib/api/cache'
 import { writeAudit } from '@/lib/api/audit'
 import { PublishPolicyVersionSchema } from '@/lib/api/schemas/policies'
@@ -19,21 +21,26 @@ export const dynamic = 'force-dynamic'
 
 type Params = { params: Promise<{ policyId: string }> }
 
-export async function GET(_req: NextRequest, { params }: Params) {
+export async function GET(req: NextRequest, { params }: Params) {
   try {
     const { policyId } = await params
+    assertUuid(policyId)
     const { supabase } = await requireUser()
     await assertPolicyExists(supabase, policyId)
+    const { page, pageSize } = parsePagination(req.nextUrl.searchParams)
 
-    const { data, error } = await supabase
+    const [from, to] = rangeFor(page, pageSize)
+    const { data, error, count } = await supabase
       .from('policy_versions')
-      .select(POLICY_VERSION_COLUMNS)
+      .select(POLICY_VERSION_COLUMNS, { count: 'exact' })
       .eq('policy_id', policyId)
       .order('date', { ascending: false })
+      .order('id', { ascending: false })
+      .range(from, to)
     if (error) throw error
 
-    return ok(data ?? [], {
-      cache: { sMaxAge: 60, tags: [cacheTags.policies(policyId)] },
+    return ok(paginate(data ?? [], page, pageSize, count ?? 0), {
+      cache: 'no-store',
     })
   } catch (e) {
     return handle(e)
@@ -43,10 +50,16 @@ export async function GET(_req: NextRequest, { params }: Params) {
 export async function POST(req: NextRequest, { params }: Params) {
   try {
     const { policyId } = await params
+    assertUuid(policyId)
     const { supabase, user, profile } = await requirePerm('edit')
     await assertPolicyExists(supabase, policyId)
     const input = await parseJson(req, PublishPolicyVersionSchema)
 
+    // Wave-19.4 / Item-3 — dual-store. The Publish endpoint accepts a single
+    // free-text `changes` blob (no i18n key); persist it into both columns so
+    // the reader's locale-conditioned pick still has a value either way. UI
+    // callers wanting bilingual copy go through the PATCH flow which composes
+    // `renderBilingual('regulatoryUpdates.timeline.policyVersionUpdated', …)`.
     const { data, error } = await supabase
       .from('policy_versions')
       .insert({
@@ -54,7 +67,8 @@ export async function POST(req: NextRequest, { params }: Params) {
         version: input.version,
         date: input.date,
         author: input.author,
-        changes: input.changes,
+        text_en: input.changes,
+        text_ar: input.changes,
       })
       .select(POLICY_VERSION_COLUMNS)
       .single()

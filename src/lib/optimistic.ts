@@ -66,3 +66,93 @@ export async function runOptimistic<T extends { id: string }, R extends { id: st
     return null
   }
 }
+
+// ── GAP-14: cross-cutting optimistic-mutation lifecycle ─────────────────────
+//
+// `optimisticMutation` codifies the full optimistic-UI lifecycle used by every
+// mutating action on the Regulatory Updates — Rules page:
+//
+//   1. `apply()`     — synchronously mutate the store to the optimistic END
+//                      state (row removed / chip updated / temp row inserted),
+//                      BEFORE any await, so the UI changes the same tick.
+//   2. `request()`   — fire the background request; resolves with server data.
+//   3. on 2xx  → `reconcile(result)` — optional; swap temp ids, stamp
+//                server-authoritative fields (progress / status / version).
+//   4. on error → `revert()` then a friendly error toast (default copy below).
+//                The real error is logged to console for developers.
+//
+// IMPORTANT — entity-granular snapshots: the CALLER captures a snapshot of just
+// the affected entity (circular / article / step / field) BEFORE calling, and
+// `revert()` restores only that entity, recomputing rollups from the CURRENT
+// store state. Never snapshot/restore the whole store — that would clobber
+// concurrent mutations on other entities.
+
+import { pushToast, type ToastMessage } from '@/stores/toast-store'
+
+/**
+ * RTL-8: default i18n KEY for a reverted optimistic mutation. The toast carries
+ * a key (not a literal) so `<ToastHost />` translates it at render time — the
+ * store lives outside React and has no `t()`.
+ */
+export const DEFAULT_REVERT_MESSAGE_KEY = 'regulatoryUpdates.optimisticRevert'
+
+export interface OptimisticMutationOptions<T> {
+  /** Synchronously mutate store state to the optimistic END state. */
+  apply: () => void
+  /** Fire the background request; resolves with the server result. */
+  request: () => Promise<T>
+  /**
+   * Optional success step: reconcile server-authoritative fields into the
+   * already-optimistic state (swap temp ids, stamp progress/status/version).
+   */
+  reconcile?: (result: T) => void
+  /**
+   * Revert the optimistic change. Restore the affected entity from the
+   * caller's snapshot and recompute rollups from the CURRENT store state.
+   */
+  revert: () => void
+  /**
+   * Friendly toast shown on failure. RTL-8: pass a `{key,params}` translation
+   * spec (or a literal string) — defaults to the translatable revert key so the
+   * copy is localised. Never pass a hardcoded English sentence.
+   *
+   * Wave-20.cleanup — accepts an `(err) => ToastMessage` function so callers
+   * can switch between the generic revert key and the 412-specific conflict
+   * key based on the failure. (Static value still works for the simple case.)
+   */
+  errorMessage?: ToastMessage | ((err: unknown) => ToastMessage)
+  /** Context label for the dev console log. */
+  context?: string
+}
+
+/**
+ * Run an optimistic mutation through the full lifecycle. Applies the optimistic
+ * state immediately, fires the request, reconciles on success, reverts + toasts
+ * on failure. Re-throws the error after revert so callers can still react.
+ */
+export async function optimisticMutation<T>(
+  opts: OptimisticMutationOptions<T>,
+): Promise<T | void> {
+  const { apply, request, reconcile, revert, errorMessage, context } = opts
+
+  // 1. Optimistic end state — synchronous, before any await.
+  apply()
+
+  try {
+    // 2. Background request.
+    const result = await request()
+    // 3. Reconcile server-authoritative fields.
+    reconcile?.(result)
+    return result
+  } catch (e) {
+    // 4. Revert + friendly toast. Log the real error for developers.
+    revert()
+    console.error(`[optimistic${context ? `:${context}` : ''}] mutation failed —`, e)
+    const toast =
+      typeof errorMessage === 'function'
+        ? errorMessage(e)
+        : (errorMessage ?? { key: DEFAULT_REVERT_MESSAGE_KEY })
+    pushToast(toast, 'error')
+    throw e
+  }
+}

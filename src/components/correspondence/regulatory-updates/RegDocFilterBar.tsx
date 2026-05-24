@@ -23,9 +23,14 @@ interface RegDocFilterBarProps {
   statusFilter?: PolicyStatus | 'all'
   onStatusChange?: (v: PolicyStatus | 'all') => void
   resultCount: number
-  resultLabel: string
+  // GAP-5: base translation key for the result-count line. The component
+  // resolves it count-aware via `tCount` ("1 circular found" / "2 circulars
+  // found"). Reusable across circular / policy / observation / letter lists.
+  resultLabelKey: string
   rightSlot?: React.ReactNode
   t: (key: TranslationKey, params?: Record<string, string>) => string
+  // GAP-5: count-aware translator from `useTranslation()`.
+  tCount: (baseKey: string, count: number, params?: Record<string, string | number>) => string
   isRTL: boolean
 }
 
@@ -42,9 +47,10 @@ export function RegDocFilterBar({
   statusFilter = 'all',
   onStatusChange,
   resultCount,
-  resultLabel,
+  resultLabelKey,
   rightSlot,
   t,
+  tCount,
   isRTL,
 }: RegDocFilterBarProps) {
   const { departments: allDepartments, addDepartment, updateDepartment, removeDepartment } = useDepartmentStore()
@@ -159,7 +165,7 @@ export function RegDocFilterBar({
       {/* Right side: result count + slot */}
       <div className={`flex items-center gap-3 shrink-0`}>
         <span className={`text-xs font-bold text-slate-500`}>
-          {resultCount} {resultLabel}
+          {tCount(resultLabelKey, resultCount)}
         </span>
         {rightSlot}
       </div>

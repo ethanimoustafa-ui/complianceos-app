@@ -32,13 +32,7 @@ export async function GET(req: NextRequest, { params }: Params) {
       .range(from, to)
     if (error) throw error
 
-    return ok(paginate(data ?? [], page, pageSize, count ?? 0), {
-      cache: {
-        sMaxAge: 60,
-        staleWhileRevalidate: 300,
-        tags: [cacheTags.observations(observationId)],
-      },
-    })
+    return ok(paginate(data ?? [], page, pageSize, count ?? 0), { cache: 'no-store' })
   } catch (e) {
     return handle(e)
   }

@@ -11,7 +11,7 @@ import type { NextRequest } from 'next/server'
 import { requirePerm } from '@/lib/api/auth'
 import { Conflict, handle } from '@/lib/api/errors'
 import { ok } from '@/lib/api/response'
-import { parseJson } from '@/lib/api/validate'
+import { assertUuid, parseJson } from '@/lib/api/validate'
 import { cacheTags, revalidate, revalidateAll } from '@/lib/api/cache'
 import { writeAudit } from '@/lib/api/audit'
 import { AdvancePhaseSchema } from '@/lib/api/schemas/circulars'
@@ -23,6 +23,8 @@ import {
   recomputeCircularProgress,
 } from '@/lib/api/services/circulars'
 import { notifyCircularStepAssignee } from '@/lib/api/services/notifications'
+// Wave-19.1 / Q8 — server-side bilingual renderer for dual-store timeline rows.
+import { renderBilingual } from '@/lib/i18n/server'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -43,6 +45,7 @@ type StepRow = {
 export async function POST(req: NextRequest, { params }: Params) {
   try {
     const { circularId } = await params
+    assertUuid(circularId) // SEC-5
     const { supabase, user, profile } = await requirePerm('edit')
     await assertCircularExists(supabase, circularId)
     const body = await parseJson(req, AdvancePhaseSchema)
@@ -104,6 +107,11 @@ export async function POST(req: NextRequest, { params }: Params) {
       if (nErr) throw nErr
     }
 
+    // Side-bug: a within-phase advance (completing a step but staying on the
+    // same phase) used to write a noise event "Phase advanced: 1 → 1". Only
+    // log the phase-change timeline row when the phase actually moved.
+    const phaseChanged = current.phase !== nextPhase
+
     await Promise.all([
       writeAudit({
         actor_id: user.id,
@@ -119,13 +127,18 @@ export async function POST(req: NextRequest, { params }: Params) {
         },
         supabase,
       }),
-      insertCircularTimeline(
-        supabase,
-        circularId,
-        `Phase advanced: ${current.phase} → ${nextPhase}`,
-        actor,
-        'completed',
-      ),
+      phaseChanged
+        ? insertCircularTimeline(
+            supabase,
+            circularId,
+            renderBilingual('regulatoryUpdates.timeline.phaseAdvanced', {
+              from: String(current.phase),
+              to: String(nextPhase),
+            }),
+            actor,
+            'completed',
+          )
+        : Promise.resolve(),
       recomputeCircularProgress(supabase, circularId).catch(() => undefined),
     ])
 

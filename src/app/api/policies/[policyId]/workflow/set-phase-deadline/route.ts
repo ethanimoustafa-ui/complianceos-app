@@ -7,7 +7,7 @@ import type { NextRequest } from 'next/server'
 import { requirePerm } from '@/lib/api/auth'
 import { handle, NotFound } from '@/lib/api/errors'
 import { ok } from '@/lib/api/response'
-import { parseJson } from '@/lib/api/validate'
+import { assertUuid, parseJson } from '@/lib/api/validate'
 import { cacheTags, revalidateAll } from '@/lib/api/cache'
 import { writeAudit } from '@/lib/api/audit'
 import { SetPhaseDeadlineSchema } from '@/lib/api/schemas/policies'
@@ -25,6 +25,7 @@ type Params = { params: Promise<{ policyId: string }> }
 export async function POST(req: NextRequest, { params }: Params) {
   try {
     const { policyId } = await params
+    assertUuid(policyId)
     const { supabase, user, profile } = await requirePerm('edit')
     await assertPolicyExists(supabase, policyId)
     const input = await parseJson(req, SetPhaseDeadlineSchema)

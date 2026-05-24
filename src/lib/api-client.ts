@@ -227,12 +227,16 @@ async function apiFetchInternal<T>(
 export const api = {
   get: <T>(path: string, params?: QueryParams) =>
     apiFetch<T>(path, { method: 'GET', params }),
-  post: <T>(path: string, body?: unknown) =>
-    apiFetch<T>(path, { method: 'POST', body }),
-  patch: <T>(path: string, body?: unknown) =>
-    apiFetch<T>(path, { method: 'PATCH', body }),
-  delete: <T = { id: string; deleted: true }>(path: string) =>
-    apiFetch<T>(path, { method: 'DELETE' }),
+  post: <T>(path: string, body?: unknown, headers?: Record<string, string>) =>
+    apiFetch<T>(path, { method: 'POST', body, headers }),
+  // SEC-1: `headers` lets a caller attach the `If-Match` optimistic-locking
+  // token (the entity's last-known `updated_at`).
+  patch: <T>(path: string, body?: unknown, headers?: Record<string, string>) =>
+    apiFetch<T>(path, { method: 'PATCH', body, headers }),
+  delete: <T = { id: string; deleted: true }>(
+    path: string,
+    headers?: Record<string, string>,
+  ) => apiFetch<T>(path, { method: 'DELETE', headers }),
 }
 
 /** Narrow check for stores that want to special-case validation errors. */

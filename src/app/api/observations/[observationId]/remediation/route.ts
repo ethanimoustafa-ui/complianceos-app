@@ -32,13 +32,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
       .order('created_at', { ascending: false })
     if (error) throw error
 
-    return ok(data ?? [], {
-      cache: {
-        sMaxAge: 60,
-        staleWhileRevalidate: 300,
-        tags: [cacheTags.observations(observationId)],
-      },
-    })
+    return ok(data ?? [], { cache: 'no-store' })
   } catch (e) {
     return handle(e)
   }

@@ -4,6 +4,11 @@ import { memo, useState, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { Icon } from '@iconify/react'
 import { useTranslation } from '@/i18n'
+import {
+  formatObservationSeverity,
+  formatObservationStatus,
+  formatObservationSource,
+} from '@/lib/format/enum'
 import { Observation, severityConfig, statusConfig, sourceConfig } from './observation-types'
 
 interface ObservationTableRowProps {
@@ -87,7 +92,8 @@ export const ObservationTableRow = memo(function ObservationTableRow({
             className={isClosed ? 'text-slate-400' : source.iconColor}
           />
           <span className="text-xs font-bold text-slate-700">
-            {t(`observations.sources.${observation.source}` as 'observations.sources.sama')}
+            {/* Wave-20.cleanup — single shared enum formatter. */}
+            {formatObservationSource(t, observation.source)}
           </span>
         </div>
       </td>
@@ -105,7 +111,8 @@ export const ObservationTableRow = memo(function ObservationTableRow({
             isClosed ? 'bg-slate-100 text-slate-600' : severity.badgeClass
           } text-[10px] font-black rounded-full uppercase`}
         >
-          {t(`observations.severityOptions.${observation.severity}` as 'observations.severityOptions.critical')}
+          {/* Wave-20.cleanup — single shared enum formatter. */}
+          {formatObservationSeverity(t, observation.severity)}
         </span>
       </td>
       <td className={`py-4 text-xs font-medium text-slate-600`}>
@@ -128,7 +135,10 @@ export const ObservationTableRow = memo(function ObservationTableRow({
             }`}
           />
           <span className={`text-xs font-bold ${status.textColor}`}>
-            {t(`observations.statusOptions.${observation.status === 'in_progress' ? 'inProgress' : observation.status === 'resolved' ? 'pendingReview' : observation.status}` as 'observations.statusOptions.open')}
+            {/* Wave-20.cleanup — single shared enum formatter. The helper
+                already maps in_progress→inProgress and resolved→pendingReview
+                via its OBSERVATION_STATUS_KEYS table. */}
+            {formatObservationStatus(t, observation.status)}
           </span>
         </div>
       </td>

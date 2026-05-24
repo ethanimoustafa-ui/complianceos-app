@@ -5,7 +5,7 @@ import type { NextRequest } from 'next/server'
 import { requirePerm, requireUser } from '@/lib/api/auth'
 import { handle, NotFound } from '@/lib/api/errors'
 import { ok } from '@/lib/api/response'
-import { parseJson } from '@/lib/api/validate'
+import { assertUuid, parseJson } from '@/lib/api/validate'
 import { cacheTags, revalidateAll } from '@/lib/api/cache'
 import { writeAudit } from '@/lib/api/audit'
 import { CreateArticleChecklistItemSchema } from '@/lib/api/schemas/circulars'
@@ -16,6 +16,8 @@ import {
   insertArticleTimeline,
   recomputeCircularProgress,
 } from '@/lib/api/services/circulars'
+// Wave-19.1 / Q8 — server-side bilingual renderer for dual-store timeline rows.
+import { renderBilingual } from '@/lib/i18n/server'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -25,6 +27,7 @@ type Params = { params: Promise<{ circularId: string; implementationId: string }
 export async function GET(_req: NextRequest, { params }: Params) {
   try {
     const { circularId, implementationId } = await params
+    assertUuid(circularId, implementationId) // SEC-5
     const { supabase } = await requireUser()
     await assertCircularExists(supabase, circularId)
     await assertArticleExists(supabase, circularId, implementationId)
@@ -34,9 +37,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
       .eq('article_id', implementationId)
       .order('sort_order', { ascending: true })
     if (error) throw error
-    return ok(data ?? [], {
-      cache: { sMaxAge: 60, tags: [cacheTags.circulars(circularId)] },
-    })
+    return ok(data ?? [], { cache: 'no-store' })
   } catch (e) {
     return handle(e)
   }
@@ -45,6 +46,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
 export async function POST(req: NextRequest, { params }: Params) {
   try {
     const { circularId, implementationId } = await params
+    assertUuid(circularId, implementationId) // SEC-5
     const { supabase, user, profile } = await requirePerm('edit')
     await assertCircularExists(supabase, circularId)
     await assertArticleExists(supabase, circularId, implementationId)
@@ -77,7 +79,9 @@ export async function POST(req: NextRequest, { params }: Params) {
       insertArticleTimeline(
         supabase,
         implementationId,
-        `Checklist item added: ${input.title}`,
+        renderBilingual('regulatoryUpdates.timeline.checklistItemAdded', {
+          title: input.title,
+        }),
         actorName,
         'completed',
       ),

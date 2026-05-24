@@ -1,4 +1,4 @@
-// /api/observations/[observationId]/checklist — list / add checklist items.
+// Wave-20 — /api/observations/[observationId]/checklist — list / add items.
 
 import type { NextRequest } from 'next/server'
 import { requirePerm, requireUser } from '@/lib/api/auth'
@@ -11,8 +11,10 @@ import { CreateChecklistItemSchema } from '@/lib/api/schemas/observations'
 import {
   OBSERVATION_CHECKLIST_COLUMNS,
   assertObservationExists,
-  writeObservationTimeline,
+  insertObservationTimeline,
+  observationActorName,
 } from '@/lib/api/services/observations'
+import { renderBilingual } from '@/lib/i18n/server'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -32,13 +34,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
       .order('sort_order', { ascending: true })
     if (error) throw error
 
-    return ok(data ?? [], {
-      cache: {
-        sMaxAge: 60,
-        staleWhileRevalidate: 300,
-        tags: [cacheTags.observations(observationId)],
-      },
-    })
+    return ok(data ?? [], { cache: 'no-store' })
   } catch (e) {
     return handle(e)
   }
@@ -51,36 +47,48 @@ export async function POST(req: NextRequest, { params }: Params) {
     const observationId = await assertObservationExists(supabase, observationIdParam)
     const input = await parseJson(req, CreateChecklistItemSchema)
 
+    // GAP-12 — server-authoritative MAX+1 sort_order. The client may still
+    // send a value; it's overridden.
+    const { data: top } = await supabase
+      .from('observation_checklist')
+      .select('sort_order')
+      .eq('observation_id', observationId)
+      .order('sort_order', { ascending: false })
+      .limit(1)
+      .maybeSingle<{ sort_order: number }>()
+    const nextOrder = (top?.sort_order ?? -1) + 1
+
     const { data, error } = await supabase
       .from('observation_checklist')
       .insert({
         observation_id: observationId,
         text: input.text,
-        sort_order: input.sort_order ?? 0,
+        sort_order: nextOrder,
       })
       .select(OBSERVATION_CHECKLIST_COLUMNS)
       .single()
     if (error || !data) throw error ?? NotFound('Insert returned no row')
 
     const created = data as { id: string }
+    const actor = observationActorName(profile, user.id)
     await Promise.all([
       writeAudit({
         actor_id: user.id,
-        actor_name: profile.name ?? profile.email ?? user.id,
+        actor_name: actor,
         action: 'observation.checklist.create',
         entity_type: 'observation_checklist',
         entity_id: created.id,
         metadata: { observation_id: observationId },
         supabase,
       }),
-      writeObservationTimeline({
+      insertObservationTimeline({
         supabase,
         observation_id: observationId,
         action_type: 'checklist.added',
-        description: `Checklist item added: ${input.text}`,
         user_id: user.id,
-        user_name: profile.name ?? profile.email ?? user.id,
+        user_name: actor,
         target_id: created.id,
+        ...renderBilingual('regulatoryUpdates.timeline.checklistItemAdded', { title: input.text }),
       }),
     ])
 

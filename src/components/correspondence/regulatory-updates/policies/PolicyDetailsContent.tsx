@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef, useMemo } from 'react'
+import { useState, useRef, useMemo, useEffect } from 'react'
 import { Icon } from '@iconify/react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
@@ -10,9 +10,18 @@ import { usePolicyStore } from '@/stores/policy-store'
 import { useAuthStore } from '@/stores/auth-store'
 import { useNotificationStore } from '@/stores/notification-store'
 import { useDepartmentStore } from '@/stores/department-store'
+import { useTeamStore } from '@/stores/team-store'
 import { useCan } from '@/lib/permissions'
 import { EditableSelect } from '@/components/ui/editable-select'
 import { InlineDeadlinePicker } from '@/components/ui/inline-deadline-picker'
+import {
+  formatPolicyStatus,
+  formatPolicyApprovalTier,
+  formatPolicyWorkflowStepStatus,
+} from '@/lib/format/enum'
+// Wave-19.7 — approval-tier labels are user-configurable. Read from the
+// enum-values store first and fall back to the legacy static map.
+import { useEnumValuesStore } from '@/stores/enum-values-store'
 import type {
   Policy, PolicyStatus, PolicyApprovalTier, PolicyActivityEntry,
   PolicyAttachment, PolicyEvidence, PolicyWorkflowStep,
@@ -119,23 +128,23 @@ export function PolicyDetailsContent({
   const actingUser = authUser?.name ?? fresh.owner.name
   const today = new Date().toISOString().split('T')[0]
 
-  const statusLabel: Record<PolicyStatus, string> = {
-    draft:              t('policies.statusDraft'),
-    'under-review':     t('policies.statusUnderReview'),
-    approved:           t('policies.statusApproved'),
-    expired:            t('policies.statusExpired'),
-    overdue:            t('policies.statusOverdue'),
-    'requires-review':  t('policies.statusRequiresReview'),
-  }
-
-  const tierLabels: Record<PolicyApprovalTier, string> = {
-    board:      t('policies.approvalTierBoard'),
-    management: t('policies.approvalTierManagement'),
-    sharia:     t('policies.approvalTierSharia'),
-    agm:        t('policies.approvalTierAGM'),
-  }
+  // W18-cleanup — every enum chip below routes through `src/lib/format/enum.ts`.
+  // The per-component label maps that used to live here were removed in favour
+  // of the shared formatter so EN/AR copy lives in the dictionaries once.
 
   const tierStyle = TIER_COLORS[fresh.approvalTier] ?? TIER_COLORS.management
+
+  // Wave-19.7 — preferred tier label comes from `enum_value_definitions`.
+  // Fetch on mount + fall back to the legacy static formatter when the row
+  // hasn't loaded yet (or doesn't exist for this stored value).
+  const fetchEnumValues = useEnumValuesStore((s) => s.fetch)
+  useEffect(() => { void fetchEnumValues('policy.approval_tier') }, [fetchEnumValues])
+  const tierRow = useEnumValuesStore((s) =>
+    (s.byDomain['policy.approval_tier'] ?? []).find((v) => v.key === fresh.approvalTier),
+  )
+  const tierLabel = tierRow
+    ? (isRTL ? tierRow.nameAr : tierRow.nameEn)
+    : formatPolicyApprovalTier(t, fresh.approvalTier)
 
   const STEP_NAME_MAP: Record<string, string> = {
     'Draft Created': t('policies.stepDraftCreated'),
@@ -149,19 +158,6 @@ export function PolicyDetailsContent({
     'Management Review': t('policies.stepManagementReview'),
     'Risk Review': t('policies.stepRiskReview'),
     'Review Initiated': t('policies.stepReviewInitiated'),
-  }
-
-  const VERSION_CHANGES_MAP: Record<string, string> = {
-    'Initial draft': t('policies.changeInitialDraft'),
-    'Updated suspicious activity thresholds': t('policies.changeUpdatedSAT'),
-    'Added PEP screening requirements': t('policies.changeAddedPEP'),
-    'Revised CDD procedures': t('policies.changeRevisedCDD'),
-    'Added cloud security controls': t('policies.changeAddedCloudSecurity'),
-    'Updated incident response procedures': t('policies.changeUpdatedIR'),
-    'Major revision for PDPL compliance': t('policies.changePDPLRevision'),
-    'Updated consent requirements': t('policies.changeUpdatedConsent'),
-    'Added cloud vendor requirements': t('policies.changeAddedCloudVendor'),
-    'Major revision': t('policies.changeMajorRevision'),
   }
 
   /** Format a review cycle label in the current locale.
@@ -632,10 +628,10 @@ export function PolicyDetailsContent({
         {/* Status + tier badge row */}
         <div className={`flex items-center gap-2 mb-4 flex-wrap`}>
           <span className={cn('px-3 py-1 rounded-full text-xs font-bold', STATUS_COLORS[fresh.status] ?? 'bg-slate-100 text-slate-600')}>
-            {statusLabel[fresh.status] ?? fresh.status}
+            {formatPolicyStatus(t, fresh.status)}
           </span>
           <span className={cn('px-3 py-1 rounded-full text-xs font-bold', tierStyle.bg, tierStyle.text)}>
-            {tierLabels[fresh.approvalTier]}
+            {tierLabel}
           </span>
           <span className="px-3 py-1 rounded-full text-xs font-bold bg-slate-100 text-slate-600">
             {fresh.version}
@@ -969,9 +965,7 @@ export function PolicyDetailsContent({
                           isCompleted ? 'text-emerald-600' :
                           step.status === 'current' ? 'text-amber-600' : 'text-slate-300'
                         )}>
-                          {isCompleted ? t('policies.workflowCompleted') :
-                           step.status === 'current' ? t('policies.workflowCurrent') :
-                           t('policies.workflowPending')}
+                          {formatPolicyWorkflowStepStatus(t, step.status)}
                         </span>
 
                         <Icon
@@ -1330,13 +1324,16 @@ export function PolicyDetailsContent({
                   <div key={idx}>
                     <button
                       onClick={() => setExpandedVersion(expandedVersion === idx ? null : idx)}
-                      className="w-full flex items-start gap-3 p-3 bg-slate-50 rounded-xl hover:bg-slate-100 transition-colors cursor-pointer text-left"
+                      className="w-full flex items-start gap-3 p-3 bg-slate-50 rounded-xl hover:bg-slate-100 transition-colors cursor-pointer text-start"
                     >
                       <span className="px-2 py-0.5 bg-emerald-100 text-emerald-700 rounded text-xs font-bold font-mono shrink-0">
                         {entry.version}
                       </span>
                       <div className="flex-1 min-w-0">
-                        <p className="text-xs font-bold text-slate-700">{VERSION_CHANGES_MAP[entry.changes] ?? entry.changes}</p>
+                        {/* Wave-19.4 / Item-3 — dual-store: pick `textEn` vs
+                            `textAr` based on the current locale (migration 057
+                            retired the single-language `changes` column). */}
+                        <p className="text-xs font-bold text-slate-700">{isRTL ? entry.textAr : entry.textEn}</p>
                         <p className="text-[10px] text-slate-400 mt-0.5">{entry.date} • {entry.author}</p>
                       </div>
                       <Icon
@@ -1356,7 +1353,7 @@ export function PolicyDetailsContent({
                           <span className="text-slate-600">{entry.date}</span>
                           <span className="text-slate-600">{entry.author}</span>
                         </div>
-                        <p className="text-[10px] text-slate-500 mt-2">{VERSION_CHANGES_MAP[entry.changes] ?? entry.changes}</p>
+                        <p className="text-[10px] text-slate-500 mt-2">{isRTL ? entry.textAr : entry.textEn}</p>
                       </div>
                     )}
                   </div>
@@ -1369,21 +1366,9 @@ export function PolicyDetailsContent({
 
       {/* ── Right panel ───────────────────────────────────────────────── */}
       <div className={`w-full md:w-72 bg-slate-50 -mx-6 -mb-4 md:mx-0 md:mb-0 p-6 md:rounded-xl space-y-6`}>
-        {/* Policy Leader (person responsible for follow-up) */}
-        <div>
-          <h3 className="text-[10px] font-black text-slate-400 uppercase mb-3">{t('policies.policyLeader')}</h3>
-          <div className="flex items-center gap-3">
-            <img
-              src={dicebearAvatar(fresh.owner.avatar)}
-              className="w-10 h-10 rounded-full border-2 border-white shadow-sm"
-              alt={fresh.owner.name}
-            />
-            <div>
-              <p className="text-sm font-bold text-slate-900">{fresh.owner.name}</p>
-              <p className="text-xs text-slate-500">{fresh.owner.department}</p>
-            </div>
-          </div>
-        </div>
+        {/* Policy Leader (person responsible for follow-up) — Wave-19.3 */}
+        <PolicyLeaderSection policy={fresh} t={t} />
+
 
         {/* Policy Owner (Business Owner — department responsible for compliance) */}
         <PolicyBusinessOwnerSection policy={fresh} t={t} />
@@ -1393,7 +1378,7 @@ export function PolicyDetailsContent({
         <div>
           <h3 className="text-[10px] font-black text-slate-400 uppercase mb-2">{t('policies.approvalTier')}</h3>
           <span className={cn('px-2.5 py-1 rounded-full text-xs font-bold', tierStyle.bg, tierStyle.text)}>
-            {tierLabels[fresh.approvalTier]}
+            {tierLabel}
           </span>
         </div>
 
@@ -1481,6 +1466,76 @@ function PolicyBusinessOwnerSection({ policy, t }: { policy: Policy; t: (key: an
           {t('policies.businessOwnerExplain')}
         </p>
       )}
+    </div>
+  )
+}
+
+/**
+ * Wave-19.3 / Task-B — Policy Leader picker.
+ *
+ * Replaces the static avatar+name block. Clicking the row opens an
+ * `EditableSelect` (labels-only, no CRUD affordances) populated from the
+ * team-store members. Selecting a person fires `updateLeader(...)` which
+ * applies an optimistic owner update, PATCHes `/api/policies/{uuid}` with
+ * `owner_id` + `owner_name` + `owner_department`, and refreshes the detail
+ * GET so the server-emitted `leader_changed` / `leader_assigned` activity
+ * row lands on the Activity tab. 412 conflicts surface the keyed revert
+ * toast via the shared `revertMessage` helper in the store.
+ */
+function PolicyLeaderSection({
+  policy,
+  t,
+}: {
+  policy: Policy
+  t: (key: any, params?: Record<string, string>) => string
+}) {
+  const members = useTeamStore((s) => s.members)
+  const fetchTeam = useTeamStore((s) => s.fetchAll)
+  const updateLeader = usePolicyStore((s) => s.updateLeader)
+
+  // Hydrate team members so the picker has options.
+  useEffect(() => {
+    void fetchTeam()
+  }, [fetchTeam])
+
+  // The store carries `ownerId` (canonical FK); fall back to a name-match for
+  // legacy rows where only `owner_name` is set.
+  const selectedId =
+    policy.ownerId ??
+    members.find((m) => m.name === policy.owner?.name)?.id ??
+    null
+
+  return (
+    <div>
+      <h3 className="text-[10px] font-black text-slate-400 uppercase mb-3">
+        {t('policies.policyLeader')}
+      </h3>
+      <div className="flex items-center gap-3 mb-2">
+        <img
+          src={dicebearAvatar(policy.owner?.avatar || policy.owner?.name || '')}
+          className="w-10 h-10 rounded-full border-2 border-white shadow-sm"
+          alt={policy.owner?.name ?? ''}
+        />
+        <div className="min-w-0">
+          <p className="text-sm font-bold text-slate-900 truncate">
+            {policy.owner?.name || '—'}
+          </p>
+          <p className="text-xs text-slate-500 truncate">
+            {policy.owner?.department || ''}
+          </p>
+        </div>
+      </div>
+      <EditableSelect
+        value={selectedId}
+        onChange={(id) => {
+          const m = members.find((mm) => mm.id === id)
+          if (!m) return
+          updateLeader(policy.id, m.id, m.name, m.department ?? null)
+        }}
+        items={members.map((m) => ({ id: m.id, label: m.name }))}
+        placeholder={t('policies.policyLeader')}
+        mode="labels-only"
+      />
     </div>
   )
 }

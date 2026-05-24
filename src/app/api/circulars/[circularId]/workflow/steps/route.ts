@@ -8,7 +8,7 @@ import type { NextRequest } from 'next/server'
 import { requirePerm, requireUser } from '@/lib/api/auth'
 import { handle } from '@/lib/api/errors'
 import { ok } from '@/lib/api/response'
-import { parseJson } from '@/lib/api/validate'
+import { assertUuid, parseJson } from '@/lib/api/validate'
 import { cacheTags, revalidateAll } from '@/lib/api/cache'
 import { writeAudit } from '@/lib/api/audit'
 import { CreateCircularWorkflowStepSchema } from '@/lib/api/schemas/circulars'
@@ -19,6 +19,8 @@ import {
   maxCircularWorkflowStepSortOrder,
   recomputeCircularProgress,
 } from '@/lib/api/services/circulars'
+// Wave-19.1 / Q8 — server-side bilingual renderer for dual-store timeline rows.
+import { renderBilingual } from '@/lib/i18n/server'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -28,6 +30,7 @@ type Params = { params: Promise<{ circularId: string }> }
 export async function GET(_req: NextRequest, { params }: Params) {
   try {
     const { circularId } = await params
+    assertUuid(circularId) // SEC-5
     const { supabase } = await requireUser()
     await assertCircularExists(supabase, circularId)
 
@@ -38,13 +41,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
       .order('sort_order', { ascending: true })
     if (error) throw error
 
-    return ok(data ?? [], {
-      cache: {
-        sMaxAge: 60,
-        staleWhileRevalidate: 300,
-        tags: [cacheTags.circularWorkflowSteps(circularId)],
-      },
-    })
+    return ok(data ?? [], { cache: 'no-store' })
   } catch (e) {
     return handle(e)
   }
@@ -53,13 +50,17 @@ export async function GET(_req: NextRequest, { params }: Params) {
 export async function POST(req: NextRequest, { params }: Params) {
   try {
     const { circularId } = await params
+    assertUuid(circularId) // SEC-5
     const { supabase, user, profile } = await requirePerm('edit')
     await assertCircularExists(supabase, circularId)
     const input = await parseJson(req, CreateCircularWorkflowStepSchema)
     const actor = profile.name ?? profile.email ?? user.id
 
-    const sortOrder =
-      input.sort_order ?? (await maxCircularWorkflowStepSortOrder(supabase, circularId)) + 1
+    // GAP-12: ALWAYS compute sort_order server-side. The client sends a
+    // stale/optimistic `input.sort_order` (e.g. 10) which would collide with an
+    // existing step — ignore it. `maxCircularWorkflowStepSortOrder` is a
+    // circular-wide MAX; max+1 keeps the global ordering unique (Story 11.4).
+    const sortOrder = (await maxCircularWorkflowStepSortOrder(supabase, circularId)) + 1
 
     const { data, error } = await supabase
       .from('circular_workflow_steps')
@@ -95,7 +96,9 @@ export async function POST(req: NextRequest, { params }: Params) {
       insertCircularTimeline(
         supabase,
         circularId,
-        `Workflow step "${input.label}" added`,
+        renderBilingual('regulatoryUpdates.timeline.workflowStepAdded', {
+          label: input.label,
+        }),
         actor,
         'completed',
       ),

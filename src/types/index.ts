@@ -231,6 +231,12 @@ export interface ObservationTimelineEntry {
   descriptionAr?: string // Arabic description for bilingual support
   descriptionKey?: string // Translation key for standard actions
   descriptionParams?: Record<string, string> // Parameters for translation interpolation
+  // Wave-20 / PORTING-TEMPLATE §2.11 — dual-store columns. The reader picks
+  // textEn vs textAr by current locale (no parse, no regex). `description`
+  // / `descriptionAr` are kept for backward-compat with legacy in-memory
+  // entries that the store still synthesises optimistically.
+  textEn?: string
+  textAr?: string
   userId?: string
   userName?: string
   userAvatar?: string
@@ -275,6 +281,10 @@ export interface Observation {
   frameworkIds?: RegulatoryBodyId[]
   createdAt?: string
   updatedAt?: string
+  // Wave-20 / Q3 — persisted `observations.is_overdue` (migration 060). True
+  // when `due_date < current_date` and `status NOT IN ('closed','resolved','completed')`.
+  // Maintained by a BEFORE INSERT/UPDATE trigger + a daily pg_cron resync.
+  isOverdue?: boolean
 }
 
 // Risk types
@@ -377,6 +387,10 @@ export interface Attachment {
   uploadedAt: string
   uploadedBy: string
   dataUrl?: string
+  // W17-1 / SEC-1: optimistic-locking token (server `updated_at`). The
+  // attachment-DELETE route consumes this via `If-Match`. Optional — pre-W17
+  // persisted attachments may not carry it until the next mutation re-fetches.
+  updatedAt?: string
 }
 
 // Reminder type
@@ -712,7 +726,10 @@ export type PolicyStatus = 'draft' | 'under-review' | 'approved' | 'expired' | '
 export type PolicyCategory = string
 export type PolicyApprovalTier = 'board' | 'management' | 'sharia' | 'agm'
 
-export interface PolicyVersionEntry { version: string; date: string; author: string; changes: string }
+// Wave-19.4 / Item-3 — dual-store: `textEn` + `textAr` replace the
+// single-language `changes` string (migration 057). The reader picks the
+// locale-matching column at render time.
+export interface PolicyVersionEntry { version: string; date: string; author: string; textEn: string; textAr: string }
 export interface PolicyWorkflowStep {
   step: string
   date: string
@@ -753,7 +770,19 @@ export interface PolicyActivityEntry {
   id: string
   timestamp: string   // ISO string, used for ordering
   date: string        // YYYY-MM-DD, for display
-  type: 'created' | 'edited' | 'step_advanced' | 'step_reverted' | 'document_uploaded' | 'document_removed' | 'step_added' | 'step_renamed' | 'workflow_approved' | 'step_denied' | 'evidence_uploaded' | 'evidence_removed' | 'phase_deadline_set' | 'phase_deadline_changed' | 'checklist_deadline_set'
+  // Wave-19.3 — `leader_changed` / `leader_assigned` added for the Policy
+  // Leader change wired through the PATCH route. Catch-all `string` widens
+  // the union for forward-compat with server-emitted types not yet enumerated
+  // on the client (the activity log feed never crashes on an unknown type).
+  type:
+    | 'created' | 'edited' | 'step_advanced' | 'step_reverted'
+    | 'document_uploaded' | 'document_removed'
+    | 'step_added' | 'step_renamed'
+    | 'workflow_approved' | 'step_denied'
+    | 'evidence_uploaded' | 'evidence_removed'
+    | 'phase_deadline_set' | 'phase_deadline_changed' | 'checklist_deadline_set'
+    | 'leader_changed' | 'leader_assigned'
+    | (string & {})
   textEn: string
   textAr: string
   user?: string
@@ -761,7 +790,11 @@ export interface PolicyActivityEntry {
 }
 
 export interface Policy {
-  id: string                      // auto: POL-001
+  id: string                      // auto: POL-001 (or `ref_code` post Wave-19)
+  // Wave-19.3 / P18-BUG-1 — the canonical UUID from `policies.id`. The UI
+  // entity id is the `ref_code` (display-friendly), but every API call (PATCH,
+  // DELETE, child routes, /activity) requires the UUID.
+  uuid?: string
   name: string
   description: string
   status: PolicyStatus
@@ -770,6 +803,10 @@ export interface Policy {
   approvalTier: PolicyApprovalTier
   // Person responsible for following up on the policy. Surfaced as "Policy Leader" in UI.
   owner: PolicyOwner
+  // Wave-19.3 / Task-B — `policies.owner_id` (uuid → profiles.id) lifts the
+  // optional FK onto the client so the Leader picker can render the canonical
+  // team-member id (not just a display name).
+  ownerId?: string
   // Department that owns the policy ("Policy Owner" / "Business Owner"). Stored as dept id.
   businessOwnerDepartmentId?: string
   // Departments impacted by the policy (round-3 §4 propagation). Stored as
@@ -793,6 +830,11 @@ export interface Policy {
   reviewCycleHistory?: Array<{ id: string; label: string; initiatedAt: string }>
   reviewSchedule?: ReviewSchedule
   frameworkIds?: RegulatoryBodyId[]
+  // Wave-19 / Q3: persisted `policies.is_expired` (migration 055) — bool column
+  // populated by a BEFORE INSERT/UPDATE trigger + daily pg_cron resync. Cheap
+  // O(1) read for StatCard counts; consumers should prefer this over inline
+  // `nextReviewDate < new Date()` checks.
+  isExpired?: boolean
   createdAt: string
   updatedAt: string
 }
@@ -841,6 +883,10 @@ export interface CircularArticle {
   attachments: Attachment[]
   versions?: ArticleVersionEntry[]
   timeline?: ArticleTimelineEvent[]
+  // W17-1 / SEC-1: optimistic-locking token (server `updated_at`). Sent as
+  // `If-Match: W/"<updatedAt>"` on PATCH/DELETE. Optional for backward
+  // compatibility with rows hydrated before this column was surfaced.
+  updatedAt?: string
 }
 
 export interface CircularWorkflowStep {
@@ -857,6 +903,11 @@ export interface CircularWorkflowStep {
   requiresNotes: boolean
   actionType: 'approve' | 'notify-bo' | 'notify-authority' | 'advance' | 'submit' | 'acknowledge' | 'start' | 'complete' | 'review'
   deadline?: string                  // YYYY-MM-DD; must be ≤ parent circular dueDate (or capDeadline for CAP-phase steps)
+  // Story 11.3: per-step assignee (team-member id). Editable in the inline
+  // step editor on the Workflow tab.
+  assignedTo?: string
+  // W17-1 / SEC-1: optimistic-locking token (server `updated_at`).
+  updatedAt?: string
 }
 
 export type CircularTimelineEventType =
@@ -879,12 +930,28 @@ export interface CircularTimelineEvent {
   type?: CircularTimelineEventType
 }
 
+// GAP-19: a single structured per-field diff entry — shared by circular and
+// article version history, rendered by the shared `VersionHistoryList` diff
+// table (Field Changed / From / To).
+export interface VersionFieldChange {
+  field: string
+  from: string
+  to: string
+}
+
 export interface CircularVersionEntry {
   version: number
   date: string
   author: string
-  changes: string
-  fieldChanges?: Record<string, { from: string; to: string }>
+  // Wave-19.4 / Item-3 — dual-store columns (migration 057). The reader picks
+  // `textEn` vs `textAr` based on the current locale; no JSON parse.
+  textEn: string
+  textAr: string
+  // GAP-19: structured per-field diff persisted in `circular_versions.field_changes`.
+  // Mirrors `ArticleVersionEntry.fieldChanges`; the circular Version History
+  // tab renders it as a Field / From / To table. `[]` for no-diff rows (e.g.
+  // the synthetic "Initial registration" entry).
+  fieldChanges?: VersionFieldChange[]
   approved: boolean
 }
 
@@ -892,8 +959,13 @@ export interface ArticleVersionEntry {
   version: number
   date: string
   author: string
-  summary: string
-  fieldChanges: Record<string, { from: string; to: string }>
+  // Wave-19.4 / Item-3 — dual-store columns (migration 057).
+  textEn: string
+  textAr: string
+  // GAP-13: structured per-field diff persisted in `article_versions.field_changes`.
+  // The Version History tab renders this as a Field / From / To table. Empty
+  // for pre-migration (Wave-9) rows, which fall back to the locale text.
+  fieldChanges: { field: string; from: string; to: string }[]
   approved: boolean
 }
 
@@ -901,6 +973,10 @@ export interface ArticleTimelineEvent {
   id: string
   title: string
   titleAr?: string
+  // Wave-19.1 / Q8 — dual-store rendered strings persisted on the row at
+  // write time. The reader picks the column matching the current locale.
+  textEn?: string
+  textAr?: string
   date: string
   user?: string
   status: 'completed' | 'active' | 'pending'
@@ -943,16 +1019,31 @@ export interface Circular {
   description?: string
   pdfUrl?: string
   workflowSteps?: CircularWorkflowStep[]
+  // Phase of the current workflow step, stamped by the list endpoint via a
+  // side query so the row card can paint the right phase chip BEFORE the
+  // detail GET fires. `undefined` means "phase unknown — show skeleton".
+  currentPhase?: 0 | 1 | 2
+  // True once the detail endpoint has populated the nested workflow_steps /
+  // implementations / timeline arrays. Used to gate skeleton placeholders.
+  detailHydrated?: boolean
   timeline?: CircularTimelineEvent[]
   versions?: CircularVersionEntry[]
   capAttachments?: Attachment[]
   capResponseDeadline?: string
   remediationAttachments?: Attachment[]
+  // GAP-21: multi-file circular PDF attachments (circular_pdf_attachments).
+  // Distinct from the legacy single `pdfUrl` column, which is still surfaced.
+  pdfAttachments?: Attachment[]
   capDeadline?: string
   remediationDeadline?: string
   referenceUrl?: string
   pendingEdit?: CircularPendingEdit
   frameworkIds?: RegulatoryBodyId[]
+  // Wave-19 / Q3: persisted `circulars.is_overdue` (migration 055) — bool column
+  // populated by a BEFORE INSERT/UPDATE trigger on (`due_date`, `status`) +
+  // daily pg_cron resync. Predicate: `due_date < current_date AND status !=
+  // 'completed'`. Cheap O(1) read for StatCard counts.
+  isOverdue?: boolean
   createdAt: string
   updatedAt: string
 }
@@ -1046,6 +1137,8 @@ export interface ChecklistItem {
   completedAt?: string
   order: number
   deadline?: string                  // YYYY-MM-DD; optional per-item due date
+  // W17-1 / SEC-1: optimistic-locking token (server `updated_at`).
+  updatedAt?: string
 }
 
 // Filter types for list views

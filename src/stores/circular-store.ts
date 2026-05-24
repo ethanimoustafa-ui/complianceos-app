@@ -35,6 +35,17 @@ import type {
 } from '@/types'
 import { validateChildDeadline } from '@/lib/deadline-validation'
 import { api, ApiClientError } from '@/lib/api-client'
+import { pushToast, type ToastMessage } from '@/stores/toast-store'
+import { computeCircularProgress } from '@/lib/progress-formula'
+import { optimisticMutation } from '@/lib/optimistic'
+
+// Wave-19.4 / Item-3 — the synthetic "Initial registration" entry shown when a
+// freshly-created circular has no real `circular_versions` rows yet. Inlined
+// to mirror what the server would emit via `renderBilingual` for the
+// `regulatoryUpdates.timeline.initialRegistration` key (dictionaries stay the
+// source of truth; this client-only fallback never reaches the DB).
+const INITIAL_REGISTRATION_EN = 'Initial registration'
+const INITIAL_REGISTRATION_AR = 'التسجيل الأولي'
 
 // ---------- API row shape ---------------------------------------------------
 
@@ -61,13 +72,88 @@ interface CircularApiRow {
   description: string | null
   pdf_url: string | null
   reference_url: string | null
+  // Wave-19 / Q3 — persisted `circulars.is_overdue` from migration 055.
+  is_overdue?: boolean
   framework_ids: string[] | null
   created_at: string
   updated_at: string
+  // List-stamped: server side-query that returns the phase of the row's
+  // current workflow step (or null if no current step exists). Lets the row
+  // card render the right phase chip before `fetchById` resolves.
+  current_phase?: number | null
   // Detail-only:
   workflow_steps?: unknown[]
   implementations?: unknown[]
   timeline?: unknown[]
+  timeline_has_more?: boolean
+  cap_attachments?: unknown[]
+  remediation_attachments?: unknown[]
+  pdf_attachments?: unknown[]
+  versions?: unknown[]
+  // W15-5: detail-GET version-history pagination flag.
+  versions_has_more?: boolean
+}
+
+// GAP-19 + Wave-19.4 / Item-3: circular_versions row shape from the API.
+// Dual-store columns `text_en` + `text_ar` (migration 057).
+interface CircularVersionApiRow {
+  id: string
+  circular_id?: string
+  version: number
+  date: string
+  author: string
+  text_en: string
+  text_ar: string
+  field_changes?: { field: string; from: string; to: string }[] | null
+  approved: boolean
+}
+
+// GAP-1: CAP / remediation attachment row shape from the API.
+interface CircularAttachmentApiRow {
+  id: string
+  circular_id: string
+  name: string
+  storage_path: string
+  type: string | null
+  size: number | null
+  uploaded_at: string
+  uploaded_by: string | null
+  // W17-1 / SEC-1: optimistic-locking token from the server.
+  updated_at?: string
+}
+
+interface ArticleChecklistApiRow {
+  id: string
+  article_id?: string
+  text: string
+  completed: boolean
+  sort_order: number
+  // W17-1 / SEC-1: optimistic-locking token from the server.
+  updated_at?: string
+}
+
+interface ArticleTimelineApiRow {
+  id: string
+  article_id?: string
+  // Wave-19.1 / Q8 — dual-store columns (migration 056).
+  text_en: string
+  text_ar: string
+  date: string
+  user_name?: string | null
+  status?: string | null
+}
+
+interface ArticleVersionApiRow {
+  id: string
+  article_id?: string
+  version_no: number
+  date: string
+  author: string
+  // Wave-19.4 / Item-3 — dual-store columns (migration 057).
+  text_en: string
+  text_ar: string
+  // GAP-13: structured per-field diff. NULL for pre-migration (Wave-9) rows.
+  field_changes?: { field: string; from: string; to: string }[] | null
 }
 
 interface ImplementationApiRow {
@@ -82,6 +168,17 @@ interface ImplementationApiRow {
   assigned_to: string | null
   notes: string | null
   sort_order: number
+  // W17-1 / SEC-1: optimistic-locking token from the server.
+  updated_at?: string
+  // Detail-endpoint nested children (`/api/circulars/[id]` aliases these via
+  // `checklist:article_checklist_items(...)`, `timeline:article_timeline(...)`,
+  // `versions:article_versions(...)`).
+  checklist?: ArticleChecklistApiRow[]
+  timeline?: ArticleTimelineApiRow[]
+  versions?: ArticleVersionApiRow[]
+  // W15-5: per-article first-page pagination flags from the detail GET.
+  timeline_has_more?: boolean
+  versions_has_more?: boolean
 }
 
 interface WorkflowStepApiRow {
@@ -100,6 +197,9 @@ interface WorkflowStepApiRow {
   action_type: string
   sort_order: number
   deadline?: string | null
+  assigned_to?: string | null
+  // W17-1 / SEC-1: optimistic-locking token from the server.
+  updated_at?: string
 }
 
 // ---------- workflow step defaults ------------------------------------------
@@ -120,15 +220,24 @@ export function buildInitialWorkflowSteps(): CircularWorkflowStep[] {
 }
 
 function recalcProgress(c: Circular): number {
-  const allChecklist = c.articles.flatMap((a) => a.checklist ?? [])
-  const totalItems = allChecklist.length
-  const doneItems = allChecklist.filter((i) => i.completed).length
-  const steps = c.workflowSteps ?? buildInitialWorkflowSteps()
-  const totalSteps = steps.length
-  const doneSteps = steps.filter((s) => s.status === 'completed').length
-  const checklistPct = totalItems > 0 ? doneItems / totalItems : 0
-  const phasePct = totalSteps > 0 ? doneSteps / totalSteps : 0
-  return Math.round((checklistPct * 0.6 + phasePct * 0.4) * 100)
+  // FORENSIC §5 / Task-B: the GAP-16 dynamic 50/50 formula now lives in ONE
+  // shared module (`src/lib/progress-formula.ts`) imported by both this client
+  // store and the server's `recomputeCircularProgress` — it can no longer
+  // drift between layers. This function just gathers the four counts.
+  const steps = c.workflowSteps ?? []
+  const stepsTotal = steps.length
+  const stepsDone = steps.filter((s) => s.status === 'completed').length
+
+  let checklistTotal = 0
+  let checklistDone = 0
+  for (const art of c.articles ?? []) {
+    for (const item of art.checklist ?? []) {
+      checklistTotal += 1
+      if (item.completed) checklistDone += 1
+    }
+  }
+
+  return computeCircularProgress({ stepsTotal, stepsDone, checklistTotal, checklistDone })
 }
 
 function syncSelected(
@@ -141,6 +250,12 @@ function syncSelected(
 }
 
 function mapRow(row: CircularApiRow, previous?: Circular): Circular {
+  // True when the row carries the detail-endpoint's nested children. Used by
+  // the UI to gate skeleton placeholders — falling back to a stale `previous`
+  // is fine, but never start fresh with the static client default and pretend
+  // detail is ready.
+  const hasDetailPayload =
+    Array.isArray(row.workflow_steps) && row.workflow_steps.length > 0
   return {
     id: row.id,
     reference: row.reference,
@@ -154,6 +269,11 @@ function mapRow(row: CircularApiRow, previous?: Circular): Circular {
       row.business_owner_department ?? previous?.businessOwnerDepartment ?? undefined,
     assignedTo: row.assigned_to ?? previous?.assignedTo ?? undefined,
     progress: row.progress ?? previous?.progress ?? 0,
+    currentPhase:
+      typeof row.current_phase === 'number'
+        ? (row.current_phase as 0 | 1 | 2)
+        : previous?.currentPhase,
+    detailHydrated: hasDetailPayload || previous?.detailHydrated || false,
     issuanceDate: row.issuance_date,
     dueDate: row.due_date,
     capStatus: row.cap_status as CAPStatus,
@@ -164,13 +284,20 @@ function mapRow(row: CircularApiRow, previous?: Circular): Circular {
     // defaults. Sort timeline newest-first so consumers can render in array
     // order.
     articles: Array.isArray(row.implementations) && row.implementations.length > 0
-      ? row.implementations.map((r) => mapImplementationRow(r as ImplementationApiRow))
+      ? row.implementations.map((r) => {
+          const apiRow = r as ImplementationApiRow
+          const prevArticle = previous?.articles?.find((a) => a.id === apiRow.id)
+          return mapImplementationRow(apiRow, prevArticle)
+        })
       : previous?.articles ?? [],
     description: row.description ?? previous?.description ?? undefined,
     pdfUrl: row.pdf_url ?? previous?.pdfUrl ?? undefined,
-    workflowSteps: Array.isArray(row.workflow_steps) && row.workflow_steps.length > 0
+    // When list response carries no workflow_steps AND no prior detail-loaded
+    // copy exists, leave an empty array so skeleton placeholders render. Once
+    // fetchById resolves, we fall through to the mapWorkflowStepRow branch.
+    workflowSteps: hasDetailPayload
       ? (row.workflow_steps as WorkflowStepApiRow[]).map(mapWorkflowStepRow)
-      : previous?.workflowSteps ?? buildInitialWorkflowSteps(),
+      : previous?.workflowSteps ?? [],
     timeline: Array.isArray(row.timeline)
       ? [...row.timeline]
           .map(mapTimelineRow)
@@ -180,29 +307,162 @@ function mapRow(row: CircularApiRow, previous?: Circular): Circular {
             return (Number.isNaN(tb) ? 0 : tb) - (Number.isNaN(ta) ? 0 : ta)
           })
       : previous?.timeline ?? [],
-    versions: previous?.versions ?? [
-      {
-        version: 1,
-        date: row.created_at.slice(0, 10),
-        author: 'System',
-        changes: 'Initial registration',
-        approved: true,
-      },
-    ],
-    capAttachments: previous?.capAttachments ?? [],
+    // GAP-19: surface the nested `circular_versions` array (detail GET) so the
+    // circular Version History tab renders persisted edit history. Sort
+    // ascending by version. When the detail GET carries an empty array the
+    // circular genuinely has no version rows yet — synthesise the "Initial
+    // registration" entry so the tab is never blank. List responses (no
+    // `versions` key) keep any previously hydrated rows.
+    versions: Array.isArray(row.versions)
+      ? (() => {
+          const mapped = (row.versions as CircularVersionApiRow[])
+            .map(mapCircularVersionRow)
+            .sort((a, b) => a.version - b.version)
+          return mapped.length > 0
+            ? mapped
+            : [
+                {
+                  version: 1,
+                  date: row.created_at.slice(0, 10),
+                  author: 'System',
+                  textEn: INITIAL_REGISTRATION_EN,
+                  textAr: INITIAL_REGISTRATION_AR,
+                  fieldChanges: [],
+                  approved: true,
+                },
+              ]
+        })()
+      : previous?.versions ?? [
+          {
+            version: 1,
+            date: row.created_at.slice(0, 10),
+            author: 'System',
+            textEn: INITIAL_REGISTRATION_EN,
+            textAr: INITIAL_REGISTRATION_AR,
+            fieldChanges: [],
+            approved: true,
+          },
+        ],
+    // GAP-1: persisted CAP / remediation attachments from the detail GET.
+    // When the row is a list response (no attachment arrays) keep the prior
+    // hydrated value rather than wiping to [].
+    capAttachments: Array.isArray(row.cap_attachments)
+      ? (row.cap_attachments as CircularAttachmentApiRow[]).map(mapAttachmentRow)
+      : previous?.capAttachments ?? [],
     capResponseDeadline: row.cap_response_deadline ?? previous?.capResponseDeadline ?? undefined,
-    remediationAttachments: previous?.remediationAttachments ?? [],
+    remediationAttachments: Array.isArray(row.remediation_attachments)
+      ? (row.remediation_attachments as CircularAttachmentApiRow[]).map(mapAttachmentRow)
+      : previous?.remediationAttachments ?? [],
+    // GAP-21: persisted multi-file circular PDF attachments.
+    pdfAttachments: Array.isArray(row.pdf_attachments)
+      ? (row.pdf_attachments as CircularAttachmentApiRow[]).map(mapAttachmentRow)
+      : previous?.pdfAttachments ?? [],
     capDeadline: row.cap_deadline ?? previous?.capDeadline ?? undefined,
     remediationDeadline: row.remediation_deadline ?? previous?.remediationDeadline ?? undefined,
     referenceUrl: row.reference_url ?? previous?.referenceUrl ?? undefined,
     pendingEdit: previous?.pendingEdit,
     frameworkIds: (row.framework_ids ?? previous?.frameworkIds ?? []) as RegulatoryBodyId[],
+    // Wave-19 / Q3 — persisted `circulars.is_overdue` from migration 055.
+    isOverdue: row.is_overdue ?? previous?.isOverdue,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }
 }
 
+function mapArticleChecklistRow(row: ArticleChecklistApiRow): ChecklistItem {
+  return {
+    id: row.id,
+    title: row.text,
+    completed: !!row.completed,
+    order: typeof row.sort_order === 'number' ? row.sort_order : 0,
+    // W17-1 / SEC-1: server-stamped optimistic-locking token threaded to PATCH/DELETE.
+    updatedAt: row.updated_at,
+  }
+}
+
+function mapArticleTimelineRow(row: ArticleTimelineApiRow): ArticleTimelineEvent {
+  // Wave-19.1 / Q8 — server stores both languages in `text_en` / `text_ar`.
+  // `title` stays populated with the English string for backward-compatible
+  // consumers (snapshots, optimistic placeholders); the renderer picks the
+  // locale column directly.
+  return {
+    id: row.id,
+    title: row.text_en ?? '',
+    textEn: row.text_en ?? '',
+    textAr: row.text_ar ?? '',
+    date: row.date,
+    user: row.user_name ?? undefined,
+    status: (row.status as ArticleTimelineEvent['status']) ?? 'completed',
+  }
+}
+
+// GAP-11/GAP-13: nested `article_versions` row → client `ArticleVersionEntry`.
+// `changes` maps to `summary`; `field_changes` (jsonb) maps to the structured
+// `fieldChanges` array which the Version History tab renders as a Field /
+// From / To table. Pre-migration (Wave-9) rows have a NULL `field_changes` →
+// an empty array, which makes the tab fall back to the `summary` text.
+function mapArticleVersionRow(row: ArticleVersionApiRow): ArticleVersionEntry {
+  return {
+    version: row.version_no,
+    date: row.date,
+    author: row.author,
+    // Wave-19.4 / Item-3 — dual-store. Reader picks per-locale at render time.
+    textEn: row.text_en ?? '',
+    textAr: row.text_ar ?? '',
+    fieldChanges: Array.isArray(row.field_changes) ? row.field_changes : [],
+    approved: true,
+  }
+}
+
+// GAP-19: nested `circular_versions` row → client `CircularVersionEntry`.
+// Wave-19.4 / Item-3 — dual-store `text_en` + `text_ar`; `field_changes`
+// (jsonb) maps to the structured `fieldChanges` array the shared Version
+// History diff renders.
+function mapCircularVersionRow(row: CircularVersionApiRow): CircularVersionEntry {
+  return {
+    version: row.version,
+    date: row.date,
+    author: row.author,
+    textEn: row.text_en ?? '',
+    textAr: row.text_ar ?? '',
+    fieldChanges: Array.isArray(row.field_changes) ? row.field_changes : [],
+    approved: !!row.approved,
+  }
+}
+
 function mapImplementationRow(row: ImplementationApiRow, previous?: CircularArticle): CircularArticle {
+  // HANI-1: the detail endpoint nests `checklist` + `timeline` arrays on each
+  // implementation row. Map them onto the client `Article` (snake_case →
+  // camelCase). Resilient: if the nested array is absent (e.g. a row coming
+  // back from a sub-resource PATCH that doesn't re-select children), keep any
+  // previously hydrated rows rather than wiping to [].
+  const checklist = Array.isArray(row.checklist)
+    ? [...row.checklist]
+        .map(mapArticleChecklistRow)
+        .sort((a, b) => a.order - b.order)
+    : previous?.checklist ?? []
+  // GAP-15: article timeline is sorted NEWEST-FIRST so the Activity tab can
+  // render it in array order (newest-at-top); Load More appends older rows.
+  const timeline = Array.isArray(row.timeline)
+    ? [...row.timeline]
+        .map(mapArticleTimelineRow)
+        .sort((a, b) => {
+          const ta = a.date ? Date.parse(a.date) : 0
+          const tb = b.date ? Date.parse(b.date) : 0
+          return (Number.isNaN(tb) ? 0 : tb) - (Number.isNaN(ta) ? 0 : ta)
+        })
+    : previous?.timeline
+  // GAP-11 / GAP-17: surface the nested `article_versions` array (detail GET)
+  // so the Article Version History tab renders persisted edit history. The
+  // detail GET embeds `versions:article_versions(...)` — when that array is
+  // present (even empty) it is authoritative. ONLY when the key is entirely
+  // absent (a sub-resource PATCH response that doesn't re-select children) do
+  // we keep previously hydrated rows, so a hard reload never wipes the tab.
+  const versions = Array.isArray(row.versions)
+    ? [...row.versions]
+        .map(mapArticleVersionRow)
+        .sort((a, b) => a.version - b.version)
+    : previous?.versions ?? []
   return {
     id: row.id,
     articleNumber: row.article_number,
@@ -213,29 +473,54 @@ function mapImplementationRow(row: ImplementationApiRow, previous?: CircularArti
     complianceStatus: row.compliance_status as CircularArticle['complianceStatus'],
     assignedTo: row.assigned_to ?? undefined,
     notes: row.notes ?? undefined,
-    checklist: previous?.checklist ?? [],
+    checklist,
     attachments: previous?.attachments ?? [],
-    versions: previous?.versions,
-    timeline: previous?.timeline,
+    versions,
+    timeline,
+    // W17-1 / SEC-1: server `updated_at` — emitted as `If-Match` on PATCH/DELETE.
+    updatedAt: row.updated_at ?? previous?.updatedAt,
   }
 }
 
 function mapTimelineRow(row: unknown): CircularTimelineEvent {
+  // Wave-19.1 / Q8 — dual-store `text_en` / `text_ar` columns. `title` is
+  // kept in sync with the English string so any legacy consumer reading the
+  // `title` field continues to work; the actual renderer picks the locale
+  // column directly via `event.textEn` / `event.textAr`.
   const r = row as {
     id: string
-    title: string
-    title_ar?: string | null
+    text_en?: string | null
+    text_ar?: string | null
     date: string
     user_name?: string | null
     status?: string | null
   }
   return {
     id: r.id,
-    title: r.title,
-    titleAr: r.title_ar ?? undefined,
+    title: r.text_en ?? '',
+    textEn: r.text_en ?? '',
+    textAr: r.text_ar ?? '',
     date: r.date,
     user: r.user_name ?? undefined,
     status: (r.status as CircularTimelineEvent['status']) ?? 'completed',
+  }
+}
+
+// GAP-1: snake_case attachment row → client `Attachment`. `storage_path`
+// holds a base64 data URL, mapped to both `url` and `dataUrl` so the existing
+// download button works unchanged.
+function mapAttachmentRow(row: CircularAttachmentApiRow): Attachment {
+  return {
+    id: row.id,
+    name: row.name,
+    url: row.storage_path,
+    dataUrl: row.storage_path,
+    type: row.type ?? 'application/octet-stream',
+    size: row.size ?? 0,
+    uploadedAt: row.uploaded_at,
+    uploadedBy: row.uploaded_by ?? '',
+    // W17-1 / SEC-1: optimistic-locking token threaded to attachment DELETE.
+    updatedAt: row.updated_at,
   }
 }
 
@@ -254,6 +539,9 @@ function mapWorkflowStepRow(row: WorkflowStepApiRow): CircularWorkflowStep {
     requiresNotes: row.requires_notes,
     actionType: row.action_type as CircularWorkflowStep['actionType'],
     deadline: row.deadline ?? undefined,
+    assignedTo: row.assigned_to ?? undefined,
+    // W17-1 / SEC-1: optimistic-locking token threaded to workflow-step PATCH/DELETE.
+    updatedAt: row.updated_at,
   }
 }
 
@@ -292,6 +580,11 @@ function toCreatePayload(
 }
 
 function toUpdatePayload(patch: Partial<Circular>): Record<string, unknown> {
+  // GAP-3: a clearable optional field the user emptied must be sent as an
+  // explicit `null` so the PATCH route NULLs the DB column. Sending `undefined`
+  // (omit) leaves the stale value; sending `""` fails the schema's `min(1)`.
+  // Only fields actually present on `patch` are sent — untouched fields stay
+  // absent. `|| null` collapses empty-string → null for clearable fields.
   const out: Record<string, unknown> = {}
   if (patch.authority !== undefined) out.authority = patch.authority
   if (patch.title !== undefined) out.title = patch.title
@@ -300,23 +593,44 @@ function toUpdatePayload(patch: Partial<Circular>): Record<string, unknown> {
   if (patch.applicability !== undefined) out.applicability = patch.applicability
   if (patch.departments !== undefined) out.departments = patch.departments
   if (patch.businessOwnerDepartment !== undefined)
-    out.business_owner_department = patch.businessOwnerDepartment || undefined
-  if (patch.assignedTo !== undefined) out.assigned_to = patch.assignedTo || undefined
+    out.business_owner_department = patch.businessOwnerDepartment || null
+  if (patch.assignedTo !== undefined) out.assigned_to = patch.assignedTo || null
   if (patch.progress !== undefined) out.progress = patch.progress
   if (patch.issuanceDate !== undefined) out.issuance_date = patch.issuanceDate
   if (patch.dueDate !== undefined) out.due_date = patch.dueDate
   if (patch.capStatus !== undefined) out.cap_status = patch.capStatus
-  if (patch.capDueDate !== undefined) out.cap_due_date = patch.capDueDate || undefined
-  if (patch.capDeadline !== undefined) out.cap_deadline = patch.capDeadline || undefined
+  if (patch.capDueDate !== undefined) out.cap_due_date = patch.capDueDate || null
+  if (patch.capDeadline !== undefined) out.cap_deadline = patch.capDeadline || null
   if (patch.capResponseDeadline !== undefined)
-    out.cap_response_deadline = patch.capResponseDeadline || undefined
+    out.cap_response_deadline = patch.capResponseDeadline || null
   if (patch.remediationDeadline !== undefined)
-    out.remediation_deadline = patch.remediationDeadline || undefined
-  if (patch.description !== undefined) out.description = patch.description || undefined
-  if (patch.pdfUrl !== undefined) out.pdf_url = patch.pdfUrl ?? ''
-  if (patch.referenceUrl !== undefined) out.reference_url = patch.referenceUrl || undefined
+    out.remediation_deadline = patch.remediationDeadline || null
+  if (patch.description !== undefined) out.description = patch.description || null
+  if (patch.pdfUrl !== undefined) out.pdf_url = patch.pdfUrl || null
+  if (patch.referenceUrl !== undefined) out.reference_url = patch.referenceUrl || null
   if (patch.frameworkIds !== undefined) out.framework_ids = patch.frameworkIds
   return out
+}
+
+// GAP-20: a child mutation (checklist toggle/delete) must never PATCH a
+// non-persisted id. A persisted row always has a real Postgres UUID; an
+// optimistic/temp row has a `temp-…` id OR (legacy) a short client random id.
+// `isPersistedId` returns true ONLY for a canonical UUID, so any client-side
+// placeholder — `temp-…` or `Math.random().toString(36)` — is treated as
+// not-yet-persisted and the server call is skipped until the row reconciles.
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+function isPersistedId(id: string): boolean {
+  return UUID_RE.test(id)
+}
+
+// W17-1 / SEC-1: build an `If-Match: W/"<updatedAt>"` header object when the
+// child entity carries an `updatedAt` token. Returned `undefined` keeps the
+// request backward-compatible with rows hydrated before the column existed —
+// the server will accept the write rather than 412 in that case.
+function ifMatchHeader(updatedAt: string | undefined): Record<string, string> | undefined {
+  if (!updatedAt) return undefined
+  return { 'If-Match': `W/"${updatedAt}"` }
 }
 
 function errorMessage(e: unknown, fallback: string): string {
@@ -325,13 +639,68 @@ function errorMessage(e: unknown, fallback: string): string {
   return fallback
 }
 
+// GAP-14 / RTL-8: friendly toast copy for a reverted optimistic mutation. The
+// store lives outside React and has no `t()`, so `revertMessage` returns a
+// `{key,params}` translation spec — `<ToastHost />` translates it at render
+// time. For validation-style errors a short, clean server reason is passed as
+// the `{{reason}}` param; network / unknown errors omit it.
+function revertMessage(e: unknown): ToastMessage {
+  if (e instanceof ApiClientError) {
+    // SEC-1: an optimistic-concurrency conflict (412) — someone else changed
+    // the record. Show a dedicated, actionable conflict toast instead of the
+    // generic "didn't register" copy.
+    if (e.status === 412 || e.code === 'precondition_failed') {
+      return { key: 'regulatoryUpdates.optimisticConflict' }
+    }
+    // Validation errors carry a human-readable, short reason worth showing.
+    // Skip auth/network/server codes whose messages are not user-friendly.
+    const showable =
+      e.code === 'validation_error' ||
+      e.code === 'validation_failed' ||
+      e.code === 'bad_request' ||
+      e.code === 'conflict'
+    if (showable && e.message && e.message.length < 120) {
+      return {
+        key: 'regulatoryUpdates.optimisticRevertWithReason',
+        params: { reason: e.message },
+      }
+    }
+  }
+  return { key: 'regulatoryUpdates.optimisticRevert' }
+}
+
 // ---------- store ----------------------------------------------------------
+
+// GAP-15: per-list timeline pagination state. `offset` is the count of rows
+// already loaded; `hasMore` gates the Load More button; `loadingMore` drives
+// the on-button spinner. Keyed by circularId (circular timeline) and by
+// `${circularId}:${articleId}` (article timeline).
+export interface TimelinePagination {
+  offset: number
+  hasMore: boolean
+  loadingMore: boolean
+}
+
+// Wave-19.6 — the W15-2 single-shot `lastStepMutation` ephemeral undo was
+// REMOVED in favour of DB-backed step-by-step Undo + workflow-wide Reset
+// driven by `circular_workflow_steps.completed_at` (migration 062). The new
+// actions live further down on this store: `undoLastWorkflowStep` /
+// `resetWorkflow`. The old `StepMutationUndo` type + 5-minute window + UI
+// banner are gone.
 
 interface CircularState {
   circulars: Circular[]
   byId: Record<string, Circular>
   selectedCircular: Circular | null
   filters: CircularFilters
+
+  // GAP-15: timeline pagination — circular timelines keyed by circularId,
+  // article timelines keyed by `${circularId}:${articleId}`.
+  circularTimelinePagination: Record<string, TimelinePagination>
+  articleTimelinePagination: Record<string, TimelinePagination>
+  // W15-5: Version History pagination — same shape, same keying scheme.
+  circularVersionPagination: Record<string, TimelinePagination>
+  articleVersionPagination: Record<string, TimelinePagination>
 
   // First-fetch detector: `isLoading && circulars.length === 0`.
   isLoading: boolean
@@ -401,6 +770,17 @@ interface CircularState {
     newLabel: string,
     actingUser: string,
   ) => Promise<void>
+  // Story 11.3: edit a step's notes / assignee / action-type from the inline
+  // editor on the Workflow tab.
+  updateWorkflowStep: (
+    circularId: string,
+    stepId: string,
+    updates: {
+      notes?: string | null
+      assignedTo?: string | null
+      actionType?: CircularWorkflowStep['actionType']
+    },
+  ) => Promise<void>
   removeWorkflowStep: (circularId: string, stepIndex: number, actingUser: string) => Promise<void>
   reorderWorkflowSteps: (
     circularId: string,
@@ -408,23 +788,55 @@ interface CircularState {
     toIndex: number,
     actingUser: string,
   ) => Promise<void>
+  // Wave-19.6 — DB-backed undo / reset of the workflow.
+  //   `undoLastWorkflowStep` pops the most-recently-completed step back to
+  //   'pending' (server-side `ORDER BY completed_at DESC LIMIT 1`).
+  //   `resetWorkflow` reverts every step to 'pending' (only valid when 100%
+  //   of steps are currently completed).
+  undoLastWorkflowStep: (circularId: string) => Promise<void>
+  resetWorkflow: (circularId: string) => Promise<void>
 
   requestCircularEdit: (circularId: string, editData: Partial<Circular>) => Promise<void>
   approveCircularEditStep: (circularId: string, approvalId: string, notes: string) => void
   rejectCircularEditStep: (circularId: string, approvalId: string, notes: string) => void
 
+  // GAP-1: now API-backed (persist to circular_cap_attachments /
+  // circular_remediation_attachments). Async so the dropzone can show a
+  // loading state for the full request.
   addCAPAttachment: (
     circularId: string,
     file: { name: string; size?: number; dataUrl?: string; type?: string },
-  ) => void
+  ) => Promise<void>
   addRemediationAttachment: (
     circularId: string,
     file: { name: string; size?: number; dataUrl?: string; type?: string },
-  ) => void
-  removeCAPAttachment: (circularId: string, attachmentId: string) => void
-  removeRemediationAttachment: (circularId: string, attachmentId: string) => void
+  ) => Promise<void>
+  removeCAPAttachment: (circularId: string, attachmentId: string) => Promise<void>
+  removeRemediationAttachment: (circularId: string, attachmentId: string) => Promise<void>
 
   addTimelineEvent: (circularId: string, event: Omit<CircularTimelineEvent, 'id'>) => void
+
+  // GAP-15: Activity timeline pagination. `loadMoreTimeline` fetches the next
+  // page of the circular timeline; `loadArticleTimeline` loads the first page
+  // for an article (lazy, on modal open); `loadMoreArticleTimeline` pages it.
+  loadMoreTimeline: (circularId: string) => Promise<void>
+  loadArticleTimeline: (circularId: string, articleId: string) => Promise<void>
+  loadMoreArticleTimeline: (circularId: string, articleId: string) => Promise<void>
+
+  // W15-5: Version History pagination — `loadMoreCircularVersions` pages the
+  // circular detail-modal Version History tab; `loadArticleVersions` lazily
+  // loads an article's first version page on modal open; `loadMoreArticleVersions`
+  // pages it. Mirrors the timeline pagination actions above.
+  loadMoreCircularVersions: (circularId: string) => Promise<void>
+  loadArticleVersions: (circularId: string, articleId: string) => Promise<void>
+  loadMoreArticleVersions: (circularId: string, articleId: string) => Promise<void>
+
+  // GAP-21: multi-file circular PDF attachments (circular_pdf_attachments).
+  addPdfAttachment: (
+    circularId: string,
+    file: { name: string; size?: number; dataUrl?: string; type?: string },
+  ) => Promise<void>
+  removePdfAttachment: (circularId: string, attachmentId: string) => Promise<void>
 }
 
 // ---------- helpers ---------------------------------------------------------
@@ -443,11 +855,152 @@ function applyCircular(
   }
 }
 
+// GAP-14: entity-granular revert. `snapshot` is a copy of ONE circular taken
+// BEFORE the optimistic mutation; restoring it touches only that circular's
+// slot in `circulars` / `byId` / `selectedCircular`, so a concurrent mutation
+// on a *different* circular is never clobbered. The circular's own rollups
+// (Implementation Progress, workflow status) live inside the snapshot, so
+// putting the snapshot back also reverts the rolled-up state in one step.
+function restoreCircularState(
+  state: CircularState,
+  circularId: string,
+  snapshot: Circular,
+): Pick<CircularState, 'circulars' | 'byId' | 'selectedCircular'> {
+  return {
+    circulars: state.circulars.map((c) => (c.id === circularId ? snapshot : c)),
+    byId: { ...state.byId, [circularId]: snapshot },
+    selectedCircular:
+      state.selectedCircular?.id === circularId ? snapshot : state.selectedCircular,
+  }
+}
+
+// GAP-1: shared CAP / remediation attachment persistence. `kind` selects the
+// list field + the API `?kind=`. Optimistic-insert a temp row, POST, swap in
+// the server row; restore the snapshot on failure.
+type StoreSet = (
+  partial:
+    | CircularState
+    | Partial<CircularState>
+    | ((state: CircularState) => CircularState | Partial<CircularState>),
+) => void
+type StoreGet = () => CircularState
+
+type AttachmentKind = 'cap' | 'remediation' | 'pdf'
+type AttachmentField = 'capAttachments' | 'remediationAttachments' | 'pdfAttachments'
+
+function attachmentField(kind: AttachmentKind): AttachmentField {
+  if (kind === 'cap') return 'capAttachments'
+  if (kind === 'pdf') return 'pdfAttachments'
+  return 'remediationAttachments'
+}
+
+async function uploadCircularAttachment(
+  get: StoreGet,
+  set: StoreSet,
+  circularId: string,
+  kind: AttachmentKind,
+  file: { name: string; size?: number; dataUrl?: string; type?: string },
+): Promise<void> {
+  const field = attachmentField(kind)
+  const snapshot = get().byId[circularId]
+  const tempId = `temp-${nanoid()}`
+  const now = new Date().toISOString()
+  const optimistic: Attachment = {
+    id: tempId,
+    name: file.name,
+    url: file.dataUrl ?? '',
+    dataUrl: file.dataUrl,
+    type: file.type ?? 'application/octet-stream',
+    size: file.size ?? 0,
+    uploadedAt: now,
+    uploadedBy: 'Current User',
+  }
+  set((state) =>
+    applyCircular(state, circularId, (c) => ({
+      ...c,
+      [field]: [optimistic, ...(c[field] ?? [])],
+      updatedAt: now,
+    })),
+  )
+
+  try {
+    const row = await api.post<CircularAttachmentApiRow>(
+      `/circulars/${circularId}/attachments`,
+      {
+        kind,
+        name: file.name,
+        storage_path: file.dataUrl ?? '',
+        type: file.type || undefined,
+        size: file.size ?? undefined,
+      },
+    )
+    const real = mapAttachmentRow(row)
+    set((state) =>
+      applyCircular(state, circularId, (c) => ({
+        ...c,
+        [field]: (c[field] ?? []).map((a) => (a.id === tempId ? real : a)),
+      })),
+    )
+  } catch (e) {
+    if (snapshot) {
+      set((state) => restoreCircularState(state, circularId, snapshot))
+    }
+    set({ error: errorMessage(e, 'Failed to upload document') })
+    pushToast(revertMessage(e), 'error')
+    console.error('[optimistic:uploadCircularAttachment] failed —', e)
+    throw e
+  }
+}
+
+async function deleteCircularAttachment(
+  get: StoreGet,
+  set: StoreSet,
+  circularId: string,
+  kind: AttachmentKind,
+  attachmentId: string,
+): Promise<void> {
+  const field = attachmentField(kind)
+  const snapshot = get().byId[circularId]
+  // W17-1 / SEC-1: capture the attachment's last-known `updatedAt` BEFORE the
+  // optimistic remove so the wire DELETE can echo it back as `If-Match`.
+  const attachment = snapshot?.[field]?.find((a) => a.id === attachmentId)
+  const now = new Date().toISOString()
+  set((state) =>
+    applyCircular(state, circularId, (c) => ({
+      ...c,
+      [field]: (c[field] ?? []).filter((a) => a.id !== attachmentId),
+      updatedAt: now,
+    })),
+  )
+
+  // A temp row never reached the server — nothing to delete remotely.
+  if (attachmentId.startsWith('temp-')) return
+
+  try {
+    await api.delete(
+      `/circulars/${circularId}/attachments/${attachmentId}?kind=${kind}`,
+      ifMatchHeader(attachment?.updatedAt),
+    )
+  } catch (e) {
+    if (snapshot) {
+      set((state) => restoreCircularState(state, circularId, snapshot))
+    }
+    set({ error: errorMessage(e, 'Failed to remove document') })
+    pushToast(revertMessage(e), 'error')
+    console.error('[optimistic:deleteCircularAttachment] failed —', e)
+    throw e
+  }
+}
+
 export const useCircularStore = create<CircularState>()((set, get) => ({
   circulars: [],
   byId: {},
   selectedCircular: null,
   filters: {},
+  circularTimelinePagination: {},
+  articleTimelinePagination: {},
+  circularVersionPagination: {},
+  articleVersionPagination: {},
   isLoading: false,
   isMutating: false,
   error: null,
@@ -495,6 +1048,53 @@ export const useCircularStore = create<CircularState>()((set, get) => ({
           ? state.circulars.map((c) => (c.id === id ? circular : c))
           : state.circulars,
         selectedCircular: circular,
+        // GAP-15: seed the circular timeline pagination from the detail GET —
+        // it returned the first page (`timeline`) + `timeline_has_more`.
+        circularTimelinePagination: {
+          ...state.circularTimelinePagination,
+          [id]: {
+            offset: circular.timeline?.length ?? 0,
+            hasMore: !!row.timeline_has_more,
+            loadingMore: false,
+          },
+        },
+        // W15-5: seed the circular Version History pagination from the detail
+        // GET — it returned the first 10 versions + `versions_has_more`.
+        circularVersionPagination: {
+          ...state.circularVersionPagination,
+          [id]: {
+            offset: circular.versions?.length ?? 0,
+            hasMore: !!row.versions_has_more,
+            loadingMore: false,
+          },
+        },
+        // W15-5: seed each article's timeline + version pagination from the
+        // detail GET's per-article first page + `*_has_more` flags so the
+        // article-modal tabs render Load More without an extra round-trip.
+        articleTimelinePagination: (() => {
+          const acc = { ...state.articleTimelinePagination }
+          for (const r of (row.implementations ?? []) as ImplementationApiRow[]) {
+            const art = circular.articles?.find((a) => a.id === r.id)
+            acc[`${id}:${r.id}`] = {
+              offset: art?.timeline?.length ?? 0,
+              hasMore: !!r.timeline_has_more,
+              loadingMore: false,
+            }
+          }
+          return acc
+        })(),
+        articleVersionPagination: (() => {
+          const acc = { ...state.articleVersionPagination }
+          for (const r of (row.implementations ?? []) as ImplementationApiRow[]) {
+            const art = circular.articles?.find((a) => a.id === r.id)
+            acc[`${id}:${r.id}`] = {
+              offset: art?.versions?.length ?? 0,
+              hasMore: !!r.versions_has_more,
+              loadingMore: false,
+            }
+          }
+          return acc
+        })(),
         isLoading: false,
         lastFetched: Date.now(),
       }))
@@ -507,59 +1107,185 @@ export const useCircularStore = create<CircularState>()((set, get) => ({
   },
 
   create: async (data) => {
-    set({ isMutating: true, error: null })
+    // GAP-14: optimistic register. Insert a temp row at the TOP of the list
+    // synchronously, BEFORE the POST returns, so the new circular appears
+    // instantly. The server stamps `reference` (SAMA-2026-NNN) + real UUID;
+    // we swap the temp row for the server row on success. On error the temp
+    // row is removed and a friendly toast is raised.
+    const tempId = `temp-${nanoid()}`
+    const now = new Date().toISOString()
+    const today = now.slice(0, 10)
+    const optimistic: Circular = {
+      id: tempId,
+      reference: '…', // server-generated; placeholder until reconcile.
+      authority: data.authority,
+      title: data.title,
+      priority: data.priority ?? 'medium',
+      status: data.status ?? 'pending',
+      applicability: data.applicability ?? 'pending',
+      departments: data.departments ?? [],
+      businessOwnerDepartment: data.businessOwnerDepartment,
+      assignedTo: data.assignedTo,
+      progress: data.progress ?? 0,
+      currentPhase: 0,
+      detailHydrated: false,
+      issuanceDate: data.issuanceDate,
+      dueDate: data.dueDate,
+      capStatus: data.capStatus ?? 'not-started',
+      capDueDate: data.capDueDate,
+      capDeadline: data.capDeadline,
+      remediationDeadline: data.remediationDeadline,
+      referenceUrl: data.referenceUrl,
+      description: data.description,
+      pdfUrl: data.pdfUrl,
+      articles: [],
+      workflowSteps: [],
+      timeline: [],
+      versions: [
+        { version: 1, date: today, author: 'System', textEn: INITIAL_REGISTRATION_EN, textAr: INITIAL_REGISTRATION_AR, fieldChanges: [], approved: true },
+      ],
+      capAttachments: [],
+      remediationAttachments: [],
+      frameworkIds: data.frameworkIds ?? [],
+      createdAt: now,
+      updatedAt: now,
+    }
+    // NOTE: deliberately do NOT set `selectedCircular` to the temp row — the
+    // detail-modal effect would fire `fetchById('temp-…')` and 500. The row
+    // just appears in the list; the user opens it after the real id lands.
+    set((state) => ({
+      circulars: [optimistic, ...state.circulars],
+      byId: { ...state.byId, [tempId]: optimistic },
+      isMutating: true,
+      error: null,
+    }))
+
     try {
       const row = await api.post<CircularApiRow>('/circulars', toCreatePayload(data))
       const created = mapRow(row)
-      // Optimistic-prepend: surface immediately so UI doesn't need a reload.
+      // Reconcile: swap the temp row for the server row (real UUID + reference).
       set((state) => ({
-        circulars: [created, ...state.circulars.filter((c) => c.id !== created.id)],
-        byId: { ...state.byId, [created.id]: created },
-        selectedCircular: created,
+        circulars: [
+          created,
+          ...state.circulars.filter((c) => c.id !== tempId && c.id !== created.id),
+        ],
+        byId: (() => {
+          const { [tempId]: _drop, ...rest } = state.byId
+          return { ...rest, [created.id]: created }
+        })(),
+        selectedCircular:
+          state.selectedCircular?.id === tempId ? created : state.selectedCircular,
         isMutating: false,
       }))
       return created
     } catch (e) {
-      set({ error: errorMessage(e, 'Failed to create circular'), isMutating: false })
+      // Revert: drop the temp row.
+      set((state) => {
+        const { [tempId]: _drop, ...rest } = state.byId
+        return {
+          circulars: state.circulars.filter((c) => c.id !== tempId),
+          byId: rest,
+          selectedCircular:
+            state.selectedCircular?.id === tempId ? null : state.selectedCircular,
+          error: errorMessage(e, 'Failed to create circular'),
+          isMutating: false,
+        }
+      })
+      pushToast(revertMessage(e), 'error')
+      console.error('[optimistic:create] failed —', e)
       throw e
     }
   },
 
   update: async (id, data) => {
+    // GAP-14: optimistic update. Apply the patch to the circular synchronously
+    // so the row / detail panel reflects the new values immediately, then PATCH
+    // in the background. On success reconcile server-authoritative fields; on
+    // error restore the entity snapshot + raise a friendly toast.
+    const snapshot = get().byId[id]
+    const now = new Date().toISOString()
+    set((state) =>
+      applyCircular(state, id, (c) => ({ ...c, ...data, updatedAt: now })),
+    )
     set({ isMutating: true, error: null })
+
     try {
-      const row = await api.patch<CircularApiRow>(`/circulars/${id}`, toUpdatePayload(data))
-      const previous = get().byId[id]
-      const updated = mapRow(row, previous)
+      // SEC-1: send the entity's last-known `updatedAt` as an `If-Match`
+      // optimistic-locking token. If a concurrent writer changed the row
+      // since we read it the server returns 412 — caught below: the snapshot
+      // is restored and a conflict toast is shown.
+      const ifMatch = snapshot?.updatedAt
+        ? { 'If-Match': `W/"${snapshot.updatedAt}"` }
+        : undefined
+      const row = await api.patch<CircularApiRow>(
+        `/circulars/${id}`,
+        toUpdatePayload(data),
+        ifMatch,
+      )
+      // Reconcile against the CURRENT (already-optimistic) circular so nested
+      // children added by concurrent mutations are preserved.
+      const updated = mapRow(row, get().byId[id])
       set((state) => ({
-        circulars: state.circulars.map((c) => (c.id === id ? updated : c)),
-        byId: { ...state.byId, [id]: updated },
-        selectedCircular:
-          state.selectedCircular?.id === id ? updated : state.selectedCircular,
+        ...applyCircular(state, id, () => updated),
         isMutating: false,
       }))
     } catch (e) {
+      if (snapshot) {
+        set((state) => restoreCircularState(state, id, snapshot))
+      }
       set({ error: errorMessage(e, 'Failed to update circular'), isMutating: false })
+      pushToast(revertMessage(e), 'error')
+      console.error('[optimistic:update] failed —', e)
       throw e
     }
   },
 
   delete: async (id) => {
-    set({ isMutating: true, error: null })
+    // GAP-14: optimistic delete. Drop the circular from the list synchronously
+    // so the row vanishes the same tick the user confirms; DELETE in the
+    // background. On error re-insert the snapshot at its original position +
+    // raise a friendly toast.
+    const snapshot = get().byId[id]
+    const originalIndex = get().circulars.findIndex((c) => c.id === id)
+    set((state) => {
+      const { [id]: _drop, ...rest } = state.byId
+      return {
+        circulars: state.circulars.filter((c) => c.id !== id),
+        byId: rest,
+        selectedCircular:
+          state.selectedCircular?.id === id ? null : state.selectedCircular,
+        isMutating: true,
+        error: null,
+      }
+    })
+
+    // A temp row never reached the server — nothing to delete remotely.
+    if (id.startsWith('temp-')) {
+      set({ isMutating: false })
+      return
+    }
+
     try {
       await api.delete(`/circulars/${id}`)
-      set((state) => {
-        const { [id]: _drop, ...rest } = state.byId
-        return {
-          circulars: state.circulars.filter((c) => c.id !== id),
-          byId: rest,
-          selectedCircular:
-            state.selectedCircular?.id === id ? null : state.selectedCircular,
-          isMutating: false,
-        }
-      })
+      set({ isMutating: false })
     } catch (e) {
-      set({ error: errorMessage(e, 'Failed to delete circular'), isMutating: false })
+      if (snapshot) {
+        set((state) => {
+          const next = [...state.circulars]
+          const insertAt = originalIndex >= 0 ? originalIndex : next.length
+          next.splice(insertAt, 0, snapshot)
+          return {
+            circulars: next,
+            byId: { ...state.byId, [id]: snapshot },
+            error: errorMessage(e, 'Failed to delete circular'),
+            isMutating: false,
+          }
+        })
+      } else {
+        set({ error: errorMessage(e, 'Failed to delete circular'), isMutating: false })
+      }
+      pushToast(revertMessage(e), 'error')
+      console.error('[optimistic:delete] failed —', e)
       throw e
     }
   },
@@ -598,8 +1324,10 @@ export const useCircularStore = create<CircularState>()((set, get) => ({
           version: 1,
           date: today,
           author: 'Current User',
-          summary: 'Article created',
-          fieldChanges: {},
+          // Wave-19.4 / Item-3 — dual-store optimistic fallback.
+          textEn: 'Article created',
+          textAr: 'تم إنشاء المادة',
+          fieldChanges: [],
           approved: true,
         },
       ],
@@ -614,7 +1342,11 @@ export const useCircularStore = create<CircularState>()((set, get) => ({
         },
       ],
     }
-    // Optimistic insert.
+    // GAP-16: optimistic insert + recalc. The new dynamic 50/50 formula means
+    // adding an article (with seed checklist items) changes `totalItems`, so
+    // progress is recomputed locally to match the server-side recompute that
+    // now fires on the implementations POST. An article with no checklist
+    // items doesn't change either total, so the bar holds steady in that case.
     set((state) =>
       applyCircular(state, circularId, (c) => {
         const updated = { ...c, articles: [...c.articles, optimistic], updatedAt: now }
@@ -642,7 +1374,9 @@ export const useCircularStore = create<CircularState>()((set, get) => ({
         payload,
       )
       const real = mapImplementationRow(row, optimistic)
-      // Swap temp row for server row.
+      // Swap temp row for server row, then recalc — `real` carries the
+      // server-reconciled checklist (with real ids), so `totalItems` is stable
+      // but we recompute to stay aligned with the server-side recompute.
       set((state) =>
         applyCircular(state, circularId, (c) => {
           const updated = {
@@ -654,32 +1388,66 @@ export const useCircularStore = create<CircularState>()((set, get) => ({
       )
 
       // Persist any optimistic checklist items the user added during creation.
+      // The optimistic items carry client-side placeholder IDs; the server-side
+      // rows get real UUIDs that the toggle/delete routes require. Swap each
+      // response back into local state so the UI's IDs match DB.
+      //
+      // GAP-20: read each item's `completed` from the LIVE store state at POST
+      // time, not the frozen `article` param — the user may have toggled an
+      // optimistic checkbox during the create reconcile window (that toggle's
+      // server PATCH was skipped by the persisted-id guard, so its value must
+      // be carried into the create POST instead).
       const seedItems = article.checklist ?? []
       if (seedItems.length > 0) {
+        const persisted: { tempId: string; row: { id: string; text: string; completed: boolean; sort_order: number } }[] = []
         for (const item of seedItems) {
           try {
-            await api.post(
+            const liveItem = get()
+              .byId[circularId]?.articles.find((a) => a.id === real.id)
+              ?.checklist.find((i) => i.id === item.id)
+            const completed = liveItem ? !!liveItem.completed : !!item.completed
+            const row = await api.post<{ id: string; text: string; completed: boolean; sort_order: number }>(
               `/circulars/${circularId}/implementations/${real.id}/checklist`,
-              { title: item.title, completed: !!item.completed },
+              { title: item.title, completed },
             )
+            persisted.push({ tempId: item.id, row })
           } catch {
             // Swallow per-item errors so the parent succeeds; user can retry.
           }
+        }
+        if (persisted.length > 0) {
+          set((state) =>
+            applyCircular(state, circularId, (c) => {
+              const updated = {
+                ...c,
+                articles: c.articles.map((a) => {
+                  if (a.id !== real.id) return a
+                  return {
+                    ...a,
+                    checklist: a.checklist.map((i) => {
+                      const swap = persisted.find((p) => p.tempId === i.id)
+                      return swap
+                        ? { id: swap.row.id, title: swap.row.text, completed: swap.row.completed, order: swap.row.sort_order }
+                        : i
+                    }),
+                  }
+                }),
+              }
+              return { ...updated, progress: recalcProgress(updated) }
+            }),
+          )
         }
       }
 
       return real
     } catch (e) {
-      // Restore snapshot.
+      // Restore snapshot — drops the optimistic article + any rollups.
       if (snapshot) {
-        set((state) => ({
-          circulars: state.circulars.map((c) => (c.id === circularId ? snapshot : c)),
-          byId: { ...state.byId, [circularId]: snapshot },
-          selectedCircular:
-            state.selectedCircular?.id === circularId ? snapshot : state.selectedCircular,
-        }))
+        set((state) => restoreCircularState(state, circularId, snapshot))
       }
       set({ error: errorMessage(e, 'Failed to add article') })
+      pushToast(revertMessage(e), 'error')
+      console.error('[optimistic:addArticle] failed —', e)
       throw e
     }
   },
@@ -697,18 +1465,20 @@ export const useCircularStore = create<CircularState>()((set, get) => ({
             'title', 'articleNumber', 'description', 'riskLevel',
             'complianceStatus', 'responsibleDepartment', 'assignedTo',
           ] as const
-          const fieldChanges: Record<string, { from: string; to: string }> = {}
+          const fieldChanges: { field: string; from: string; to: string }[] = []
           for (const field of trackedFields) {
             const oldVal = String(a[field] ?? '')
             const newVal = String((updates as Record<string, unknown>)[field] ?? a[field] ?? '')
-            if (oldVal !== newVal) fieldChanges[field] = { from: oldVal, to: newVal }
+            if (oldVal !== newVal) fieldChanges.push({ field, from: oldVal, to: newVal })
           }
           const nextVer = (a.versions?.length ?? 0) + 1
           const newVersion: ArticleVersionEntry = {
             version: nextVer,
             date: today,
             author: 'Current User',
-            summary: 'Article updated',
+            // Wave-19.4 / Item-3 — dual-store optimistic fallback.
+            textEn: 'Article updated',
+            textAr: 'تم تحديث المادة',
             fieldChanges,
             approved: true,
           }
@@ -724,11 +1494,12 @@ export const useCircularStore = create<CircularState>()((set, get) => ({
             ...a,
             ...updates,
             versions: [...(a.versions ?? []), newVersion],
-            timeline: [...(a.timeline ?? []), newTimelineEvent],
+            timeline: [newTimelineEvent, ...(a.timeline ?? [])],
           }
         })
-        const updated = { ...c, articles, updatedAt: now }
-        return { ...updated, progress: recalcProgress(updated) }
+        // Article field edits don't touch checklist/workflow data, so the DB
+        // progress doesn't change — don't recalc locally either.
+        return { ...c, articles, updatedAt: now }
       }),
     )
 
@@ -747,9 +1518,12 @@ export const useCircularStore = create<CircularState>()((set, get) => ({
       if (updates.responsibleDepartment !== undefined) payload.responsible_department = updates.responsibleDepartment || undefined
       if (updates.assignedTo !== undefined) payload.assigned_to = updates.assignedTo || undefined
       if (updates.notes !== undefined) payload.notes = updates.notes || undefined
+      // W17-1 / SEC-1: send the article's last-known `updatedAt` as `If-Match`.
+      const article = snapshot?.articles.find((a) => a.id === articleId)
       const row = await api.patch<ImplementationApiRow>(
         `/circulars/${circularId}/implementations/${articleId}`,
         payload,
+        ifMatchHeader(article?.updatedAt),
       )
       const real = mapImplementationRow(row, get().byId[circularId]?.articles.find((a) => a.id === articleId))
       set((state) =>
@@ -763,14 +1537,11 @@ export const useCircularStore = create<CircularState>()((set, get) => ({
       )
     } catch (e) {
       if (snapshot) {
-        set((state) => ({
-          circulars: state.circulars.map((c) => (c.id === circularId ? snapshot : c)),
-          byId: { ...state.byId, [circularId]: snapshot },
-          selectedCircular:
-            state.selectedCircular?.id === circularId ? snapshot : state.selectedCircular,
-        }))
+        set((state) => restoreCircularState(state, circularId, snapshot))
       }
       set({ error: errorMessage(e, 'Failed to update article') })
+      pushToast(revertMessage(e), 'error')
+      console.error('[optimistic:updateArticle] failed —', e)
       throw e
     }
   },
@@ -791,17 +1562,19 @@ export const useCircularStore = create<CircularState>()((set, get) => ({
     if (articleId.startsWith('temp-')) return
 
     try {
-      await api.delete(`/circulars/${circularId}/implementations/${articleId}`)
+      // W17-1 / SEC-1: send the article's last-known `updatedAt` as `If-Match`.
+      const article = snapshot?.articles.find((a) => a.id === articleId)
+      await api.delete(
+        `/circulars/${circularId}/implementations/${articleId}`,
+        ifMatchHeader(article?.updatedAt),
+      )
     } catch (e) {
       if (snapshot) {
-        set((state) => ({
-          circulars: state.circulars.map((c) => (c.id === circularId ? snapshot : c)),
-          byId: { ...state.byId, [circularId]: snapshot },
-          selectedCircular:
-            state.selectedCircular?.id === circularId ? snapshot : state.selectedCircular,
-        }))
+        set((state) => restoreCircularState(state, circularId, snapshot))
       }
       set({ error: errorMessage(e, 'Failed to delete article') })
+      pushToast(revertMessage(e), 'error')
+      console.error('[optimistic:deleteArticle] failed —', e)
       throw e
     }
   },
@@ -832,7 +1605,7 @@ export const useCircularStore = create<CircularState>()((set, get) => ({
               checklist: a.checklist.map((i) =>
                 i.id === itemId ? { ...i, completed: newCompleted } : i,
               ),
-              timeline: [...(a.timeline ?? []), newEvent],
+              timeline: [newEvent, ...(a.timeline ?? [])],
             }
           }),
           updatedAt: now,
@@ -841,23 +1614,45 @@ export const useCircularStore = create<CircularState>()((set, get) => ({
       }),
     )
 
-    if (itemId.startsWith('temp-') || articleId.startsWith('temp-')) return
+    // GAP-20: skip the server PATCH unless BOTH the article and the item carry
+    // real persisted UUIDs. A freshly-created article (or a seed checklist
+    // item) may still hold a client placeholder id during the reconcile
+    // window; PATCHing `/…/<placeholder>` would 500 on an invalid uuid. The
+    // optimistic UI state already reflects the toggle, and the row's persisted
+    // value lands with its real id once the create chain finishes.
+    if (!isPersistedId(articleId) || !isPersistedId(itemId)) return
 
     try {
-      await api.patch(
+      // W17-1 / SEC-1: thread the item's last-known `updatedAt` as `If-Match`.
+      // Refresh local `updatedAt` from the response so the next PATCH wins.
+      const row = await api.patch<ArticleChecklistApiRow>(
         `/circulars/${circularId}/implementations/${articleId}/checklist/${itemId}`,
         { completed: newCompleted },
+        ifMatchHeader(item?.updatedAt),
       )
+      if (row?.updated_at) {
+        set((state) =>
+          applyCircular(state, circularId, (c) => ({
+            ...c,
+            articles: c.articles.map((a) => {
+              if (a.id !== articleId) return a
+              return {
+                ...a,
+                checklist: a.checklist.map((i) =>
+                  i.id === itemId ? { ...i, updatedAt: row.updated_at } : i,
+                ),
+              }
+            }),
+          })),
+        )
+      }
     } catch (e) {
       if (snapshot) {
-        set((state) => ({
-          circulars: state.circulars.map((c) => (c.id === circularId ? snapshot : c)),
-          byId: { ...state.byId, [circularId]: snapshot },
-          selectedCircular:
-            state.selectedCircular?.id === circularId ? snapshot : state.selectedCircular,
-        }))
+        set((state) => restoreCircularState(state, circularId, snapshot))
       }
       set({ error: errorMessage(e, 'Failed to update checklist item') })
+      pushToast(revertMessage(e), 'error')
+      console.error('[optimistic:toggleChecklistItem] failed —', e)
       throw e
     }
   },
@@ -882,21 +1677,27 @@ export const useCircularStore = create<CircularState>()((set, get) => ({
       status: 'completed',
     }
     set((state) =>
-      applyCircular(state, circularId, (c) => ({
-        ...c,
-        articles: c.articles.map((a) => {
-          if (a.id !== articleId) return a
-          return {
-            ...a,
-            checklist: [...a.checklist, newItem],
-            timeline: [...(a.timeline ?? []), newEvent],
-          }
-        }),
-        updatedAt: now,
-      })),
+      applyCircular(state, circularId, (c) => {
+        const updated = {
+          ...c,
+          articles: c.articles.map((a) => {
+            if (a.id !== articleId) return a
+            return {
+              ...a,
+              checklist: [...a.checklist, newItem],
+              timeline: [newEvent, ...(a.timeline ?? [])],
+            }
+          }),
+          updatedAt: now,
+        }
+        // Monotonic blend never drops the bar for an uncompleted add; recalc
+        // keeps client + server in sync once the server-side recompute fires.
+        return { ...updated, progress: recalcProgress(updated) }
+      }),
     )
 
-    if (articleId.startsWith('temp-')) return
+    // GAP-20: only POST when the parent article is a persisted UUID.
+    if (!isPersistedId(articleId)) return
 
     try {
       const row = await api.post<{ id: string; text: string; completed: boolean; sort_order: number }>(
@@ -921,14 +1722,11 @@ export const useCircularStore = create<CircularState>()((set, get) => ({
       )
     } catch (e) {
       if (snapshot) {
-        set((state) => ({
-          circulars: state.circulars.map((c) => (c.id === circularId ? snapshot : c)),
-          byId: { ...state.byId, [circularId]: snapshot },
-          selectedCircular:
-            state.selectedCircular?.id === circularId ? snapshot : state.selectedCircular,
-        }))
+        set((state) => restoreCircularState(state, circularId, snapshot))
       }
       set({ error: errorMessage(e, 'Failed to add checklist item') })
+      pushToast(revertMessage(e), 'error')
+      console.error('[optimistic:addChecklistItem] failed —', e)
       throw e
     }
   },
@@ -956,7 +1754,7 @@ export const useCircularStore = create<CircularState>()((set, get) => ({
             return {
               ...a,
               checklist: a.checklist.filter((i) => i.id !== itemId),
-              timeline: [...(a.timeline ?? []), newEvent],
+              timeline: [newEvent, ...(a.timeline ?? [])],
             }
           }),
           updatedAt: now,
@@ -965,20 +1763,22 @@ export const useCircularStore = create<CircularState>()((set, get) => ({
       }),
     )
 
-    if (itemId.startsWith('temp-') || articleId.startsWith('temp-')) return
+    // GAP-20: same persisted-id guard as toggle — never DELETE a placeholder id.
+    if (!isPersistedId(articleId) || !isPersistedId(itemId)) return
 
     try {
-      await api.delete(`/circulars/${circularId}/implementations/${articleId}/checklist/${itemId}`)
+      // W17-1 / SEC-1: thread the item's last-known `updatedAt` as `If-Match`.
+      await api.delete(
+        `/circulars/${circularId}/implementations/${articleId}/checklist/${itemId}`,
+        ifMatchHeader(item?.updatedAt),
+      )
     } catch (e) {
       if (snapshot) {
-        set((state) => ({
-          circulars: state.circulars.map((c) => (c.id === circularId ? snapshot : c)),
-          byId: { ...state.byId, [circularId]: snapshot },
-          selectedCircular:
-            state.selectedCircular?.id === circularId ? snapshot : state.selectedCircular,
-        }))
+        set((state) => restoreCircularState(state, circularId, snapshot))
       }
       set({ error: errorMessage(e, 'Failed to delete checklist item') })
+      pushToast(revertMessage(e), 'error')
+      console.error('[optimistic:deleteChecklistItem] failed —', e)
       throw e
     }
   },
@@ -991,7 +1791,7 @@ export const useCircularStore = create<CircularState>()((set, get) => ({
         ...c,
         articles: c.articles.map((a) => {
           if (a.id !== articleId) return a
-          return { ...a, timeline: [...(a.timeline ?? []), newEvent] }
+          return { ...a, timeline: [newEvent, ...(a.timeline ?? [])] }
         }),
         updatedAt: now,
       })),
@@ -1032,14 +1832,20 @@ export const useCircularStore = create<CircularState>()((set, get) => ({
           user: 'Current User',
           status: 'completed',
         }
-        return {
+        // GAP-16: completing a step changes `completedSteps`, so recalc the
+        // dynamic 50/50 progress optimistically to match the server recompute.
+        const updated = {
           ...c,
           workflowSteps: updatedSteps,
-          timeline: [...(c.timeline ?? []), newEvent],
+          timeline: [newEvent, ...(c.timeline ?? [])],
           updatedAt: now,
         }
+        return { ...updated, progress: recalcProgress(updated) }
       }),
     )
+
+    // Wave-19.6 — the ephemeral `lastStepMutation` undo plumbing was removed.
+    // Step Undo now reads from the DB via `undoLastWorkflowStep`.
 
     try {
       await api.post(`/circulars/${circularId}/workflow/advance`, {
@@ -1048,14 +1854,11 @@ export const useCircularStore = create<CircularState>()((set, get) => ({
       })
     } catch (e) {
       if (snapshot) {
-        set((state) => ({
-          circulars: state.circulars.map((c) => (c.id === circularId ? snapshot : c)),
-          byId: { ...state.byId, [circularId]: snapshot },
-          selectedCircular:
-            state.selectedCircular?.id === circularId ? snapshot : state.selectedCircular,
-        }))
+        set((state) => restoreCircularState(state, circularId, snapshot))
       }
       set({ error: errorMessage(e, 'Failed to advance workflow step') })
+      pushToast(revertMessage(e), 'error')
+      console.error('[optimistic:advanceWorkflowStep] failed —', e)
       throw e
     }
   },
@@ -1110,23 +1913,36 @@ export const useCircularStore = create<CircularState>()((set, get) => ({
       type: action,
     }
     const now = new Date().toISOString()
+    // GAP-14: entity snapshot for the background revert path. The picker is
+    // synchronous (returns ok/false immediately), so the PATCH is fire-and-
+    // forget — but on failure we still revert the optimistic deadline + the
+    // timeline row, and raise a friendly toast.
+    const snapshot = get().byId[circularId]
     set((state) =>
       applyCircular(state, circularId, (c) => ({
         ...c,
         workflowSteps: newSteps,
-        timeline: [...(c.timeline ?? []), event],
+        timeline: [event, ...(c.timeline ?? [])],
         updatedAt: now,
       })),
     )
     // Fire-and-forget API call so the inline picker stays synchronous and
-    // returns the boolean shape its caller expects. Errors surface via store.error.
+    // returns the boolean shape its caller expects.
     if (step.id && !step.id.startsWith('temp-')) {
+      // W17-1 / SEC-1: thread the step's last-known `updatedAt` as `If-Match`.
       void api
-        .patch(`/circulars/${circularId}/workflow/steps/${step.id}`, {
-          deadline: deadline ?? null,
-        })
+        .patch(
+          `/circulars/${circularId}/workflow/steps/${step.id}`,
+          { deadline: deadline ?? null },
+          ifMatchHeader(step.updatedAt),
+        )
         .catch((e) => {
+          if (snapshot) {
+            set((state) => restoreCircularState(state, circularId, snapshot))
+          }
           set({ error: errorMessage(e, 'Failed to update step deadline') })
+          pushToast(revertMessage(e), 'error')
+          console.error('[optimistic:setRuleStepDeadline] failed —', e)
         })
     }
     return { ok: true }
@@ -1164,14 +1980,17 @@ export const useCircularStore = create<CircularState>()((set, get) => ({
       type: 'step_added',
     }
     const now = new Date().toISOString()
-    // Optimistic append.
+    // Optimistic append. GAP-16: adding a step grows `totalSteps`, so recalc.
     set((state) =>
-      applyCircular(state, circularId, (c) => ({
-        ...c,
-        workflowSteps: [...existingSteps, newStep],
-        timeline: [...(c.timeline ?? []), event],
-        updatedAt: now,
-      })),
+      applyCircular(state, circularId, (c) => {
+        const updated = {
+          ...c,
+          workflowSteps: [...existingSteps, newStep],
+          timeline: [event, ...(c.timeline ?? [])],
+          updatedAt: now,
+        }
+        return { ...updated, progress: recalcProgress(updated) }
+      }),
     )
 
     try {
@@ -1196,16 +2015,15 @@ export const useCircularStore = create<CircularState>()((set, get) => ({
           workflowSteps: (c.workflowSteps ?? []).map((s) => (s.id === tempId ? real : s)),
         })),
       )
+      // Wave-19.6 supersedes the W15-2 ephemeral-undo plumbing entirely —
+      // the new flow is DB-backed via `undoLastWorkflowStep` / `resetWorkflow`.
     } catch (e) {
       if (snapshot) {
-        set((state) => ({
-          circulars: state.circulars.map((c) => (c.id === circularId ? snapshot : c)),
-          byId: { ...state.byId, [circularId]: snapshot },
-          selectedCircular:
-            state.selectedCircular?.id === circularId ? snapshot : state.selectedCircular,
-        }))
+        set((state) => restoreCircularState(state, circularId, snapshot))
       }
       set({ error: errorMessage(e, 'Failed to add workflow step') })
+      pushToast(revertMessage(e), 'error')
+      console.error('[optimistic:addWorkflowStep] failed —', e)
       throw e
     }
   },
@@ -1241,28 +2059,102 @@ export const useCircularStore = create<CircularState>()((set, get) => ({
       applyCircular(state, circularId, (c) => ({
         ...c,
         workflowSteps: newSteps,
-        timeline: [...(c.timeline ?? []), event],
+        timeline: [event, ...(c.timeline ?? [])],
         updatedAt: now,
       })),
     )
 
+    // Wave-19.6 — ephemeral edit-undo plumbing removed (see store header).
+
     if (step.id.startsWith('temp-')) return
 
     try {
-      await api.patch(`/circulars/${circularId}/workflow/steps/${step.id}`, {
-        label: trimmed,
-        label_ar: trimmed,
-      })
+      // W17-1 / SEC-1: thread the step's last-known `updatedAt` as `If-Match`.
+      const row = await api.patch<WorkflowStepApiRow>(
+        `/circulars/${circularId}/workflow/steps/${step.id}`,
+        { label: trimmed, label_ar: trimmed },
+        ifMatchHeader(step.updatedAt),
+      )
+      if (row?.updated_at) {
+        set((state) =>
+          applyCircular(state, circularId, (c) => ({
+            ...c,
+            workflowSteps: (c.workflowSteps ?? []).map((s) =>
+              s.id === step.id ? { ...s, updatedAt: row.updated_at } : s,
+            ),
+          })),
+        )
+      }
     } catch (e) {
       if (snapshot) {
-        set((state) => ({
-          circulars: state.circulars.map((c) => (c.id === circularId ? snapshot : c)),
-          byId: { ...state.byId, [circularId]: snapshot },
-          selectedCircular:
-            state.selectedCircular?.id === circularId ? snapshot : state.selectedCircular,
-        }))
+        set((state) => restoreCircularState(state, circularId, snapshot))
       }
       set({ error: errorMessage(e, 'Failed to rename workflow step') })
+      pushToast(revertMessage(e), 'error')
+      console.error('[optimistic:renameWorkflowStep] failed —', e)
+      throw e
+    }
+  },
+
+  updateWorkflowStep: async (circularId, stepId, updates) => {
+    const snapshot = get().byId[circularId]
+    const now = new Date().toISOString()
+    // Optimistic patch.
+    set((state) =>
+      applyCircular(state, circularId, (c) => ({
+        ...c,
+        workflowSteps: (c.workflowSteps ?? []).map((s) =>
+          s.id === stepId
+            ? {
+                ...s,
+                ...(updates.notes !== undefined ? { notes: updates.notes ?? undefined } : {}),
+                ...(updates.assignedTo !== undefined
+                  ? { assignedTo: updates.assignedTo ?? undefined }
+                  : {}),
+                ...(updates.actionType !== undefined ? { actionType: updates.actionType } : {}),
+              }
+            : s,
+        ),
+        updatedAt: now,
+      })),
+    )
+
+    // Wave-19.6 — ephemeral edit-undo plumbing removed (see store header).
+
+    if (stepId.startsWith('temp-')) return
+
+    try {
+      const payload: Record<string, unknown> = {}
+      // `null` clears the column; the schema accepts `.nullable()` for these.
+      if (updates.notes !== undefined) payload.notes = updates.notes || null
+      if (updates.assignedTo !== undefined) payload.assigned_to = updates.assignedTo || null
+      if (updates.actionType !== undefined) payload.action_type = updates.actionType
+      if (Object.keys(payload).length === 0) return
+      // W17-1 / SEC-1: thread the step's last-known `updatedAt` as `If-Match`,
+      // and refresh local `updatedAt` from the response.
+      const snapStep = snapshot?.workflowSteps?.find((s) => s.id === stepId)
+      const row = await api.patch<WorkflowStepApiRow>(
+        `/circulars/${circularId}/workflow/steps/${stepId}`,
+        payload,
+        ifMatchHeader(snapStep?.updatedAt),
+      )
+      if (row?.updated_at) {
+        set((state) =>
+          applyCircular(state, circularId, (c) => ({
+            ...c,
+            workflowSteps: (c.workflowSteps ?? []).map((s) =>
+              s.id === stepId ? { ...s, updatedAt: row.updated_at } : s,
+            ),
+          })),
+        )
+      }
+    } catch (e) {
+      if (snapshot) {
+        set((state) => restoreCircularState(state, circularId, snapshot))
+      }
+      set({ error: errorMessage(e, 'Failed to update workflow step') })
+      pushToast(revertMessage(e), 'error')
+      console.error('[optimistic:updateWorkflowStep] failed —', e)
       throw e
     }
   },
@@ -1300,29 +2192,36 @@ export const useCircularStore = create<CircularState>()((set, get) => ({
       type: 'step_removed',
     }
     const now = new Date().toISOString()
+    // GAP-16: removing a step shrinks `totalSteps`, so recalc progress.
     set((state) =>
-      applyCircular(state, circularId, (c) => ({
-        ...c,
-        workflowSteps: restated,
-        timeline: [...(c.timeline ?? []), event],
-        updatedAt: now,
-      })),
+      applyCircular(state, circularId, (c) => {
+        const updated = {
+          ...c,
+          workflowSteps: restated,
+          timeline: [event, ...(c.timeline ?? [])],
+          updatedAt: now,
+        }
+        return { ...updated, progress: recalcProgress(updated) }
+      }),
     )
+
+    // Wave-19.6 — ephemeral remove-undo plumbing removed (see store header).
 
     if (removedId.startsWith('temp-')) return
 
     try {
-      await api.delete(`/circulars/${circularId}/workflow/steps/${removedId}`)
+      // W17-1 / SEC-1: thread the step's last-known `updatedAt` as `If-Match`.
+      await api.delete(
+        `/circulars/${circularId}/workflow/steps/${removedId}`,
+        ifMatchHeader(step.updatedAt),
+      )
     } catch (e) {
       if (snapshot) {
-        set((state) => ({
-          circulars: state.circulars.map((c) => (c.id === circularId ? snapshot : c)),
-          byId: { ...state.byId, [circularId]: snapshot },
-          selectedCircular:
-            state.selectedCircular?.id === circularId ? snapshot : state.selectedCircular,
-        }))
+        set((state) => restoreCircularState(state, circularId, snapshot))
       }
       set({ error: errorMessage(e, 'Failed to remove workflow step') })
+      pushToast(revertMessage(e), 'error')
+      console.error('[optimistic:removeWorkflowStep] failed —', e)
       throw e
     }
   },
@@ -1367,7 +2266,7 @@ export const useCircularStore = create<CircularState>()((set, get) => ({
       applyCircular(state, circularId, (c) => ({
         ...c,
         workflowSteps: restated,
-        timeline: [...(c.timeline ?? []), event],
+        timeline: [event, ...(c.timeline ?? [])],
         updatedAt: now,
       })),
     )
@@ -1383,16 +2282,134 @@ export const useCircularStore = create<CircularState>()((set, get) => ({
       })
     } catch (e) {
       if (snapshot) {
-        set((state) => ({
-          circulars: state.circulars.map((c) => (c.id === circularId ? snapshot : c)),
-          byId: { ...state.byId, [circularId]: snapshot },
-          selectedCircular:
-            state.selectedCircular?.id === circularId ? snapshot : state.selectedCircular,
-        }))
+        set((state) => restoreCircularState(state, circularId, snapshot))
       }
       set({ error: errorMessage(e, 'Failed to reorder workflow steps') })
+      pushToast(revertMessage(e), 'error')
+      console.error('[optimistic:reorderWorkflowSteps] failed —', e)
       throw e
     }
+  },
+
+  // Wave-19.6 (corrected) — DB-backed UNDO with dual-flip cursor model.
+  // One click walks the cursor backwards by exactly one step:
+  //   • most-recently-completed step → 'current' (cursor moves here)
+  //   • previously-current step → 'pending' (un-highlights)
+  // Reconciliation accepts the server's full refreshed workflow array so we
+  // pick up the canonical state regardless of any client/server race.
+  // Uses the parent circular's `updated_at` as `If-Match` (W17.2).
+  undoLastWorkflowStep: async (circularId) => {
+    const snapshot = get().byId[circularId]
+    if (!snapshot) return
+    const steps = snapshot.workflowSteps ?? []
+    // The client doesn't hydrate `completed_at`; fall back to the LAST
+    // `status==='completed'` in sort_order — in practice the same step.
+    let lastCompletedIdx = -1
+    for (let i = 0; i < steps.length; i++) {
+      if (steps[i].status === 'completed') lastCompletedIdx = i
+    }
+    if (lastCompletedIdx === -1) return
+    const currentIdx = steps.findIndex((s) => s.status === 'current')
+
+    await optimisticMutation<{ items: WorkflowStepApiRow[] }>({
+      context: 'circular.undoStep',
+      errorMessage: revertMessage,
+      apply: () => {
+        set((state) =>
+          applyCircular(state, circularId, (c) => {
+            const next = (c.workflowSteps ?? []).map((s, i) => {
+              if (i === lastCompletedIdx) {
+                // Promote — most-recently-completed becomes the new active step.
+                return { ...s, status: 'current' as const, date: undefined, user: undefined }
+              }
+              if (i === currentIdx && currentIdx !== lastCompletedIdx) {
+                // Demote — previously-current step un-highlights.
+                return { ...s, status: 'pending' as const, date: undefined, user: undefined }
+              }
+              return s
+            })
+            const updated = { ...c, workflowSteps: next, updatedAt: new Date().toISOString() }
+            return { ...updated, progress: recalcProgress(updated) }
+          }),
+        )
+      },
+      request: () =>
+        api.post<{ items: WorkflowStepApiRow[] }>(
+          `/circulars/${circularId}/workflow/undo`,
+          {},
+          ifMatchHeader(snapshot.updatedAt),
+        ),
+      reconcile: (res) => {
+        // Server returns the full refreshed workflow array (mirrors reset).
+        // Apply it directly so we don't depend on a background refetch racing
+        // with the optimistic apply.
+        const rows = Array.isArray(res?.items) ? res.items : []
+        if (rows.length > 0) {
+          set((state) =>
+            applyCircular(state, circularId, (c) => {
+              const updated = { ...c, workflowSteps: rows.map(mapWorkflowStepRow) }
+              return { ...updated, progress: recalcProgress(updated) }
+            }),
+          )
+        }
+        void get().fetchById(circularId)
+      },
+      revert: () => {
+        set((state) => restoreCircularState(state, circularId, snapshot))
+      },
+    }).catch(() => {
+      // toast + console.error already raised inside `optimisticMutation`.
+    })
+  },
+
+  // Wave-19.6 — DB-backed RESET. Only valid when 100% of steps are completed.
+  // Bulk-revert via POST /api/circulars/:id/workflow/reset. Optimistic flip
+  // every step to 'pending'; reconcile from the server response.
+  resetWorkflow: async (circularId) => {
+    const snapshot = get().byId[circularId]
+    if (!snapshot) return
+    const steps = snapshot.workflowSteps ?? []
+    if (steps.length === 0 || steps.some((s) => s.status !== 'completed')) return
+
+    await optimisticMutation<{ items: WorkflowStepApiRow[] }>({
+      context: 'circular.resetWorkflow',
+      errorMessage: revertMessage,
+      apply: () => {
+        set((state) =>
+          applyCircular(state, circularId, (c) => {
+            const next = (c.workflowSteps ?? []).map((s) => ({
+              ...s,
+              status: 'pending' as const,
+              date: undefined,
+              user: undefined,
+            }))
+            const updated = { ...c, workflowSteps: next, updatedAt: new Date().toISOString() }
+            return { ...updated, progress: recalcProgress(updated) }
+          }),
+        )
+      },
+      request: () =>
+        api.post<{ items: WorkflowStepApiRow[] }>(
+          `/circulars/${circularId}/workflow/reset`,
+          {},
+          ifMatchHeader(snapshot.updatedAt),
+        ),
+      reconcile: (res) => {
+        const rows = Array.isArray(res?.items) ? res.items : []
+        set((state) =>
+          applyCircular(state, circularId, (c) => {
+            const updated = { ...c, workflowSteps: rows.map(mapWorkflowStepRow) }
+            return { ...updated, progress: recalcProgress(updated) }
+          }),
+        )
+        void get().fetchById(circularId)
+      },
+      revert: () => {
+        set((state) => restoreCircularState(state, circularId, snapshot))
+      },
+    }).catch(() => {
+      // toast + console.error already raised inside `optimisticMutation`.
+    })
   },
 
   requestCircularEdit: async (circularId, editData) => {
@@ -1425,8 +2442,19 @@ export const useCircularStore = create<CircularState>()((set, get) => ({
             version: nextVersion,
             date: today,
             author: 'Current User',
-            changes: 'Edit approved and applied',
-            fieldChanges: c.pendingEdit?.fieldChanges,
+            // Wave-19.4 / Item-3 — dual-store optimistic fallback.
+            textEn: 'Edit approved and applied',
+            textAr: 'تمت الموافقة على التعديل وتطبيقه',
+            // GAP-19: `CircularVersionEntry.fieldChanges` is now a structured
+            // array; the legacy `pendingEdit.fieldChanges` keyed Record is
+            // flattened into `[{field,from,to}]`.
+            fieldChanges: c.pendingEdit?.fieldChanges
+              ? Object.entries(c.pendingEdit.fieldChanges).map(([field, diff]) => ({
+                  field,
+                  from: diff.from,
+                  to: diff.to,
+                }))
+              : [],
             approved: true,
           }
           const approvedEvent: CircularTimelineEvent = {
@@ -1442,7 +2470,7 @@ export const useCircularStore = create<CircularState>()((set, get) => ({
             ...c.pendingEdit.data,
             pendingEdit: undefined,
             versions: [...(c.versions ?? []), newVersion],
-            timeline: [...(c.timeline ?? []), approvedEvent],
+            timeline: [approvedEvent, ...(c.timeline ?? [])],
             updatedAt: now,
           }
         }
@@ -1457,7 +2485,7 @@ export const useCircularStore = create<CircularState>()((set, get) => ({
         return {
           ...c,
           pendingEdit: { ...c.pendingEdit, approvals: updatedApprovals },
-          timeline: [...(c.timeline ?? []), approvedEvent],
+          timeline: [approvedEvent, ...(c.timeline ?? [])],
           updatedAt: now,
         }
       }),
@@ -1496,77 +2524,30 @@ export const useCircularStore = create<CircularState>()((set, get) => ({
             status: 'rejected' as const,
             approvals: updatedApprovals,
           },
-          timeline: [...(c.timeline ?? []), rejectedEvent],
+          timeline: [rejectedEvent, ...(c.timeline ?? [])],
           updatedAt: now,
         }
       }),
     )
   },
 
-  addCAPAttachment: (circularId, file) => {
-    const now = new Date().toISOString()
-    const attachment: Attachment = {
-      id: nanoid(),
-      name: file.name,
-      url: file.dataUrl ?? '',
-      dataUrl: file.dataUrl,
-      type: file.type ?? 'application/pdf',
-      size: file.size ?? 0,
-      uploadedAt: now,
-      uploadedBy: 'Current User',
-    }
-    set((state) =>
-      applyCircular(state, circularId, (c) => ({
-        ...c,
-        capAttachments: [...(c.capAttachments ?? []), attachment],
-        updatedAt: now,
-      })),
-    )
+  // GAP-1: CAP / remediation attachments are now persisted via
+  // /api/circulars/[id]/attachments. Optimistic insert with a temp id, then
+  // swap in the server row; on failure restore the snapshot.
+  addCAPAttachment: async (circularId, file) => {
+    await uploadCircularAttachment(get, set, circularId, 'cap', file)
   },
 
-  addRemediationAttachment: (circularId, file) => {
-    const now = new Date().toISOString()
-    const attachment: Attachment = {
-      id: nanoid(),
-      name: file.name,
-      url: file.dataUrl ?? '',
-      dataUrl: file.dataUrl,
-      type: file.type ?? 'application/pdf',
-      size: file.size ?? 0,
-      uploadedAt: now,
-      uploadedBy: 'Current User',
-    }
-    set((state) =>
-      applyCircular(state, circularId, (c) => ({
-        ...c,
-        remediationAttachments: [...(c.remediationAttachments ?? []), attachment],
-        updatedAt: now,
-      })),
-    )
+  addRemediationAttachment: async (circularId, file) => {
+    await uploadCircularAttachment(get, set, circularId, 'remediation', file)
   },
 
-  removeCAPAttachment: (circularId, attachmentId) => {
-    const now = new Date().toISOString()
-    set((state) =>
-      applyCircular(state, circularId, (c) => ({
-        ...c,
-        capAttachments: (c.capAttachments ?? []).filter((a) => a.id !== attachmentId),
-        updatedAt: now,
-      })),
-    )
+  removeCAPAttachment: async (circularId, attachmentId) => {
+    await deleteCircularAttachment(get, set, circularId, 'cap', attachmentId)
   },
 
-  removeRemediationAttachment: (circularId, attachmentId) => {
-    const now = new Date().toISOString()
-    set((state) =>
-      applyCircular(state, circularId, (c) => ({
-        ...c,
-        remediationAttachments: (c.remediationAttachments ?? []).filter(
-          (a) => a.id !== attachmentId,
-        ),
-        updatedAt: now,
-      })),
-    )
+  removeRemediationAttachment: async (circularId, attachmentId) => {
+    await deleteCircularAttachment(get, set, circularId, 'remediation', attachmentId)
   },
 
   addTimelineEvent: (circularId, event) => {
@@ -1575,10 +2556,325 @@ export const useCircularStore = create<CircularState>()((set, get) => ({
     set((state) =>
       applyCircular(state, circularId, (c) => ({
         ...c,
-        timeline: [...(c.timeline ?? []), newEvent],
+        timeline: [newEvent, ...(c.timeline ?? [])],
         updatedAt: now,
       })),
     )
+  },
+
+  // GAP-15: load the NEXT page (10 rows) of the circular Activity timeline.
+  // The timeline is stored newest-first; new rows are appended (older) so the
+  // Activity tab — which renders the array reversed for oldest-at-bottom —
+  // shows them correctly. A `loadingMore` flag drives the on-button spinner.
+  loadMoreTimeline: async (circularId) => {
+    const page = get().circularTimelinePagination[circularId]
+    if (!page || page.loadingMore || !page.hasMore) return
+    set((state) => ({
+      circularTimelinePagination: {
+        ...state.circularTimelinePagination,
+        [circularId]: { ...page, loadingMore: true },
+      },
+    }))
+    try {
+      const res = await api.get<{ items: unknown[]; hasMore: boolean }>(
+        `/circulars/${circularId}/timeline`,
+        { offset: page.offset, limit: 10 },
+      )
+      const newRows = res.items.map(mapTimelineRow)
+      set((state) => {
+        const next = applyCircular(state, circularId, (c) => {
+          // De-dupe against ids already present (race-safe).
+          const existing = new Set((c.timeline ?? []).map((e) => e.id))
+          const merged = [
+            ...(c.timeline ?? []),
+            ...newRows.filter((e) => !existing.has(e.id)),
+          ]
+          return { ...c, timeline: merged }
+        })
+        const newOffset =
+          (next.byId[circularId]?.timeline?.length ?? page.offset)
+        return {
+          ...next,
+          circularTimelinePagination: {
+            ...state.circularTimelinePagination,
+            [circularId]: {
+              offset: newOffset,
+              hasMore: res.hasMore,
+              loadingMore: false,
+            },
+          },
+        }
+      })
+    } catch (e) {
+      set((state) => ({
+        circularTimelinePagination: {
+          ...state.circularTimelinePagination,
+          [circularId]: { ...page, loadingMore: false },
+        },
+      }))
+      pushToast(revertMessage(e), 'error')
+      console.error('[loadMoreTimeline] failed —', e)
+    }
+  },
+
+  // GAP-15: lazily load the FIRST page of an article's Activity timeline when
+  // its modal opens. Replaces the article's `timeline` with the first 10 rows.
+  loadArticleTimeline: async (circularId, articleId) => {
+    const key = `${circularId}:${articleId}`
+    // Skip if already loaded once (pagination state exists).
+    if (get().articleTimelinePagination[key]) return
+    if (!isPersistedId(articleId)) return
+    set((state) => ({
+      articleTimelinePagination: {
+        ...state.articleTimelinePagination,
+        [key]: { offset: 0, hasMore: false, loadingMore: true },
+      },
+    }))
+    try {
+      const res = await api.get<{ items: ArticleTimelineApiRow[]; hasMore: boolean }>(
+        `/circulars/${circularId}/implementations/${articleId}/timeline`,
+        { offset: 0, limit: 10 },
+      )
+      const rows = res.items.map(mapArticleTimelineRow)
+      set((state) => {
+        const next = applyCircular(state, circularId, (c) => ({
+          ...c,
+          articles: c.articles.map((a) =>
+            a.id === articleId ? { ...a, timeline: rows } : a,
+          ),
+        }))
+        return {
+          ...next,
+          articleTimelinePagination: {
+            ...state.articleTimelinePagination,
+            [key]: { offset: rows.length, hasMore: res.hasMore, loadingMore: false },
+          },
+        }
+      })
+    } catch (e) {
+      set((state) => ({
+        articleTimelinePagination: {
+          ...state.articleTimelinePagination,
+          [key]: { offset: 0, hasMore: false, loadingMore: false },
+        },
+      }))
+      console.error('[loadArticleTimeline] failed —', e)
+    }
+  },
+
+  // GAP-15: load the NEXT page of an article's Activity timeline.
+  loadMoreArticleTimeline: async (circularId, articleId) => {
+    const key = `${circularId}:${articleId}`
+    const page = get().articleTimelinePagination[key]
+    if (!page || page.loadingMore || !page.hasMore) return
+    set((state) => ({
+      articleTimelinePagination: {
+        ...state.articleTimelinePagination,
+        [key]: { ...page, loadingMore: true },
+      },
+    }))
+    try {
+      const res = await api.get<{ items: ArticleTimelineApiRow[]; hasMore: boolean }>(
+        `/circulars/${circularId}/implementations/${articleId}/timeline`,
+        { offset: page.offset, limit: 10 },
+      )
+      const newRows = res.items.map(mapArticleTimelineRow)
+      set((state) => {
+        const next = applyCircular(state, circularId, (c) => ({
+          ...c,
+          articles: c.articles.map((a) => {
+            if (a.id !== articleId) return a
+            const existing = new Set((a.timeline ?? []).map((e) => e.id))
+            return {
+              ...a,
+              timeline: [
+                ...(a.timeline ?? []),
+                ...newRows.filter((e) => !existing.has(e.id)),
+              ],
+            }
+          }),
+        }))
+        const newOffset =
+          next.byId[circularId]?.articles.find((a) => a.id === articleId)?.timeline
+            ?.length ?? page.offset
+        return {
+          ...next,
+          articleTimelinePagination: {
+            ...state.articleTimelinePagination,
+            [key]: { offset: newOffset, hasMore: res.hasMore, loadingMore: false },
+          },
+        }
+      })
+    } catch (e) {
+      set((state) => ({
+        articleTimelinePagination: {
+          ...state.articleTimelinePagination,
+          [key]: { ...page, loadingMore: false },
+        },
+      }))
+      pushToast(revertMessage(e), 'error')
+      console.error('[loadMoreArticleTimeline] failed —', e)
+    }
+  },
+
+  // W15-5: load the NEXT page (10 rows) of the circular Version History tab.
+  // Versions are stored newest-first (after the server's DESC fetch); the
+  // store keeps `versions` ASC-sorted, so the next page (older versions) is
+  // merged and re-sorted. A `loadingMore` flag drives the on-button spinner.
+  loadMoreCircularVersions: async (circularId) => {
+    const page = get().circularVersionPagination[circularId]
+    if (!page || page.loadingMore || !page.hasMore) return
+    set((state) => ({
+      circularVersionPagination: {
+        ...state.circularVersionPagination,
+        [circularId]: { ...page, loadingMore: true },
+      },
+    }))
+    try {
+      const res = await api.get<{ items: CircularVersionApiRow[]; hasMore: boolean }>(
+        `/circulars/${circularId}/versions`,
+        { offset: page.offset, limit: 10 },
+      )
+      const newRows = res.items.map(mapCircularVersionRow)
+      set((state) => {
+        const next = applyCircular(state, circularId, (c) => {
+          const existing = new Set((c.versions ?? []).map((v) => v.version))
+          const merged = [
+            ...(c.versions ?? []),
+            ...newRows.filter((v) => !existing.has(v.version)),
+          ].sort((a, b) => a.version - b.version)
+          return { ...c, versions: merged }
+        })
+        const newOffset = next.byId[circularId]?.versions?.length ?? page.offset
+        return {
+          ...next,
+          circularVersionPagination: {
+            ...state.circularVersionPagination,
+            [circularId]: {
+              offset: newOffset,
+              hasMore: res.hasMore,
+              loadingMore: false,
+            },
+          },
+        }
+      })
+    } catch (e) {
+      set((state) => ({
+        circularVersionPagination: {
+          ...state.circularVersionPagination,
+          [circularId]: { ...page, loadingMore: false },
+        },
+      }))
+      pushToast(revertMessage(e), 'error')
+      console.error('[loadMoreCircularVersions] failed —', e)
+    }
+  },
+
+  // W15-5: lazily load the FIRST page of an article's Version History when its
+  // modal opens — replaces the article's `versions` with the newest 10 rows.
+  loadArticleVersions: async (circularId, articleId) => {
+    const key = `${circularId}:${articleId}`
+    if (get().articleVersionPagination[key]) return
+    if (!isPersistedId(articleId)) return
+    set((state) => ({
+      articleVersionPagination: {
+        ...state.articleVersionPagination,
+        [key]: { offset: 0, hasMore: false, loadingMore: true },
+      },
+    }))
+    try {
+      const res = await api.get<{ items: ArticleVersionApiRow[]; hasMore: boolean }>(
+        `/circulars/${circularId}/implementations/${articleId}/versions`,
+        { offset: 0, limit: 10 },
+      )
+      const rows = res.items.map(mapArticleVersionRow).sort((a, b) => a.version - b.version)
+      set((state) => {
+        const next = applyCircular(state, circularId, (c) => ({
+          ...c,
+          articles: c.articles.map((a) =>
+            a.id === articleId ? { ...a, versions: rows } : a,
+          ),
+        }))
+        return {
+          ...next,
+          articleVersionPagination: {
+            ...state.articleVersionPagination,
+            [key]: { offset: rows.length, hasMore: res.hasMore, loadingMore: false },
+          },
+        }
+      })
+    } catch (e) {
+      set((state) => ({
+        articleVersionPagination: {
+          ...state.articleVersionPagination,
+          [key]: { offset: 0, hasMore: false, loadingMore: false },
+        },
+      }))
+      console.error('[loadArticleVersions] failed —', e)
+    }
+  },
+
+  // W15-5: load the NEXT page of an article's Version History.
+  loadMoreArticleVersions: async (circularId, articleId) => {
+    const key = `${circularId}:${articleId}`
+    const page = get().articleVersionPagination[key]
+    if (!page || page.loadingMore || !page.hasMore) return
+    set((state) => ({
+      articleVersionPagination: {
+        ...state.articleVersionPagination,
+        [key]: { ...page, loadingMore: true },
+      },
+    }))
+    try {
+      const res = await api.get<{ items: ArticleVersionApiRow[]; hasMore: boolean }>(
+        `/circulars/${circularId}/implementations/${articleId}/versions`,
+        { offset: page.offset, limit: 10 },
+      )
+      const newRows = res.items.map(mapArticleVersionRow)
+      set((state) => {
+        const next = applyCircular(state, circularId, (c) => ({
+          ...c,
+          articles: c.articles.map((a) => {
+            if (a.id !== articleId) return a
+            const existing = new Set((a.versions ?? []).map((v) => v.version))
+            const merged = [
+              ...(a.versions ?? []),
+              ...newRows.filter((v) => !existing.has(v.version)),
+            ].sort((x, y) => x.version - y.version)
+            return { ...a, versions: merged }
+          }),
+        }))
+        const newOffset =
+          next.byId[circularId]?.articles.find((a) => a.id === articleId)?.versions
+            ?.length ?? page.offset
+        return {
+          ...next,
+          articleVersionPagination: {
+            ...state.articleVersionPagination,
+            [key]: { offset: newOffset, hasMore: res.hasMore, loadingMore: false },
+          },
+        }
+      })
+    } catch (e) {
+      set((state) => ({
+        articleVersionPagination: {
+          ...state.articleVersionPagination,
+          [key]: { ...page, loadingMore: false },
+        },
+      }))
+      pushToast(revertMessage(e), 'error')
+      console.error('[loadMoreArticleVersions] failed —', e)
+    }
+  },
+
+  // GAP-21: circular PDF attachments — optimistic add/remove, mirroring the
+  // CAP / Remediation document actions.
+  addPdfAttachment: async (circularId, file) => {
+    await uploadCircularAttachment(get, set, circularId, 'pdf', file)
+  },
+
+  removePdfAttachment: async (circularId, attachmentId) => {
+    await deleteCircularAttachment(get, set, circularId, 'pdf', attachmentId)
   },
 }))
 

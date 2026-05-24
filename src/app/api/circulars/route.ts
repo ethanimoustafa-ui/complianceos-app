@@ -18,6 +18,8 @@ import {
   nextCircularReference,
 } from '@/lib/api/services/circulars'
 import { buildDefaultWorkflowStepRows } from '@/lib/workflow-defaults'
+// Wave-19.1 / Q8 — server-side bilingual renderer for dual-store timeline rows.
+import { renderBilingual } from '@/lib/i18n/server'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -50,9 +52,7 @@ export async function GET(req: NextRequest) {
       const set = new Set(((rows ?? []) as { circular_id: string }[]).map((r) => r.circular_id))
       if (q.has_pending_edits === 'true') {
         if (set.size === 0) {
-          return ok(paginate([], q.page, q.pageSize, 0), {
-            cache: { sMaxAge: 60, staleWhileRevalidate: 300, tags: [cacheTags.circulars()] },
-          })
+          return ok(paginate([], q.page, q.pageSize, 0), { cache: 'no-store' })
         }
         query = query.in('id', Array.from(set))
       } else if (set.size > 0) {
@@ -66,9 +66,25 @@ export async function GET(req: NextRequest) {
       .range(from, to)
     if (error) throw error
 
-    return ok(paginate(data ?? [], q.page, q.pageSize, count ?? 0), {
-      cache: { sMaxAge: 60, staleWhileRevalidate: 300, tags: [cacheTags.circulars()] },
-    })
+    // Stamp each row with `current_phase` so the row card can render the
+    // correct CAP / CAP-Approval / Remediation chip without waiting on a
+    // detail fetch. One side query, indexed on (circular_id, status).
+    const rows = (data ?? []) as Array<{ id: string; [k: string]: unknown }>
+    if (rows.length > 0) {
+      const ids = rows.map((r) => r.id)
+      const { data: currentSteps } = await supabase
+        .from('circular_workflow_steps')
+        .select('circular_id, phase')
+        .in('circular_id', ids)
+        .eq('status', 'current')
+      const phaseById = new Map<string, number>()
+      for (const s of (currentSteps ?? []) as Array<{ circular_id: string; phase: number }>) {
+        phaseById.set(s.circular_id, s.phase)
+      }
+      for (const r of rows) r.current_phase = phaseById.get(r.id) ?? null
+    }
+
+    return ok(paginate(rows, q.page, q.pageSize, count ?? 0), { cache: 'no-store' })
   } catch (e) {
     return handle(e)
   }
@@ -79,9 +95,22 @@ export async function POST(req: NextRequest) {
     const { supabase, user, profile } = await requirePerm('create')
     const input = await parseJson(req, CreateCircularSchema)
 
+    // SEC-11: `nextCircularReference` does a `SELECT max(reference)+1`, which
+    // races under concurrent POSTs — `circulars.reference` has a UNIQUE
+    // constraint (`circulars_reference_key`) so a colliding insert fails with
+    // Postgres `23505`. Retry on `23505`: recompute the next reference and try
+    // again. Between attempts we add a small random jitter so concurrent
+    // retriers desynchronise and re-read different `max` values rather than
+    // colliding again in lockstep. ~8 attempts is ample for realistic burst
+    // concurrency; anything beyond that fails cleanly with the last error.
+    const MAX_REFERENCE_ATTEMPTS = 8
     let inserted: Record<string, unknown> | null = null
     let lastError: unknown = null
-    for (let attempt = 0; attempt < 3; attempt++) {
+    for (let attempt = 0; attempt < MAX_REFERENCE_ATTEMPTS; attempt++) {
+      if (attempt > 0) {
+        // Jittered backoff (10–60ms) so peers re-read `max` at different times.
+        await new Promise((r) => setTimeout(r, 10 + Math.floor(Math.random() * 50)))
+      }
       const reference = await nextCircularReference(supabase, input.authority)
       const { data, error } = await supabase
         .from('circulars')
@@ -134,7 +163,7 @@ export async function POST(req: NextRequest) {
       insertCircularTimeline(
         supabase,
         created.id,
-        'Circular created',
+        renderBilingual('regulatoryUpdates.timeline.circularCreated'),
         profile.name ?? profile.email ?? user.id,
         'completed',
       ),

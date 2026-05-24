@@ -1,8 +1,13 @@
-// /api/observations — collection endpoint.
+// Wave-20 — /api/observations — collection endpoint.
+//
+// Hardened against PORTING-TEMPLATE §2 countermeasures:
+//   - GET: cache:'no-store' on every entity read (§2.2)
+//   - POST: server-generated reference via `insertWithRefCode` (§2.10) +
+//           dual-store timeline write (§2.11) + recompute hook (§2.7)
 
 import type { NextRequest } from 'next/server'
 import { requirePerm, requireUser } from '@/lib/api/auth'
-import { handle, NotFound } from '@/lib/api/errors'
+import { handle } from '@/lib/api/errors'
 import { ok, paginate } from '@/lib/api/response'
 import { parseJson, parseQuery } from '@/lib/api/validate'
 import { rangeFor } from '@/lib/api/pagination'
@@ -14,8 +19,12 @@ import {
 } from '@/lib/api/schemas/observations'
 import {
   OBSERVATION_LIST_COLUMNS,
-  writeObservationTimeline,
+  insertObservationTimeline,
+  observationActorName,
+  recomputeObservationDerivedState,
 } from '@/lib/api/services/observations'
+import { insertWithRefCode } from '@/lib/api/services/refcode'
+import { renderBilingual } from '@/lib/i18n/server'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -23,14 +32,12 @@ export const dynamic = 'force-dynamic'
 export async function GET(req: NextRequest) {
   try {
     const { supabase } = await requireUser()
-    // parseQuery surfaces invalid filter values as a 400 (ValidationFailed);
-    // a raw schema.parse() throws a ZodError that the global error handler
-    // would surface as a 500. Match audits/circulars/policies.
     const q = parseQuery(req.nextUrl.searchParams, ListObservationsQuerySchema)
 
     let query = supabase
       .from('observations')
       .select(OBSERVATION_LIST_COLUMNS, { count: 'exact' })
+      .is('deleted_at', null)
 
     if (q.id) query = query.eq('id', q.id)
     if (q.status) query = query.eq('status', q.status)
@@ -40,8 +47,6 @@ export async function GET(req: NextRequest) {
     if (q.framework_id) query = query.contains('framework_ids', [q.framework_id])
     if (q.q) query = query.ilike('title', `%${q.q}%`)
 
-    // department_id is the *department row id*. observations.department is a
-    // text label. Resolve dept-id → key/name first if requested.
     if (q.department_id) {
       const { data: dept } = await supabase
         .from('departments')
@@ -49,19 +54,14 @@ export async function GET(req: NextRequest) {
         .eq('id', q.department_id)
         .maybeSingle<{ key: string; name_en: string }>()
       if (!dept) {
-        return ok(paginate([], q.page, q.pageSize, 0), {
-          cache: { sMaxAge: 60, staleWhileRevalidate: 300, tags: [cacheTags.observations()] },
-        })
+        return ok(paginate([], q.page, q.pageSize, 0), { cache: 'no-store' })
       }
       query = query.in('department', [dept.key, dept.name_en])
     }
 
-    // audit_id filter: observations are linked to audits via
-    // letter_observations / observation_team currently. There is no
-    // direct FK. Filtering by audit_id is a no-op until that link exists.
-    // We accept the param without breaking — return all matching rows.
+    // audit_id filter is a no-op until a direct FK exists (see prior comment).
     if (q.audit_id) {
-      // intentionally not applied — see note above.
+      // intentionally not applied.
     }
 
     const [from, to] = rangeFor(q.page, q.pageSize)
@@ -70,9 +70,10 @@ export async function GET(req: NextRequest) {
       .range(from, to)
     if (error) throw error
 
-    return ok(paginate(data ?? [], q.page, q.pageSize, count ?? 0), {
-      cache: { sMaxAge: 60, staleWhileRevalidate: 300, tags: [cacheTags.observations()] },
-    })
+    // PORTING-TEMPLATE §2.2 — `cache: 'no-store'` on every entity GET; the
+    // `sMaxAge`/`staleWhileRevalidate` shape is unreliable for entity reads
+    // (rows vanish for up to 60s after a write).
+    return ok(paginate(data ?? [], q.page, q.pageSize, count ?? 0), { cache: 'no-store' })
   } catch (e) {
     return handle(e)
   }
@@ -83,9 +84,14 @@ export async function POST(req: NextRequest) {
     const { supabase, user, profile } = await requirePerm('observation:create')
     const input = await parseJson(req, CreateObservationSchema)
 
-    const { data, error } = await supabase
-      .from('observations')
-      .insert({
+    // Wave-20 / Q1 — server-generated `reference` via the platform helper.
+    // Slug source: observation title. Column name stays `reference` (legacy).
+    const data = await insertWithRefCode<{ id: string; reference: string }>({
+      supabase,
+      table: 'observations',
+      refCodeColumn: 'reference',
+      slugSource: input.title,
+      insertPayload: {
         title: input.title,
         sub_title: input.sub_title ?? null,
         description: input.description,
@@ -94,35 +100,41 @@ export async function POST(req: NextRequest) {
         due_date: input.due_date,
         remediation_submission_due: input.remediation_submission_due ?? null,
         department: input.department ?? null,
-        reference: input.reference,
         leader_id: input.leader_id ?? null,
         creator_id: user.id,
-        framework_ids: input.framework_ids,
-      })
-      .select(OBSERVATION_LIST_COLUMNS)
-      .single()
-    if (error || !data) throw error ?? NotFound('Insert returned no row')
+        framework_ids: input.framework_ids ?? [],
+      },
+      selectColumns: OBSERVATION_LIST_COLUMNS,
+    })
 
-    const created = data as { id: string }
+    const created = data as unknown as { id: string; reference: string }
+    const actor = observationActorName(profile, user.id)
     await Promise.all([
       writeAudit({
         actor_id: user.id,
-        actor_name: profile.name ?? profile.email ?? user.id,
+        actor_name: actor,
         action: 'observation.create',
         entity_type: 'observation',
         entity_id: created.id,
-        metadata: { reference: input.reference, severity: input.severity },
+        metadata: { reference: created.reference, severity: input.severity },
         supabase,
       }),
-      writeObservationTimeline({
+      insertObservationTimeline({
         supabase,
         observation_id: created.id,
         action_type: 'created',
-        description: `Observation created: ${input.title}`,
         user_id: user.id,
-        user_name: profile.name ?? profile.email ?? user.id,
+        user_name: actor,
+        ...renderBilingual('regulatoryUpdates.timeline.observationCreated', {
+          title: input.title,
+        }),
       }),
     ])
+
+    // §2.7 — server-authoritative recompute. is_overdue is maintained by the
+    // SQL trigger (migration 060); this is the call-site hook for future
+    // derived rollups.
+    await recomputeObservationDerivedState(supabase, created.id)
 
     revalidateAll([cacheTags.observations(), cacheTags.observations(created.id)])
     revalidate(cacheTags.compliance())
