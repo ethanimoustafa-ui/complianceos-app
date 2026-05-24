@@ -29,7 +29,7 @@ export const OBSERVATION_TIMELINE_COLUMNS =
   'id, observation_id, date, text_en, text_ar, action_type, user_id, user_name, target_id, metadata'
 
 export const REMEDIATION_PLAN_COLUMNS =
-  'id, observation_id, title, description, due_date, status, submitted_at, submitted_by, reviewed_at, reviewed_by, review_notes, created_at'
+  'id, observation_id, title, description, due_date, status, submitted_at, submitted_by, reviewed_at, reviewed_by, review_notes, created_at, updated_at'
 
 // `observation_updates` is the storage table for comments.
 export const OBSERVATION_UPDATE_COLUMNS =
@@ -37,6 +37,10 @@ export const OBSERVATION_UPDATE_COLUMNS =
 
 export const OBSERVATION_ASSIGNEE_COLUMNS =
   'id, observation_id, user_id, name, role, updated_at'
+
+// Wave-24 — observation version history (migration 064)
+export const OBSERVATION_VERSION_COLUMNS =
+  'id, observation_id, date, author, text_en, text_ar, field_changes, created_at'
 
 // --- assertions --------------------------------------------------------------
 

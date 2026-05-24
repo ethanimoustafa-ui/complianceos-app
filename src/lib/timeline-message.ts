@@ -26,6 +26,7 @@ type Translate = (key: any, params?: any) => string
 const FIELD_LABEL_KEY_PREFIXES = [
   'regulatoryUpdates.timelineField.',
   'policies.field.',
+  'observations.field.',
 ]
 
 export function renderFieldLabel(

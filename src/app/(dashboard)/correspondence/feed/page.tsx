@@ -22,6 +22,7 @@ import { exportCorrespondenceLocalized } from '@/lib/export'
 import type { Correspondence, Circular } from '@/types'
 import { useFormattedDate } from '@/hooks/useFormattedDate'
 import { formatDateWithPreference } from '@/lib/date-format'
+import { formatLocalizedQuarter } from '@/lib/format-date'
 import { useUserPreferencesStore } from '@/stores/user-preferences-store'
 import { dicebearAvatar } from '@/lib/avatar'
 import { Gate } from '@/components/auth/gate'
@@ -66,7 +67,7 @@ type UpcomingItem = {
 }
 
 export default function CorrespondenceFeedPage() {
-  const { t, isRTL } = useTranslation()
+  const { t, isRTL, language } = useTranslation()
   const pathname = usePathname()
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -190,11 +191,11 @@ export default function CorrespondenceFeedPage() {
     ).length
   }, [correspondenceStore.correspondence])
 
+  // W24-1 — locale-aware quarter label. AR → "الربع الثاني ٢٠٢٦", EN → "Q2 2026".
   const currentQuarterLabel = useMemo(() => {
-    const now = new Date()
-    const q = Math.floor(now.getMonth() / 3) + 1
-    return `Q${q} ${now.getFullYear()}`
-  }, [])
+    return formatLocalizedQuarter(language)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [language])
 
   const openObservationCount = useMemo(() =>
     observationStore.observations.filter(o => o.status === 'open').length,

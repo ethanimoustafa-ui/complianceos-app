@@ -1,9 +1,15 @@
 'use client'
 
+import { useEffect, useMemo } from 'react'
 import { Icon } from '@iconify/react'
 import { ObservationSource, ObservationSeverity, ObservationStatus } from './observation-types'
 import { useTranslation } from '@/i18n'
 import { EditableSelect } from '@/components/ui/editable-select'
+import { useEnumValuesStore } from '@/stores/enum-values-store'
+
+// W19.7-BUG-1 fix: stable empty reference to prevent useSyncExternalStore loop.
+import type { EnumValue } from '@/stores/enum-values-store'
+const EMPTY_SOURCES: EnumValue[] = []
 
 interface ObservationFiltersProps {
   searchQuery: string
@@ -34,7 +40,40 @@ export function ObservationFilters({
   submissionDueDateFilter,
   onSubmissionDueDateChange,
 }: ObservationFiltersProps) {
-  const { t, isRTL } = useTranslation()
+  const { t, isRTL, language } = useTranslation()
+
+  // W24-6c: read source options from the configurable enum store so that
+  // admin-added sources appear here automatically.
+  const sourceEnumRows = useEnumValuesStore((s) => s.byDomain['observation.source'] ?? EMPTY_SOURCES)
+  const fetchEnumValues = useEnumValuesStore((s) => s.fetch)
+  useEffect(() => { void fetchEnumValues('observation.source') }, [fetchEnumValues])
+
+  const sourceItems = useMemo(() => {
+    const allOption = { id: 'all', label: t('observations.filters.allSources') }
+    if (sourceEnumRows.length === 0) {
+      // Fallback to hard-coded seeds while the fetch is in flight.
+      return [
+        allOption,
+        { id: 'sama',     label: t('observations.sama') },
+        { id: 'cma',      label: t('observations.sources.cma') },
+        { id: 'ia',       label: t('observations.sources.ia') },
+        { id: 'zatca',    label: t('observations.sources.zatca') },
+        { id: 'misa',     label: t('observations.sources.misa') },
+        { id: 'safiu',    label: t('observations.sources.safiu') },
+        { id: 'citc',     label: t('observations.sources.citc') },
+        { id: 'internal', label: t('observations.sources.internal') },
+        { id: 'sharia',   label: t('observations.sources.sharia') },
+      ]
+    }
+    const sorted = sourceEnumRows.slice().sort((a, b) => a.sortOrder - b.sortOrder)
+    return [
+      allOption,
+      ...sorted.map((row) => ({
+        id: row.key,
+        label: language === 'ar' ? row.nameAr : row.nameEn,
+      })),
+    ]
+  }, [sourceEnumRows, language, t])
 
   return (
     <div className={`flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 mb-6 `}>
@@ -58,18 +97,7 @@ export function ObservationFilters({
           size="sm"
           value={sourceFilter}
           onChange={(id) => onSourceChange(id as ObservationSource | 'all')}
-          items={[
-            { id: 'all', label: t('observations.filters.allSources') },
-            { id: 'sama', label: t('observations.sources.sama') },
-            { id: 'cma', label: t('observations.sources.cma') },
-            { id: 'ia', label: t('observations.sources.ia') },
-            { id: 'zatca', label: t('observations.sources.zatca') },
-            { id: 'misa', label: t('observations.sources.misa') },
-            { id: 'safiu', label: t('observations.sources.safiu') },
-            { id: 'citc', label: t('observations.sources.citc') },
-            { id: 'internal', label: t('observations.sources.internal') },
-            { id: 'sharia', label: t('observations.sources.sharia') },
-          ]}
+          items={sourceItems}
           isRTL={isRTL}
         />
         <EditableSelect

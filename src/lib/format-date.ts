@@ -3,6 +3,12 @@
 // Server timestamps arrive as full ISO strings (e.g.
 // `2026-05-17T17:26:58.561758+00:00`). Date-only strings (`YYYY-MM-DD`)
 // pass through untouched so existing "day" rows still render legibly.
+//
+// W24-1 — locale-aware helpers added so every date-rendering site can
+// consult the current locale ('ar' → 'ar-SA' with Arabic-Indic numerals)
+// instead of hardcoding 'en-US'. Import `formatLocalizedDate` or
+// `formatLocalizedQuarter` rather than calling `toLocaleDateString('en-US', …)`
+// directly.
 
 'use client'
 
@@ -68,6 +74,69 @@ export function formatRelativeTime(
     }
   }
   return ''
+}
+
+// ── W24-1: locale-aware date formatting helpers ─────────────────────────────
+
+/**
+ * Resolve the Intl locale string from the app's language setting.
+ * 'ar' → 'ar-SA-u-nu-arab' (Arabic-Indic numerals, Arabic month names).
+ * 'en' (or any other value) → 'en-US'.
+ *
+ * The `-u-nu-arab` extension requests the Arabic-Indic digit set
+ * (٠١٢٣٤٥٦٧٨٩) instead of Western Arabic (0123456789).
+ */
+export function intlLocale(language: string): string {
+  return language === 'ar' ? 'ar-SA-u-nu-arab' : 'en-US'
+}
+
+/**
+ * W24-1 — Format a `YYYY-MM-DD` or ISO date string for display in the current
+ * locale. Produces output like:
+ *   EN: "May 24, 2026"
+ *   AR: "٢٤ مايو ٢٠٢٦"
+ *
+ * Falls back to the raw string if the input can't be parsed.
+ */
+export function formatLocalizedDate(
+  input: string | Date | null | undefined,
+  language: string,
+  options: Intl.DateTimeFormatOptions = {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  },
+): string {
+  if (!input) return ''
+  const d = input instanceof Date ? input : new Date(input)
+  if (Number.isNaN(d.getTime())) return typeof input === 'string' ? input : ''
+  // Use gregorian calendar explicitly to avoid hijri fallback on ar-SA.
+  return d.toLocaleDateString(intlLocale(language), {
+    calendar: 'gregory',
+    ...options,
+  })
+}
+
+/**
+ * W24-1 — Format a quarter label like "Q2 2026" in the current locale.
+ *   EN: "Q2 2026"
+ *   AR: "الربع ٢ ٢٠٢٦"  (uses Arabic ordinal + Arabic-Indic year)
+ *
+ * Accepts a `Date` (defaults to current date when omitted).
+ */
+export function formatLocalizedQuarter(language: string, date: Date = new Date()): string {
+  const q = Math.floor(date.getMonth() / 3) + 1
+  const year = date.getFullYear()
+  if (language !== 'ar') return `Q${q} ${year}`
+  // Arabic-Indic numerals via Intl
+  const nf = new Intl.NumberFormat('ar-SA-u-nu-arab')
+  const quarterNames: Record<number, string> = {
+    1: 'الربع الأول',
+    2: 'الربع الثاني',
+    3: 'الربع الثالث',
+    4: 'الربع الرابع',
+  }
+  return `${quarterNames[q] ?? `الربع ${nf.format(q)}`} ${nf.format(year)}`
 }
 
 /**

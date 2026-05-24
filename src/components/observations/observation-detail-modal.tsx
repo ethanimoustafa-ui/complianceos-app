@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, memo } from 'react'
+import { useState, useEffect, useCallback, memo } from 'react'
 import { Icon } from '@iconify/react'
 import { Modal } from '@/components/ui/modal'
 import { Observation } from './observation-types'
@@ -11,6 +11,7 @@ import { useTranslation } from '@/i18n'
 import { canTransferLeadership, canReviewRemediation, canUploadDocument, canRequestClosure, canReviewClosure } from '@/lib/permissions'
 import { TransferLeadershipModal } from './transfer-leadership-modal'
 import { FileUploadModal, getFileType } from './file-upload-modal'
+import { renderFieldLabel } from '@/lib/timeline-message'
 import {
   ChecklistSection,
   CommentsSection,
@@ -55,11 +56,34 @@ export const ObservationDetailModal = memo(function ObservationDetailModal({
   onClose,
   onChecklistToggle,
 }: ObservationDetailModalProps) {
-  const { t, isRTL } = useTranslation()
+  const { t, isRTL, language } = useTranslation()
 
   // Local state for checklist and comments - synced from prop, updated locally
   const [localChecklist, setLocalChecklist] = useState<LocalChecklistItem[]>([])
   const [localComments, setLocalComments] = useState<LocalComment[]>([])
+
+  // W24-4: version history
+  interface VersionEntry {
+    id: string
+    date: string
+    author: string
+    text_en: string
+    text_ar: string
+    field_changes: Array<{ field: string; from: string; to: string }> | null
+  }
+  const [versionHistory, setVersionHistory] = useState<VersionEntry[]>([])
+  const [expandedVersion, setExpandedVersion] = useState<string | null>(null)
+
+  const fetchVersionHistory = useCallback(async (obsId: string) => {
+    try {
+      const res = await fetch(`/api/observations/${obsId}/versions?pageSize=50`, { cache: 'no-store' })
+      if (!res.ok) return
+      const json = await res.json() as { data?: { items?: VersionEntry[] } }
+      setVersionHistory(json?.data?.items ?? [])
+    } catch {
+      // silently ignore — feature degrades gracefully
+    }
+  }, [])
 
   const store = useObservationStore()
   const {
@@ -90,10 +114,11 @@ export const ObservationDetailModal = memo(function ObservationDetailModal({
     void fetchById(observation.id).finally(() => {
       if (!cancelled) setIsHydrating(false)
     })
+    void fetchVersionHistory(observation.id)
     return () => {
       cancelled = true
     }
-  }, [isOpen, observation?.id, fetchById])
+  }, [isOpen, observation?.id, fetchById, fetchVersionHistory])
 
   // Composite "detail loaded?" flag: prefer the store helper if present,
   // otherwise fall back to the local fetch state.
@@ -326,6 +351,70 @@ export const ObservationDetailModal = memo(function ObservationDetailModal({
               isRTL={isRTL}
               isLoaded={detailLoaded}
             />
+
+            {/* Version History — W24-4 */}
+            <section>
+              <h3 className={`text-xs font-black uppercase text-slate-400 tracking-widest mb-3`}>
+                {t('observations.detail.versionHistory' as import('@/i18n').TranslationKey)}
+              </h3>
+              {versionHistory.length === 0 ? (
+                <p className="text-sm text-slate-400">
+                  {t('observations.detail.noVersionHistory' as import('@/i18n').TranslationKey)}
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  {versionHistory.map((ver, idx) => {
+                    const isOpen = expandedVersion === ver.id
+                    const hasDiff = (ver.field_changes ?? []).length > 0
+                    const summary = language === 'ar' ? ver.text_ar : ver.text_en
+                    const displayNum = versionHistory.length - idx
+                    return (
+                      <div key={ver.id}>
+                        <button
+                          onClick={() => setExpandedVersion(isOpen ? null : ver.id)}
+                          className="w-full flex items-start gap-3 p-3 bg-slate-50 rounded-xl hover:bg-slate-100 transition-colors cursor-pointer text-left"
+                        >
+                          <span className="px-2 py-0.5 bg-slate-200 text-slate-700 rounded text-xs font-bold font-mono shrink-0">
+                            v{displayNum}
+                          </span>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs font-bold text-slate-700">{summary}</p>
+                            <p className="text-[10px] text-slate-400 mt-0.5">
+                              {ver.date} • {ver.author}
+                            </p>
+                          </div>
+                          <Icon
+                            icon={isOpen ? 'lucide:chevron-up' : 'lucide:chevron-down'}
+                            className="text-slate-400 text-sm shrink-0 mt-0.5"
+                          />
+                        </button>
+                        {isOpen && hasDiff && (
+                          <div className="bg-amber-50 rounded-xl p-3 mt-1 space-y-1.5">
+                            <div className="grid grid-cols-3 gap-1 text-[10px] font-black text-slate-500 uppercase tracking-wider border-b border-amber-100 pb-1">
+                              <span>{t('observations.detail.fieldChanged' as import('@/i18n').TranslationKey)}</span>
+                              <span>{t('observations.detail.changedFrom' as import('@/i18n').TranslationKey)}</span>
+                              <span>{t('observations.detail.changedTo' as import('@/i18n').TranslationKey)}</span>
+                            </div>
+                            {(ver.field_changes ?? []).map((diff, i) => (
+                              <div key={`${diff.field}-${i}`} className="grid grid-cols-3 gap-1 text-[10px]">
+                                <span className="font-bold text-slate-600">{renderFieldLabel(diff.field, t)}</span>
+                                <span className="text-rose-600 line-through truncate">{diff.from || '—'}</span>
+                                <span className="text-emerald-600 truncate">{diff.to || '—'}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        {isOpen && !hasDiff && (
+                          <div className="bg-slate-50 rounded-xl p-3 mt-1">
+                            <p className="text-xs text-slate-400">{summary}</p>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </section>
           </div>
         </div>
 

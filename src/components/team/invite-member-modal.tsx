@@ -12,6 +12,7 @@ import { useTeamStore } from '@/stores/team-store'
 import { useDepartmentStore } from '@/stores/department-store'
 import { EditableSelect } from '@/components/ui/editable-select'
 import type { TeamMember } from '@/types'
+import { useTranslation } from '@/i18n'
 
 const inviteSchema = z.object({
   email: z.string().email('Invalid email address'),
@@ -37,6 +38,7 @@ const roles = [
 export function InviteMemberModal({ isOpen, onClose, onSuccess }: InviteMemberModalProps) {
   const { invite, isMutating } = useTeamStore()
   const { departments: deptList, addDepartment, updateDepartment, removeDepartment } = useDepartmentStore()
+  const { t } = useTranslation()
 
   const {
     control,
@@ -165,7 +167,7 @@ export function InviteMemberModal({ isOpen, onClose, onSuccess }: InviteMemberMo
                       field.onChange(dept ? dept.name : '')
                     }}
                     items={deptList.map((d) => ({ id: d.id, label: d.name, labelAr: d.nameAr, isDefault: d.isDefault }))}
-                    placeholder="Select department..."
+                    placeholder={t('observations.form.selectDepartment' as import('@/i18n').TranslationKey)}
                     onAdd={(label, labelAr) => addDepartment(label, labelAr ?? label).id}
                     onEdit={(id, label, labelAr) => updateDepartment(id, { name: label, nameAr: labelAr ?? label })}
                     onDelete={(id) => removeDepartment(id)}

@@ -10,6 +10,7 @@ import { useCircularStore } from '@/stores/circular-store'
 import { usePolicyStore } from '@/stores/policy-store'
 import type { Circular, Policy } from '@/types'
 import { EditableSelect } from '@/components/ui/editable-select'
+import { formatLocalizedDate } from '@/lib/format-date'
 
 type RegistryRow = {
   id: string
@@ -38,7 +39,7 @@ const registryStatusColors: Record<string, string> = {
 }
 
 export default function RegistryPage() {
-  const { t, isRTL } = useTranslation()
+  const { t, isRTL, language } = useTranslation()
   const { circulars, setSelected: setSelectedCircular } = useCircularStore()
   const { policies, setSelected: setSelectedPolicy } = usePolicyStore()
   const router = useRouter()
@@ -72,14 +73,27 @@ export default function RegistryPage() {
     'requires-review': t('policies.statusRequiresReview' as TranslationKey),
   }
 
-  // Category translation map (for policies)
+  // Category / authority translation map (covers both policy categories and
+  // circular authority values so no raw key ever reaches the DOM).
   const categoryLabels: Record<string, string> = {
-    'compliance': t('policies.categoryCompliance' as TranslationKey),
-    'it': t('policies.categoryIT' as TranslationKey),
-    'operations': t('policies.categoryOperations' as TranslationKey),
-    'risk': t('policies.categoryRisk' as TranslationKey),
-    'hr': t('policies.categoryHR' as TranslationKey),
-    'finance': t('policies.categoryFinance' as TranslationKey),
+    // Policy categories
+    'compliance':  t('policies.categoryCompliance' as TranslationKey),
+    'it':          t('policies.categoryIT' as TranslationKey),
+    'operations':  t('policies.categoryOperations' as TranslationKey),
+    'risk':        t('policies.categoryRisk' as TranslationKey),
+    'hr':          t('policies.categoryHR' as TranslationKey),
+    'finance':     t('policies.categoryFinance' as TranslationKey),
+    // Extra policy categories that may appear from user-added seeds
+    'governance':  isRTL ? 'الحوكمة' : 'Governance',
+    'credit-risk': isRTL ? 'مخاطر الائتمان' : 'Credit Risk',
+    // Circular authority values (registry maps category = c.authority)
+    'sama':  t('observations.sources.sama' as TranslationKey),
+    'cma':   t('observations.sources.cma' as TranslationKey),
+    'ia':    t('observations.sources.ia' as TranslationKey),
+    'zatca': t('observations.sources.zatca' as TranslationKey),
+    'misa':  t('observations.sources.misa' as TranslationKey),
+    'safiu': t('observations.sources.safiu' as TranslationKey),
+    'citc':  t('observations.sources.citc' as TranslationKey),
   }
 
   // ── Registry rows (circulars + policies combined) ─────────────────────────
@@ -310,7 +324,7 @@ export default function RegistryPage() {
                           {statusLabels[row.status] ?? row.status}
                         </span>
                       </td>
-                      <td className="p-4 text-sm text-slate-600">{row.dueDate || '—'}</td>
+                      <td className="p-4 text-sm text-slate-600">{row.dueDate ? formatLocalizedDate(row.dueDate, language, { year: 'numeric', month: 'short', day: 'numeric' }) : '—'}</td>
                       <td className="p-4 min-w-[120px]">
                         <div className="flex items-center gap-2">
                           <div className="flex-1 bg-slate-200 rounded-full h-1.5">
@@ -417,7 +431,7 @@ export default function RegistryPage() {
                   <div className={`flex justify-between text-xs`}>
                     <span className="text-slate-400">{t('observations.dueDate')}</span>
                     <span className={`font-bold ${new Date(previewRow.dueDate) < new Date() ? 'text-rose-600' : 'text-slate-700'}`}>
-                      {previewRow.dueDate}
+                      {formatLocalizedDate(previewRow.dueDate, language, { year: 'numeric', month: 'short', day: 'numeric' })}
                     </span>
                   </div>
                 )}
@@ -449,7 +463,7 @@ export default function RegistryPage() {
                       <div className={`flex justify-between text-xs`}>
                         <span className="text-slate-400">{t('regulatoryUpdates.capDeadline' as TranslationKey)}</span>
                         <span className={`font-bold ${new Date((previewItem as Circular).capDeadline!) < new Date() ? 'text-rose-600' : 'text-slate-700'}`}>
-                          {(previewItem as Circular).capDeadline}
+                          {formatLocalizedDate((previewItem as Circular).capDeadline, language, { year: 'numeric', month: 'short', day: 'numeric' })}
                         </span>
                       </div>
                     )}

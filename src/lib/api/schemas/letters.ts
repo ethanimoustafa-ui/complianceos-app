@@ -64,7 +64,12 @@ const PlaceholderDef = z.object({
 
 export const CreateLetterSchema = z
   .object({
-    authority: z.string().min(1).max(100),
+    // W24-2 fix: normalise to lowercase before the DB insert so that
+    // `authority:'SAMA'` hits the frameworks FK (which stores lowercase ids)
+    // instead of crashing with a FK violation → 500. Decision: normalise +
+    // accept either case (vs. rejecting uppercase with 400) so the API is
+    // lenient for callers that capitalise authority codes.
+    authority: z.string().min(1).max(100).transform((s) => s.toLowerCase()),
     type: z.string().min(1).max(100), // letter type key — e.g. 'non-objection','inquiry','submission','notification'
     sub_category: PlainText(200).optional(),
     sama_department: PlainText(200).optional(),
@@ -102,7 +107,8 @@ export type CreateLetterInput = z.infer<typeof CreateLetterSchema>
 // nullable or optional without dragging along Create-only validation.
 export const UpdateLetterSchema = z
   .object({
-    authority: z.string().min(1).max(100).optional(),
+    // W24-2 fix: same lowercase normalisation as CreateLetterSchema.
+    authority: z.string().min(1).max(100).transform((s) => s.toLowerCase()).optional(),
     type: z.string().min(1).max(100).optional(),
     sub_category: PlainText(200).nullable().optional(),
     sama_department: PlainText(200).nullable().optional(),

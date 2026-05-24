@@ -10,6 +10,7 @@ import { UserPreferencesSection } from '@/components/settings/UserPreferencesSec
 import { AuditTemplatesSection } from '@/components/settings/AuditTemplatesSection'
 import { PolicyTemplatesSection } from '@/components/settings/PolicyTemplatesSection'
 import { ApprovalTiersSection } from '@/components/settings/ApprovalTiersSection'
+import { SourcesSection } from '@/components/settings/SourcesSection'
 import { ListsAndCategoriesSection } from '@/components/settings/ListsAndCategoriesSection'
 import { AccessMatrixSection } from '@/components/settings/AccessMatrixSection'
 import { Gate } from '@/components/auth/gate'
@@ -55,6 +56,7 @@ export default function SettingsPage() {
           <AuditTemplatesSection />
           <PolicyTemplatesSection />
           <ApprovalTiersSection />
+          <SourcesSection />
           <ListsAndCategoriesSection />
           <AccessMatrixSection />
         </div>

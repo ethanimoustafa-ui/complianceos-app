@@ -7,7 +7,7 @@ import Link from 'next/link'
 import { Icon } from '@iconify/react'
 import { Modal } from '@/components/ui/modal'
 import { ListSkeleton, Skeleton } from '@/components/ui/skeleton'
-import { formatTimelineDate } from '@/lib/format-date'
+import { formatTimelineDate, formatLocalizedDate } from '@/lib/format-date'
 import { cn } from '@/lib/utils'
 import { useTranslation } from '@/i18n'
 import { Gate } from '@/components/auth/gate'
@@ -626,9 +626,11 @@ export default function LettersPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingSend, view, selectedLetter?.id])
 
+  // W24-1 — locale-aware date formatter. Uses 'ar-SA-u-nu-arab' in AR mode
+  // so Arabic-Indic numerals and Arabic month names are used consistently.
   const formatDate = (iso: string): string => {
     try {
-      return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+      return formatLocalizedDate(iso, language, { month: 'short', day: 'numeric', year: 'numeric' })
     } catch {
       return iso
     }

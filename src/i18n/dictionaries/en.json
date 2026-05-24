@@ -555,7 +555,8 @@
     "dateLast365Days": "Last 12 months",
     "letterSentToAuthority": "Sent to {{authority}}",
     "pendingAuthorityReply": "Pending {{authority}} reply",
-    "statusSentToAuthority": "Sent to authority"
+    "statusSentToAuthority": "Sent to authority",
+    "selectDepartment": "Select department..."
   },
   "observations": {
     "observation": "observation",
@@ -790,7 +791,12 @@
       "rejectClosure": "Reject Closure",
       "verifiedClosed": "Verified & Closed",
       "closureApprovedBy": "Closure approved by {{name}}",
-      "workInProgress": "Work in progress"
+      "workInProgress": "Work in progress",
+      "versionHistory": "Version History",
+      "noVersionHistory": "No version history yet",
+      "fieldChanged": "Field Changed",
+      "changedFrom": "From",
+      "changedTo": "To"
     }
   },
   "regulatoryUpdates": {
@@ -1591,6 +1597,13 @@
       "keyAlreadyExists": "A tier with this key already exists.",
       "deleteConfirmTitle": "Delete approval tier?",
       "deleteConfirmBody": "Removing this tier won't change existing policies — their stored value stays — but it will disappear from the Create / Edit dropdown."
+    },
+    "sources": {
+      "title": "Observation Sources",
+      "description": "Customize the observation source options shown in the Observations filter and Add Observation form.",
+      "addSource": "Add Source",
+      "deleteConfirmTitle": "Delete observation source?",
+      "deleteConfirmBody": "Removing this source won't change existing observations — their stored value stays — but it will disappear from the filter dropdown."
     },
     "title": "Settings",
     "subtitle": "Governance & Compliance Configuration",

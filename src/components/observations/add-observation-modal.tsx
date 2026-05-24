@@ -6,7 +6,6 @@ import { Modal } from '@/components/ui/modal'
 import { Button } from '@/components/ui/button'
 import { FileUpload, UploadedFile } from '@/components/ui/file-upload'
 import { ObservationSource, ObservationSeverity } from './observation-types'
-import { useObservationStore } from '@/stores/observation-store'
 import { useTeamStore } from '@/stores/team-store'
 import { useDepartmentStore } from '@/stores/department-store'
 import { useTranslation } from '@/i18n'
@@ -55,7 +54,6 @@ interface FormErrors {
 
 export const AddObservationModal = memo(function AddObservationModal({ isOpen, onClose, onSave }: AddObservationModalProps) {
   const { t, isRTL } = useTranslation()
-  const { getNextReference } = useObservationStore()
   const { members } = useTeamStore()
   const activeMembers = members.filter(m => m.status === 'active')
 
@@ -281,36 +279,22 @@ export const AddObservationModal = memo(function AddObservationModal({ isOpen, o
                 <label className={`text-xs font-black uppercase text-slate-500 tracking-widest mb-2 block`}>
                   {t('observations.form.referenceNumber')} <span className="text-rose-500">*</span>
                 </label>
-                <div className={`flex gap-2`}>
-                  <input
-                    type="text"
-                    placeholder={t('observations.form.referencePlaceholder')}
-                    value={formData.reference}
-                    onChange={(e) => {
-                      setFormData((prev) => ({ ...prev, reference: e.target.value }))
-                      // Clear error when field becomes valid
-                      if (e.target.value.trim()) {
-                        setErrors((prev) => ({ ...prev, reference: undefined }))
-                      }
-                    }}
-                    onBlur={() => handleBlur('reference')}
-                    className={`flex-1 px-4 py-3 bg-slate-50 border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 ${
-                      touched.reference && errors.reference ? 'border-rose-300' : 'border-slate-200'
-                    }`}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const nextRef = getNextReference()
-                      setFormData((prev) => ({ ...prev, reference: nextRef }))
-                      setTouched((prev) => ({ ...prev, reference: true }))
-                    }}
-                    className="px-3 py-3 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-600 hover:bg-emerald-100 transition-colors"
-                    title="Auto-generate reference"
-                  >
-                    <Icon icon="lucide:sparkles" />
-                  </button>
-                </div>
+                <input
+                  type="text"
+                  placeholder={t('observations.form.referencePlaceholder')}
+                  value={formData.reference}
+                  onChange={(e) => {
+                    setFormData((prev) => ({ ...prev, reference: e.target.value }))
+                    // Clear error when field becomes valid
+                    if (e.target.value.trim()) {
+                      setErrors((prev) => ({ ...prev, reference: undefined }))
+                    }
+                  }}
+                  onBlur={() => handleBlur('reference')}
+                  className={`w-full px-4 py-3 bg-slate-50 border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 ${
+                    touched.reference && errors.reference ? 'border-rose-300' : 'border-slate-200'
+                  }`}
+                />
                 {touched.reference && errors.reference ? (
                   <p className="text-rose-500 text-xs mt-1">{errors.reference}</p>
                 ) : null}

@@ -60,7 +60,10 @@ export const DeadlineCountdown = memo(function DeadlineCountdown({
     }
   }, [activeDate])
 
-  const formattedDays = daysRemaining.toString().padStart(2, '0')
+  // W24-1 — use Arabic-Indic numerals when in AR locale.
+  const formattedDays = isRTL
+    ? daysRemaining.toString().padStart(2, '0').replace(/\d/g, (d) => '٠١٢٣٤٥٦٧٨٩'[parseInt(d)])
+    : daysRemaining.toString().padStart(2, '0')
 
   return (
     <div>

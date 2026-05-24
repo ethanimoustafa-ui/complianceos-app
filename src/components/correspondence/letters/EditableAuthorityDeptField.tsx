@@ -5,6 +5,7 @@ import { Icon } from '@iconify/react'
 import type { CircularAuthority } from '@/types'
 import { EditableSelect } from '@/components/ui/editable-select'
 import { useAuthorityDeptStore } from '@/stores/authority-department-store'
+import { useTranslation } from '@/i18n'
 
 // Editable per-authority department field — wraps EditableSelect against
 // useAuthorityDeptStore. Also exposes an inline email-memory editor: typing an
@@ -21,6 +22,7 @@ export function EditableAuthorityDeptField({
   onChange: (id: string) => void
   isRTL: boolean
 }) {
+  const { t } = useTranslation()
   const { getDepartments, addDepartment, updateDepartment, removeDepartment, setDepartmentEmail } =
     useAuthorityDeptStore()
   const depts = getDepartments(authority)
@@ -37,7 +39,7 @@ export function EditableAuthorityDeptField({
         value={value || null}
         onChange={(id) => onChange(id)}
         items={depts.map((d) => ({ id: d.id, label: d.en, labelAr: d.ar }))}
-        placeholder="Select department..."
+        placeholder={t('letters.selectDepartment' as import('@/i18n').TranslationKey)}
         onAdd={async (label, labelAr) => {
           try {
             const created = await addDepartment(authority, label, labelAr ?? label)

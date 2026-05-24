@@ -555,7 +555,8 @@
     "dateLast365Days": "آخر 12 شهراً",
     "letterSentToAuthority": "تم الإرسال إلى {{authority}}",
     "pendingAuthorityReply": "بانتظار رد {{authority}}",
-    "statusSentToAuthority": "تم الإرسال إلى الجهة"
+    "statusSentToAuthority": "تم الإرسال إلى الجهة",
+    "selectDepartment": "اختر إدارة..."
   },
   "observations": {
     "observation": "الملاحظة",
@@ -790,7 +791,12 @@
       "rejectClosure": "رفض الإغلاق",
       "verifiedClosed": "تم التحقق والإغلاق",
       "closureApprovedBy": "تمت الموافقة على الإغلاق بواسطة {{name}}",
-      "workInProgress": "العمل قيد التنفيذ"
+      "workInProgress": "العمل قيد التنفيذ",
+      "versionHistory": "سجل الإصدارات",
+      "noVersionHistory": "لا يوجد سجل إصدارات بعد",
+      "fieldChanged": "الحقل المُعدَّل",
+      "changedFrom": "من",
+      "changedTo": "إلى"
     }
   },
   "regulatoryUpdates": {
@@ -1591,6 +1597,13 @@
       "keyAlreadyExists": "يوجد مستوى آخر بهذا المفتاح بالفعل.",
       "deleteConfirmTitle": "حذف مستوى الاعتماد؟",
       "deleteConfirmBody": "إزالة هذا المستوى لن تغيّر السياسات الحالية — ستحتفظ بقيمتها المخزنة — لكنه سيختفي من قائمة الإنشاء / التعديل."
+    },
+    "sources": {
+      "title": "مصادر الملاحظات",
+      "description": "تخصيص خيارات مصدر الملاحظات المعروضة في قائمة الفلترة ونموذج إضافة ملاحظة.",
+      "addSource": "إضافة مصدر",
+      "deleteConfirmTitle": "حذف مصدر الملاحظة؟",
+      "deleteConfirmBody": "إزالة هذا المصدر لن تغيّر الملاحظات الحالية — ستحتفظ بقيمتها المخزنة — لكنه سيختفي من قائمة الفلترة."
     },
     "title": "الإعدادات",
     "subtitle": "تكوين الحوكمة والامتثال",

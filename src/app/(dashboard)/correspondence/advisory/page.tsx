@@ -19,6 +19,7 @@ import { useDepartmentStore } from '@/stores/department-store'
 import { EditableSelect } from '@/components/ui/editable-select'
 import { Gate } from '@/components/auth/gate'
 import { paginate } from '@/lib/pagination'
+import { formatLocalizedDate } from '@/lib/format-date'
 
 type TimeFrequency = 'week' | 'month' | 'quarter' | 'semi_annual' | 'annual' | 'fiscal'
 
@@ -38,7 +39,7 @@ function Toast({ message, onClose }: { message: string; onClose: () => void }) {
 }
 
 export default function AdvisoryPage() {
-  const { t, isRTL } = useTranslation()
+  const { t, isRTL, language } = useTranslation()
   const pathname = usePathname()
   const searchParams = useSearchParams()
 
@@ -435,7 +436,7 @@ export default function AdvisoryPage() {
                         </span>
                         <span className={`text-xs text-slate-500 flex items-center gap-1`}>
                           <Icon icon="lucide:calendar" className="text-slate-400" />
-                          {advisory.requestedDate}
+                          {formatLocalizedDate(advisory.requestedDate, language, { year: 'numeric', month: 'short', day: 'numeric' })}
                         </span>
                         {advisory.notes.length > 0 && (
                           <span className={`text-xs text-blue-600 flex items-center gap-1`}>
@@ -676,7 +677,7 @@ export default function AdvisoryPage() {
               </div>
               <div className={`bg-slate-50 p-4 rounded-lg ${isRTL ? 'text-right' : ''}`}>
                 <p className="text-xs font-bold text-slate-500 uppercase mb-1">{t('advisory.requestDate')}</p>
-                <p className="text-sm font-bold text-slate-900">{selectedAdvisory.requestedDate}</p>
+                <p className="text-sm font-bold text-slate-900">{formatLocalizedDate(selectedAdvisory.requestedDate, language)}</p>
               </div>
               {selectedAdvisory.assignedTo && (
                 <div className={`bg-emerald-50 p-4 rounded-lg ${isRTL ? 'text-right' : ''}`}>
@@ -704,7 +705,7 @@ export default function AdvisoryPage() {
                     <div key={note.id} className={`bg-slate-50 p-4 rounded-lg border-l-4 border-emerald-500 ${isRTL ? 'text-right border-l-0 border-r-4' : ''}`}>
                       <div className={`flex justify-between items-start mb-2`}>
                         <span className="text-xs font-bold text-slate-900">{note.author}</span>
-                        <span className="text-[10px] text-slate-400">{new Date(note.timestamp).toLocaleString(isRTL ? 'ar-SA' : 'en-US')}</span>
+                        <span className="text-[10px] text-slate-400">{formatLocalizedDate(note.timestamp, language, { year: 'numeric', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</span>
                       </div>
                       <p className="text-sm text-slate-600">{note.content}</p>
                     </div>

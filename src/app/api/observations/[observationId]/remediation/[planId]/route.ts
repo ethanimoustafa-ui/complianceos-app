@@ -37,22 +37,19 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     const observationId = await assertObservationExists(supabase, observationIdParam)
     const input = await parseJson(req, ReviewRemediationPlanSchema)
 
-    // Wave-20.cleanup / W17.2 — optimistic-concurrency guard. The
-    // `remediation_plans` table has no `updated_at` column (no DB migration in
-    // scope for this pass), so we guard against the PARENT observation's
-    // `updated_at` instead — the client tracks the parent token anyway via
-    // `ifMatchHeader(observation.updatedAt)` and bumps it on every parent
-    // mutation. This still blocks the "stale review of a remediation plan on
-    // an observation that was just edited" race the W17.2 pattern targets.
+    // W24-6a — optimistic-concurrency guard using the plan's own `updated_at`
+    // (migration 067 added the column). The client should pass the plan token
+    // via If-Match when it reads the plan row; 412 fires if the plan was
+    // concurrently updated since the client last read it.
     const ifMatch = readIfMatch(req)
     if (ifMatch != null) {
-      const { data: parent } = await supabase
-        .from('observations')
+      const { data: plan } = await supabase
+        .from('remediation_plans')
         .select('updated_at')
-        .eq('id', observationId)
-        .is('deleted_at', null)
+        .eq('id', planId)
+        .eq('observation_id', observationId)
         .maybeSingle<{ updated_at: string }>()
-      assertNotStale(ifMatch, parent?.updated_at)
+      assertNotStale(ifMatch, plan?.updated_at)
     }
 
     const update: Record<string, unknown> = {

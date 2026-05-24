@@ -283,7 +283,6 @@ interface ObservationState {
   ) => Promise<void>
   removeDocument: (observationId: string, documentId: string, documentName: string, user: User) => Promise<void>
 
-  getNextReference: () => string
   setFilters: (filters: ObservationFilters) => void
   clearFilters: () => void
   setSelected: (observation: ObservationWithComments | null) => void
@@ -555,7 +554,9 @@ export const useObservationStore = create<ObservationState>()((set, get) => ({
 
   create: async (data, creator) => {
     requirePermission('Manage Audit Findings', { storeName: 'observation', actionName: 'create' })
-    const reference = data.reference || get().getNextReference()
+    // W24-6b: reference is always generated server-side; use any user-provided
+    // value as the optimistic placeholder, or fall back to a temp marker.
+    const reference = data.reference || 'OBS-…'
     // Auto-add creator as assignee in the local mirror so the UI shows it.
     const assignees = [...(data.assignees || [])]
     if (creator && !assignees.some((a) => a.id === creator.id)) {
@@ -2241,17 +2242,6 @@ export const useObservationStore = create<ObservationState>()((set, get) => ({
       set({ error: errorMessage(e, 'Failed to remove document') })
       // Historic call-site contract: no throw.
     }
-  },
-
-  getNextReference: () => {
-    const year = new Date().getFullYear()
-    const existingRefs = get().observations
-      .map((obs) => obs.reference)
-      .filter((ref) => ref && ref.startsWith(`OBS-${year}-`))
-      .map((ref) => parseInt(ref.split('-')[2], 10))
-      .filter((n) => !isNaN(n))
-    const nextNumber = existingRefs.length > 0 ? Math.max(...existingRefs) + 1 : 1
-    return `OBS-${year}-${String(nextNumber).padStart(4, '0')}`
   },
 
   setFilters: (filters) => set({ filters }),
