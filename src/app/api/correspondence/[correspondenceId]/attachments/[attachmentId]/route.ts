@@ -1,9 +1,12 @@
 // DELETE /api/correspondence/[correspondenceId]/attachments/[attachmentId]
+//
+// W22: assertUuid on both dynamic segments (SEC-5 §2.13).
 
 import type { NextRequest } from 'next/server'
 import { requirePerm } from '@/lib/api/auth'
 import { handle } from '@/lib/api/errors'
 import { ok } from '@/lib/api/response'
+import { assertUuid } from '@/lib/api/validate'
 import { cacheTags, revalidateAll } from '@/lib/api/cache'
 import { writeAudit } from '@/lib/api/audit'
 import { assertCorrespondenceExists } from '@/lib/api/services/correspondence'
@@ -16,6 +19,8 @@ type Params = { params: Promise<{ correspondenceId: string; attachmentId: string
 export async function DELETE(_req: NextRequest, { params }: Params) {
   try {
     const { correspondenceId, attachmentId } = await params
+    // SEC-5 §2.13 — reject non-UUID segments before any DB access.
+    assertUuid(correspondenceId, attachmentId)
     const { supabase, user, profile } = await requirePerm('edit')
     await assertCorrespondenceExists(supabase, correspondenceId)
 

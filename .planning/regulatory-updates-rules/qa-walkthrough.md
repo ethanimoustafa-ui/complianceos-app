@@ -3449,4 +3449,144 @@ PORTING-TEMPLATE §8).
 
 - Observations: seed via the probe (`npx tsx tests/probes/observation-timeline-dual-store.ts
   --cookie="..."`) which self-creates and self-cleans.
+
+---
+
+## Wave-22 — Correspondence hub port (read-side hardening)
+
+**Scope:** `/correspondence/feed` (the hub — redirected from `/correspondence/`), plus
+all `/api/correspondence/...` routes backing it.
+
+**Pattern honesty note:** The `/correspondence` hub is primarily a READ-ONLY aggregate
+surface that pulls data from child-entity Zustand stores (circulars, letters, observations,
+policies, risks, team). It has one mutation surface: the "Log Communication" modal which
+creates a `correspondence` record. The mutation patterns below were applied where they
+actually fit the surface; patterns that don't apply are marked N/A with rationale.
+
+### Pre-implementation findings
+
+1. **`cache: 'no-store'` missing on ALL correspondence GETs** — three routes used
+   `sMaxAge: 60, staleWhileRevalidate: 300` instead. Per MEMORY.md directive and
+   PORTING-TEMPLATE §2.2, entity reads must never use sMaxAge; rows vanish for up to
+   60s after writes.
+2. **`assertUuid` missing on every route** (SEC-5 §2.13) — none of the 6 correspondence
+   routes validated the `correspondenceId` / `attachmentId` segment. A non-UUID would
+   reach the DB and throw a Postgres `22P02` 500 instead of a clean 400.
+3. **`ETag` / `If-Match` missing** — the detail GET returned no ETag; PATCH had no
+   optimistic-locking check (no `If-Match` read, no atomic conditional UPDATE, no 412).
+4. **P2 violation — `UpdateCorrespondenceSchema = CreateCorrespondenceSchema.partial()`**
+   — `.default([])` on `to_parties` and `framework_ids` survived `.partial()` and would
+   have injected `[]` into PATCH writes even when those fields were absent, clobbering
+   existing data (FORENSIC P2 / HANI-3 pattern).
+5. **No `.strict()` on any correspondence schema** (SEC-8) — unknown keys in request
+   bodies were silently ignored instead of returning 400.
+6. **Feed-page assignee bug** — `items` for the "Assigned To" dropdown in the Log
+   Communication modal mapped `{ id: m.name, label: ... }` — sending the member's
+   display name as `assignee_id` to the API, which expects a UUID (same as QA Bug 1 for
+   circulars in Wave-1). Fixed to `{ id: m.id, label: ... }`.
+7. **Concurrent PATCH returned 500** — first attempt at the `[200, 412]` concurrent-token
+   test returned `[200, 500]` because `.single()` throws PGRST116 (JSON API error)
+   when 0 rows are returned by the conditional UPDATE. Fixed to `.maybeSingle()` so the
+   0-row case surfaces as null data → 412 PreconditionFailed, never 500.
+
+### Pattern applicability
+
+| Pattern | Applicable? | Status |
+|---|---|---|
+| `cache: 'no-store'` on aggregate GETs (§2.2) | YES | Applied to all 3 GET routes |
+| `assertUuid` on every dynamic segment (SEC-5) | YES | Applied to all 6 route files |
+| ETag on single-resource GET (§2.12) | YES | Applied — `W/"<updated_at>"` header |
+| If-Match on PATCH + atomic conditional UPDATE (§2.12, W17.2) | YES | Applied — `maybeSingle()` + 412 on 0 rows |
+| `.strict()` on all schemas (SEC-8) | YES | Applied — Create + Update + Attachment schemas |
+| Hand-written Update schema (P2 prevention) | YES | Applied — no more `.partial()` |
+| ETag/If-Match on child routes (archive/unarchive) | N/A | archive/unarchive are idempotent boolean flips — no data conflict surface |
+| Dual-store bilingual timeline (§2.11) | N/A | Correspondence hub has no dedicated `correspondence_timeline` table; it uses `audit_log` only |
+| Version history dual-store (§2.11) | N/A | Correspondence hub has no version-history concept |
+| Workflow undo/reset (W19.6) | N/A | No workflow on correspondence |
+| Configurable enum infra (W19.7) | N/A | `status` is a closed 3-value enum (draft/sent/received) — no user-domain enum surface on the hub |
+| Optimistic UI (GAP-14) | Partial | Store already has optimistic `update`/`archive`/`unarchive`; no regression |
+
+### What landed
+
+**Schema hardening (`src/lib/api/schemas/correspondence.ts`):**
+- `CreateCorrespondenceSchema.strict()` (SEC-8).
+- `UpdateCorrespondenceSchema` hand-written (not `.partial()`) with nullable clearable
+  fields (`body`, `thread_id`, `assignee_id`) — closes P2.
+- `RegisterCorrespondenceAttachmentSchema.strict()` (SEC-8).
+
+**Route hardening (`src/app/api/correspondence/`):**
+- `route.ts` GET: `cache: 'no-store'` on list and `has_attachments`-empty fast-path.
+- `[correspondenceId]/route.ts`:
+  - GET: `assertUuid` + `cache: 'no-store'` + `ETag: W/"<updated_at>"` header.
+  - PATCH: `assertUuid` + `readIfMatch` + before-snapshot + `assertNotStale` +
+    conditional UPDATE `.eq('updated_at', ifMatch)` + `.maybeSingle()` → 412 on 0 rows +
+    fresh ETag on response.
+  - DELETE: `assertUuid`.
+- `[correspondenceId]/attachments/route.ts`: `assertUuid` + `cache: 'no-store'` on GET;
+  `assertUuid` on POST.
+- `[correspondenceId]/attachments/[attachmentId]/route.ts`: `assertUuid` on both segments.
+- `[correspondenceId]/archive/route.ts`: `assertUuid`.
+- `[correspondenceId]/unarchive/route.ts`: `assertUuid`.
+
+**Feed-page fix (`src/app/(dashboard)/correspondence/feed/page.tsx`):**
+- Assignee dropdown: `id: m.id` (UUID) instead of `id: m.name` (display name).
+
+**Auth-bypass probe extension (`tests/probes/auth-bypass.ts`):**
+- Added 10 correspondence endpoints; all now included in the 117-endpoint suite.
+
+**New probe (`tests/probes/correspondence-security.ts`):**
+- SEC-5, SEC-8, W17-2 stale If-Match, W17-2 concurrent token, W21-BUG-A casing audit,
+  GET smoke. All hit the mounted HTTP layer; all assert specific status codes.
+
+**New Playwright spec (`tests/e2e/wave-22-correspondence.spec.ts`):**
+- 11 steps covering: hub EN render, KPI widget NaN check, modal open, AR render,
+  GET list cache:no-store, GET detail ETag, SEC-5, SEC-8, W17-2 stale, W21-BUG-A casing.
+- Artifacts under `tests/e2e/_artifacts/wave-22-correspondence/`.
+
+### Live HTTP smoke results (against dev server)
+
+| Test | Expected | Got | Pass |
+|---|---|---|---|
+| GET /api/correspondence → 200 + cache:no-store | 200 + no-store | 200 + no-store | PASS |
+| SEC-5 GET /api/correspondence/not-a-uuid → 400 invalid_uuid | 400 invalid_uuid | 400 invalid_uuid | PASS |
+| SEC-5 PATCH /api/correspondence/not-a-uuid → 400 invalid_uuid | 400 invalid_uuid | 400 invalid_uuid | PASS |
+| SEC-8 PATCH real record unknown key → 400 validation_failed | 400 validation_failed | 400 validation_failed | PASS |
+| GET detail → 200 + ETag + cache:no-store | 200 + ETag + no-store | 200 + ETag + no-store | PASS |
+| W17-2 stale If-Match → 412 precondition_failed | 412 precondition_failed | 412 precondition_failed | PASS |
+| W17-2 concurrent same-token → [200, 412] | 200 + 412 | 200 + 412 | PASS |
+| W21-BUG-A uppercase status=DRAFT → 400 not 500 | 400 validation_failed | 400 validation_failed | PASS |
+| Auth bypass (10 endpoints) → 401 unauthenticated | 401 for all | 401 for all (117 total) | PASS |
+
+All probe rows created during smoke test were deleted (cleanup confirmed: 200 DELETE).
+
+### Casing audit
+
+The `status` field uses `z.enum(['draft', 'sent', 'received'])` — a closed Zod enum.
+Uppercase `'DRAFT'` submitted via POST → 400 `validation_failed` (not 500). No W21-BUG-A
+pattern here. The `type` field is an open string (`z.string().min(1).max(100)`) — no
+casing constraint needed.
+
+### Migrations
+
+None required. The `correspondence` table already had `updated_at` (a pre-existing
+column in `CORRESPONDENCE_LIST_COLUMNS`). No new tables or columns needed for this
+read-side hardening wave.
+
+### Verification exit codes
+
+- `npx tsc --noEmit` → **exit 0** (clean)
+- `npx vitest run` → **108/108 passing** (baseline maintained)
+- `npx tsx tests/probes/auth-bypass.ts` → **117/117 endpoints returned 401** ✓
+
+### Deferred (W22.1)
+
+- **W23 — Internal** — out of scope per instructions.
+- **`correspondence` activity feed dual-store** — the `correspondence` table uses
+  `audit_log` for write history (not a dedicated `correspondence_timeline`). If a
+  dedicated timeline with `text_en`/`text_ar` dual-store columns is desired for the
+  hub's activity widget, that is a future wave.
+- **`correspondence` version history** — no version-history concept exists today.
+- **`archive`/`unarchive` ETag** — these routes are idempotent boolean flips with no
+  data-conflict risk; adding If-Match would be mechanical but not valuable without a
+  UI surface that races on archive state. Deferred.
 - For the security probe: any existing observation UUID via `--observation=<uuid>`.

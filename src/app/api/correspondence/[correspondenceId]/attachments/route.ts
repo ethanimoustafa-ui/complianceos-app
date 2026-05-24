@@ -1,10 +1,12 @@
 // /api/correspondence/[correspondenceId]/attachments — list + register.
+//
+// W22: assertUuid (SEC-5 §2.13) + cache:'no-store' (§2.2) on GET.
 
 import type { NextRequest } from 'next/server'
 import { requirePerm, requireUser } from '@/lib/api/auth'
 import { handle, NotFound } from '@/lib/api/errors'
 import { ok } from '@/lib/api/response'
-import { parseJson } from '@/lib/api/validate'
+import { assertUuid, parseJson } from '@/lib/api/validate'
 import { cacheTags, revalidateAll } from '@/lib/api/cache'
 import { writeAudit } from '@/lib/api/audit'
 import { RegisterCorrespondenceAttachmentSchema } from '@/lib/api/schemas/correspondence'
@@ -21,6 +23,8 @@ type Params = { params: Promise<{ correspondenceId: string }> }
 export async function GET(_req: NextRequest, { params }: Params) {
   try {
     const { correspondenceId } = await params
+    // SEC-5 §2.13 — reject non-UUID before any DB access.
+    assertUuid(correspondenceId)
     const { supabase } = await requireUser()
     await assertCorrespondenceExists(supabase, correspondenceId)
     const { data, error } = await supabase
@@ -29,13 +33,8 @@ export async function GET(_req: NextRequest, { params }: Params) {
       .eq('correspondence_id', correspondenceId)
       .order('uploaded_at', { ascending: false })
     if (error) throw error
-    return ok(data ?? [], {
-      cache: {
-        sMaxAge: 60,
-        staleWhileRevalidate: 300,
-        tags: [cacheTags.correspondenceAttachments(correspondenceId)],
-      },
-    })
+    // §2.2 — cache:'no-store' on entity reads.
+    return ok(data ?? [], { cache: 'no-store' })
   } catch (e) {
     return handle(e)
   }
@@ -44,6 +43,8 @@ export async function GET(_req: NextRequest, { params }: Params) {
 export async function POST(req: NextRequest, { params }: Params) {
   try {
     const { correspondenceId } = await params
+    // SEC-5 §2.13 — reject non-UUID before any DB access.
+    assertUuid(correspondenceId)
     const { supabase, user, profile } = await requirePerm('edit')
     await assertCorrespondenceExists(supabase, correspondenceId)
     const input = await parseJson(req, RegisterCorrespondenceAttachmentSchema)

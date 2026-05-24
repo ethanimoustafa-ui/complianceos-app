@@ -1,4 +1,8 @@
 // /api/correspondence — generic correspondence registry list + create.
+//
+// W22 PORTING-TEMPLATE §2 countermeasures applied:
+//   - GET: cache:'no-store' (§2.2 — entity reads must never be stale post-write).
+//   - POST: SEC-8 strict schema, server-generated reference (§2.10).
 
 import type { NextRequest } from 'next/server'
 import { requirePerm, requireUser } from '@/lib/api/auth'
@@ -54,13 +58,8 @@ export async function GET(req: NextRequest) {
       )
       if (q.has_attachments === 'true') {
         if (set.size === 0) {
-          return ok(paginate([], q.page, q.pageSize, 0), {
-            cache: {
-              sMaxAge: 60,
-              staleWhileRevalidate: 300,
-              tags: [cacheTags.correspondence()],
-            },
-          })
+          // §2.2 — cache:'no-store' on every entity GET.
+          return ok(paginate([], q.page, q.pageSize, 0), { cache: 'no-store' })
         }
         query = query.in('id', Array.from(set))
       } else if (set.size > 0) {
@@ -96,9 +95,9 @@ export async function GET(req: NextRequest) {
       has_pdf: (attachmentCount.get(r.id) ?? 0) > 0,
     }))
 
-    return ok(paginate(decorated, q.page, q.pageSize, count ?? 0), {
-      cache: { sMaxAge: 60, staleWhileRevalidate: 300, tags: [cacheTags.correspondence()] },
-    })
+    // §2.2 — cache:'no-store' on entity reads (rows vanish for up to 60s after
+    // writes with sMaxAge; hard-refresh must always show the latest state).
+    return ok(paginate(decorated, q.page, q.pageSize, count ?? 0), { cache: 'no-store' })
   } catch (e) {
     return handle(e)
   }

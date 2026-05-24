@@ -860,7 +860,7 @@ export default function CorrespondenceFeedPage() {
             <EditableSelect
               value={newCorrespondenceAssignee || null}
               onChange={(id) => setNewCorrespondenceAssignee(id)}
-              items={teamStore.members.map((m) => ({ id: m.name, label: `${m.name} — ${m.role}` }))}
+              items={teamStore.members.map((m) => ({ id: m.id, label: `${m.name} — ${m.role}` }))}
               placeholder={t('common.unassigned' as TranslationKey)}
               isRTL={isRTL}
             />

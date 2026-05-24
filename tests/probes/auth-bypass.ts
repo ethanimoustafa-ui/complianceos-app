@@ -150,6 +150,17 @@ const ENDPOINTS: Endpoint[] = [
   { method: 'POST',   path: `/api/letters/${C}/mark-response-received`, body: {} },
   { method: 'POST',   path: `/api/letters/${C}/archive`, body: {} },
   { method: 'POST',   path: `/api/letters/${C}/unarchive`, body: {} },
+  // Wave-22 — Correspondence hub — auth gate must be the first check.
+  { method: 'GET',    path: `/api/correspondence` },
+  { method: 'POST',   path: `/api/correspondence`, body: {} },
+  { method: 'GET',    path: `/api/correspondence/${C}` },
+  { method: 'PATCH',  path: `/api/correspondence/${C}`, body: {} },
+  { method: 'DELETE', path: `/api/correspondence/${C}` },
+  { method: 'GET',    path: `/api/correspondence/${C}/attachments` },
+  { method: 'POST',   path: `/api/correspondence/${C}/attachments`, body: {} },
+  { method: 'DELETE', path: `/api/correspondence/${C}/attachments/${A}` },
+  { method: 'POST',   path: `/api/correspondence/${C}/archive`, body: {} },
+  { method: 'POST',   path: `/api/correspondence/${C}/unarchive`, body: {} },
 ]
 
 interface ProbeResult {
