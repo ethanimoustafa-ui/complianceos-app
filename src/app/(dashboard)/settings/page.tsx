@@ -9,6 +9,7 @@ import { ConnectedAppsSection } from '@/components/settings/ConnectedAppsSection
 import { UserPreferencesSection } from '@/components/settings/UserPreferencesSection'
 import { AuditTemplatesSection } from '@/components/settings/AuditTemplatesSection'
 import { PolicyTemplatesSection } from '@/components/settings/PolicyTemplatesSection'
+import { ApprovalTiersSection } from '@/components/settings/ApprovalTiersSection'
 import { ListsAndCategoriesSection } from '@/components/settings/ListsAndCategoriesSection'
 import { AccessMatrixSection } from '@/components/settings/AccessMatrixSection'
 import { Gate } from '@/components/auth/gate'
@@ -53,6 +54,7 @@ export default function SettingsPage() {
           <UserPreferencesSection />
           <AuditTemplatesSection />
           <PolicyTemplatesSection />
+          <ApprovalTiersSection />
           <ListsAndCategoriesSection />
           <AccessMatrixSection />
         </div>

@@ -26,7 +26,7 @@ type Props = {
 
 export function RegisterCircularModal({ isOpen, onClose, onCreated, t }: Props) {
   const { isRTL } = useTranslation()
-  const { create, setPdfUrl } = useCircularStore()
+  const { create, addPdfAttachment } = useCircularStore()
   const { departments: allDepartments, addDepartment, updateDepartment, removeDepartment } = useDepartmentStore()
   const { members: teamMembers } = useTeamStore()
 
@@ -64,7 +64,7 @@ export function RegisterCircularModal({ isOpen, onClose, onCreated, t }: Props) 
     )
   }
 
-  async function handleCreate() {
+  function handleCreate() {
     if (
       !formAuthority ||
       !formTitle ||
@@ -75,7 +75,8 @@ export function RegisterCircularModal({ isOpen, onClose, onCreated, t }: Props) 
     ) {
       return
     }
-    const created = await create({
+    // Capture the form payload before resetting / closing.
+    const payload = {
       authority: formAuthority as CircularAuthority,
       title: formTitle,
       priority: formPriority,
@@ -93,11 +94,19 @@ export function RegisterCircularModal({ isOpen, onClose, onCreated, t }: Props) 
       articles: [],
       description: formDescription,
       frameworkIds,
-    })
-    if (formPdfFiles[0]) {
-      setPdfUrl(created.id, formPdfFiles[0].dataUrl)
     }
-    // Reset form
+    // W15-4: every uploaded PDF — including the FIRST — must go through the
+    // multi-file attachment flow so its real filename is persisted. The legacy
+    // single `pdf_url` path (via `setPdfUrl`) stored no `name`, so the first
+    // upload on a new circular used to lose its filename. Capture the full
+    // list (each entry already carries `name`) and upload them all.
+    const pdfFilesToUpload = [...formPdfFiles]
+
+    // Close-on-click: reset the form + close the modal the SAME tick. The
+    // store inserts a temp circular row at the top of the list immediately
+    // (before the POST returns), swaps it for the server row on success, and
+    // removes it + toasts on failure. The optional PDF upload chains onto the
+    // real id once the create resolves.
     setFormTitle('')
     setFormAuthority('')
     setFormPriority('medium')
@@ -112,6 +121,29 @@ export function RegisterCircularModal({ isOpen, onClose, onCreated, t }: Props) 
     setFormPdfFiles([])
     setFrameworkIds([])
     onCreated(t('regulatoryUpdates.circularRegistered'))
+
+    void Promise.resolve(create(payload))
+      .then(async (created) => {
+        if (created && pdfFilesToUpload.length > 0) {
+          // Sequential so each attachment row keeps a stable order; the store
+          // persists the File's real `.name` on every upload.
+          for (const f of pdfFilesToUpload) {
+            try {
+              await addPdfAttachment(created.id, {
+                name: f.name,
+                size: f.size,
+                dataUrl: f.dataUrl,
+                type: 'application/pdf',
+              })
+            } catch {
+              // Store already reverted + raised a friendly toast.
+            }
+          }
+        }
+      })
+      .catch(() => {
+        // Store already reverted + raised a friendly toast.
+      })
   }
 
   return (
@@ -207,7 +239,9 @@ export function RegisterCircularModal({ isOpen, onClose, onCreated, t }: Props) 
                   // Send the team-member UUID, not their display name —
                   // assigned_to is a UUID column on the server (HANDOFF #15).
                   id: m.id,
-                  label: `${m.name} — ${m.department}`,
+                  // Cosmetic: only append "— department" when the member has
+                  // one; otherwise the label trails a dangling separator.
+                  label: m.department ? `${m.name} — ${m.department}` : m.name,
                 }))}
                 placeholder={t('regulatoryUpdates.selectOfficer')}
                 isRTL={isRTL}
@@ -327,7 +361,7 @@ export function RegisterCircularModal({ isOpen, onClose, onCreated, t }: Props) 
               />
             </div>
 
-            <FrameworkTagSelector value={frameworkIds} onChange={setFrameworkIds} label="Frameworks" selfAssessmentOnly />
+            <FrameworkTagSelector value={frameworkIds} onChange={setFrameworkIds} label={t('regulatoryUpdates.frameworks')} selfAssessmentOnly />
 
             <input
               ref={pdfInputRef}

@@ -1,5 +1,5 @@
-// POST /api/observations/[observationId]/comments — add a comment (writes to
-// observation_updates AND the observation_timeline).
+// Wave-20 — POST /api/observations/[observationId]/comments
+// Comments persist into `observation_updates` AND a dual-store timeline row.
 
 import type { NextRequest } from 'next/server'
 import { requirePerm } from '@/lib/api/auth'
@@ -10,15 +10,15 @@ import { cacheTags, revalidateAll } from '@/lib/api/cache'
 import { writeAudit } from '@/lib/api/audit'
 import { CreateObservationCommentSchema } from '@/lib/api/schemas/observations'
 import {
+  OBSERVATION_UPDATE_COLUMNS,
   assertObservationExists,
-  writeObservationTimeline,
+  insertObservationTimeline,
+  observationActorName,
 } from '@/lib/api/services/observations'
+import { renderBilingual } from '@/lib/i18n/server'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
-
-const UPDATE_COLUMNS =
-  'id, observation_id, author_id, text, is_edited, edited_at, created_at'
 
 type Params = { params: Promise<{ observationId: string }> }
 
@@ -36,29 +36,30 @@ export async function POST(req: NextRequest, { params }: Params) {
         author_id: user.id,
         text: input.text,
       })
-      .select(UPDATE_COLUMNS)
+      .select(OBSERVATION_UPDATE_COLUMNS)
       .single()
     if (error || !data) throw error ?? NotFound('Insert returned no row')
 
     const created = data as { id: string }
+    const actor = observationActorName(profile, user.id)
     await Promise.all([
       writeAudit({
         actor_id: user.id,
-        actor_name: profile.name ?? profile.email ?? user.id,
+        actor_name: actor,
         action: 'observation.comment.create',
         entity_type: 'observation_update',
         entity_id: created.id,
         metadata: { observation_id: observationId },
         supabase,
       }),
-      writeObservationTimeline({
+      insertObservationTimeline({
         supabase,
         observation_id: observationId,
         action_type: 'comment.added',
-        description: input.text.slice(0, 280),
         user_id: user.id,
-        user_name: profile.name ?? profile.email ?? user.id,
+        user_name: actor,
         target_id: created.id,
+        ...renderBilingual('observations.detail.timeline.commentAdded', { name: actor }),
       }),
     ])
 

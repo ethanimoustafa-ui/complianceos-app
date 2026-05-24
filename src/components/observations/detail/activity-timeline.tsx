@@ -73,9 +73,18 @@ export const ActivityTimeline = memo(function ActivityTimeline({
               ? t(`observations.detail.${event.dateKey}` as 'observations.detail.today')
               : formatTimelineDate(event.date, isRTL)
 
+            // Wave-20.cleanup — canonical reader. Prefer the dual-store
+            // `textEn` / `textAr` columns (server-emitted, mirror of Policy +
+            // Rules); fall back to legacy `description` / `descriptionAr` for
+            // optimistic in-memory rows synthesised by the store. The
+            // descriptionKey path (translated client-only strings) still wins
+            // when present.
+            const localized = isRTL
+              ? (event.textAr ?? event.descriptionAr ?? event.textEn ?? event.description)
+              : (event.textEn ?? event.description ?? event.textAr ?? event.descriptionAr)
             const formattedDescription = event.descriptionKey
               ? t(event.descriptionKey as 'observations.detail.timeline.checklistAdded', event.descriptionParams as Record<string, string>)
-              : (isRTL && event.descriptionAr) ? event.descriptionAr : event.description
+              : localized
 
             return (
               <div

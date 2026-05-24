@@ -13,7 +13,7 @@ import type { NextRequest } from 'next/server'
 import { requirePerm } from '@/lib/api/auth'
 import { handle, NotFound } from '@/lib/api/errors'
 import { ok } from '@/lib/api/response'
-import { parseJson } from '@/lib/api/validate'
+import { assertNotStale, parseJson, readIfMatch } from '@/lib/api/validate'
 import { cacheTags, revalidateAll } from '@/lib/api/cache'
 import { writeAudit } from '@/lib/api/audit'
 import { ReviewRemediationPlanSchema } from '@/lib/api/schemas/observations'
@@ -35,6 +35,24 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     const observationId = await assertObservationExists(supabase, observationIdParam)
     const input = await parseJson(req, ReviewRemediationPlanSchema)
 
+    // Wave-20.cleanup / W17.2 — optimistic-concurrency guard. The
+    // `remediation_plans` table has no `updated_at` column (no DB migration in
+    // scope for this pass), so we guard against the PARENT observation's
+    // `updated_at` instead — the client tracks the parent token anyway via
+    // `ifMatchHeader(observation.updatedAt)` and bumps it on every parent
+    // mutation. This still blocks the "stale review of a remediation plan on
+    // an observation that was just edited" race the W17.2 pattern targets.
+    const ifMatch = readIfMatch(req)
+    if (ifMatch != null) {
+      const { data: parent } = await supabase
+        .from('observations')
+        .select('updated_at')
+        .eq('id', observationId)
+        .is('deleted_at', null)
+        .maybeSingle<{ updated_at: string }>()
+      assertNotStale(ifMatch, parent?.updated_at)
+    }
+
     const update: Record<string, unknown> = {
       status: input.approved ? 'approved' : 'rejected',
       reviewed_at: new Date().toISOString(),
@@ -48,8 +66,9 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       .eq('id', planId)
       .eq('observation_id', observationId)
       .select(REMEDIATION_PLAN_COLUMNS)
-      .single()
-    if (error || !data) throw error ?? NotFound(`Remediation plan ${planId} not found`)
+      .maybeSingle()
+    if (error) throw error
+    if (!data) throw NotFound(`Remediation plan ${planId} not found`)
 
     const reviewerName = profile.name ?? profile.email ?? user.id
     await Promise.all([

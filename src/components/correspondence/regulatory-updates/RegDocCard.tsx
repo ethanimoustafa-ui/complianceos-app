@@ -10,6 +10,9 @@ import { useFrameworkConfigStore } from '@/stores/framework-config-store'
 import { resolveAuthorityCode } from '@/lib/authority-display'
 import { useTranslation } from '@/i18n'
 import { dicebearAvatar } from '@/lib/avatar'
+// W17-3: never inline an enum label — use the shared formatter.
+// W18-cleanup: policy chips routed through the same helpers.
+import { formatStatus, formatPriority, formatPolicyStatus, formatPolicyApprovalTier } from '@/lib/format/enum'
 
 interface RegDocCardProps {
   variant: 'circular' | 'policy'
@@ -146,27 +149,31 @@ function CircularCardContent({ circular, t }: { circular: Circular; t: RegDocCar
   const daysLeft = getDaysLeft(circular.dueDate)
   const isCompleted = circular.status === 'completed'
   const isOverdue = circular.status === 'overdue'
-  const currentStep = circular.workflowSteps?.find((s) => s.status === 'current')
-  const currentPhase = currentStep?.phase ?? 0
+  // Prefer the server-stamped current_phase from the list endpoint so the chip
+  // is correct on first paint; fall back to the detail-fetched workflowSteps
+  // if available. `phaseKnown` gates the chip vs a skeleton placeholder so we
+  // never lie with "Phase 0" before the data is in.
+  const currentPhase = circular.currentPhase ?? circular.workflowSteps?.find((s) => s.status === 'current')?.phase
+  const phaseKnown = typeof currentPhase === 'number'
 
-  const statusLabels: Record<CircularStatus, string> = {
-    'pending': t('common.pending'),
-    'in-progress': t('policies.inProgress' as TranslationKey),
-    'completed': t('common.completed'),
-    'overdue': t('common.overdue'),
-  }
-
-  const priorityLabels: Record<CircularPriority, string> = {
-    'critical': t('regulatoryUpdates.critical'),
-    'high': t('regulatoryUpdates.high'),
-    'medium': t('regulatoryUpdates.medium'),
-    'low': t('regulatoryUpdates.low'),
-  }
+  // W17-3: shared formatter — no inline labels.
+  const statusLabel = formatStatus(t, circular.status)
+  const priorityLabel = formatPriority(t, circular.priority)
 
   const getDeptLabel = (deptName: string) => {
     const dept = departments.find(d => d.name === deptName || d.id === deptName)
     if (dept) return rtl ? dept.nameAr : dept.name
     return deptName
+  }
+
+  // RTL-10: deadline overrun suffix. English keeps the terse "(8d)" / "(-1d)"
+  // notation; RTL renders an Arabic phrase with localised numerals, mirroring
+  // the day-counter chip on the same row.
+  const deadlineSuffix = (days: number): string => {
+    if (!rtl) return `(${days}d)`
+    return days < 0
+      ? `(${t('regulatoryUpdates.daysOverdue')} ${Math.abs(days)})`
+      : `(${days} ${t('regulatoryUpdates.daysLeft')})`
   }
 
   return (
@@ -178,10 +185,12 @@ function CircularCardContent({ circular, t }: { circular: Circular; t: RegDocCar
 
       {/* Main info */}
       <div className={cn('flex-1 space-y-1.5 min-w-0')}>
-        <div className={cn('flex items-center gap-2', )}>
-          <h4 className="text-sm font-bold text-slate-900 truncate">{circular.title}</h4>
+        {/* RTL-11: `min-w-0` on the row + the title lets `truncate` engage in
+            both LTR and RTL — without it a long title clips to "te…". */}
+        <div className={cn('flex items-center gap-2 min-w-0', )}>
+          <h4 className="text-sm font-bold text-slate-900 truncate min-w-0">{circular.title}</h4>
           <span className={cn('px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0', statusStyle.bg, statusStyle.text)}>
-            {(statusLabels[circular.status] ?? circular.status).toUpperCase()}
+            {statusLabel.toUpperCase()}
           </span>
           {circular.referenceUrl && (
             <a
@@ -205,15 +214,17 @@ function CircularCardContent({ circular, t }: { circular: Circular; t: RegDocCar
             </span>
           )}
         </div>
-        <div className={cn('flex items-center gap-2', )}>
+        {/* RTL-11: `flex-wrap` so a long (often longer in Arabic) business-owner
+            department name wraps cleanly instead of clipping the row edge. */}
+        <div className={cn('flex items-center gap-2 flex-wrap', )}>
           <span className="text-xs font-mono font-bold text-slate-500">{circular.reference}</span>
-          <span className="w-1 h-1 bg-slate-300 rounded-full"></span>
-          <span className={cn('px-2 py-0.5 rounded-full text-[10px] font-bold', priorityStyle.bg, priorityStyle.text)}>
-            {(priorityLabels[circular.priority] ?? circular.priority).toUpperCase()}
+          <span className="w-1 h-1 bg-slate-300 rounded-full shrink-0"></span>
+          <span className={cn('px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0', priorityStyle.bg, priorityStyle.text)}>
+            {priorityLabel.toUpperCase()}
           </span>
-          <span className="w-1 h-1 bg-slate-300 rounded-full"></span>
+          <span className="w-1 h-1 bg-slate-300 rounded-full shrink-0"></span>
           {/* Business Owner */}
-          <span className="text-[10px] font-bold text-slate-400 uppercase">{t('regulatoryUpdates.businessOwnerDepartment')}:</span>
+          <span className="text-[10px] font-bold text-slate-400 uppercase shrink-0">{t('regulatoryUpdates.businessOwnerDepartment')}:</span>
           {circular.businessOwnerDepartment ? (
             <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-violet-100 text-violet-700">
               {getDeptLabel(circular.businessOwnerDepartment)}
@@ -278,13 +289,13 @@ function CircularCardContent({ circular, t }: { circular: Circular; t: RegDocCar
                       : 'bg-amber-50 text-amber-700 border-amber-100',
                   )}
                 >
-                  {t('regulatoryUpdates.capDeadline')}: {circular.capDeadline} ({days}d)
+                  {t('regulatoryUpdates.capDeadline')}: {circular.capDeadline} {deadlineSuffix(days)}
                 </span>
               )
             })()}
             {circular.remediationDeadline && (
               <span className="bg-rose-50 text-rose-700 border border-rose-100 text-[10px] font-medium px-2 py-0.5 rounded-full">
-                {t('regulatoryUpdates.remediationDeadline')}: {circular.remediationDeadline} ({differenceInCalendarDays(new Date(circular.remediationDeadline), new Date())}d)
+                {t('regulatoryUpdates.remediationDeadline')}: {circular.remediationDeadline} {deadlineSuffix(differenceInCalendarDays(new Date(circular.remediationDeadline), new Date()))}
               </span>
             )}
           </div>
@@ -318,16 +329,20 @@ function CircularCardContent({ circular, t }: { circular: Circular; t: RegDocCar
           <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">
             {t('regulatoryUpdates.currentPhase')}
           </p>
-          <span className={cn(
-            'px-2 py-0.5 rounded-full text-[10px] font-bold',
-            currentPhase === 2 ? 'bg-violet-100 text-violet-700' :
-            currentPhase === 1 ? 'bg-blue-100 text-blue-700' :
-            'bg-amber-100 text-amber-700'
-          )}>
-            {currentPhase === 2 ? t('regulatoryUpdates.phaseRemediation') :
-             currentPhase === 1 ? t('regulatoryUpdates.phaseCorrectiveActionPlan') :
-             t('regulatoryUpdates.phaseCAP')}
-          </span>
+          {phaseKnown ? (
+            <span className={cn(
+              'px-2 py-0.5 rounded-full text-[10px] font-bold',
+              currentPhase === 2 ? 'bg-violet-100 text-violet-700' :
+              currentPhase === 1 ? 'bg-blue-100 text-blue-700' :
+              'bg-amber-100 text-amber-700'
+            )}>
+              {currentPhase === 2 ? t('regulatoryUpdates.phaseRemediation') :
+               currentPhase === 1 ? t('regulatoryUpdates.phaseCorrectiveActionPlan') :
+               t('regulatoryUpdates.phaseCAP')}
+            </span>
+          ) : (
+            <div className="inline-block h-4 w-24 rounded-full bg-slate-200 animate-pulse" />
+          )}
         </div>
       </div>
     </div>
@@ -348,12 +363,9 @@ function PolicyCardContent({ policy, t }: { policy: Policy; t: RegDocCardProps['
     return deptName
   }
 
-  const tierLabels: Record<string, string> = {
-    board:      t('policies.approvalTierBoard'),
-    management: t('policies.approvalTierManagement'),
-    sharia:     t('policies.approvalTierSharia'),
-    agm:        t('policies.approvalTierAGM'),
-  }
+  // W18-cleanup: tier + status labels resolved by shared formatters. The
+  // per-card tier map and status ternary were retired so EN/AR copy lives in
+  // the dictionaries once.
 
   return (
     <div className={cn('flex items-center gap-6 flex-1', )}>
@@ -367,19 +379,14 @@ function PolicyCardContent({ policy, t }: { policy: Policy; t: RegDocCardProps['
         <div className={cn('flex items-center gap-2', )}>
           <h4 className="text-sm font-bold text-slate-900 truncate">{policy.name}</h4>
           <span className={cn('px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0', statusStyle.bg, statusStyle.text)}>
-            {policy.status === 'under-review'    ? t('policies.statusUnderReview') :
-             policy.status === 'approved'       ? t('policies.statusApproved') :
-             policy.status === 'expired'        ? t('policies.statusExpired') :
-             policy.status === 'overdue'        ? t('policies.statusOverdue') :
-             policy.status === 'requires-review' ? t('policies.statusRequiresReview') :
-             t('policies.statusDraft')}
+            {formatPolicyStatus(t, policy.status)}
           </span>
         </div>
         <div className={cn('flex items-center gap-2', )}>
           <span className="text-xs font-mono font-bold text-slate-400">{policy.id}</span>
           <span className="w-1 h-1 bg-slate-300 rounded-full"></span>
           <span className={cn('px-2 py-0.5 rounded-full text-[10px] font-bold', tierStyle.bg, tierStyle.text)}>
-            {tierLabels[policy.approvalTier]}
+            {formatPolicyApprovalTier(t, policy.approvalTier)}
           </span>
           <span className="w-1 h-1 bg-slate-300 rounded-full"></span>
           <span className="px-2 py-0.5 bg-emerald-50 text-emerald-600 text-[10px] font-bold rounded-full">{policy.version}</span>

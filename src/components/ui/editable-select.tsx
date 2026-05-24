@@ -168,14 +168,14 @@ export function EditableSelect({
         disabled={disabled}
         onClick={() => !disabled && setOpen((o) => !o)}
         className={cn(
-          'w-full flex items-center justify-between px-3 bg-white border border-slate-200 rounded-lg hover:border-slate-300 transition-colors text-start',
+          'w-full flex items-center justify-between gap-2 px-3 bg-white border border-slate-200 rounded-lg hover:border-slate-300 transition-colors text-start',
           padY,
           triggerText,
           disabled && 'opacity-50 cursor-not-allowed',
           !disabled && 'cursor-pointer',
         )}
       >
-        <span className={selectedLabel ? 'text-slate-900' : 'text-slate-400'}>
+        <span className={cn('min-w-0 truncate', selectedLabel ? 'text-slate-900' : 'text-slate-400')}>
           {selectedLabel ?? effectivePlaceholder}
         </span>
         <Icon icon="lucide:chevron-down" className="text-slate-400 text-sm shrink-0" />

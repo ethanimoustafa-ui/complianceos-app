@@ -23,6 +23,9 @@ import type {
   PolicyOwner,
   PolicyWorkflowStep,
   PolicyActivityEntry,
+  PolicyVersionEntry,
+  PolicyAttachment,
+  PolicyEvidence,
   PaginationState,
   RegulatoryBodyId,
   ReviewSchedule,
@@ -32,6 +35,50 @@ import { computeNextReview, cadenceToReviewCycleDays } from '@/lib/review-schedu
 import { validateChildDeadline } from '@/lib/deadline-validation'
 import { requirePermission } from '@/lib/rbac-store-gate'
 import { useUserLogStore } from '@/stores/user-log-store'
+import { pushToast, type ToastMessage } from '@/stores/toast-store'
+
+// W18 / W17-1 / SEC-1: build an `If-Match: W/"<updatedAt>"` header object when
+// the entity carries an `updatedAt` token. Returned `undefined` keeps the
+// request backward-compatible with rows hydrated before the column existed.
+function ifMatchHeader(
+  updatedAt: string | undefined,
+): Record<string, string> | undefined {
+  if (!updatedAt) return undefined
+  return { 'If-Match': `W/"${updatedAt}"` }
+}
+
+// W18 / GAP-20: a child mutation must never PATCH a non-persisted id. A
+// persisted row always has a real Postgres UUID; an optimistic/temp row has a
+// `temp-…` id OR a short client random id.
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+function isPersistedId(id: string): boolean {
+  return UUID_RE.test(id)
+}
+void isPersistedId
+
+// GAP-14 / RTL-8 / W18: keyed toast for a reverted optimistic mutation. 412 →
+// dedicated conflict toast (someone else changed the row); other errors → the
+// generic revert key.
+function revertMessage(e: unknown): ToastMessage {
+  if (e instanceof ApiClientError) {
+    if (e.status === 412 || e.code === 'precondition_failed') {
+      return { key: 'regulatoryUpdates.optimisticConflict' }
+    }
+    const showable =
+      e.code === 'validation_error' ||
+      e.code === 'validation_failed' ||
+      e.code === 'bad_request' ||
+      e.code === 'conflict'
+    if (showable && e.message && e.message.length < 120) {
+      return {
+        key: 'regulatoryUpdates.optimisticRevertWithReason',
+        params: { reason: e.message },
+      }
+    }
+  }
+  return { key: 'regulatoryUpdates.optimisticRevert' }
+}
 
 // ---------- API row shape ----------------------------------------------------
 
@@ -60,8 +107,141 @@ interface PolicyApiRow {
   review_schedule?: unknown
   framework_ids: string[]
   affected_departments: string[]
+  // Wave-19 / Q3 — persisted `policies.is_expired` from migration 055.
+  is_expired?: boolean
   created_at: string
   updated_at: string
+  // Detail-GET-only nested children. Wave-19.3 / P18-BUG-1 — `mapRow` now
+  // hydrates these onto the Policy entity so the Activity / Version /
+  // Workflow tabs render server-side rows instead of falling through to the
+  // empty branch.
+  versions?: unknown[]
+  versions_has_more?: boolean
+  workflow_steps?: unknown[]
+  attachments?: unknown[]
+  evidence?: unknown[]
+  activity_log?: unknown[]
+  activity_log_has_more?: boolean
+}
+
+// Wave-19.3 / P18-BUG-1 — API-row shape for `policy_activity_log` rows fed by
+// `/api/policies/[id]` (nested) and `/api/policies/[id]/activity` (paginated).
+interface PolicyActivityApiRow {
+  id: string
+  timestamp: string
+  date: string
+  type: string
+  text_en: string
+  text_ar: string
+  user_name: string | null
+  note: string | null
+}
+
+// Wave-19.4 / Item-3 — dual-store columns `text_en` + `text_ar` (migration 057).
+interface PolicyVersionApiRow {
+  id: string
+  version: string
+  date: string
+  author: string | null
+  text_en: string
+  text_ar: string
+}
+
+interface PolicyWorkflowStepApiRow {
+  id: string
+  step: string
+  date: string | null
+  user_name: string | null
+  status: string
+  description: string | null
+  action_type: string | null
+  note: string | null
+  step_state: string | null
+  sort_order: number
+  updated_at?: string
+}
+
+interface PolicyAttachmentApiRow {
+  id: string
+  name: string
+  storage_path: string
+  size: number | null
+  uploaded_at: string
+  uploaded_by: string | null
+}
+
+interface PolicyEvidenceApiRow {
+  id: string
+  name: string
+  storage_path: string
+  uploaded_at: string
+  uploaded_by: string | null
+  review_cycle_id: string
+  review_cycle_label: string
+  notes: string | null
+}
+
+function mapPolicyActivityRow(row: PolicyActivityApiRow): PolicyActivityEntry {
+  return {
+    id: row.id,
+    timestamp: row.timestamp,
+    date: row.date,
+    type: row.type as PolicyActivityEntry['type'],
+    // Wave-19.3 — `policy_activity_log` is dual-store; the renderer reads
+    // `textEn` / `textAr` directly based on locale.
+    textEn: row.text_en ?? '',
+    textAr: row.text_ar ?? '',
+    user: row.user_name ?? undefined,
+    note: row.note ?? undefined,
+  }
+}
+
+function mapPolicyVersionRow(row: PolicyVersionApiRow): PolicyVersionEntry {
+  return {
+    version: row.version,
+    date: row.date,
+    author: row.author ?? '',
+    // Wave-19.4 / Item-3 — dual-store. Reader picks per-locale at render time.
+    textEn: row.text_en ?? '',
+    textAr: row.text_ar ?? '',
+  }
+}
+
+function mapPolicyWorkflowStepRow(row: PolicyWorkflowStepApiRow): PolicyWorkflowStep {
+  return {
+    step: row.step,
+    date: row.date ?? '',
+    user: row.user_name ?? '',
+    status: row.status as PolicyWorkflowStep['status'],
+    description: row.description ?? undefined,
+    actionType: row.action_type ?? undefined,
+    note: row.note ?? undefined,
+    stepState: (row.step_state as PolicyWorkflowStep['stepState']) ?? undefined,
+  }
+}
+
+function mapPolicyAttachmentRow(row: PolicyAttachmentApiRow): PolicyAttachment {
+  return {
+    id: row.id,
+    name: row.name,
+    dataUrl: row.storage_path,
+    size: row.size ?? 0,
+    uploadedAt: row.uploaded_at,
+    uploadedBy: row.uploaded_by ?? '',
+  }
+}
+
+function mapPolicyEvidenceRow(row: PolicyEvidenceApiRow): PolicyEvidence {
+  return {
+    id: row.id,
+    name: row.name,
+    dataUrl: row.storage_path,
+    uploadedAt: row.uploaded_at,
+    uploadedBy: row.uploaded_by ?? '',
+    reviewCycleId: row.review_cycle_id,
+    reviewCycleLabel: row.review_cycle_label,
+    notes: row.notes ?? undefined,
+  }
 }
 
 function stubOwner(name: string | null, department: string | null): PolicyOwner {
@@ -73,15 +253,44 @@ function stubOwner(name: string | null, department: string | null): PolicyOwner 
 }
 
 function mapRow(row: PolicyApiRow, previous?: Policy): Policy {
+  // Wave-19.3 / P18-BUG-1 — the detail GET (`/api/policies/[id]`) returns
+  // first-page nested children (`activity_log`, `versions`, `workflow_steps`,
+  // `attachments`, `evidence`); the list GET (`/api/policies`) omits them.
+  // Hydrate whenever an array IS present on the row, else keep `previous`'s
+  // value so list-refresh after a detail-fetch doesn't blow away the modal's
+  // populated tabs. Empty arrays from the detail GET are honored — they mean
+  // "the server says there are none yet".
+  const activity = Array.isArray(row.activity_log)
+    ? (row.activity_log as PolicyActivityApiRow[]).map(mapPolicyActivityRow)
+    : previous?.activityLog ?? []
+  const versions = Array.isArray(row.versions)
+    ? (row.versions as PolicyVersionApiRow[]).map(mapPolicyVersionRow)
+    : previous?.versionHistory ?? []
+  const steps = Array.isArray(row.workflow_steps)
+    ? (row.workflow_steps as PolicyWorkflowStepApiRow[]).map(mapPolicyWorkflowStepRow)
+    : previous?.workflowTimeline ?? []
+  const attachments = Array.isArray(row.attachments)
+    ? (row.attachments as PolicyAttachmentApiRow[]).map(mapPolicyAttachmentRow)
+    : previous?.attachments
+  const evidence = Array.isArray(row.evidence)
+    ? (row.evidence as PolicyEvidenceApiRow[]).map(mapPolicyEvidenceRow)
+    : previous?.evidence
   return {
     id: row.ref_code || row.id,
+    uuid: row.id,
     name: row.name,
     description: row.description ?? previous?.description ?? '',
     status: row.status as PolicyStatus,
     category: row.category as PolicyCategory,
     version: row.version,
     approvalTier: row.approval_tier as PolicyApprovalTier,
-    owner: previous?.owner ?? stubOwner(row.owner_name, row.owner_department),
+    // Wave-19.3 / Task-B — keep owner in sync with the canonical
+    // `owner_name` / `owner_department` columns. The previous behaviour
+    // (`previous?.owner ?? stubOwner(...)`) ignored fresh server-side
+    // changes to the Policy Leader, defeating the round-trip after a
+    // leader-change PATCH. The avatar is derived from `owner_name`.
+    owner: stubOwner(row.owner_name, row.owner_department),
+    ownerId: row.owner_id ?? previous?.ownerId ?? undefined,
     businessOwnerDepartmentId:
       row.business_owner_department_id ?? previous?.businessOwnerDepartmentId,
     affectedDepartments: row.affected_departments ?? previous?.affectedDepartments ?? [],
@@ -89,12 +298,12 @@ function mapRow(row: PolicyApiRow, previous?: Policy): Policy {
     nextReviewDate: row.next_review_date ?? previous?.nextReviewDate ?? '',
     reviewCycleDays: row.review_cycle_days ?? previous?.reviewCycleDays ?? 365,
     approvedDate: row.approved_date ?? previous?.approvedDate,
-    versionHistory: previous?.versionHistory ?? [],
-    workflowTimeline: previous?.workflowTimeline ?? [],
-    activityLog: previous?.activityLog ?? [],
-    attachments: previous?.attachments,
+    versionHistory: versions,
+    workflowTimeline: steps,
+    activityLog: activity,
+    attachments,
     attachmentUrl: previous?.attachmentUrl,
-    evidence: previous?.evidence,
+    evidence,
     overdueCount: row.overdue_count ?? previous?.overdueCount ?? 0,
     lastOverdueDate: row.last_overdue_date ?? previous?.lastOverdueDate,
     currentReviewCycleId: row.current_review_cycle_id ?? previous?.currentReviewCycleId,
@@ -104,14 +313,18 @@ function mapRow(row: PolicyApiRow, previous?: Policy): Policy {
     reviewSchedule:
       (row.review_schedule as ReviewSchedule | undefined) ?? previous?.reviewSchedule,
     frameworkIds: (row.framework_ids ?? previous?.frameworkIds ?? []) as RegulatoryBodyId[],
+    // Wave-19 / Q3 — persisted `policies.is_expired` from migration 055.
+    isExpired: row.is_expired ?? previous?.isExpired,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }
 }
 
 function toCreatePayload(data: Omit<Policy, 'id' | 'createdAt' | 'updatedAt'>): Record<string, unknown> {
+  // Wave-19 / Q1: `ref_code` is server-generated (`{SLUG}-{YYYY}-{NNNN}`) — the
+  // client must NOT send it. CreatePolicySchema is `.strict()` and would 400
+  // on any extra key. See `src/lib/api/services/refcode.ts`.
   return {
-    ref_code: `POL-PENDING-${Date.now()}`, // overridden by getNextId-style consumers below
     name: data.name,
     description: data.description,
     category: data.category as string,
@@ -141,6 +354,10 @@ function toUpdatePayload(patch: Partial<Policy>): Record<string, unknown> {
     out.owner_name = patch.owner?.name ?? null
     out.owner_department = patch.owner?.department ?? null
   }
+  // Wave-19.3 / Task-B — `ownerId` carries the canonical `policies.owner_id`
+  // (FK to profiles). The Leader-picker writes both `owner` (name/dept) and
+  // `ownerId` so the server-side diff in `/api/policies/[id]` PATCH fires.
+  if (patch.ownerId !== undefined) out.owner_id = patch.ownerId ?? null
   if (patch.businessOwnerDepartmentId !== undefined)
     out.business_owner_department_id = patch.businessOwnerDepartmentId
   if (patch.lastReviewDate !== undefined) out.last_review_date = patch.lastReviewDate || null
@@ -213,6 +430,25 @@ interface PolicyStoreState {
     actingUser: string,
   ) => void
 
+  // Wave-19.3 / P18-BUG-1 — load more `policy_activity_log` rows (10/page,
+  // newest-first). Mirrors `loadMoreTimeline` in circular-store.
+  loadMorePolicyActivity: (policyId: string) => Promise<void>
+  policyActivityPagination: Record<
+    string,
+    { offset: number; hasMore: boolean; loadingMore: boolean }
+  >
+
+  // Wave-19.3 / Task-B — Policy Leader change. Optimistically updates
+  // owner/ownerId, PATCHes with If-Match; the server emits the activity-log
+  // row (`leader_changed` / `leader_assigned`) so the Activity tab re-renders
+  // it from the dual-store columns on the next detail-GET.
+  updateLeader: (
+    policyId: string,
+    ownerId: string | null,
+    ownerName: string | null,
+    ownerDepartment?: string | null,
+  ) => void
+
   clearError: () => void
 }
 
@@ -227,6 +463,7 @@ export const usePolicyStore = create<PolicyStoreState>()((set, get) => ({
   policies: [],
   byId: {},
   selectedPolicy: null,
+  policyActivityPagination: {},
   pagination: INITIAL_PAGINATION,
   filters: {},
   isLoading: false,
@@ -274,10 +511,15 @@ export const usePolicyStore = create<PolicyStoreState>()((set, get) => ({
 
   fetchById: (id) => {
     // Legacy signature: synchronous lookup with background refresh.
+    // Wave-19.3 / P18-BUG-1 — the entity `id` is the display `ref_code`, but
+    // the REST route requires the canonical UUID. Resolve to the stored `uuid`
+    // before hitting the network; fall through to the bare `id` so a UUID
+    // passed directly (deep-link case) still works.
     const cached = get().byId[id] ?? get().policies.find((p) => p.id === id) ?? null
+    const apiId = cached?.uuid ?? id
     void (async () => {
       try {
-        const row = await api.get<PolicyApiRow>(`/policies/${id}`)
+        const row = await api.get<PolicyApiRow>(`/policies/${apiId}`)
         const previous = get().byId[id]
         const policy = mapRow(row, previous)
         set((s) => ({
@@ -331,7 +573,8 @@ export const usePolicyStore = create<PolicyStoreState>()((set, get) => ({
 
     void (async () => {
       try {
-        const payload = { ...toCreatePayload({ ...optimistic }), ref_code: id }
+        // Wave-19 / Q1: do NOT inject `ref_code` — server generates it.
+        const payload = toCreatePayload({ ...optimistic })
         const row = await api.post<PolicyApiRow>('/policies', payload)
         const created = mapRow(row, optimistic)
         // The server may return a different stable id — surface it on the
@@ -358,6 +601,7 @@ export const usePolicyStore = create<PolicyStoreState>()((set, get) => ({
             isMutating: false,
           }
         })
+        pushToast(revertMessage(e), 'error')
       }
     })()
 
@@ -379,7 +623,16 @@ export const usePolicyStore = create<PolicyStoreState>()((set, get) => ({
 
     void (async () => {
       try {
-        const row = await api.patch<PolicyApiRow>(`/policies/${id}`, toUpdatePayload(data))
+        // W18 / SEC-1: thread the row's last-known `updatedAt` via `If-Match`
+        // so the server can refuse a stale write with 412.
+        // Wave-19.3 / P18-BUG-1 — route requires the canonical UUID; entity
+        // `id` is the `ref_code` for display.
+        const apiId = previous.uuid ?? id
+        const row = await api.patch<PolicyApiRow>(
+          `/policies/${apiId}`,
+          toUpdatePayload(data),
+          ifMatchHeader(previous.updatedAt),
+        )
         const updated = mapRow(row, optimistic)
         set((s) => ({
           policies: s.policies.map((p) => (p.id === id ? updated : p)),
@@ -388,7 +641,8 @@ export const usePolicyStore = create<PolicyStoreState>()((set, get) => ({
           isMutating: false,
         }))
       } catch (e) {
-        // Roll back the optimistic patch to the previous server-known state.
+        // Roll back the optimistic patch + surface a keyed toast (412 →
+        // conflict; everything else → generic revert).
         set((s) => ({
           policies: s.policies.map((p) => (p.id === id ? previous : p)),
           byId: { ...s.byId, [id]: previous },
@@ -396,6 +650,7 @@ export const usePolicyStore = create<PolicyStoreState>()((set, get) => ({
           error: errorMessage(e, 'Failed to update policy'),
           isMutating: false,
         }))
+        pushToast(revertMessage(e), 'error')
       }
     })()
   },
@@ -416,7 +671,10 @@ export const usePolicyStore = create<PolicyStoreState>()((set, get) => ({
 
     void (async () => {
       try {
-        await api.delete(`/policies/${id}`)
+        // W18 / SEC-1: optimistic-concurrency guard on delete too.
+        // Wave-19.3 / P18-BUG-1 — route takes the canonical UUID.
+        const apiId = previous.uuid ?? id
+        await api.delete(`/policies/${apiId}`, ifMatchHeader(previous.updatedAt))
         set({ isMutating: false })
       } catch (e) {
         // Roll back.
@@ -426,6 +684,7 @@ export const usePolicyStore = create<PolicyStoreState>()((set, get) => ({
           error: errorMessage(e, 'Failed to delete policy'),
           isMutating: false,
         }))
+        pushToast(revertMessage(e), 'error')
       }
     })()
   },
@@ -636,6 +895,134 @@ export const usePolicyStore = create<PolicyStoreState>()((set, get) => ({
       for (const p of policies) byId[p.id] = p
       return { policies, byId }
     })
+  },
+
+  // Wave-19.3 / P18-BUG-1 — load the NEXT page of `policy_activity_log` rows
+  // for the open detail modal. Mirrors `loadMoreTimeline` in circular-store:
+  // newest-first, append older rows below, dedupe by id, `loadingMore` flag
+  // drives the on-button spinner. The first page is already shipped by the
+  // detail GET via `getPolicyDetail`.
+  loadMorePolicyActivity: async (policyId: string) => {
+    const policy = get().byId[policyId] ?? get().policies.find((p) => p.id === policyId)
+    if (!policy) return
+    const apiId = policy.uuid ?? policyId
+    const page = get().policyActivityPagination[policyId] ?? {
+      offset: (policy.activityLog ?? []).length,
+      hasMore: true,
+      loadingMore: false,
+    }
+    if (page.loadingMore || !page.hasMore) return
+    set((s) => ({
+      policyActivityPagination: {
+        ...s.policyActivityPagination,
+        [policyId]: { ...page, loadingMore: true },
+      },
+    }))
+    try {
+      const res = await api.get<{
+        items: PolicyActivityApiRow[]
+        page: number
+        pageSize: number
+        total: number
+        totalPages: number
+      }>(`/policies/${apiId}/activity`, { page: Math.floor(page.offset / 10) + 1, pageSize: 10 })
+      const newRows = (res.items ?? []).map(mapPolicyActivityRow)
+      set((s) => {
+        const updated = (s.byId[policyId] ?? policy)
+        const existing = new Set((updated.activityLog ?? []).map((e) => e.id))
+        const merged = [
+          ...(updated.activityLog ?? []),
+          ...newRows.filter((e) => !existing.has(e.id)),
+        ]
+        const next: Policy = { ...updated, activityLog: merged }
+        return {
+          byId: { ...s.byId, [policyId]: next },
+          policies: s.policies.map((p) => (p.id === policyId ? next : p)),
+          selectedPolicy: s.selectedPolicy?.id === policyId ? next : s.selectedPolicy,
+          policyActivityPagination: {
+            ...s.policyActivityPagination,
+            [policyId]: {
+              offset: merged.length,
+              hasMore: merged.length < (res.total ?? 0),
+              loadingMore: false,
+            },
+          },
+        }
+      })
+    } catch (e) {
+      set((s) => ({
+        policyActivityPagination: {
+          ...s.policyActivityPagination,
+          [policyId]: { ...page, loadingMore: false },
+        },
+      }))
+      pushToast(revertMessage(e), 'error')
+      // eslint-disable-next-line no-console
+      console.error('[loadMorePolicyActivity] failed —', e)
+    }
+  },
+
+  // Wave-19.3 / Task-B — Policy Leader change. Optimistic owner update +
+  // PATCH /policies/{uuid}; the server PATCH route writes the
+  // `leader_changed` / `leader_assigned` activity-log row (dual-store).
+  // After the response lands, fetchById is called so the Activity tab picks
+  // up the new entry on the next render.
+  updateLeader: (policyId, ownerId, ownerName, ownerDepartment) => {
+    const previous = get().byId[policyId]
+    if (!previous) return
+    const optimistic: Policy = {
+      ...previous,
+      ownerId: ownerId ?? undefined,
+      owner: {
+        name: ownerName ?? '',
+        avatar: ownerName ?? '',
+        department: ownerDepartment ?? previous.owner?.department ?? '',
+      },
+      updatedAt: new Date().toISOString(),
+    }
+    set((s) => ({
+      policies: s.policies.map((p) => (p.id === policyId ? optimistic : p)),
+      byId: { ...s.byId, [policyId]: optimistic },
+      selectedPolicy: s.selectedPolicy?.id === policyId ? optimistic : s.selectedPolicy,
+      isMutating: true,
+      error: null,
+    }))
+    void (async () => {
+      try {
+        const apiId = previous.uuid ?? policyId
+        const payload: Record<string, unknown> = {
+          owner_id: ownerId,
+          owner_name: ownerName,
+        }
+        if (ownerDepartment !== undefined) payload.owner_department = ownerDepartment
+        const row = await api.patch<PolicyApiRow>(
+          `/policies/${apiId}`,
+          payload,
+          ifMatchHeader(previous.updatedAt),
+        )
+        const updated = mapRow(row, optimistic)
+        set((s) => ({
+          policies: s.policies.map((p) => (p.id === policyId ? updated : p)),
+          byId: { ...s.byId, [policyId]: updated },
+          selectedPolicy: s.selectedPolicy?.id === policyId ? updated : s.selectedPolicy,
+          isMutating: false,
+        }))
+        // Refresh the detail so the new `leader_changed` activity row lands
+        // on the Activity tab (the PATCH response itself only carries the
+        // top-level policy row, not the activity-log children).
+        get().fetchById(policyId)
+      } catch (e) {
+        // Roll back the optimistic owner update + surface a keyed toast.
+        set((s) => ({
+          policies: s.policies.map((p) => (p.id === policyId ? previous : p)),
+          byId: { ...s.byId, [policyId]: previous },
+          selectedPolicy: s.selectedPolicy?.id === policyId ? previous : s.selectedPolicy,
+          error: errorMessage(e, 'Failed to update policy leader'),
+          isMutating: false,
+        }))
+        pushToast(revertMessage(e), 'error')
+      }
+    })()
   },
 
   clearError: () => set({ error: null }),

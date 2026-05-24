@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useMemo, useEffect } from 'react'
+import { Icon } from '@iconify/react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Modal } from '@/components/ui/modal'
@@ -106,25 +107,49 @@ export function EditCircularModal({ circular, isOpen, onClose, onSaved, t, isRTL
   }
 
   function handleRequestEdit() {
-    const editData: Partial<Circular> = {
-      title: formTitle,
-      authority: formAuthority,
-      priority: formPriority,
-      issuanceDate: formIssuanceDate,
-      dueDate: formDueDate,
-      capDeadline: formCapDeadline || undefined,
-      referenceUrl: formReferenceUrl ? normalizeUrl(formReferenceUrl) : undefined,
-      departments: formDepartments,
-      description: formDescription,
-      businessOwnerDepartment: formBODept || undefined,
-      assignedTo: formAssignedTo || undefined,
-      frameworkIds,
+    // GAP-7 + GAP-10: send ONLY the fields the user actually changed. Diffing
+    // each form value against the ORIGINAL `circular` prop avoids two bugs:
+    //  - GAP-7: the server timeline lists every field even on a 1-field edit.
+    //  - GAP-10: a stale prefill for an untouched field would be written back,
+    //    silently overwriting the real DB value.
+    // GAP-3 still holds: a field the user *did* change to empty is sent as `''`
+    // so `toUpdatePayload` collapses it to an explicit `null`.
+
+    // Optional strings: treat '' and undefined/null as equal — no spurious diff.
+    const strEq = (a: string | null | undefined, b: string | null | undefined) =>
+      (a ?? '') === (b ?? '')
+    // Arrays: order-insensitive content compare.
+    const arrEq = (a: readonly string[], b: readonly string[]) => {
+      if (a.length !== b.length) return false
+      const sa = [...a].sort()
+      const sb = [...b].sort()
+      return sa.every((v, i) => v === sb[i])
     }
+
+    const normalizedUrl = formReferenceUrl ? normalizeUrl(formReferenceUrl) : ''
+
+    const editData: Partial<Circular> = {}
+    if (formTitle !== circular.title) editData.title = formTitle
+    if (formAuthority !== circular.authority) editData.authority = formAuthority
+    if (formPriority !== circular.priority) editData.priority = formPriority
+    if (formIssuanceDate !== circular.issuanceDate) editData.issuanceDate = formIssuanceDate
+    if (formDueDate !== circular.dueDate) editData.dueDate = formDueDate
+    if (!strEq(formCapDeadline, circular.capDeadline)) editData.capDeadline = formCapDeadline
+    if (!strEq(normalizedUrl, circular.referenceUrl)) editData.referenceUrl = normalizedUrl
+    if (!arrEq(formDepartments, circular.departments)) editData.departments = formDepartments
+    if (!strEq(formDescription, circular.description)) editData.description = formDescription
+    if (!strEq(formBODept, circular.businessOwnerDepartment))
+      editData.businessOwnerDepartment = formBODept
+    if (!strEq(formAssignedTo, circular.assignedTo)) editData.assignedTo = formAssignedTo
+    if (!arrEq(frameworkIds, circular.frameworkIds ?? [])) editData.frameworkIds = frameworkIds
+
     // Close-on-click: close immediately, fire the persist in the background.
     // The store applies an optimistic update so the row reflects the new
     // values right away; on failure the store will surface state.error and
-    // revert via its catch path.
+    // revert via its catch path. When nothing changed, skip the PATCH entirely
+    // so no pointless timeline row / version is written.
     onSaved()
+    if (Object.keys(editData).length === 0) return
     void Promise.resolve(requestCircularEdit(circular.id, editData)).catch(() => {})
   }
 
@@ -201,8 +226,15 @@ export function EditCircularModal({ circular, isOpen, onClose, onSaved, t, isRTL
                 value={formAssignedTo || null}
                 onChange={(id) => setFormAssignedTo(id)}
                 items={teamMembers.filter((m) => m.status === 'active').map((m) => ({
-                  id: m.name,
-                  label: `${m.name} - ${m.department}`,
+                  // Send the team-member UUID, not their display name —
+                  // `assigned_to` is a UUID column on the server. Seeding the
+                  // control from `circular.assignedTo` (a UUID) only matches
+                  // when item ids are UUIDs too, consistent with the Register
+                  // modal.
+                  id: m.id,
+                  // Cosmetic: only append "- department" when the member has
+                  // one; otherwise the label trails a dangling separator.
+                  label: m.department ? `${m.name} - ${m.department}` : m.name,
                 }))}
                 placeholder={t('regulatoryUpdates.selectOfficer')}
                 isRTL={isRTL}
@@ -250,19 +282,57 @@ export function EditCircularModal({ circular, isOpen, onClose, onSaved, t, isRTL
           <div className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('regulatoryUpdates.affectedDepartments')}</label>
-              <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-2 max-h-44 overflow-y-auto">
-                {allDepartments.map((dept) => (
-                  <label key={dept.id} className={`flex items-center gap-3 cursor-pointer`}>
-                    <input
-                      type="checkbox"
-                      className="rounded text-emerald-600 focus:ring-emerald-500"
-                      checked={formDepartments.includes(dept.name)}
-                      onChange={() => toggleDept(dept.name)}
-                    />
-                    <span className="text-sm">{isRTL ? dept.nameAr : dept.name}</span>
-                  </label>
-                ))}
+              {/* Side-bug: chips multi-select — kept consistent with the
+                  Register modal's "Affected Departments" picker. Clicking a
+                  chip toggles selection; selected chips show below as
+                  removable pills. */}
+              <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl">
+                <div className="flex flex-wrap gap-1.5">
+                  {allDepartments.map((dept) => {
+                    const selected = formDepartments.includes(dept.name)
+                    return (
+                      <button
+                        type="button"
+                        key={dept.id}
+                        onClick={() => toggleDept(dept.name)}
+                        className={
+                          selected
+                            ? 'px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-600 text-white border border-emerald-600 cursor-pointer transition-colors'
+                            : 'px-2.5 py-1 rounded-full text-xs font-medium bg-white text-slate-600 border border-slate-200 hover:border-emerald-300 hover:text-emerald-700 cursor-pointer transition-colors'
+                        }
+                      >
+                        {isRTL ? dept.nameAr : dept.name}
+                      </button>
+                    )
+                  })}
+                </div>
               </div>
+              {formDepartments.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 mt-2">
+                  {formDepartments.map((dept) => (
+                    <span
+                      key={dept}
+                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-100"
+                    >
+                      {/* RTL-3: show the Arabic department name on the
+                          selected pills, matching the picker grid above. */}
+                      {(() => {
+                        const d = allDepartments.find(
+                          (x) => x.name === dept || x.id === dept,
+                        )
+                        return d ? (isRTL ? d.nameAr : d.name) : dept
+                      })()}
+                      <button
+                        type="button"
+                        onClick={() => toggleDept(dept)}
+                        className="text-emerald-600 hover:text-rose-600 cursor-pointer"
+                      >
+                        <Icon icon="lucide:x" className="text-[10px]" />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
 
             <div>
@@ -274,7 +344,7 @@ export function EditCircularModal({ circular, isOpen, onClose, onSaved, t, isRTL
               />
             </div>
 
-            <FrameworkTagSelector value={frameworkIds} onChange={setFrameworkIds} label="Frameworks" selfAssessmentOnly />
+            <FrameworkTagSelector value={frameworkIds} onChange={setFrameworkIds} label={t('regulatoryUpdates.frameworks')} selfAssessmentOnly />
           </div>
         </div>
 

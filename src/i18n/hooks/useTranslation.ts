@@ -44,6 +44,31 @@ function interpolate(text: string, params?: InterpolationParams): string {
   })
 }
 
+/**
+ * GAP-5 — count-aware plural selection. Reusable across every list page
+ * (circulars / policies / observations / letters). Given a base key, resolves
+ * `<key>_one` vs `<key>_other` by `count` and interpolates `{{count}}`.
+ *
+ * English: `count === 1` → `_one`, else `_other`.
+ * Arabic:  Arabic has 6 CLDR plural categories, but for short "N items found"
+ *          UI strings the two-form one/other split reads naturally enough and
+ *          keeps the dictionary small. `count === 1` → `_one`, else `_other`.
+ *
+ * Falls back to the bare key if the `_one`/`_other` variants are missing, so
+ * adopting it incrementally never throws.
+ */
+function pluralize(
+  dictionary: Record<string, unknown>,
+  baseKey: string,
+  count: number,
+  params?: InterpolationParams,
+): string {
+  const form = count === 1 ? 'one' : 'other'
+  const variant = getNestedValue(dictionary, `${baseKey}_${form}`)
+  const value = variant !== `${baseKey}_${form}` ? variant : getNestedValue(dictionary, baseKey)
+  return interpolate(value, { count, ...params })
+}
+
 export function useTranslation() {
   const { language, direction, setLanguage, toggleLanguage } = useLanguageStore()
 
@@ -55,8 +80,14 @@ export function useTranslation() {
     return interpolate(value, params)
   }
 
+  // GAP-5: count-aware translation. `tCount('regulatoryUpdates.circularsFound', n)`
+  // resolves `circularsFound_one` / `circularsFound_other`.
+  const tCount = (baseKey: string, count: number, params?: InterpolationParams): string =>
+    pluralize(dictionary as Record<string, unknown>, baseKey, count, params)
+
   return {
     t,
+    tCount,
     language,
     direction,
     isRTL,

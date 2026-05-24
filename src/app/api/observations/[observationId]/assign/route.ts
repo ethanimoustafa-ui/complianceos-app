@@ -2,9 +2,9 @@
 
 import type { NextRequest } from 'next/server'
 import { requirePerm } from '@/lib/api/auth'
-import { handle, NotFound } from '@/lib/api/errors'
+import { handle, NotFound, PreconditionFailed } from '@/lib/api/errors'
 import { ok } from '@/lib/api/response'
-import { parseJson } from '@/lib/api/validate'
+import { assertNotStale, parseJson, readIfMatch } from '@/lib/api/validate'
 import { cacheTags, revalidateAll } from '@/lib/api/cache'
 import { writeAudit } from '@/lib/api/audit'
 import { AssignObservationSchema } from '@/lib/api/schemas/observations'
@@ -26,12 +26,34 @@ export async function POST(req: NextRequest, { params }: Params) {
     const observationId = await assertObservationExists(supabase, observationIdParam)
     const input = await parseJson(req, AssignObservationSchema)
 
+    // Wave-20.cleanup / W17.2 — optimistic-concurrency guard. The PATCH on
+    // /observations/[id] uses an atomic-on-client-token shape; mirror it here
+    // so leadership / assignee changes can't trample concurrent edits.
+    const ifMatch = readIfMatch(req)
+    if (ifMatch != null) {
+      const { data: current } = await supabase
+        .from('observations')
+        .select('updated_at')
+        .eq('id', observationId)
+        .is('deleted_at', null)
+        .maybeSingle<{ updated_at: string }>()
+      assertNotStale(ifMatch, current?.updated_at)
+    }
+
     if (input.leader_id !== undefined) {
-      const { error } = await supabase
+      let leaderQ = supabase
         .from('observations')
         .update({ leader_id: input.leader_id ?? null })
         .eq('id', observationId)
+        .is('deleted_at', null)
+      if (ifMatch != null) leaderQ = leaderQ.eq('updated_at', ifMatch)
+      const { data: leaderRow, error } = await leaderQ.select('id').maybeSingle()
       if (error) throw error
+      if (!leaderRow && ifMatch != null) {
+        throw PreconditionFailed(
+          'This record was changed by someone else — reload to see the latest.',
+        )
+      }
     }
 
     if (input.assignees) {

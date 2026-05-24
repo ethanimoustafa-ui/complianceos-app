@@ -1,7 +1,7 @@
 ﻿'use client'
 
 import { useState, useEffect, useCallback, useMemo, Suspense } from 'react'
-import { useSearchParams } from 'next/navigation'
+import { useSearchParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Icon } from '@iconify/react'
 import { Button } from '@/components/ui/button'
@@ -12,6 +12,7 @@ import { NoResultsEmptyState } from '@/components/ui/empty-state'
 import { useCircularStore } from '@/stores/circular-store'
 import { RegDocCard } from '@/components/correspondence/regulatory-updates/RegDocCard'
 import { RegDocFilterBar } from '@/components/correspondence/regulatory-updates/RegDocFilterBar'
+import { Skeleton } from '@/components/ui/skeleton'
 import type { CircularAuthority } from '@/types'
 import { exportRulesLocalized } from '@/lib/export'
 import { Gate } from '@/components/auth/gate'
@@ -23,28 +24,19 @@ import { BusinessOwnerModal } from '@/components/correspondence/regulatory-updat
 import { DeleteConfirmModal } from '@/components/correspondence/regulatory-updates/rules/DeleteConfirmModal'
 import { EditCircularModal } from '@/components/correspondence/regulatory-updates/rules/EditCircularModal'
 import { CircularDetailsContent } from '@/components/correspondence/regulatory-updates/rules/CircularDetailsContent'
-
-// ── Toast ─────────────────────────────────────────────────────────────────────
-
-function Toast({ message, onClose }: { message: string; onClose: () => void }) {
-  useEffect(() => {
-    const timer = setTimeout(onClose, 3000)
-    return () => clearTimeout(timer)
-  }, [onClose])
-  return (
-    <div className="fixed bottom-8 right-8 bg-emerald-600 text-white px-6 py-4 rounded-lg shadow-2xl flex items-center gap-3 z-[60] animate-in slide-in-from-bottom-4">
-      <Icon icon="lucide:check-circle" className="text-2xl" />
-      <span className="font-bold">{message}</span>
-    </div>
-  )
-}
+import { ToastHost } from '@/components/ui/toast-host'
+import { pushToast } from '@/stores/toast-store'
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 function RegulatoryUpdatesRulesPageContent() {
-  const { t, isRTL } = useTranslation()
+  const { t, tCount, isRTL } = useTranslation()
   const { circulars, selectedCircular, setSelected } = useCircularStore()
+  const isLoading = useCircularStore((s) => s.isLoading)
+  const lastFetched = useCircularStore((s) => s.lastFetched)
+  const isFirstLoad = isLoading && lastFetched === null && circulars.length === 0
   const searchParams = useSearchParams()
+  const router = useRouter()
 
   // Hydrate server-state on mount (Fix-1).
   const fetchCirculars = useCircularStore((s) => s.fetchAll)
@@ -62,6 +54,18 @@ function RegulatoryUpdatesRulesPageContent() {
     void fetchCircularById(selectedCircularId)
   }, [selectedCircularId, fetchCircularById])
 
+  // GAP-8: the detail-modal tab lives HERE, in the always-mounted page
+  // component — not inside `CircularDetailsContent`, which unmounts/remounts
+  // every time the modal closes (the article-modal "Close both" path). Holding
+  // it here means a tab click survives that remount and registers on the first
+  // attempt. Reset to 'overview' whenever a genuinely different circular is
+  // opened (the selected id changes).
+  // GAP-19: 'versions' tab added for the circular Version History.
+  const [activeTab, setActiveTab] = useState<'overview' | 'workflow' | 'activity' | 'versions'>('overview')
+  useEffect(() => {
+    if (selectedCircularId) setActiveTab('overview')
+  }, [selectedCircularId])
+
   const [searchQuery, setSearchQuery] = useState('')
   const [authorityFilter, setAuthorityFilter] = useState<CircularAuthority | 'all'>('all')
   const [departmentFilter, setDepartmentFilter] = useState('all')
@@ -72,19 +76,34 @@ function RegulatoryUpdatesRulesPageContent() {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false)
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false)
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null)
-  const [toastMessage, setToastMessage] = useState<string | null>(null)
 
-  const showToast = useCallback((message: string) => setToastMessage(message), [])
+  // Success toasts now route through the shared global toast store so the
+  // store layer (optimistic-mutation reverts) can raise toasts on the same
+  // surface. `<ToastHost />` (mounted below) renders the queue.
+  const showToast = useCallback((message: string) => pushToast(message, 'success'), [])
 
   useEffect(() => { setCurrentPage(1) }, [searchQuery, authorityFilter, departmentFilter])
 
+  const deepLinkId = searchParams.get('id')
   useEffect(() => {
-    const deepLinkId = searchParams.get('id')
     if (deepLinkId && circulars.length > 0) {
       const target = circulars.find(c => c.id === deepLinkId)
       if (target) setSelected(target)
     }
-  }, [searchParams, circulars, setSelected])
+  }, [deepLinkId, circulars, setSelected])
+
+  // GAP-4: deep-link to an unknown circular id. Once the list has loaded
+  // (`lastFetched !== null`) and no circular matches, show a "Not found"
+  // panel instead of silently rendering the list.
+  const deepLinkNotFound =
+    !!deepLinkId &&
+    lastFetched !== null &&
+    !isLoading &&
+    !circulars.some((c) => c.id === deepLinkId)
+
+  const clearDeepLink = useCallback(() => {
+    router.replace('/correspondence/regulatory-updates/rules')
+  }, [router])
 
   const filteredCirculars = useMemo(() => {
     return circulars
@@ -203,7 +222,7 @@ function RegulatoryUpdatesRulesPageContent() {
           departmentFilter={departmentFilter}
           onDepartmentChange={setDepartmentFilter}
           resultCount={filteredCirculars.length}
-          resultLabel={t('regulatoryUpdates.circularsFound')}
+          resultLabelKey="regulatoryUpdates.circularsFound"
           rightSlot={
             <Link
               href="/correspondence/registry"
@@ -214,11 +233,52 @@ function RegulatoryUpdatesRulesPageContent() {
             </Link>
           }
           t={t}
+          tCount={tCount}
           isRTL={isRTL}
         />
 
+        {/* GAP-4: deep-link to an unknown circular — "Not found" panel. */}
+        {deepLinkNotFound && (
+          <div className="mb-6 bg-white border border-rose-100 rounded-2xl p-8 flex flex-col items-center text-center">
+            <div className="w-14 h-14 rounded-full bg-rose-50 flex items-center justify-center mb-4">
+              <Icon icon="lucide:file-x" className="text-2xl text-rose-500" />
+            </div>
+            <h3 className="text-base font-bold text-slate-900 mb-1">
+              {t('regulatoryUpdates.circularNotFoundTitle')}
+            </h3>
+            <p className="text-sm text-slate-500 mb-1">
+              {t('regulatoryUpdates.circularNotFoundBody')}
+            </p>
+            <p className="text-xs font-mono text-slate-400 mb-4">{deepLinkId}</p>
+            <Button variant="outline" onClick={clearDeepLink}>
+              <Icon icon="lucide:arrow-left" className="w-4 h-4" />
+              {t('regulatoryUpdates.backToAllCirculars')}
+            </Button>
+          </div>
+        )}
+
         {/* List */}
-        {filteredCirculars.length === 0 ? (
+        {isFirstLoad ? (
+          <div className="space-y-3" role="status" aria-busy="true" aria-live="polite">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className="bg-white border border-slate-100 rounded-2xl p-5 space-y-3">
+                <div className="flex items-center gap-3">
+                  <Skeleton className="h-5 w-24" />
+                  <Skeleton className="h-5 w-16" />
+                  <Skeleton className="h-5 w-16" />
+                  <Skeleton className="h-5 w-20" />
+                </div>
+                <Skeleton className="h-5 w-2/3" />
+                <Skeleton className="h-3 w-4/5" />
+                <div className="flex items-center gap-2 pt-2">
+                  <Skeleton className="h-4 w-32" />
+                  <Skeleton className="h-4 w-28" />
+                </div>
+                <Skeleton className="h-1.5 w-full" />
+              </div>
+            ))}
+          </div>
+        ) : filteredCirculars.length === 0 ? (
           <NoResultsEmptyState
             onClearFilters={() => {
               setSearchQuery('')
@@ -300,6 +360,8 @@ function RegulatoryUpdatesRulesPageContent() {
         {selectedCircular && (
           <CircularDetailsContent
             circular={selectedCircular}
+            activeTab={activeTab}
+            setActiveTab={setActiveTab}
             onClose={() => setSelected(null)}
             onOpenBOModal={() => setIsBOModalOpen(true)}
             onEditOpen={() => setIsEditModalOpen(true)}
@@ -340,8 +402,8 @@ function RegulatoryUpdatesRulesPageContent() {
         t={t}
       />
 
-      {/* Toast */}
-      {toastMessage && <Toast message={toastMessage} onClose={() => setToastMessage(null)} />}
+      {/* Toast host — renders success + optimistic-revert error toasts. */}
+      <ToastHost />
     </div>
   )
 }

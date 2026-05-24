@@ -2,6 +2,7 @@
 
 import { memo } from 'react'
 import { useTranslation } from '@/i18n'
+import { formatObservationSeverity } from '@/lib/format/enum'
 import type { ObservationSeverity } from '../observation-types'
 
 export interface SidebarSeverityProps {
@@ -30,7 +31,8 @@ export const SidebarSeverity = memo(function SidebarSeverity({
       <span
         className={`px-4 py-2 ${severityColors[severity]} text-white text-xs font-black rounded-lg uppercase block text-center`}
       >
-        {t(`observations.severityOptions.${severity}`)}
+        {/* Wave-20.cleanup — single shared enum formatter. */}
+        {formatObservationSeverity(t, severity)}
       </span>
     </div>
   )

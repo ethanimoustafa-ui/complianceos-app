@@ -1,11 +1,12 @@
 // GET /api/policies/[policyId]/workflow — list workflow steps.
 // POST is exposed at /workflow/advance (see sibling route).
+// Wave-18: assertUuid + no-store.
 
 import type { NextRequest } from 'next/server'
 import { requireUser } from '@/lib/api/auth'
 import { handle } from '@/lib/api/errors'
 import { ok } from '@/lib/api/response'
-import { cacheTags } from '@/lib/api/cache'
+import { assertUuid } from '@/lib/api/validate'
 import {
   POLICY_WORKFLOW_STEP_COLUMNS,
   assertPolicyExists,
@@ -19,6 +20,7 @@ type Params = { params: Promise<{ policyId: string }> }
 export async function GET(_req: NextRequest, { params }: Params) {
   try {
     const { policyId } = await params
+    assertUuid(policyId)
     const { supabase } = await requireUser()
     await assertPolicyExists(supabase, policyId)
 
@@ -29,9 +31,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
       .order('sort_order', { ascending: true })
     if (error) throw error
 
-    return ok(data ?? [], {
-      cache: { sMaxAge: 60, tags: [cacheTags.policies(policyId)] },
-    })
+    return ok(data ?? [], { cache: 'no-store' })
   } catch (e) {
     return handle(e)
   }

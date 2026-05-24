@@ -10,10 +10,10 @@
 //   step by sort_order is promoted to 'current'.
 
 import type { NextRequest } from 'next/server'
-import { requirePerm } from '@/lib/api/auth'
-import { handle, NotFound } from '@/lib/api/errors'
+import { requirePerm, requireUser } from '@/lib/api/auth'
+import { handle, NotFound, PreconditionFailed } from '@/lib/api/errors'
 import { ok } from '@/lib/api/response'
-import { parseJson } from '@/lib/api/validate'
+import { assertUuid, parseJson, readIfMatch } from '@/lib/api/validate'
 import { cacheTags, revalidateAll } from '@/lib/api/cache'
 import { writeAudit } from '@/lib/api/audit'
 import { UpdateCircularWorkflowStepSchema } from '@/lib/api/schemas/circulars'
@@ -26,18 +26,52 @@ import {
   recomputeCircularProgress,
 } from '@/lib/api/services/circulars'
 import { notifyCircularStepAssignee } from '@/lib/api/services/notifications'
+// Wave-19.1 / Q8 — server-side bilingual renderer for dual-store timeline rows.
+import { renderBilingual } from '@/lib/i18n/server'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
 type Params = { params: Promise<{ circularId: string; stepId: string }> }
 
+// W17.2: single-resource GET — exposes `ETag: W/"<updated_at>"` for the
+// client's next `If-Match`-guarded PATCH/DELETE.
+export async function GET(_req: NextRequest, { params }: Params) {
+  try {
+    const { circularId, stepId } = await params
+    assertUuid(circularId, stepId) // SEC-5
+    const { supabase } = await requireUser()
+    await assertCircularExists(supabase, circularId)
+
+    const { data, error } = await supabase
+      .from('circular_workflow_steps')
+      .select(WORKFLOW_STEP_COLUMNS)
+      .eq('id', stepId)
+      .eq('circular_id', circularId)
+      .maybeSingle<Record<string, unknown>>()
+    if (error) throw error
+    if (!data) throw NotFound(`Workflow step ${stepId} not found`)
+
+    const updatedAt = data.updated_at
+    const etag =
+      typeof updatedAt === 'string' ? { ETag: `W/"${updatedAt}"` } : undefined
+    return ok(data, { cache: 'no-store', headers: etag })
+  } catch (e) {
+    return handle(e)
+  }
+}
+
 export async function PATCH(req: NextRequest, { params }: Params) {
   try {
     const { circularId, stepId } = await params
+    assertUuid(circularId, stepId) // SEC-5
     const { supabase, user, profile } = await requirePerm('edit')
     await assertCircularExists(supabase, circularId)
     const prev = await assertCircularWorkflowStepExists(supabase, circularId, stepId)
+    // W17-1 / SEC-1: optimistic-concurrency token. UPDATE scoped to live
+    // `updated_at` so concurrent PATCHes with the same fresh token race
+    // atomically — one wins, the other matches 0 rows and surfaces as 412.
+    const ifMatch = readIfMatch(req)
     const input = await parseJson(req, UpdateCircularWorkflowStepSchema)
     const actor = profile.name ?? profile.email ?? user.id
 
@@ -49,25 +83,44 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       return ok(prev)
     }
 
-    const { data, error } = await supabase
+    let query = supabase
       .from('circular_workflow_steps')
       .update(update)
       .eq('id', stepId)
       .eq('circular_id', circularId)
-      .select(WORKFLOW_STEP_COLUMNS)
-      .single()
-    if (error || !data) throw error ?? NotFound('Update returned no row')
+    if (ifMatch != null) {
+      // W17.2: scope on the CLIENT's claimed token (not the just-read server
+      // value) so a stale `If-Match` matches 0 rows and trips 412 below.
+      query = query.eq('updated_at', ifMatch)
+    }
+    const { data, error } = await query.select(WORKFLOW_STEP_COLUMNS).maybeSingle()
+    if (error) throw error
+    if (!data) {
+      if (ifMatch != null) {
+        throw PreconditionFailed(
+          'This record was changed by someone else — reload to see the latest.',
+        )
+      }
+      throw NotFound('Update returned no row')
+    }
 
     const after = data as typeof prev
 
     const isRename = input.label !== undefined && input.label !== prev.label
     const becameCurrent = after.status === 'current' && prev.status !== 'current'
 
-    const timelineTitle = isRename
-      ? `Step renamed: "${prev.label}" → "${after.label}"`
+    const timelineBody = isRename
+      ? renderBilingual('regulatoryUpdates.timeline.workflowStepRenamed', {
+          from: prev.label,
+          to: after.label,
+        })
       : becameCurrent
-      ? `Step activated: ${after.label}`
-      : `Step updated: ${after.label}`
+      ? renderBilingual('regulatoryUpdates.timeline.workflowStepActivated', {
+          label: after.label,
+        })
+      : renderBilingual('regulatoryUpdates.timeline.workflowStepUpdated', {
+          label: after.label,
+        })
 
     await Promise.all([
       writeAudit({
@@ -85,7 +138,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         },
         supabase,
       }),
-      insertCircularTimeline(supabase, circularId, timelineTitle, actor, 'completed'),
+      insertCircularTimeline(supabase, circularId, timelineBody, actor, 'completed'),
       recomputeCircularProgress(supabase, circularId).catch(() => undefined),
     ])
 
@@ -117,20 +170,34 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   }
 }
 
-export async function DELETE(_req: NextRequest, { params }: Params) {
+export async function DELETE(req: NextRequest, { params }: Params) {
   try {
     const { circularId, stepId } = await params
+    assertUuid(circularId, stepId) // SEC-5
     const { supabase, user, profile } = await requirePerm('edit')
     await assertCircularExists(supabase, circularId)
     const prev = await assertCircularWorkflowStepExists(supabase, circularId, stepId)
+    // W17-1 / SEC-1: optimistic-concurrency token. DELETE scoped to live
+    // `updated_at` when `If-Match` is sent so a concurrent writer trips 412.
+    const ifMatch = readIfMatch(req)
     const actor = profile.name ?? profile.email ?? user.id
 
-    const { error: delErr } = await supabase
+    let delQuery = supabase
       .from('circular_workflow_steps')
       .delete()
       .eq('id', stepId)
       .eq('circular_id', circularId)
+    if (ifMatch != null) {
+      // W17.2: scope on the CLIENT's claimed token (see PATCH above).
+      delQuery = delQuery.eq('updated_at', ifMatch)
+    }
+    const { data: deletedRows, error: delErr } = await delQuery.select('id')
     if (delErr) throw delErr
+    if (ifMatch != null && (!deletedRows || deletedRows.length === 0)) {
+      throw PreconditionFailed(
+        'This record was changed by someone else — reload to see the latest.',
+      )
+    }
 
     // If the removed step was 'current', promote the next pending step
     // (lowest sort_order > prev.sort_order, falling back to lowest pending).
@@ -187,7 +254,9 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
       insertCircularTimeline(
         supabase,
         circularId,
-        `Workflow step "${prev.label}" removed`,
+        renderBilingual('regulatoryUpdates.timeline.workflowStepRemoved', {
+          label: prev.label,
+        }),
         actor,
         'completed',
       ),

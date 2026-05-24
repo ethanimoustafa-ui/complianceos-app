@@ -10,7 +10,7 @@ import type { NextRequest } from 'next/server'
 import { requirePerm } from '@/lib/api/auth'
 import { handle } from '@/lib/api/errors'
 import { ok } from '@/lib/api/response'
-import { parseJson } from '@/lib/api/validate'
+import { assertUuid, parseJson } from '@/lib/api/validate'
 import { cacheTags, revalidateAll } from '@/lib/api/cache'
 import { writeAudit } from '@/lib/api/audit'
 import { ReorderCircularWorkflowStepsSchema } from '@/lib/api/schemas/circulars'
@@ -20,6 +20,8 @@ import {
   insertCircularTimeline,
   recomputeCircularProgress,
 } from '@/lib/api/services/circulars'
+// Wave-19.1 / Q8 — server-side bilingual renderer for dual-store timeline rows.
+import { renderBilingual } from '@/lib/i18n/server'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -29,6 +31,7 @@ type Params = { params: Promise<{ circularId: string }> }
 export async function POST(req: NextRequest, { params }: Params) {
   try {
     const { circularId } = await params
+    assertUuid(circularId) // SEC-5
     const { supabase, user, profile } = await requirePerm('edit')
     await assertCircularExists(supabase, circularId)
     const input = await parseJson(req, ReorderCircularWorkflowStepsSchema)
@@ -70,7 +73,7 @@ export async function POST(req: NextRequest, { params }: Params) {
       insertCircularTimeline(
         supabase,
         circularId,
-        'Workflow steps reordered',
+        renderBilingual('regulatoryUpdates.timeline.workflowStepsReordered'),
         actor,
         'completed',
       ),

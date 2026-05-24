@@ -1,9 +1,9 @@
 // /api/policies — collection endpoint.
 //
-// Permission gating: no `policy:*` keys exist in the seeded RBAC matrix. Per
-// BACKEND-API-MAP §3.5 / §4.7 we map standard CRUD to the canonical `create`
-// / `edit` / `delete` keys (compliance_officer + org_admin), and reviews to
-// `settings:edit` (org_admin only).
+// Wave-18: hardened per PORTING-TEMPLATE §2 — `cache: 'no-store'` on every
+// entity GET (P1's stale-read trigger), `.strict()` schemas, recompute call
+// path and read-time `is_expired` per row (so StatCards count idle expiries
+// without a cron).
 
 import type { NextRequest } from 'next/server'
 import { requirePerm, requireUser } from '@/lib/api/auth'
@@ -14,7 +14,12 @@ import { rangeFor } from '@/lib/api/pagination'
 import { cacheTags, revalidate } from '@/lib/api/cache'
 import { writeAudit } from '@/lib/api/audit'
 import { CreatePolicySchema, ListPoliciesQuerySchema } from '@/lib/api/schemas/policies'
-import { POLICY_LIST_COLUMNS, writePolicyActivity } from '@/lib/api/services/policies'
+import {
+  POLICY_LIST_COLUMNS,
+  recomputePolicyStatus,
+  writePolicyActivity,
+} from '@/lib/api/services/policies'
+import { insertWithRefCode } from '@/lib/api/services/refcode'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -47,8 +52,19 @@ export async function GET(req: NextRequest) {
       .range(from, to)
     if (error) throw error
 
+    // Wave-19.1 / Q2 — ship the persisted `is_expired` column verbatim.
+    // Migration 055 added the bool column on `policies` and a BEFORE
+    // INSERT/UPDATE trigger + daily pg_cron resync to keep it in sync with
+    // `(next_review_date, status)`. An `approved` policy that is past its
+    // review date SHOULD show `is_expired:true` — that's the case the
+    // Expired StatCard exists to surface. The previous overlay here
+    // additionally exempted `status='approved'`, contradicting that spec.
+    //
+    // FORENSIC §4 / W3: entity GETs MUST be `cache: 'no-store'` — sMaxAge +
+    // staleWhileRevalidate is unreliable; rows can vanish for up to 60s after
+    // writes (the user's own auto-memory note).
     return ok(paginate(data ?? [], q.page, q.pageSize, count ?? 0), {
-      cache: { sMaxAge: 60, staleWhileRevalidate: 300, tags: [cacheTags.policies()] },
+      cache: 'no-store',
     })
   } catch (e) {
     return handle(e)
@@ -60,14 +76,20 @@ export async function POST(req: NextRequest) {
     const { supabase, user, profile } = await requirePerm('create')
     const input = await parseJson(req, CreatePolicySchema)
 
-    const { data, error } = await supabase
-      .from('policies')
-      .insert({
-        ref_code: input.ref_code,
+    // Wave-19 / Q1 — `ref_code` is server-generated from `input.name`. The
+    // generic helper handles slug derivation, sequence increment, and retries
+    // on UNIQUE-violation (Postgres 23505) for concurrent POST safety —
+    // mirrors the `nextCircularReference` retry-loop on circulars.
+    const data = await insertWithRefCode<Record<string, unknown> & { id: string }>({
+      supabase,
+      table: 'policies',
+      slugSource: input.name,
+      selectColumns: POLICY_LIST_COLUMNS,
+      insertPayload: {
         name: input.name,
         description: input.description,
         category: input.category,
-        version: input.version,
+        version: input.version ?? 'v1.0',
         approval_tier: input.approval_tier,
         owner_id: input.owner_id ?? null,
         owner_name: input.owner_name ?? null,
@@ -75,17 +97,20 @@ export async function POST(req: NextRequest) {
         business_owner_department_id: input.business_owner_department_id ?? null,
         last_review_date: input.last_review_date ?? null,
         next_review_date: input.next_review_date ?? null,
-        review_cycle_days: input.review_cycle_days,
+        review_cycle_days: input.review_cycle_days ?? 365,
         approved_date: input.approved_date ?? null,
         review_schedule: input.review_schedule ?? null,
-        framework_ids: input.framework_ids,
-        affected_departments: input.affected_departments,
-      })
-      .select(POLICY_LIST_COLUMNS)
-      .single()
-    if (error || !data) throw error ?? NotFound('Insert returned no row')
+        framework_ids: input.framework_ids ?? [],
+        affected_departments: input.affected_departments ?? [],
+      },
+    })
+    if (!data) throw NotFound('Insert returned no row')
 
-    const created = data as { id: string }
+    const created = data as { id: string; ref_code?: string }
+    // W18 / §2-7 — recompute status on insert so a back-dated next_review_date
+    // immediately surfaces as `expired`.
+    await recomputePolicyStatus(supabase, created.id)
+
     await Promise.all([
       writeAudit({
         actor_id: user.id,
@@ -93,7 +118,7 @@ export async function POST(req: NextRequest) {
         action: 'policy.create',
         entity_type: 'policy',
         entity_id: created.id,
-        metadata: { ref_code: input.ref_code, name: input.name },
+        metadata: { ref_code: created.ref_code ?? null, name: input.name },
         supabase,
       }),
       writePolicyActivity({
