@@ -1028,8 +1028,16 @@
       "policyVersionUpdated": "تم تحديث السياسة — {{fields}}",
       "observationCreated": "تم إنشاء ملاحظة: {{title}}",
       "observationUpdated": "تم تحديث الملاحظة — {{fields}}",
+      "observationClosed": "تم إغلاق الملاحظة",
+      "observationReopened": "تمت إعادة فتح الملاحظة",
       "observationLeaderAssigned": "تم تعيين قائد الملاحظة: {{to}}",
       "observationLeaderChanged": "تم تغيير قائد الملاحظة من {{from}} إلى {{to}}",
+      "observationLeaderTransferred": "تم نقل القيادة من {{from}} إلى {{to}}",
+      "observationAssigneesUpdated": "تم تحديث المسؤولين عن الملاحظة",
+      "observationRemediationSubmitted": "تم تقديم خطة المعالجة: {{title}}",
+      "observationRemediationApproved": "تمت الموافقة على خطة المعالجة",
+      "observationRemediationRejected": "تم رفض خطة المعالجة",
+      "observationAttachmentAdded": "تمت إضافة مرفق: {{name}}",
       "initialRegistration": "التسجيل الأولي"
     },
     "timelineField": {

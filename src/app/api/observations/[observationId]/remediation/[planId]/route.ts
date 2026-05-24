@@ -20,8 +20,10 @@ import { ReviewRemediationPlanSchema } from '@/lib/api/schemas/observations'
 import {
   REMEDIATION_PLAN_COLUMNS,
   assertObservationExists,
-  writeObservationTimeline,
+  insertObservationTimeline,
+  observationActorName,
 } from '@/lib/api/services/observations'
+import { renderBilingual } from '@/lib/i18n/server'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -70,11 +72,14 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     if (error) throw error
     if (!data) throw NotFound(`Remediation plan ${planId} not found`)
 
-    const reviewerName = profile.name ?? profile.email ?? user.id
+    const actor = observationActorName(profile, user.id)
+    const timelineKey = input.approved
+      ? 'regulatoryUpdates.timeline.observationRemediationApproved'
+      : 'regulatoryUpdates.timeline.observationRemediationRejected'
     await Promise.all([
       writeAudit({
         actor_id: user.id,
-        actor_name: reviewerName,
+        actor_name: actor,
         action: input.approved
           ? 'observation.remediation.approve'
           : 'observation.remediation.reject',
@@ -87,18 +92,14 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         },
         supabase,
       }),
-      writeObservationTimeline({
+      insertObservationTimeline({
         supabase,
         observation_id: observationId,
-        action_type: input.approved
-          ? 'remediation.approved'
-          : 'remediation.rejected',
-        description: input.approved
-          ? `Remediation plan approved by ${reviewerName}`
-          : `Remediation plan rejected by ${reviewerName}`,
+        action_type: input.approved ? 'remediation.approved' : 'remediation.rejected',
         user_id: user.id,
-        user_name: reviewerName,
+        user_name: actor,
         target_id: planId,
+        ...renderBilingual(timelineKey),
       }),
     ])
 

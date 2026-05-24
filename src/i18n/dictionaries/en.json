@@ -1028,8 +1028,16 @@
       "policyVersionUpdated": "Policy updated — {{fields}}",
       "observationCreated": "Observation created: {{title}}",
       "observationUpdated": "Observation updated — {{fields}}",
+      "observationClosed": "Observation closed",
+      "observationReopened": "Observation reopened",
       "observationLeaderAssigned": "Observation leader assigned: {{to}}",
       "observationLeaderChanged": "Observation leader changed from {{from}} to {{to}}",
+      "observationLeaderTransferred": "Leadership transferred from {{from}} to {{to}}",
+      "observationAssigneesUpdated": "Observation assignees updated",
+      "observationRemediationSubmitted": "Remediation plan submitted: {{title}}",
+      "observationRemediationApproved": "Remediation plan approved",
+      "observationRemediationRejected": "Remediation plan rejected",
+      "observationAttachmentAdded": "Attachment added: {{name}}",
       "initialRegistration": "Initial registration"
     },
     "timelineField": {

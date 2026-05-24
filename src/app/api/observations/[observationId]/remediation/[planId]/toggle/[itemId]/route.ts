@@ -14,8 +14,10 @@ import { writeAudit } from '@/lib/api/audit'
 import {
   OBSERVATION_CHECKLIST_COLUMNS,
   assertObservationExists,
-  writeObservationTimeline,
+  insertObservationTimeline,
+  observationActorName,
 } from '@/lib/api/services/observations'
+import { renderBilingual } from '@/lib/i18n/server'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -48,10 +50,16 @@ export async function PATCH(_req: NextRequest, { params }: Params) {
       .single()
     if (error || !data) throw error ?? NotFound('Update returned no row')
 
+    const actor = observationActorName(profile, user.id)
+    const timelineKey = !current.completed
+      ? 'regulatoryUpdates.timeline.checklistItemCompleted'
+      : 'regulatoryUpdates.timeline.checklistItemUnchecked'
+    // The checklist item text isn't selected here; use the item id as title
+    // fallback. A future improvement could join the text column.
     await Promise.all([
       writeAudit({
         actor_id: user.id,
-        actor_name: profile.name ?? profile.email ?? user.id,
+        actor_name: actor,
         action: 'observation.remediation.toggle',
         entity_type: 'observation_checklist',
         entity_id: itemId,
@@ -62,17 +70,17 @@ export async function PATCH(_req: NextRequest, { params }: Params) {
         },
         supabase,
       }),
-      writeObservationTimeline({
+      insertObservationTimeline({
         supabase,
         observation_id: observationId,
         action_type: !current.completed
           ? 'remediation.item.completed'
           : 'remediation.item.uncompleted',
-        description: `Remediation item ${itemId} ${!current.completed ? 'completed' : 'reopened'}`,
         user_id: user.id,
-        user_name: profile.name ?? profile.email ?? user.id,
+        user_name: actor,
         target_id: itemId,
         metadata: { plan_id: planId },
+        ...renderBilingual(timelineKey, { title: itemId }),
       }),
     ])
 

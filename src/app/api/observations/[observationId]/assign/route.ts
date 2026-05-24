@@ -11,8 +11,10 @@ import { AssignObservationSchema } from '@/lib/api/schemas/observations'
 import {
   OBSERVATION_LIST_COLUMNS,
   assertObservationExists,
-  writeObservationTimeline,
+  insertObservationTimeline,
+  observationActorName,
 } from '@/lib/api/services/observations'
+import { renderBilingual } from '@/lib/i18n/server'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -83,10 +85,16 @@ export async function POST(req: NextRequest, { params }: Params) {
     if (error) throw error
     if (!data) throw NotFound(`Observation ${observationId} not found`)
 
+    const actor = observationActorName(profile, user.id)
+    // Choose the i18n key based on what changed: leader swap vs assignee update.
+    const timelineKey =
+      input.leader_id !== undefined
+        ? 'regulatoryUpdates.timeline.observationLeaderTransferred'
+        : 'regulatoryUpdates.timeline.observationAssigneesUpdated'
     await Promise.all([
       writeAudit({
         actor_id: user.id,
-        actor_name: profile.name ?? profile.email ?? user.id,
+        actor_name: actor,
         action: 'observation.assign',
         entity_type: 'observation',
         entity_id: observationId,
@@ -96,16 +104,13 @@ export async function POST(req: NextRequest, { params }: Params) {
         },
         supabase,
       }),
-      writeObservationTimeline({
+      insertObservationTimeline({
         supabase,
         observation_id: observationId,
         action_type: 'assigned',
-        description:
-          input.leader_id !== undefined
-            ? 'Leadership transferred'
-            : 'Assignees updated',
         user_id: user.id,
-        user_name: profile.name ?? profile.email ?? user.id,
+        user_name: actor,
+        ...renderBilingual(timelineKey, {}),
       }),
     ])
 

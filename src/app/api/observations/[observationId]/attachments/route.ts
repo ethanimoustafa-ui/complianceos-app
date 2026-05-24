@@ -12,8 +12,11 @@ import { RegisterObservationDocumentSchema } from '@/lib/api/schemas/observation
 import {
   OBSERVATION_DOCUMENT_COLUMNS,
   assertObservationExists,
-  writeObservationTimeline,
+  insertObservationTimeline,
+  observationActorName,
 } from '@/lib/api/services/observations'
+import { safeBasename } from '@/lib/api/sanitize'
+import { renderBilingual } from '@/lib/i18n/server'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -46,11 +49,14 @@ export async function POST(req: NextRequest, { params }: Params) {
     const observationId = await assertObservationExists(supabase, observationIdParam)
     const input = await parseJson(req, RegisterObservationDocumentSchema)
 
+    // SEC-10 — path-traversal defence: reduce to safe basename.
+    const safeName = safeBasename(input.name)
+
     const { data, error } = await supabase
       .from('observation_documents')
       .insert({
         observation_id: observationId,
-        name: input.name,
+        name: safeName,
         type: input.type,
         storage_path: input.storage_path,
         uploaded_by: user.id,
@@ -60,24 +66,25 @@ export async function POST(req: NextRequest, { params }: Params) {
     if (error || !data) throw error ?? NotFound('Insert returned no row')
 
     const created = data as { id: string }
+    const actor = observationActorName(profile, user.id)
     await Promise.all([
       writeAudit({
         actor_id: user.id,
-        actor_name: profile.name ?? profile.email ?? user.id,
+        actor_name: actor,
         action: 'observation.attachment.add',
         entity_type: 'observation_document',
         entity_id: created.id,
-        metadata: { observation_id: observationId, name: input.name },
+        metadata: { observation_id: observationId, name: safeName },
         supabase,
       }),
-      writeObservationTimeline({
+      insertObservationTimeline({
         supabase,
         observation_id: observationId,
         action_type: 'attachment.added',
-        description: `Attachment added: ${input.name}`,
         user_id: user.id,
-        user_name: profile.name ?? profile.email ?? user.id,
+        user_name: actor,
         target_id: created.id,
+        ...renderBilingual('regulatoryUpdates.timeline.observationAttachmentAdded', { name: safeName }),
       }),
     ])
 

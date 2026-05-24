@@ -10,8 +10,10 @@ import { writeAudit } from '@/lib/api/audit'
 import { CloseObservationSchema } from '@/lib/api/schemas/observations'
 import {
   OBSERVATION_LIST_COLUMNS,
-  writeObservationTimeline,
+  insertObservationTimeline,
+  observationActorName,
 } from '@/lib/api/services/observations'
+import { renderBilingual } from '@/lib/i18n/server'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -76,24 +78,25 @@ export async function POST(req: NextRequest, { params }: Params) {
       throw Conflict('Transition returned no row')
     }
 
+    const actor = observationActorName(profile, user.id)
     await Promise.all([
       writeAudit({
         actor_id: user.id,
-        actor_name: profile.name ?? profile.email ?? user.id,
+        actor_name: actor,
         action: 'observation.close',
         entity_type: 'observation',
         entity_id: observationId,
         metadata: { notes: input.notes },
         supabase,
       }),
-      writeObservationTimeline({
+      insertObservationTimeline({
         supabase,
         observation_id: observationId,
         action_type: 'closed',
-        description: 'Observation closed',
         user_id: user.id,
-        user_name: profile.name ?? profile.email ?? user.id,
+        user_name: actor,
         metadata: { notes: input.notes },
+        ...renderBilingual('regulatoryUpdates.timeline.observationClosed'),
       }),
     ])
 

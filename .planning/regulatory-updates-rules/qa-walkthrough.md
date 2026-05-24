@@ -3338,3 +3338,115 @@ Reset path: not exercised in this pass — the test circular was not at 100 ompl
 
 - Circular `7f80986b-c6ae-4484-8968-24603cacd6e0` (yutr / SAMA-CIR-2026-0002).
 - Policy `694fa590-55b5-4d79-820a-4c412ad38096`.
+
+---
+
+## Wave-20 — Observations port (full pattern stack)
+
+_Appended 2026-05-24. Porting the W19.7-verified Rules + Policy pattern stack to
+Observations._
+
+### Scope
+
+Observations top-level + all child tables (assignees, checklist, documents /
+evidence / attachments, updates/comments, timeline, remediation_plans,
+closure_requests, closure_reviews) + new `observation_versions` table.
+
+No workflow lifecycle on observations (no workflow_steps). No configurable-enum
+Settings section needed (source / severity / status are already open-strings per
+PORTING-TEMPLATE §8).
+
+### Pre-implementation findings
+
+1. **{k,p} JSON** — zero callsites found (`grep -rn "k:.*p:" src/` filtered to
+   observations). Clean.
+2. **P6 write-side message gap (7 callsites)** — `close`, `reopen`, `assign`,
+   `attachments/POST`, `remediation/POST`, `remediation/[planId]/PATCH`, and
+   `remediation/[planId]/toggle/[itemId]/PATCH` all called `writeObservationTimeline`
+   with raw English `description` strings instead of `renderBilingual`.
+3. **`observationFieldsUpdatedBody` bug** — the helper was mapping `changedColumnNames`
+   (DB column names) through `OBSERVATION_FIELD_LABEL_KEYS` to get i18n key paths, then
+   passing those KEY PATHS as the `fields` param value. This caused the rendered timeline
+   text to contain raw key strings like `observations.field.title` instead of translated
+   labels. Fixed by resolving each key through `renderI18nKey` before joining.
+4. **`observation_versions` table** — did not exist yet. The `insertObservationVersion`
+   writer was already guarded to no-op on `42P01 undefined_table`. Migration 064 creates
+   the table; the writer now persists version history.
+5. **Missing i18n keys** — `regulatoryUpdates.timeline.observationClosed`,
+   `observationReopened`, `observationLeaderTransferred`, `observationAssigneesUpdated`,
+   `observationRemediationSubmitted`, `observationRemediationApproved`,
+   `observationRemediationRejected`, `observationAttachmentAdded` were absent. Added to
+   both `en.json` and `ar.json`.
+
+### What landed
+
+**Migration 064 (`observation_versions.sql`):**
+- `observation_versions` table: `id`, `observation_id` FK, `date`, `author`,
+  `text_en`, `text_ar` (dual-store, NOT NULL), `field_changes jsonb`, `created_at`.
+- RLS: read + insert for authenticated users (parallel to `observation_timeline`).
+- Append-only — no `updated_at`, no PATCH/DELETE route (PORTING-TEMPLATE §4).
+
+**i18n additions (`en.json` + `ar.json`):**
+- 8 new keys under `regulatoryUpdates.timeline.*` for observation lifecycle events.
+
+**P6 fix — all 7 legacy `writeObservationTimeline` callsites replaced:**
+- `close/route.ts` → `insertObservationTimeline` + `renderBilingual('regulatoryUpdates.timeline.observationClosed')`
+- `reopen/route.ts` → `renderBilingual('regulatoryUpdates.timeline.observationReopened')`
+- `assign/route.ts` → `renderBilingual('observationLeaderTransferred' | 'observationAssigneesUpdated')` based on payload
+- `attachments/route.ts` → `renderBilingual('observationAttachmentAdded', { name })` + `safeBasename` (also adds SEC-10 path-traversal defence)
+- `remediation/route.ts` → `renderBilingual('observationRemediationSubmitted', { title })`
+- `remediation/[planId]/route.ts` → `renderBilingual('observationRemediationApproved' | 'observationRemediationRejected')`
+- `remediation/[planId]/toggle/[itemId]/route.ts` → `renderBilingual('checklistItemCompleted' | 'checklistItemUnchecked', { title })`
+
+**`observationFieldsUpdatedBody` P6 fix (services/observations.ts):**
+- Each DB column name is now resolved through `renderI18nKey(labelKey, {}, locale)` for
+  each locale before joining. The `fields` param now contains translated label strings
+  ("Title", "العنوان") not raw key paths.
+- Imports `renderI18nKey` from `src/lib/i18n/server.ts`.
+
+**Sweep results (PORTING-TEMPLATE §5):**
+- `writeObservationTimeline` in `/api/observations/` → 0 matches (all eliminated).
+- `cache: 'no-store'` on every observations GET → confirmed.
+- `assertUuid` at every `[itemId]`/`[commentId]`/`[attachmentId]`/`[evidenceId]` route → confirmed.
+- `If-Match|readIfMatch` in PATCH/DELETE routes → 9 files confirmed.
+- `ETag` set on single-resource GET + PATCH response → confirmed.
+- `optimisticMutation` in observation-store.ts → 27 occurrences confirmed.
+
+### New probe files
+
+- `tests/probes/observation-timeline-dual-store.ts` — creates an observation, exercises
+  create/PATCH/checklist/evidence/remediation/close/reopen → checks every timeline row
+  has non-empty `text_en` AND `text_ar` with no raw i18n key paths.
+- `tests/probes/observation-security.ts` — SEC-5 UUID, SEC-8 unknown key, SEC-4 HTML
+  strip, W17-2 stale If-Match (412), W17-2 concurrent same-token (200 + 412). Every
+  assertion names the specific expected HTTP code.
+- `tests/e2e/wave-20-observations.spec.ts` — Playwright spec: list view (no console
+  errors, no getSnapshot loop), create (optimistic < 100ms), AR view screenshot, timeline
+  dual-store API assertion, stale ETag → 412 test.
+
+### Verification exit codes
+
+- `npx tsc --noEmit` → **exit 0** (clean)
+- `npx vitest run` → **108/108 passing** (baseline maintained)
+
+### Deferred (W20.1)
+
+- **Supabase MCP re-auth required to apply migration 064.** The token expired mid-wave.
+  Migration file is written at `supabase/migrations/064_observation_versions.sql`. Run
+  `npx supabase db push` or re-authorize the MCP and call `apply_migration`.
+- **`observation_versions` UI** — the `insertObservationVersion` writer now persists rows
+  once migration 064 is applied, but the Observations detail modal has no Version History
+  tab yet. Building the UI tab is W20.1 (mirrors the Policy version-history surface).
+- **`remediation_plans.updated_at`** — the remediation-plan review route guards on the
+  PARENT observation's `updated_at` (documented in the route comment). Adding its own
+  `updated_at` column and trigger to `remediation_plans` would close the remaining
+  granularity gap. Low priority; tracked as W20.1.
+- **Playwright spec full execution** — spec requires a running dev server + seeded test
+  observations. Designed to run via `npx playwright test wave-20-observations.spec.ts
+  --workers=1` after Hani verifies on localhost.
+
+### Test data
+
+- Observations: seed via the probe (`npx tsx tests/probes/observation-timeline-dual-store.ts
+  --cookie="..."`) which self-creates and self-cleans.
+- For the security probe: any existing observation UUID via `--observation=<uuid>`.

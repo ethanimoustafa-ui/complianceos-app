@@ -9,8 +9,10 @@ import { cacheTags, revalidate, revalidateAll } from '@/lib/api/cache'
 import { writeAudit } from '@/lib/api/audit'
 import {
   OBSERVATION_LIST_COLUMNS,
-  writeObservationTimeline,
+  insertObservationTimeline,
+  observationActorName,
 } from '@/lib/api/services/observations'
+import { renderBilingual } from '@/lib/i18n/server'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -59,22 +61,23 @@ export async function POST(req: NextRequest, { params }: Params) {
       throw NotFound('Transition returned no row')
     }
 
+    const actor = observationActorName(profile, user.id)
     await Promise.all([
       writeAudit({
         actor_id: user.id,
-        actor_name: profile.name ?? profile.email ?? user.id,
+        actor_name: actor,
         action: 'observation.reopen',
         entity_type: 'observation',
         entity_id: observationId,
         supabase,
       }),
-      writeObservationTimeline({
+      insertObservationTimeline({
         supabase,
         observation_id: observationId,
         action_type: 'reopened',
-        description: 'Observation reopened',
         user_id: user.id,
-        user_name: profile.name ?? profile.email ?? user.id,
+        user_name: actor,
+        ...renderBilingual('regulatoryUpdates.timeline.observationReopened'),
       }),
     ])
 

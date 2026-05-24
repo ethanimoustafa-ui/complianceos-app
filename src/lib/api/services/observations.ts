@@ -4,7 +4,7 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { NotFound } from '../errors'
-import { renderBilingual } from '@/lib/i18n/server'
+import { renderBilingual, renderI18nKey } from '@/lib/i18n/server'
 
 // --- selection lists ---------------------------------------------------------
 // PORTING-TEMPLATE §2.12: every column-list (parent + children) carries
@@ -346,25 +346,36 @@ export function observationActorName(profile: {
 
 /**
  * Compose the "Observation updated — {fields}" body in BOTH languages from a
- * list of changed-field i18n keys. Reused by the activity-log writer AND the
- * (future) `observation_versions` writer so they stay in lockstep — the
- * Wave-19.5 lesson: one render, both surfaces.
+ * list of changed DB column names. Reused by the activity-log writer AND the
+ * `observation_versions` writer so they stay in lockstep — the Wave-19.5
+ * lesson: one render, both surfaces.
+ *
+ * Wave-20 P6 fix: `fields` param must contain the TRANSLATED label strings,
+ * not the bare i18n key paths. We look up each DB column → i18n key →
+ * rendered EN/AR label, then join them per-locale so `renderBilingual`
+ * interpolates the already-translated list into the wrapping template.
  */
 export function observationFieldsUpdatedBody(
-  changedFieldLabelKeys: string[],
+  changedColumnNames: string[],
 ): { text_en: string; text_ar: string } | null {
-  if (changedFieldLabelKeys.length === 0) return null
+  if (changedColumnNames.length === 0) return null
+  // Map each DB column name to its translated label in both locales.
+  // OBSERVATION_FIELD_LABEL_KEYS maps 'title' → 'observations.field.title';
+  // renderI18nKey then resolves that key against each locale's dictionary.
   const fieldsByLocale = {
-    en: changedFieldLabelKeys
-      .map((k) => OBSERVATION_FIELD_LABEL_KEYS[k] ?? k)
+    en: changedColumnNames
+      .map((col) => {
+        const key = OBSERVATION_FIELD_LABEL_KEYS[col]
+        return key ? renderI18nKey(key, {}, 'en') : col
+      })
       .join(', '),
-    ar: changedFieldLabelKeys
-      .map((k) => OBSERVATION_FIELD_LABEL_KEYS[k] ?? k)
+    ar: changedColumnNames
+      .map((col) => {
+        const key = OBSERVATION_FIELD_LABEL_KEYS[col]
+        return key ? renderI18nKey(key, {}, 'ar') : col
+      })
       .join(', '),
   }
-  // The "fields" param is locale-aware so EN and AR each get their own list,
-  // but we currently keep the field-label keys as raw strings. The bilingual
-  // resolver still produces both languages by re-rendering against each dict.
   return renderBilingual('regulatoryUpdates.timeline.observationUpdated', {
     fields: fieldsByLocale,
   })

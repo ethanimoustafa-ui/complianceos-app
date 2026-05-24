@@ -11,8 +11,10 @@ import { CreateRemediationPlanSchema } from '@/lib/api/schemas/observations'
 import {
   REMEDIATION_PLAN_COLUMNS,
   assertObservationExists,
-  writeObservationTimeline,
+  insertObservationTimeline,
+  observationActorName,
 } from '@/lib/api/services/observations'
+import { renderBilingual } from '@/lib/i18n/server'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -61,24 +63,25 @@ export async function POST(req: NextRequest, { params }: Params) {
     if (error || !data) throw error ?? NotFound('Insert returned no row')
 
     const created = data as { id: string }
+    const actor = observationActorName(profile, user.id)
     await Promise.all([
       writeAudit({
         actor_id: user.id,
-        actor_name: profile.name ?? profile.email ?? user.id,
+        actor_name: actor,
         action: 'observation.remediation.submit',
         entity_type: 'remediation_plan',
         entity_id: created.id,
         metadata: { observation_id: observationId },
         supabase,
       }),
-      writeObservationTimeline({
+      insertObservationTimeline({
         supabase,
         observation_id: observationId,
         action_type: 'remediation.submitted',
-        description: `Remediation plan submitted: ${input.title}`,
         user_id: user.id,
-        user_name: profile.name ?? profile.email ?? user.id,
+        user_name: actor,
         target_id: created.id,
+        ...renderBilingual('regulatoryUpdates.timeline.observationRemediationSubmitted', { title: input.title }),
       }),
     ])
 
