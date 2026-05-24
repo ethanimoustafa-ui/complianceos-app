@@ -520,9 +520,23 @@ export interface LetterApprovalStep {
 export interface LetterTimelineEvent {
   id: string
   title: string
+  // Wave-21 dual-store: readers pick the locale-appropriate column.
+  textEn?: string
+  textAr?: string
   date: string
   user?: string
-  status: 'completed' | 'active' | 'pending'
+  status: 'completed' | 'active' | 'pending' | 'rejected'
+}
+
+/** Wave-21 — per-letter version history entry (mirrors PolicyVersionEntry). */
+export interface LetterVersionEntry {
+  id: string
+  date: string
+  author: string
+  textEn: string
+  textAr: string
+  fieldChanges: Array<{ field: string; from: string; to: string }> | null
+  createdAt: string
 }
 
 export interface Letter {
@@ -564,6 +578,8 @@ export interface Letter {
   placeholderDefs?: PlaceholderDef[]
   // Per-token compose-time values keyed by token name.
   placeholderValues?: Record<string, PlaceholderValue | undefined>
+  // Wave-21 — version history (populated by detail fetch; absent on list rows).
+  versions?: LetterVersionEntry[]
   createdAt: string
   updatedAt: string
 }

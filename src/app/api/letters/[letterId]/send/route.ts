@@ -1,10 +1,13 @@
-﻿// POST /api/letters/[letterId]/send — approved → sent. Stamps `sent_date`
+// POST /api/letters/[letterId]/send — approved → sent. Stamps `sent_date`
 // and (re)computes `response_deadline` from now.
+//
+// Wave-21: assertUuid + dual-store timeline write.
 
 import type { NextRequest } from 'next/server'
 import { requirePerm } from '@/lib/api/auth'
 import { Conflict, handle, NotFound } from '@/lib/api/errors'
 import { ok } from '@/lib/api/response'
+import { assertUuid } from '@/lib/api/validate'
 import { cacheTags, revalidateAll } from '@/lib/api/cache'
 import { writeAudit } from '@/lib/api/audit'
 import {
@@ -21,14 +24,15 @@ type Params = { params: Promise<{ letterId: string }> }
 export async function POST(_req: NextRequest, { params }: Params) {
   try {
     const { letterId } = await params
+    assertUuid(letterId)
     const { supabase, user, profile } = await requirePerm('edit')
 
     const { data: current, error: readErr } = await supabase
       .from('letters')
-      .select('id, status, type')
+      .select('id, status, type, authority')
       .eq('id', letterId)
       .is('deleted_at', null)
-      .maybeSingle<{ id: string; status: string; type: string }>()
+      .maybeSingle<{ id: string; status: string; type: string; authority: string }>()
     if (readErr) throw readErr
     if (!current) throw NotFound(`Letter ${letterId} not found`)
     if (current.status === 'sent') return ok({ id: letterId, status: 'sent' })
@@ -49,20 +53,24 @@ export async function POST(_req: NextRequest, { params }: Params) {
       .single()
     if (error || !data) throw error ?? NotFound('Transition returned no row')
 
+    const actor = profile.name ?? profile.email ?? user.id
+
     await Promise.all([
       writeAudit({
         actor_id: user.id,
-        actor_name: profile.name ?? profile.email ?? user.id,
+        actor_name: actor,
         action: 'letter.send',
         entity_type: 'letter',
         entity_id: letterId,
         supabase,
       }),
+      // Wave-21 P6 fix — dual-store timeline write with authority interpolation.
       insertLetterTimeline(
         supabase,
         letterId,
-        'Letter sent',
-        profile.name ?? profile.email ?? user.id,
+        'letters.letterSentToAuthority',
+        { authority: current.authority.toUpperCase() },
+        actor,
         'completed',
       ),
     ])

@@ -1,13 +1,15 @@
-﻿// POST /api/letters/[letterId]/approve-step
+// POST /api/letters/[letterId]/approve-step
 //   body: { step_index: 1|2|3, notes?: string }
 // Advances the 3-step approval chain. On final step → status `approved`.
 // Permission: `edit` (matches BACKEND-API-MAP §3.3 "Approve SAMA Letters").
+//
+// Wave-21: assertUuid + dual-store timeline write.
 
 import type { NextRequest } from 'next/server'
 import { requirePerm } from '@/lib/api/auth'
 import { Conflict, handle, NotFound } from '@/lib/api/errors'
 import { ok } from '@/lib/api/response'
-import { parseJson } from '@/lib/api/validate'
+import { assertUuid, parseJson } from '@/lib/api/validate'
 import { cacheTags, revalidateAll } from '@/lib/api/cache'
 import { writeAudit } from '@/lib/api/audit'
 import { ApproveStepSchema } from '@/lib/api/schemas/letters'
@@ -26,6 +28,7 @@ type Params = { params: Promise<{ letterId: string }> }
 export async function POST(req: NextRequest, { params }: Params) {
   try {
     const { letterId } = await params
+    assertUuid(letterId)
     const { supabase, user, profile } = await requirePerm('edit')
     const body = await parseJson(req, ApproveStepSchema)
 
@@ -76,23 +79,26 @@ export async function POST(req: NextRequest, { params }: Params) {
       letterAfter = data as Record<string, unknown>
     }
 
+    const actor = profile.name ?? profile.email ?? user.id
+    const isLastStep = remainingPending.length === 0
+
     await Promise.all([
       writeAudit({
         actor_id: user.id,
-        actor_name: profile.name ?? profile.email ?? user.id,
+        actor_name: actor,
         action: 'letter.approval_step_committed',
         entity_type: 'letter',
         entity_id: letterId,
         metadata: { step: body.step_index, decision: 'approved' },
         supabase,
       }),
+      // Wave-21 P6 fix — dual-store timeline write with step number interpolation.
       insertLetterTimeline(
         supabase,
         letterId,
-        remainingPending.length === 0
-          ? `Step ${body.step_index} approved — letter fully approved`
-          : `Step ${body.step_index} approved`,
-        profile.name ?? profile.email ?? user.id,
+        isLastStep ? 'letters.letterAllStepsApproved' : 'letters.letterStepApproved',
+        { step: String(body.step_index) },
+        actor,
         'completed',
       ),
     ])

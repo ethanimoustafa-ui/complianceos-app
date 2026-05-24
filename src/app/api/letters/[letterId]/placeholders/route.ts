@@ -1,13 +1,15 @@
-﻿// /api/letters/[letterId]/placeholders
+// /api/letters/[letterId]/placeholders
 //   GET   → effective list = letter.placeholder_defs (or template_defs if
 //           letter has none), merged with current letter.placeholder_values.
 //   PATCH → bulk-update placeholder_values, render shadow rendered fields.
+//
+// Wave-21: assertUuid + cache:'no-store' on GET.
 
 import type { NextRequest } from 'next/server'
 import { requirePerm, requireUser } from '@/lib/api/auth'
 import { handle, NotFound } from '@/lib/api/errors'
 import { ok } from '@/lib/api/response'
-import { parseJson } from '@/lib/api/validate'
+import { assertUuid, parseJson } from '@/lib/api/validate'
 import { cacheTags, revalidateAll } from '@/lib/api/cache'
 import { writeAudit } from '@/lib/api/audit'
 import { UpdatePlaceholdersSchema } from '@/lib/api/schemas/letters'
@@ -24,6 +26,7 @@ type Params = { params: Promise<{ letterId: string }> }
 export async function GET(_req: NextRequest, { params }: Params) {
   try {
     const { letterId } = await params
+    assertUuid(letterId)
     const { supabase } = await requireUser()
 
     const { data, error } = await supabase
@@ -35,18 +38,13 @@ export async function GET(_req: NextRequest, { params }: Params) {
     if (error) throw error
     if (!data) throw NotFound(`Letter ${letterId} not found`)
 
+    // PORTING-TEMPLATE §2.2 — cache:'no-store' on entity reads.
     return ok(
       {
         defs: (data as { placeholder_defs: unknown }).placeholder_defs ?? [],
         values: (data as { placeholder_values: unknown }).placeholder_values ?? {},
       },
-      {
-        cache: {
-          sMaxAge: 60,
-          staleWhileRevalidate: 300,
-          tags: [cacheTags.letterPlaceholders(letterId)],
-        },
-      },
+      { cache: 'no-store' },
     )
   } catch (e) {
     return handle(e)
@@ -56,6 +54,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
 export async function PATCH(req: NextRequest, { params }: Params) {
   try {
     const { letterId } = await params
+    assertUuid(letterId)
     const { supabase, user, profile } = await requirePerm('edit')
     await assertLetterExists(supabase, letterId)
     const body = await parseJson(req, UpdatePlaceholdersSchema)

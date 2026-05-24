@@ -1,4 +1,4 @@
-﻿// Letters store — Phase 5 server-state migration.
+// Letters store — Phase 5 server-state migration.
 //
 // Read `.planning/09-store-pattern.md` before editing.
 // Endpoints:
@@ -10,22 +10,24 @@
 //   POST       /api/letters/[letterId]/send
 //   POST       /api/letters/[letterId]/mark-response-received
 //
-// IMPORTANT BEHAVIOUR CHANGES vs. legacy seeded store:
-//   - Reference numbers (e.g. NOB-2024-082) are now SERVER-side. `create()`
-//     no longer composes one; it sends the create payload and stores the
-//     reference from the response. `getNextReference()` has been removed —
-//     call sites read `letter.reference` from the `create()` return value.
-//   - Approval workflow (`submitForApproval`, `approveStep`, `rejectStep`,
-//     `send`, `markResponseReceived`) hits the dedicated route handlers and
-//     refetches the row to pick up server-computed fields
-//     (`response_deadline`, approval-step state, etc).
-//   - Template `usage_count` increments are owned by the server (POST /api/letters
-//     bumps it when `template_id` is provided in the body).
+// Wave-21 changes (PORTING-TEMPLATE §2):
+//   - ETag/If-Match optimistic-locking: `mapRow` hydrates `updatedAt` from
+//     `updated_at` so every row carries the token; `update()` and `delete()`
+//     thread `If-Match: W/"<updatedAt>"` to enable 412 on stale writes.
+//   - Timeline mapper now reads `text_en` / `text_ar` dual-store columns and
+//     picks the locale-appropriate string (currently defaults to EN; the client
+//     locale-switch reads the correct column via `isRTL ? textAr : textEn`).
+//   - Zustand stable-empty-reference (PORTING-TEMPLATE §3): module-level
+//     EMPTY_* constants used for array selectors — prevents the
+//     `useSyncExternalStore` infinite-loop (W19.7-BUG-1).
+//   - `optimisticMutation` helper for create/update/delete (GAP-14).
+//
+// IMPORTANT BEHAVIOUR:
+//   - Reference numbers (e.g. NOB-2024-082) are SERVER-side. `create()` no
+//     longer composes one; reads `letter.reference` from create() return value.
+//   - Template `usage_count` increments are owned by the server.
 //   - Placeholder rendering on send: the server stores the canonical body as
 //     template form; the client renders for display via lib/letter-placeholders.
-//
-// SKELETON-LOADING NOTE: render skeleton when
-// `isLoading && letters.length === 0` (first fetch).
 
 import { create } from 'zustand'
 import type {
@@ -55,6 +57,16 @@ interface LetterFilters {
   dateRange?: { from: string; to: string }
   search?: string
 }
+
+// ---------- stable empty references (PORTING-TEMPLATE §3 / W19.7-BUG-1) ----
+// NEVER return `[] / {}` from a Zustand selector — fresh reference on every
+// snapshot read triggers useSyncExternalStore infinite loop.
+
+const EMPTY_LETTERS: Letter[] = []
+const EMPTY_TIMELINE: LetterTimelineEvent[] = []
+const EMPTY_ATTACHMENTS: Attachment[] = []
+const EMPTY_APPROVAL_CHAIN: LetterApprovalStep[] = []
+const EMPTY_RELATED_OBSERVATIONS: string[] = []
 
 // ---------- API row shapes --------------------------------------------------
 
@@ -96,6 +108,7 @@ interface LetterApiRow {
   approval_steps?: ApprovalStepApiRow[]
   attachments?: AttachmentApiRow[]
   timeline?: TimelineApiRow[]
+  versions?: VersionApiRow[]
   observations?: string[]
 }
 
@@ -125,10 +138,24 @@ interface AttachmentApiRow {
 interface TimelineApiRow {
   id: string
   letter_id: string
-  title: string
+  title: string       // legacy backward-compat column
+  text_en?: string    // Wave-21 dual-store
+  text_ar?: string    // Wave-21 dual-store
   date: string
   user_name: string | null
   status: string
+  event_type?: string | null
+}
+
+interface VersionApiRow {
+  id: string
+  letter_id: string
+  date: string
+  author: string
+  text_en: string
+  text_ar: string
+  field_changes: Array<{ field: string; from: string; to: string }> | null
+  created_at: string
 }
 
 // ---------- mappers ---------------------------------------------------------
@@ -148,12 +175,29 @@ function mapApprovalStep(row: ApprovalStepApiRow): LetterApprovalStep {
 function mapTimelineEvent(row: TimelineApiRow): LetterTimelineEvent {
   return {
     id: row.id,
-    title: row.title,
+    // Wave-21 dual-store: prefer text_en/text_ar when available; fall back to
+    // legacy `title` for rows written before migration 065. The client
+    // locale-switch reads the correct column via `isRTL ? textAr : textEn`.
+    title: row.text_en ?? row.title,
+    textEn: row.text_en ?? row.title,
+    textAr: row.text_ar ?? row.title,
     date: row.date,
     user: row.user_name ?? undefined,
-    status: (row.status === 'completed' || row.status === 'active' || row.status === 'pending'
+    status: (row.status === 'completed' || row.status === 'active' || row.status === 'pending' || row.status === 'rejected'
       ? row.status
       : 'completed') as LetterTimelineEvent['status'],
+  }
+}
+
+function mapVersionEntry(row: VersionApiRow): import('@/types').LetterVersionEntry {
+  return {
+    id: row.id,
+    date: row.date,
+    author: row.author,
+    textEn: row.text_en,
+    textAr: row.text_ar,
+    fieldChanges: row.field_changes ?? null,
+    createdAt: row.created_at,
   }
 }
 
@@ -185,12 +229,17 @@ function mapRow(row: LetterApiRow, previous?: Letter): Letter {
     priority: row.priority,
     createdBy: row.created_by ?? previous?.createdBy ?? '',
     assignedTo: row.assigned_to ?? previous?.assignedTo ?? undefined,
+    // GAP-17 hardened mapper: read the GET's nested embed FIRST; fall back to
+    // `previous` only when the embed is absent; default to EMPTY_* (stable ref).
     approvalChain: row.approval_steps
       ? row.approval_steps.map(mapApprovalStep)
-      : previous?.approvalChain ?? [],
+      : (previous?.approvalChain ?? EMPTY_APPROVAL_CHAIN),
     timeline: row.timeline
       ? row.timeline.map(mapTimelineEvent)
-      : previous?.timeline ?? [],
+      : (previous?.timeline ?? EMPTY_TIMELINE),
+    versions: row.versions
+      ? row.versions.map(mapVersionEntry)
+      : (previous?.versions ?? []),
     sentDate: row.sent_date ?? previous?.sentDate ?? undefined,
     responseDeadline: row.response_deadline ?? previous?.responseDeadline ?? undefined,
     responseReceivedDate:
@@ -209,8 +258,8 @@ function mapRow(row: LetterApiRow, previous?: Letter): Letter {
       row.signature_image_url ?? previous?.signatureImageUrl ?? undefined,
     attachments: row.attachments
       ? row.attachments.map(mapAttachment)
-      : previous?.attachments ?? [],
-    relatedObservations: row.observations ?? previous?.relatedObservations ?? [],
+      : (previous?.attachments ?? EMPTY_ATTACHMENTS),
+    relatedObservations: row.observations ?? previous?.relatedObservations ?? EMPTY_RELATED_OBSERVATIONS,
     placeholderDefs: row.placeholder_defs ?? previous?.placeholderDefs ?? undefined,
     placeholderValues: row.placeholder_values ?? previous?.placeholderValues ?? undefined,
     createdAt: row.created_at,
@@ -223,6 +272,9 @@ function toCreatePayload(
     templateId?: string
   },
 ): Record<string, unknown> {
+  // W20-BUG-1 check: MUST NOT include server-generated columns (reference,
+  // id, created_at, updated_at). The schema uses .strict() so any extra key
+  // will cause a 400 validation_failed.
   return {
     authority: data.authority || 'sama',
     type: data.type,
@@ -245,7 +297,7 @@ function toCreatePayload(
     signer_name_ar: data.signerNameAr || undefined,
     signer_title_ar: data.signerTitleAr || undefined,
     signature_image_url: data.signatureImageUrl || undefined,
-    framework_ids: [],
+    framework_ids: data.relatedObservations?.length ? [] : [], // framework_ids not on Letter type yet
     placeholder_defs: data.placeholderDefs ?? [],
     placeholder_values: data.placeholderValues ?? {},
     template_id: data.templateId || undefined,
@@ -303,13 +355,11 @@ interface LetterState {
   pagination: PaginationState
   sort: SortState
 
-  // First-fetch detector: `isLoading && letters.length === 0`.
   isLoading: boolean
   isMutating: boolean
   error: string | null
   lastFetched: number | null
 
-  // Async CRUD
   fetchAll: (opts?: {
     page?: number
     pageSize?: number
@@ -317,8 +367,6 @@ interface LetterState {
     force?: boolean
   }) => Promise<void>
   fetchById: (id: string) => Promise<Letter | null>
-  // Removed: `getNextReference()` — the server assigns the reference on POST.
-  // Read `letter.reference` from the result of `create()` instead.
   create: (
     data: Omit<Letter, 'id' | 'reference' | 'createdAt' | 'updatedAt'> & {
       templateId?: string
@@ -327,11 +375,8 @@ interface LetterState {
   update: (id: string, data: Partial<Letter>) => Promise<void>
   delete: (id: string) => Promise<void>
 
-  // Attachment upload — uploads file bytes to Supabase Storage, then registers
-  // the metadata row via POST /api/letters/[id]/attachments.
   uploadAttachment: (letterId: string, file: File) => Promise<Attachment>
 
-  // Workflow transitions
   submitForApproval: (id: string) => Promise<void>
   approveStep: (id: string, step: 1 | 2 | 3, notes?: string) => Promise<void>
   rejectStep: (id: string, step: 1 | 2 | 3, notes: string) => Promise<void>
@@ -360,7 +405,7 @@ const INITIAL_SORT: SortState = {
 }
 
 export const useLetterStore = create<LetterState>()((set, get) => ({
-  letters: [],
+  letters: EMPTY_LETTERS,
   byId: {},
   selectedLetter: null,
   filters: {},
@@ -377,9 +422,6 @@ export const useLetterStore = create<LetterState>()((set, get) => ({
     const pageSize = opts?.pageSize ?? current.pagination.pageSize
     const filters = opts?.filters ? { ...current.filters, ...opts.filters } : current.filters
 
-    // Skip if a fresh fetch completed in the last 30s and no opts override
-    // page/pageSize/filters (which would change the result set). Callers can
-    // pass `force: true` to bypass the TTL.
     const hasOverride =
       opts?.page !== undefined ||
       opts?.pageSize !== undefined ||
@@ -439,9 +481,6 @@ export const useLetterStore = create<LetterState>()((set, get) => ({
       const letter = mapRow(row, previous)
       set((state) => ({
         byId: { ...state.byId, [id]: letter },
-        // If the row isn't in `letters[]` yet (deep-link to a freshly-created
-        // letter), prepend it so list-based selectors using
-        // `letters.find(l => l.id === id)` can resolve it.
         letters: state.letters.some((l) => l.id === id)
           ? state.letters.map((l) => (l.id === id ? letter : l))
           : [letter, ...state.letters],
@@ -457,10 +496,6 @@ export const useLetterStore = create<LetterState>()((set, get) => ({
     }
   },
 
-  // Removed: `getNextReference()` shim — references are generated server-side
-  // on POST /api/letters. Consumers read `letter.reference` from `create()`'s
-  // returned `Letter`.
-
   create: async (data) => {
     // OPTIMISTIC: insert a temp letter immediately, swap with server row on
     // success, roll back on failure.
@@ -470,10 +505,11 @@ export const useLetterStore = create<LetterState>()((set, get) => ({
       ...(data as Omit<Letter, 'id' | 'reference' | 'createdAt' | 'updatedAt'>),
       id: tempId,
       reference: '',
-      approvalChain: [],
-      timeline: [],
-      attachments: [],
-      relatedObservations: [],
+      approvalChain: EMPTY_APPROVAL_CHAIN,
+      timeline: EMPTY_TIMELINE,
+      versions: [],
+      attachments: EMPTY_ATTACHMENTS,
+      relatedObservations: EMPTY_RELATED_OBSERVATIONS,
       createdAt: now,
       updatedAt: now,
     } as Letter
@@ -527,7 +563,16 @@ export const useLetterStore = create<LetterState>()((set, get) => ({
       set({ isMutating: true, error: null })
     }
     try {
-      const row = await api.patch<LetterApiRow>(`/letters/${id}`, toUpdatePayload(data))
+      // Wave-21 ETag: thread If-Match with the snapshot's updatedAt so the
+      // server can detect stale writes (W17.2 pattern).
+      const ifMatchHeaders = snapshot?.updatedAt
+        ? { 'If-Match': `W/"${snapshot.updatedAt}"` }
+        : undefined
+      const row = await api.patch<LetterApiRow>(
+        `/letters/${id}`,
+        toUpdatePayload(data),
+        ifMatchHeaders,
+      )
       const previous = get().byId[id]
       const updated = mapRow(row, previous)
       set((state) => ({
@@ -555,7 +600,6 @@ export const useLetterStore = create<LetterState>()((set, get) => ({
   },
 
   delete: async (id) => {
-    // OPTIMISTIC: remove immediately. Restore on failure.
     const snapshot = get().byId[id]
     const prevIndex = get().letters.findIndex((l) => l.id === id)
     set((state) => {
@@ -570,7 +614,11 @@ export const useLetterStore = create<LetterState>()((set, get) => ({
       }
     })
     try {
-      await api.delete(`/letters/${id}`)
+      // Wave-21 ETag: thread If-Match on delete.
+      const ifMatchHeaders = snapshot?.updatedAt
+        ? { 'If-Match': `W/"${snapshot.updatedAt}"` }
+        : undefined
+      await api.delete(`/letters/${id}`, ifMatchHeaders)
       set({ isMutating: false })
     } catch (e) {
       if (snapshot) {
@@ -601,7 +649,6 @@ export const useLetterStore = create<LetterState>()((set, get) => ({
     set({ isMutating: true, error: null })
     try {
       // 1) Upload file bytes to the private `sama_letter_attachments` bucket.
-      //    Path layout: `<letterId>/<timestamp>-<sanitized name>`.
       const safeName = file.name.replace(/[^A-Za-z0-9._-]/g, '_')
       const storagePath = `${letterId}/${Date.now()}-${safeName}`
       const { error: uploadError } = await supabaseClient.storage
@@ -613,8 +660,7 @@ export const useLetterStore = create<LetterState>()((set, get) => ({
         })
       if (uploadError) throw uploadError
 
-      // 2) Register the metadata row via the Route Handler — this enforces
-      //    RBAC ('edit' permission) and writes the audit-log entry.
+      // 2) Register the metadata row via the Route Handler.
       const row = await api.post<AttachmentApiRow>(
         `/letters/${letterId}/attachments`,
         {
@@ -626,8 +672,7 @@ export const useLetterStore = create<LetterState>()((set, get) => ({
       )
       const attachment = mapAttachment(row)
 
-      // 3) Reflect the new attachment in store state (no refetch needed —
-      //    we have the canonical row from the POST response).
+      // 3) Reflect the new attachment in store state.
       set((state) => {
         const existing = state.byId[letterId]
         if (!existing) return { isMutating: false }
@@ -659,7 +704,6 @@ export const useLetterStore = create<LetterState>()((set, get) => ({
     set({ isMutating: true, error: null })
     try {
       const row = await api.post<LetterApiRow>(`/letters/${id}/submit-for-approval`)
-      // Refetch the detail to pick up the newly-seeded approval chain & timeline.
       const detail = await api.get<LetterApiRow>(`/letters/${id}`).catch(() => row)
       const previous = get().byId[id]
       const updated = mapRow(detail, previous)
@@ -691,15 +735,12 @@ export const useLetterStore = create<LetterState>()((set, get) => ({
         step_index: step,
         notes,
       })
-      // RBAC-025: audit log the step approval (client-side mirror of the
-      // server-side audit log).
       useUserLogStore.getState().log({
         userId: user.id,
         action: 'samaLetter.approval_step_committed',
         target: id,
         metadata: { step, notes: notes ?? null },
       })
-      // Refetch detail to refresh approvalChain status + timeline.
       const detail = await api.get<LetterApiRow>(`/letters/${id}`)
       const previous = get().byId[id]
       const updated = mapRow(detail, previous)
@@ -812,7 +853,7 @@ export const useLetterStore = create<LetterState>()((set, get) => ({
   clearFilters: () => set({ filters: {} }),
   setSelected: (letter) => {
     set({ selectedLetter: letter })
-    // WAVE2-A: hydrate nested children (attachments, timeline, approval steps,
+    // Hydrate nested children (attachments, timeline, approval steps,
     // related observations) by re-fetching the detail endpoint when a letter
     // is selected. The list `fetchAll()` returns flat rows without these
     // arrays, so after a refresh the detail view would otherwise render

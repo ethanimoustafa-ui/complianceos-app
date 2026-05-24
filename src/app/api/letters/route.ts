@@ -1,4 +1,8 @@
-﻿// /api/letters — list + create SAMA (and other-authority) letters.
+// /api/letters — list + create SAMA (and other-authority) letters.
+//
+// Wave-21 PORTING-TEMPLATE §2 countermeasures applied:
+//   - GET: cache:'no-store' on every entity read (§2.2)
+//   - POST: dual-store timeline write via renderBilingual (§2.11)
 
 import type { NextRequest } from 'next/server'
 import { requirePerm, requireUser } from '@/lib/api/auth'
@@ -25,8 +29,6 @@ export async function GET(req: NextRequest) {
   try {
     const { supabase } = await requireUser()
     // parseQuery → ValidationFailed (HTTP 400) on malformed query strings.
-    // Previously a raw `.parse(...)` would throw a ZodError which fell into
-    // `handle()`'s generic-Error branch and surfaced as a 500.
     const q = parseQuery(req.nextUrl.searchParams, ListLettersQuerySchema)
 
     let query = supabase
@@ -44,10 +46,8 @@ export async function GET(req: NextRequest) {
     if (q.q) query = query.ilike('subject', `%${q.q}%`)
 
     // The schema does not include an `archived` column on letters; archived
-    // letters are modelled via `status` (e.g. response-received + manual
-    // archive). We accept the filter for API parity but apply it as a no-op
-    // unless a future column is added. Leaving as a no-op keeps the surface
-    // forward-compatible.
+    // letters are modelled via `status`. We accept the filter for API parity
+    // but apply it as a no-op unless a future column is added.
 
     // has_attachments — derive via the letter_attachments parent set.
     let attachmentLetterIds: Set<string> | null = null
@@ -58,13 +58,8 @@ export async function GET(req: NextRequest) {
       )
       if (q.has_attachments === 'true') {
         if (attachmentLetterIds.size === 0) {
-          return ok(paginate([], q.page, q.pageSize, 0), {
-            cache: {
-              sMaxAge: 60,
-              staleWhileRevalidate: 300,
-              tags: [cacheTags.letters()],
-            },
-          })
+          // PORTING-TEMPLATE §2.2 — cache:'no-store' on every entity GET.
+          return ok(paginate([], q.page, q.pageSize, 0), { cache: 'no-store' })
         }
         query = query.in('id', Array.from(attachmentLetterIds))
       } else if (attachmentLetterIds.size > 0) {
@@ -99,9 +94,8 @@ export async function GET(req: NextRequest) {
       has_pdf: (attachmentCount.get(r.id) ?? 0) > 0,
     }))
 
-    return ok(paginate(decorated, q.page, q.pageSize, count ?? 0), {
-      cache: { sMaxAge: 60, staleWhileRevalidate: 300, tags: [cacheTags.letters()] },
-    })
+    // PORTING-TEMPLATE §2.2 — cache:'no-store' on every entity GET.
+    return ok(paginate(decorated, q.page, q.pageSize, count ?? 0), { cache: 'no-store' })
   } catch (e) {
     return handle(e)
   }
@@ -176,21 +170,25 @@ export async function POST(req: NextRequest) {
         .eq('id', input.template_id)
     }
 
+    const actor = profile.name ?? profile.email ?? user.id
+
     await Promise.all([
       writeAudit({
         actor_id: user.id,
-        actor_name: profile.name ?? profile.email ?? user.id,
+        actor_name: actor,
         action: 'letter.create',
         entity_type: 'letter',
         entity_id: created.id,
         metadata: { reference: created.reference, type: input.type, authority: input.authority },
         supabase,
       }),
+      // Wave-21 P6 fix — dual-store timeline write.
       insertLetterTimeline(
         supabase,
         created.id,
-        'Letter created',
-        profile.name ?? profile.email ?? user.id,
+        'letters.letterCreatedDraft',
+        {},
+        actor,
         'completed',
       ),
     ])

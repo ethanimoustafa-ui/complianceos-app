@@ -1,9 +1,12 @@
-﻿// DELETE /api/letters/[letterId]/attachments/[attachmentId]
+// DELETE /api/letters/[letterId]/attachments/[attachmentId]
+//
+// Wave-21: assertUuid on both segments.
 
 import type { NextRequest } from 'next/server'
 import { requirePerm } from '@/lib/api/auth'
 import { handle } from '@/lib/api/errors'
 import { ok } from '@/lib/api/response'
+import { assertUuid } from '@/lib/api/validate'
 import { cacheTags, revalidateAll } from '@/lib/api/cache'
 import { writeAudit } from '@/lib/api/audit'
 import { assertLetterExists } from '@/lib/api/services/letters'
@@ -16,6 +19,7 @@ type Params = { params: Promise<{ letterId: string; attachmentId: string }> }
 export async function DELETE(_req: NextRequest, { params }: Params) {
   try {
     const { letterId, attachmentId } = await params
+    assertUuid(letterId, attachmentId)
     const { supabase, user, profile } = await requirePerm('edit')
     await assertLetterExists(supabase, letterId)
 

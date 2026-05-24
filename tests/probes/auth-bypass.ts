@@ -131,6 +131,25 @@ const ENDPOINTS: Endpoint[] = [
   { method: 'POST',   path: `/api/settings/enum-values`, body: {} },
   { method: 'PATCH',  path: `/api/settings/enum-values/${A}`, body: {} },
   { method: 'DELETE', path: `/api/settings/enum-values/${A}` },
+  // Wave-21 — Letters surface — auth gate must be the first check.
+  { method: 'GET',    path: `/api/letters` },
+  { method: 'POST',   path: `/api/letters`, body: {} },
+  { method: 'GET',    path: `/api/letters/${C}` },
+  { method: 'PATCH',  path: `/api/letters/${C}`, body: {} },
+  { method: 'DELETE', path: `/api/letters/${C}` },
+  { method: 'GET',    path: `/api/letters/${C}/timeline` },
+  { method: 'GET',    path: `/api/letters/${C}/attachments` },
+  { method: 'POST',   path: `/api/letters/${C}/attachments`, body: {} },
+  { method: 'DELETE', path: `/api/letters/${C}/attachments/${A}` },
+  { method: 'GET',    path: `/api/letters/${C}/placeholders` },
+  { method: 'PATCH',  path: `/api/letters/${C}/placeholders`, body: {} },
+  { method: 'POST',   path: `/api/letters/${C}/submit-for-approval`, body: {} },
+  { method: 'POST',   path: `/api/letters/${C}/approve-step`, body: {} },
+  { method: 'POST',   path: `/api/letters/${C}/reject-step`, body: {} },
+  { method: 'POST',   path: `/api/letters/${C}/send`, body: {} },
+  { method: 'POST',   path: `/api/letters/${C}/mark-response-received`, body: {} },
+  { method: 'POST',   path: `/api/letters/${C}/archive`, body: {} },
+  { method: 'POST',   path: `/api/letters/${C}/unarchive`, body: {} },
 ]
 
 interface ProbeResult {

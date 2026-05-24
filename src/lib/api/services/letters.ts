@@ -1,12 +1,16 @@
-﻿// SAMA letters service helpers.
+// SAMA letters service helpers.
 //
-// - Reference-number generation (per authority, per type, per year).
-// - Approval-step state machine (3-step chain).
-// - Server-side placeholder rendering (mirrors src/lib/letter-placeholders.ts).
-// - Response-deadline computation by letter type.
+// Wave-21 — full pattern-stack applied:
+//   - `insertLetterTimeline` now writes dual-store text_en + text_ar via
+//     `renderBilingual` (P6 fix). Callers pass an i18n key + params.
+//   - `insertLetterVersion` — new, mirrors `insertObservationVersion`.
+//   - `LETTER_FIELD_LABEL_KEYS` — i18n key map for per-field diff labels.
+//   - Reference-number generation, approval-step state machine, and
+//     placeholder rendering are unchanged.
 
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { Conflict, NotFound } from '../errors'
+import { renderBilingual } from '@/lib/i18n/server'
 
 // ---------- shared select columns -------------------------------------------
 
@@ -216,20 +220,140 @@ export function assertIsCurrentStep(steps: ApprovalStepRow[], stepIndex: number)
   }
 }
 
-// ---------- timeline insert -------------------------------------------------
+// ---------- field-label i18n key map ----------------------------------------
 
+/**
+ * Maps DB column names to their `letters.*` i18n key for the per-field diff
+ * display in version history. The key is stored in `letter_versions.field_changes[].field`
+ * and rendered via `renderFieldLabel(key, t)` on the client.
+ *
+ * Wave-21 PORTING-TEMPLATE §3 — field labels are i18n keys, NOT stored English
+ * strings (the one remaining surface where this gotcha applies per the template).
+ */
+export const LETTER_FIELD_LABEL_KEYS: Record<string, string> = {
+  subject:           'letters.subject',
+  subject_ar:        'letters.subjectArUpdated',
+  body:              'letters.bodyUpdated',
+  body_ar:           'letters.bodyArUpdated',
+  priority:          'letters.priorityUpdated',
+  sama_department:   'letters.departmentUpdated',
+  type:              'letters.letterTypeUpdated',
+  sub_category:      'letters.subCategoryUpdated',
+  signer_name:       'letters.signerNameUpdated',
+  signer_title:      'letters.signerTitleUpdated',
+  signer_name_ar:    'letters.signerNameUpdated',
+  signer_title_ar:   'letters.signerTitleUpdated',
+  recipient_name:    'letters.recipientNameUpdated',
+  recipient_org:     'letters.recipientOrgUpdated',
+  recipient_city:    'letters.recipientNameUpdated',
+  recipient_name_ar: 'letters.recipientNameUpdated',
+  recipient_org_ar:  'letters.recipientOrgUpdated',
+  recipient_city_ar: 'letters.recipientNameUpdated',
+  assigned_to:       'letters.metadata',
+  status:            'letters.statusResponseReceived',
+  authority:         'letters.authorityField',
+  framework_ids:     'letters.tableAuthority',
+  response_deadline: 'letters.overdueReplies',
+}
+
+// ---------- dual-store timeline insert --------------------------------------
+
+/**
+ * Wave-21 P6 fix — dual-store timeline insert.
+ *
+ * Callers pass a `renderBilingual`-style i18n key + params; both languages
+ * are resolved at write time via `renderBilingual` from `src/lib/i18n/server`.
+ * The legacy `title` column is set to `text_en` for backward-compat with any
+ * remaining readers that haven't been migrated to dual-store.
+ *
+ * REPLACES the old signature `insertLetterTimeline(supabase, letterId, rawTitle, userName, status)`.
+ */
 export async function insertLetterTimeline(
   supabase: SupabaseClient,
   letterId: string,
-  title: string,
+  i18nKey: string,
+  params: Record<string, string | { en: string; ar: string }>,
   userName: string,
   status: string = 'completed',
 ): Promise<void> {
+  const { text_en, text_ar } = renderBilingual(i18nKey, params)
   const { error } = await supabase
     .from('letter_timeline')
-    .insert({ letter_id: letterId, title, user_name: userName, status })
+    .insert({
+      letter_id: letterId,
+      title: text_en, // backward-compat: legacy `title` col keeps the English string
+      text_en,
+      text_ar,
+      user_name: userName,
+      status,
+    })
   if (error) {
     // eslint-disable-next-line no-console
-    console.error('[api/services/letters] timeline insert failed', { error, letterId, title })
+    console.error('[api/services/letters] timeline insert failed', { error, letterId, i18nKey })
   }
+}
+
+// ---------- version insert --------------------------------------------------
+
+export interface LetterFieldChange {
+  field: string // i18n key from LETTER_FIELD_LABEL_KEYS
+  from: string
+  to: string
+}
+
+/**
+ * Wave-21 — persist a version-history row.
+ *
+ * Dual-store: `text_en` + `text_ar` are the fully-rendered summary strings
+ * (from `renderBilingual`). `field_changes` carries the structured per-field
+ * diff. The table is append-only; no PATCH/DELETE route.
+ *
+ * Best-effort: silently no-ops when `letter_versions` is absent (42P01) so
+ * PATCH routes continue to work even before migration 065 runs (mirrors the
+ * observation_versions guard from Wave-20).
+ */
+export async function insertLetterVersion(
+  supabase: SupabaseClient,
+  letterId: string,
+  body: { text_en: string; text_ar: string },
+  author: string,
+  fieldChanges: LetterFieldChange[],
+): Promise<void> {
+  const { error } = await supabase
+    .from('letter_versions')
+    .insert({
+      letter_id: letterId,
+      author,
+      text_en: body.text_en,
+      text_ar: body.text_ar,
+      field_changes: fieldChanges.length > 0 ? fieldChanges : null,
+    })
+  if (error) {
+    // 42P01 = undefined_table: migration 065 not yet applied — ignore.
+    if ((error as { code?: string }).code === '42P01') return
+    // eslint-disable-next-line no-console
+    console.error('[api/services/letters] version insert failed', { error, letterId })
+  }
+}
+
+/**
+ * Compose the dual-store body for a "fields updated" event.
+ * Returns null when `changedKeys` is empty (no-op patch).
+ */
+export function letterFieldsUpdatedBody(
+  changedKeys: string[],
+): { text_en: string; text_ar: string } | null {
+  if (changedKeys.length === 0) return null
+  const fieldLabels = changedKeys.map((k) => {
+    const labelKey = LETTER_FIELD_LABEL_KEYS[k] ?? k
+    return { en: labelKey, ar: labelKey } // renderBilingual resolves these per locale
+  })
+  // Build a bilingual comma-joined field list that resolves per locale.
+  const { text_en, text_ar } = renderBilingual('letters.letterFieldsUpdated', {
+    fields: {
+      en: fieldLabels.map((l) => l.en).join(', '),
+      ar: fieldLabels.map((l) => l.ar).join('، '),
+    },
+  })
+  return { text_en, text_ar }
 }
