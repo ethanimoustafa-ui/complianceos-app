@@ -180,7 +180,11 @@ function mapRow(row: ObservationApiRow, previous?: Observation): Observation {
 
 function toCreatePayload(
   data: Omit<Observation, 'id' | 'createdAt' | 'updatedAt'>,
-  reference: string,
+  // `reference` is intentionally dropped — the POST /api/observations route
+  // generates the reference server-side via `insertWithRefCode`. Sending it
+  // would cause a 400 (CreateObservationSchema uses .strict() and rejects
+  // unknown keys). W20-BUG-1 fix.
+  _reference: string,
 ): Record<string, unknown> {
   return {
     title: data.title,
@@ -191,7 +195,6 @@ function toCreatePayload(
     due_date: data.dueDate,
     remediation_submission_due: data.remediationSubmissionDueDate ?? undefined,
     department: data.department || undefined,
-    reference,
     leader_id: data.leaderId ?? undefined,
     framework_ids: data.frameworkIds ?? [],
   }

@@ -66,6 +66,7 @@ export function ObservationFilters({
             { id: 'zatca', label: t('observations.sources.zatca') },
             { id: 'misa', label: t('observations.sources.misa') },
             { id: 'safiu', label: t('observations.sources.safiu') },
+            { id: 'citc', label: t('observations.sources.citc') },
             { id: 'internal', label: t('observations.sources.internal') },
             { id: 'sharia', label: t('observations.sources.sharia') },
           ]}
