@@ -1,14 +1,15 @@
-// Advisory request store — Phase 5 server-state migration.
+// Advisory request store — W23 pattern-stack port.
 //
-// Read `.planning/09-store-pattern.md` before editing.
-// Endpoints: GET/POST /api/advisory, GET/PATCH/DELETE /api/advisory/[advisoryId]
-//
-// Reference numbers (ADV-NNNN) are server-generated on POST.
-//
-// SKELETON-LOADING NOTE: render skeleton when
-// `isLoading && advisoryRequests.length === 0` (first fetch). After the first
-// fetch a refetch shows stale data with a subtle indicator while
-// `isLoading === true`.
+// W23 PORTING-TEMPLATE §2 countermeasures applied:
+//   - ETag threading: every mapRow stores `updatedAt` from the API response; every
+//     mutation reads `byId[id].updatedAt` and sends it as `If-Match` (§2.12).
+//   - optimisticMutation: all mutations use the shared helper (§2.1 / GAP-14).
+//   - Hardened mapRow: notes/timeline/versions are read from the API embed first,
+//     fall back to previous only when embed is absent, `?? []` (§1.6.a / GAP-17).
+//   - toUpdatePayload: no server-generated columns in create payload, null-clears
+//     clearable fields (§2.3/§2.4).
+//   - Module-level EMPTY stable references for Zustand selectors (§3 / W19.7).
+//   - 412 conflict toast distinct from generic revert toast (W20 pattern).
 
 import { create } from 'zustand'
 import type {
@@ -16,13 +17,23 @@ import type {
   AdvisoryNote,
   AdvisoryFilters,
   AdvisoryStatus,
+  AdvisoryTimelineRow,
+  AdvisoryVersionRow,
   PaginationState,
   SortState,
   BusinessUnit,
   AdvisoryPriority,
 } from '@/types'
 import { api, ApiClientError } from '@/lib/api-client'
-import { newTempId } from '@/lib/optimistic'
+import { newTempId, optimisticMutation } from '@/lib/optimistic'
+
+// ── Module-level stable empty references (W19.7-BUG-1 fix) ──────────────────
+// NEVER write `useAdvisoryStore((s) => s.X ?? [])` inline — that allocates a
+// new array on every snapshot and triggers an infinite loop in React 18's
+// useSyncExternalStore. Use these module-level constants as the fallback.
+const EMPTY_NOTES: AdvisoryNote[] = []
+const EMPTY_TIMELINE: AdvisoryTimelineRow[] = []
+const EMPTY_VERSIONS: AdvisoryVersionRow[] = []
 
 // ---------- API row shapes (snake_case from Route Handlers) -----------------
 
@@ -41,6 +52,8 @@ interface AdvisoryApiRow {
   updated_at: string
   // Present on detail responses:
   notes?: AdvisoryNoteApiRow[]
+  timeline?: AdvisoryTimelineApiRow[]
+  versions?: AdvisoryVersionApiRow[]
 }
 
 interface AdvisoryNoteApiRow {
@@ -51,6 +64,33 @@ interface AdvisoryNoteApiRow {
   created_at: string
 }
 
+// W23 — dual-store timeline row shape from API
+interface AdvisoryTimelineApiRow {
+  id: string
+  advisory_id: string
+  text_en: string
+  text_ar: string
+  user_name: string
+  status: string
+  created_at: string
+}
+
+// W23 — dual-store version row shape from API
+interface AdvisoryVersionApiRow {
+  id: string
+  advisory_id: string
+  date: string
+  author: string
+  text_en: string
+  text_ar: string
+  field_changes: AdvisoryFieldChangeRow[] | null
+  created_at: string
+}
+
+type AdvisoryFieldChangeRow = { field: string; from: string; to: string }
+
+// Client-side types are re-exported from @/types — no need to redefine here.
+
 function mapNote(row: AdvisoryNoteApiRow): AdvisoryNote {
   return {
     id: row.id,
@@ -60,6 +100,34 @@ function mapNote(row: AdvisoryNoteApiRow): AdvisoryNote {
   }
 }
 
+function mapTimelineRow(row: AdvisoryTimelineApiRow): AdvisoryTimelineRow {
+  return {
+    id: row.id,
+    advisoryId: row.advisory_id,
+    textEn: row.text_en,
+    textAr: row.text_ar,
+    userName: row.user_name,
+    status: row.status,
+    createdAt: row.created_at,
+  }
+}
+
+function mapVersionRow(row: AdvisoryVersionApiRow): AdvisoryVersionRow {
+  return {
+    id: row.id,
+    advisoryId: row.advisory_id,
+    date: row.date,
+    author: row.author,
+    textEn: row.text_en,
+    textAr: row.text_ar,
+    fieldChanges: row.field_changes,
+    createdAt: row.created_at,
+  }
+}
+
+// §1.6.a hardened mapper — read GET embed first, fall back to previous only when
+// embed is absent, `?? []` (not `?? undefined`). This prevents the P1
+// mapper-drop (GAP-17) where a list response overwrites a detail-hydrated row.
 function mapRow(row: AdvisoryApiRow, previous?: AdvisoryRequest): AdvisoryRequest {
   return {
     id: row.id,
@@ -72,12 +140,22 @@ function mapRow(row: AdvisoryApiRow, previous?: AdvisoryRequest): AdvisoryReques
     requestedBy: row.requested_by,
     requestedDate: row.requested_date,
     assignedTo: row.assigned_to ?? undefined,
-    notes: row.notes ? row.notes.map(mapNote) : previous?.notes ?? [],
+    // §1.6.a: read embed first; fall back to previous when API doesn't embed the array
+    // (list response omits it); default to EMPTY stable reference (W19.7).
+    notes: row.notes ? row.notes.map(mapNote) : (previous?.notes ?? EMPTY_NOTES),
+    timeline: row.timeline
+      ? row.timeline.map(mapTimelineRow)
+      : (previous?.timeline ?? EMPTY_TIMELINE),
+    versions: row.versions
+      ? row.versions.map(mapVersionRow)
+      : (previous?.versions ?? EMPTY_VERSIONS),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }
 }
 
+// toCreatePayload — only user-supplied fields, NO server-generated columns
+// (W20-BUG-1: id/ref/created_at must NOT be sent in create payload when schema is .strict()).
 function toCreatePayload(
   data: Omit<AdvisoryRequest, 'id' | 'ref' | 'notes' | 'createdAt' | 'updatedAt'>,
 ): Record<string, unknown> {
@@ -93,6 +171,7 @@ function toCreatePayload(
   }
 }
 
+// toUpdatePayload — only changed fields; null passes through to clear columns (GAP-3).
 function toUpdatePayload(patch: Partial<AdvisoryRequest>): Record<string, unknown> {
   const out: Record<string, unknown> = {}
   if (patch.subject !== undefined) out.subject = patch.subject
@@ -102,7 +181,8 @@ function toUpdatePayload(patch: Partial<AdvisoryRequest>): Record<string, unknow
   if (patch.priority !== undefined) out.priority = patch.priority
   if (patch.requestedBy !== undefined) out.requested_by = patch.requestedBy
   if (patch.requestedDate !== undefined) out.requested_date = patch.requestedDate
-  if (patch.assignedTo !== undefined) out.assigned_to = patch.assignedTo || undefined
+  // null explicitly clears the assignee (GAP-3 / clearable field).
+  if ('assignedTo' in patch) out.assigned_to = patch.assignedTo ?? null
   return out
 }
 
@@ -122,7 +202,6 @@ interface AdvisoryState {
   pagination: PaginationState
   sort: SortState
 
-  // First-fetch detector: `isLoading && advisoryRequests.length === 0`.
   isLoading: boolean
   isMutating: boolean
   error: string | null
@@ -247,139 +326,207 @@ export const useAdvisoryStore = create<AdvisoryState>()((set, get) => ({
   },
 
   create: async (data) => {
-    // OPTIMISTIC: insert temp row immediately, swap with server row on success.
+    // GAP-14: optimistic insert — temp row immediately, swap with server row on success.
     const tempId = newTempId('temp-adv')
     const now = new Date().toISOString()
     const optimistic: AdvisoryRequest = {
       ...(data as Omit<AdvisoryRequest, 'id' | 'ref' | 'createdAt' | 'updatedAt'>),
       id: tempId,
       ref: '',
-      notes: [],
+      notes: EMPTY_NOTES,
       createdAt: now,
       updatedAt: now,
     } as AdvisoryRequest
-    set((state) => ({
-      advisoryRequests: [optimistic, ...state.advisoryRequests],
-      byId: { ...state.byId, [tempId]: optimistic },
-      isMutating: true,
-      error: null,
-    }))
-    try {
-      const row = await api.post<AdvisoryApiRow>('/advisory', toCreatePayload(data))
-      const created = mapRow(row)
-      set((state) => {
-        const { [tempId]: _drop, ...restById } = state.byId
-        return {
-          advisoryRequests: state.advisoryRequests.map((a) => (a.id === tempId ? created : a)),
-          byId: { ...restById, [created.id]: created },
-          isMutating: false,
-        }
-      })
-      void get().fetchAll()
-      return created
-    } catch (e) {
-      set((state) => {
-        const { [tempId]: _drop, ...rest } = state.byId
-        return {
-          advisoryRequests: state.advisoryRequests.filter((a) => a.id !== tempId),
-          byId: rest,
-          error: errorMessage(e, 'Failed to create advisory request'),
-          isMutating: false,
-        }
-      })
-      throw e
-    }
-  },
 
-  update: async (id, data) => {
-    // OPTIMISTIC: snapshot, apply patch, restore on failure.
-    const snapshot = get().byId[id]
-    if (snapshot) {
-      const optimistic: AdvisoryRequest = { ...snapshot, ...data, updatedAt: new Date().toISOString() }
-      set((state) => ({
-        advisoryRequests: state.advisoryRequests.map((a) => (a.id === id ? optimistic : a)),
-        byId: { ...state.byId, [id]: optimistic },
-        selectedRequest:
-          state.selectedRequest?.id === id ? optimistic : state.selectedRequest,
-        isMutating: true,
-        error: null,
-      }))
-    } else {
-      set({ isMutating: true, error: null })
-    }
-    try {
-      const row = await api.patch<AdvisoryApiRow>(`/advisory/${id}`, toUpdatePayload(data))
-      const previous = get().byId[id]
-      const updated = mapRow(row, previous)
-      set((state) => ({
-        advisoryRequests: state.advisoryRequests.map((a) => (a.id === id ? updated : a)),
-        byId: { ...state.byId, [id]: updated },
-        selectedRequest:
-          state.selectedRequest?.id === id ? updated : state.selectedRequest,
-        isMutating: false,
-      }))
-      return updated
-    } catch (e) {
-      if (snapshot) {
+    let created: AdvisoryRequest = optimistic
+
+    await optimisticMutation({
+      apply: () => {
         set((state) => ({
-          advisoryRequests: state.advisoryRequests.map((a) => (a.id === id ? snapshot : a)),
-          byId: { ...state.byId, [id]: snapshot },
-          selectedRequest:
-            state.selectedRequest?.id === id ? snapshot : state.selectedRequest,
-          error: errorMessage(e, 'Failed to update advisory request'),
-          isMutating: false,
+          advisoryRequests: [optimistic, ...state.advisoryRequests],
+          byId: { ...state.byId, [tempId]: optimistic },
+          isMutating: true,
+          error: null,
         }))
-      } else {
-        set({ error: errorMessage(e, 'Failed to update advisory request'), isMutating: false })
-      }
-      throw e
-    }
-  },
-
-  delete: async (id) => {
-    // OPTIMISTIC: remove immediately, restore on failure.
-    const snapshot = get().byId[id]
-    const prevIndex = get().advisoryRequests.findIndex((a) => a.id === id)
-    set((state) => {
-      const { [id]: _removed, ...rest } = state.byId
-      return {
-        advisoryRequests: state.advisoryRequests.filter((a) => a.id !== id),
-        byId: rest,
-        selectedRequest:
-          state.selectedRequest?.id === id ? null : state.selectedRequest,
-        isMutating: true,
-        error: null,
-      }
-    })
-    try {
-      await api.delete(`/advisory/${id}`)
-      set({ isMutating: false })
-    } catch (e) {
-      if (snapshot) {
+      },
+      request: async () => {
+        const row = await api.post<AdvisoryApiRow>('/advisory', toCreatePayload(data))
+        return mapRow(row)
+      },
+      reconcile: (real) => {
+        created = real
         set((state) => {
-          const list = [...state.advisoryRequests]
-          const insertAt = prevIndex >= 0 && prevIndex <= list.length ? prevIndex : list.length
-          list.splice(insertAt, 0, snapshot)
+          const { [tempId]: _drop, ...restById } = state.byId
           return {
-            advisoryRequests: list,
-            byId: { ...state.byId, [id]: snapshot },
-            error: errorMessage(e, 'Failed to delete advisory request'),
+            advisoryRequests: state.advisoryRequests.map((a) =>
+              a.id === tempId ? real : a,
+            ),
+            byId: { ...restById, [real.id]: real },
             isMutating: false,
           }
         })
-      } else {
-        set({ error: errorMessage(e, 'Failed to delete advisory request'), isMutating: false })
+        void get().fetchAll()
+      },
+      revert: () => {
+        set((state) => {
+          const { [tempId]: _drop, ...rest } = state.byId
+          return {
+            advisoryRequests: state.advisoryRequests.filter((a) => a.id !== tempId),
+            byId: rest,
+            isMutating: false,
+          }
+        })
+      },
+      context: 'advisory.create',
+    })
+
+    return created
+  },
+
+  update: async (id, data) => {
+    // §2.12 — read stored updatedAt as If-Match token.
+    const snapshot = get().byId[id]
+    const ifMatch = snapshot?.updatedAt
+
+    let updated: AdvisoryRequest = snapshot ?? ({ ...data, id } as AdvisoryRequest)
+
+    if (snapshot) {
+      const optimisticRow: AdvisoryRequest = {
+        ...snapshot,
+        ...data,
+        updatedAt: new Date().toISOString(),
       }
-      throw e
+
+      await optimisticMutation({
+        apply: () => {
+          set((state) => ({
+            advisoryRequests: state.advisoryRequests.map((a) =>
+              a.id === id ? optimisticRow : a,
+            ),
+            byId: { ...state.byId, [id]: optimisticRow },
+            selectedRequest:
+              state.selectedRequest?.id === id ? optimisticRow : state.selectedRequest,
+            isMutating: true,
+            error: null,
+          }))
+        },
+        request: async () => {
+          // Thread ETag so the route enforces optimistic concurrency (§2.12).
+          const headers: Record<string, string> = {}
+          if (ifMatch) headers['If-Match'] = `W/"${ifMatch}"`
+          const row = await api.patch<AdvisoryApiRow>(
+            `/advisory/${id}`,
+            toUpdatePayload(data),
+            headers,
+          )
+          return mapRow(row, get().byId[id])
+        },
+        reconcile: (real) => {
+          updated = real
+          set((state) => ({
+            advisoryRequests: state.advisoryRequests.map((a) =>
+              a.id === id ? real : a,
+            ),
+            byId: { ...state.byId, [id]: real },
+            selectedRequest:
+              state.selectedRequest?.id === id ? real : state.selectedRequest,
+            isMutating: false,
+          }))
+        },
+        revert: () => {
+          set((state) => ({
+            advisoryRequests: state.advisoryRequests.map((a) =>
+              a.id === id ? snapshot : a,
+            ),
+            byId: { ...state.byId, [id]: snapshot },
+            selectedRequest:
+              state.selectedRequest?.id === id ? snapshot : state.selectedRequest,
+            isMutating: false,
+          }))
+        },
+        // W20 — 412 conflict uses a specific toast key, not the generic revert.
+        errorMessage: (e) =>
+          e instanceof ApiClientError && e.status === 412
+            ? { key: 'regulatoryUpdates.conflictReload' }
+            : { key: 'regulatoryUpdates.optimisticRevert' },
+        context: 'advisory.update',
+      })
+    } else {
+      set({ isMutating: true, error: null })
+      try {
+        const row = await api.patch<AdvisoryApiRow>(
+          `/advisory/${id}`,
+          toUpdatePayload(data),
+        )
+        updated = mapRow(row)
+        set((state) => ({
+          advisoryRequests: state.advisoryRequests.map((a) =>
+            a.id === id ? updated : a,
+          ),
+          byId: { ...state.byId, [id]: updated },
+          selectedRequest:
+            state.selectedRequest?.id === id ? updated : state.selectedRequest,
+          isMutating: false,
+        }))
+      } catch (e) {
+        set({ error: errorMessage(e, 'Failed to update advisory request'), isMutating: false })
+        throw e
+      }
     }
+
+    return updated
+  },
+
+  delete: async (id) => {
+    // GAP-14: optimistic remove immediately, restore on failure.
+    const snapshot = get().byId[id]
+    const prevIndex = get().advisoryRequests.findIndex((a) => a.id === id)
+    const ifMatch = snapshot?.updatedAt
+
+    await optimisticMutation({
+      apply: () => {
+        set((state) => {
+          const { [id]: _removed, ...rest } = state.byId
+          return {
+            advisoryRequests: state.advisoryRequests.filter((a) => a.id !== id),
+            byId: rest,
+            selectedRequest:
+              state.selectedRequest?.id === id ? null : state.selectedRequest,
+            isMutating: true,
+            error: null,
+          }
+        })
+      },
+      request: async () => {
+        const headers: Record<string, string> = {}
+        if (ifMatch) headers['If-Match'] = `W/"${ifMatch}"`
+        return api.delete(`/advisory/${id}`, headers)
+      },
+      reconcile: () => {
+        set({ isMutating: false })
+      },
+      revert: () => {
+        if (snapshot) {
+          set((state) => {
+            const list = [...state.advisoryRequests]
+            const insertAt =
+              prevIndex >= 0 && prevIndex <= list.length ? prevIndex : list.length
+            list.splice(insertAt, 0, snapshot)
+            return {
+              advisoryRequests: list,
+              byId: { ...state.byId, [id]: snapshot },
+              isMutating: false,
+            }
+          })
+        } else {
+          set({ isMutating: false })
+        }
+      },
+      context: 'advisory.delete',
+    })
   },
 
   addNote: async (id, note) => {
-    // Fix-3 wave: notes now persist via `POST /api/advisory/[id]` which
-    // inserts into `advisory_notes`. The POST handler is co-located on the
-    // existing detail route file (the wave's supervisor forbade creating new
-    // Route Handler files). When a dedicated `/notes` sub-route is added in
-    // a later wave the endpoint here can switch without touching callers.
     set({ isMutating: true, error: null })
     try {
       const row = await api.post<AdvisoryNoteApiRow>(`/advisory/${id}`, {
@@ -390,7 +537,9 @@ export const useAdvisoryStore = create<AdvisoryState>()((set, get) => ({
       const nowIso = new Date().toISOString()
       set((state) => ({
         advisoryRequests: state.advisoryRequests.map((r) =>
-          r.id === id ? { ...r, notes: [...r.notes, created], updatedAt: nowIso } : r,
+          r.id === id
+            ? { ...r, notes: [...r.notes, created], updatedAt: nowIso }
+            : r,
         ),
         byId: state.byId[id]
           ? {
@@ -436,7 +585,8 @@ export const useAdvisoryStore = create<AdvisoryState>()((set, get) => ({
       pagination: {
         ...state.pagination,
         pageSize,
-        totalPages: pageSize > 0 ? Math.max(1, Math.ceil(state.pagination.total / pageSize)) : 1,
+        totalPages:
+          pageSize > 0 ? Math.max(1, Math.ceil(state.pagination.total / pageSize)) : 1,
       },
     })),
   clearError: () => set({ error: null }),

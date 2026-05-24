@@ -646,6 +646,29 @@ export interface AdvisoryNote {
   timestamp: string
 }
 
+// W23 — dual-store activity-log row (text_en + text_ar populated at write time).
+export interface AdvisoryTimelineRow {
+  id: string
+  advisoryId: string
+  textEn: string
+  textAr: string
+  userName: string
+  status: string
+  createdAt: string
+}
+
+// W23 — dual-store version-history row.
+export interface AdvisoryVersionRow {
+  id: string
+  advisoryId: string
+  date: string
+  author: string
+  textEn: string
+  textAr: string
+  fieldChanges: Array<{ field: string; from: string; to: string }> | null
+  createdAt: string
+}
+
 export interface AdvisoryRequest {
   id: string
   ref: string
@@ -658,6 +681,9 @@ export interface AdvisoryRequest {
   requestedDate: string
   assignedTo?: string
   notes: AdvisoryNote[]
+  // W23 additions — populated on detail responses.
+  timeline?: AdvisoryTimelineRow[]
+  versions?: AdvisoryVersionRow[]
   createdAt: string
   updatedAt: string
 }

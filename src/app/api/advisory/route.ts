@@ -1,4 +1,10 @@
 // /api/advisory — list + create advisory requests.
+//
+// W23 PORTING-TEMPLATE §2 countermeasures applied:
+//   - GET: cache:'no-store' (§2.2 — stale-read prevention). ETag not needed on list.
+//   - POST: CreateAdvisorySchema now .strict() (SEC-8). assertUuid guards advisory_id
+//     on sub-routes. Timeline row inserted at create time (dual-store).
+//   - No assertUuid needed here (no dynamic segment on the collection route).
 
 import type { NextRequest } from 'next/server'
 import { requirePerm, requireUser } from '@/lib/api/auth'
@@ -15,6 +21,7 @@ import {
 import {
   ADVISORY_LIST_COLUMNS,
   nextAdvisoryReference,
+  insertAdvisoryTimeline,
 } from '@/lib/api/services/advisory'
 
 export const runtime = 'nodejs'
@@ -37,7 +44,6 @@ export async function GET(req: NextRequest) {
     if (bu) query = query.eq('business_unit', bu)
     if (q.assigned_to) query = query.eq('assigned_to', q.assigned_to)
     if (q.q) query = query.ilike('subject', `%${q.q}%`)
-    // department_id is accepted but not stored on advisory_requests — no-op.
 
     const [from, to] = rangeFor(q.page, q.pageSize)
     const { data, error, count } = await query
@@ -45,8 +51,9 @@ export async function GET(req: NextRequest) {
       .range(from, to)
     if (error) throw error
 
+    // PORTING-TEMPLATE §2.2 — cache:'no-store' on entity reads.
     return ok(paginate(data ?? [], q.page, q.pageSize, count ?? 0), {
-      cache: { sMaxAge: 60, staleWhileRevalidate: 300, tags: [cacheTags.advisory()] },
+      cache: 'no-store',
     })
   } catch (e) {
     return handle(e)
@@ -87,15 +94,28 @@ export async function POST(req: NextRequest) {
     if (!inserted) throw lastError ?? NotFound('Insert returned no row')
 
     const created = inserted as { id: string; ref: string }
-    await writeAudit({
-      actor_id: user.id,
-      actor_name: profile.name ?? profile.email ?? user.id,
-      action: 'advisory.create',
-      entity_type: 'advisory_request',
-      entity_id: created.id,
-      metadata: { ref: created.ref, business_unit: input.business_unit },
-      supabase,
-    })
+    const actor = profile.name ?? profile.email ?? user.id
+
+    await Promise.all([
+      writeAudit({
+        actor_id: user.id,
+        actor_name: actor,
+        action: 'advisory.create',
+        entity_type: 'advisory_request',
+        entity_id: created.id,
+        metadata: { ref: created.ref, business_unit: input.business_unit },
+        supabase,
+      }),
+      // W23 P6 — dual-store timeline row for "created" event.
+      insertAdvisoryTimeline(
+        supabase,
+        created.id,
+        'advisory.requestCreated',
+        {},
+        actor,
+        'created',
+      ),
+    ])
 
     revalidate(cacheTags.advisory())
     return ok(inserted, { status: 201 })

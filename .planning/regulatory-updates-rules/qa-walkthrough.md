@@ -3590,3 +3590,111 @@ read-side hardening wave.
   data-conflict risk; adding If-Match would be mechanical but not valuable without a
   UI surface that races on archive state. Deferred.
 - For the security probe: any existing observation UUID via `--observation=<uuid>`.
+
+---
+
+## W23 — Advisory Port (full pattern stack)
+
+**Date:** 2026-05-24
+**Migration:** `066_advisory_pattern_stack.sql` — applied to `qdbitfgxbnbzkqhdoepd`
+**Commit:** `feat(advisory): W23 port — full pattern stack`
+
+### Scope
+
+Full feature-parity port of `/correspondence/advisory` to the W18→W22 pattern stack:
+ETag/If-Match optimistic locking, dual-store i18n timeline + version history, activity-log
+writer with locale-translated labels, `.strict()` schemas, `optimisticMutation` on every
+store mutation, and two new tables (`advisory_timeline`, `advisory_versions`).
+
+### Files changed
+
+| Category | Files |
+|---|---|
+| Migration | `supabase/migrations/066_advisory_pattern_stack.sql` |
+| API schemas | `src/lib/api/schemas/advisory.ts` |
+| API service | `src/lib/api/services/advisory.ts` |
+| API routes | `src/app/api/advisory/route.ts`, `src/app/api/advisory/[advisoryId]/route.ts` |
+| Store | `src/stores/advisory-store.ts` |
+| Types | `src/types/index.ts` |
+| i18n | `src/i18n/dictionaries/en.json`, `ar.json` (15 new advisory keys each) |
+| Probes | `tests/probes/advisory-security.ts` (new), `tests/probes/advisory-live-post.ts` (new), `tests/probes/auth-bypass.ts` (6 new advisory endpoints) |
+| E2E | `tests/e2e/wave-23-advisory.spec.ts` (new, 13 serial tests) |
+
+### Pattern-stack checklist
+
+| Pattern | Status |
+|---|---|
+| ETag/If-Match (GET → 412 stale → 200 fresh) | ✅ verified live |
+| `.maybeSingle()` post-UPDATE (W22 sub-pattern) | ✅ |
+| `UpdateAdvisorySchema` hand-written (never `.partial()`) | ✅ |
+| `.strict()` on Create + Update + Note schemas (SEC-8) | ✅ |
+| `stripHtml` on all free-text fields via local `PlainText` helpers (SEC-4) | ✅ |
+| `assertUuid` on `[advisoryId]` (SEC-5) | ✅ |
+| Status/Priority `.transform(s => s.toLowerCase())` (W21-BUG-A) | ✅ verified live |
+| `null` pass-through for `assigned_to` clearable (GAP-3) | ✅ |
+| Dual-store timeline `text_en`/`text_ar` via `renderBilingual` (P6) | ✅ |
+| Dual-store version history `advisory_versions` (Wave-19.4) | ✅ |
+| `ADVISORY_FIELD_LABEL_KEYS` i18n key map for per-field diffs (§3) | ✅ |
+| Module-level stable Zustand empty refs `EMPTY_NOTES/TIMELINE/VERSIONS` (W19.7) | ✅ |
+| `optimisticMutation` on create/update/delete (GAP-14) | ✅ |
+| 412 conflict message key `regulatoryUpdates.conflictReload` in store | ✅ |
+| `cache: 'no-store'` on all entity GETs (§2.2) | ✅ |
+| Best-effort 42P01 guards on timeline/version inserts | ✅ |
+| `nextAdvisoryReference` uses admin client to bypass RLS (soft-deleted rows visible) | ✅ |
+
+### Bugs discovered and fixed during W23
+
+**Bug W23-A — POST 500: `nextAdvisoryReference` generated colliding ref via RLS**
+
+The `advisory_requests` SELECT policy filters `deleted_at IS NULL`. The user client sees
+only non-deleted rows, so a soft-deleted `ADV-0002` was invisible → function generated
+`ADV-0002` again → Postgres 23505 unique violation on `advisory_requests_ref_key`.
+Fix: `nextAdvisoryReference` uses `getAdminClient()` (bypasses RLS) when the service role
+key is available. The same soft-deleted-row visibility problem doesn't affect letters
+(SELECT policy is `true`) or observations/circulars (no deleted rows in this env).
+
+**Bug W23-B — DELETE 500: soft-delete UPDATE blocked by Postgres SELECT-as-implicit-WITH-CHECK**
+
+Postgres applies the SELECT USING expression as an implicit WITH CHECK on the post-UPDATE
+row. The existing `advisory_requests_select` policy was `deleted_at IS NULL`. The moment
+the soft-delete UPDATE set `deleted_at = now()`, the resulting row failed the SELECT
+predicate and the whole statement aborted with `42501`. This is identical to the bug
+fixed for `circulars`, `policies`, `calendar_events` in migration 039.
+Fix (migration 066): broadened SELECT policy to:
+`deleted_at IS NULL OR has_permission('edit') OR has_permission('delete')`.
+
+### Live HTTP smoke results
+
+All 10 checks passed (2026-05-24):
+
+| Check | Result |
+|---|---|
+| POST /api/advisory → 201 | ✅ `ADV-0005`, id present, ref starts with `ADV-` |
+| GET /api/advisory/{id} → 200 + ETag | ✅ ETag header present |
+| PATCH stale If-Match → 412 | ✅ |
+| PATCH fresh If-Match → 200 + description updated | ✅ |
+| PATCH uppercase `COMPLETED`/`HIGH` → 200 (casing audit) | ✅ |
+| SEC-5 UUID `/api/advisory/not-a-uuid` → 400 | ✅ |
+| SEC-8 unknown key on POST → 400 | ✅ |
+| Note POST /api/advisory/{id} → 201 | ✅ |
+| DELETE /api/advisory/{id} → 200 + `deleted: true` | ✅ |
+| GET after DELETE → 404 | ✅ |
+
+### Verification exit codes
+
+- `npx tsc --noEmit` → **exit 0** (clean)
+- `npx vitest run` → **108/108 passing** (baseline maintained)
+- Live smoke (browser_evaluate authenticated session) → **10/10 PASSED**
+- Auth-bypass probe: 6 new advisory endpoints return 401 unauthenticated (manual verify)
+
+### Deferred
+
+- **W24 — Advisory feed** — out of scope per instructions.
+- **W25 — Advisory registry** — out of scope per instructions.
+- **Playwright E2E `wave-23-advisory.spec.ts`** — 13-test spec written and in repo.
+  The Playwright runner in the CI environment uses the AR locale; `robustSignIn` helper
+  handles Arabic button text. The spec exercises list EN/AR, create, GET+ETag, PATCH
+  stale/fresh, versions, timeline dual-store, note add, casing audit, SEC-5, SEC-8, DELETE.
+  Full runner pass deferred until CI is available (sign-in works with manual session but
+  Playwright-native session may need cookie injection).
+

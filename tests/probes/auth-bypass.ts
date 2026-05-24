@@ -150,6 +150,13 @@ const ENDPOINTS: Endpoint[] = [
   { method: 'POST',   path: `/api/letters/${C}/mark-response-received`, body: {} },
   { method: 'POST',   path: `/api/letters/${C}/archive`, body: {} },
   { method: 'POST',   path: `/api/letters/${C}/unarchive`, body: {} },
+  // Wave-23 — Advisory surface — auth gate must be the first check.
+  { method: 'GET',    path: `/api/advisory` },
+  { method: 'POST',   path: `/api/advisory`, body: {} },
+  { method: 'GET',    path: `/api/advisory/${C}` },
+  { method: 'PATCH',  path: `/api/advisory/${C}`, body: {} },
+  { method: 'DELETE', path: `/api/advisory/${C}` },
+  { method: 'POST',   path: `/api/advisory/${C}`, body: {} },
   // Wave-22 — Correspondence hub — auth gate must be the first check.
   { method: 'GET',    path: `/api/correspondence` },
   { method: 'POST',   path: `/api/correspondence`, body: {} },
