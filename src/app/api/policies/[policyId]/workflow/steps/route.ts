@@ -6,7 +6,7 @@ import type { NextRequest } from 'next/server'
 import { requirePerm, requireUser } from '@/lib/api/auth'
 import { handle, NotFound } from '@/lib/api/errors'
 import { ok } from '@/lib/api/response'
-import { assertUuid, parseJson } from '@/lib/api/validate'
+import { parseJson } from '@/lib/api/validate'
 import { cacheTags, revalidateAll } from '@/lib/api/cache'
 import { writeAudit } from '@/lib/api/audit'
 import { CreatePolicyWorkflowStepSchema } from '@/lib/api/schemas/policies'
@@ -25,10 +25,10 @@ type Params = { params: Promise<{ policyId: string }> }
 
 export async function GET(_req: NextRequest, { params }: Params) {
   try {
-    const { policyId } = await params
-    assertUuid(policyId)
+    const { policyId: policyIdParam } = await params
     const { supabase } = await requireUser()
-    await assertPolicyExists(supabase, policyId)
+    // W26-C: accepts UUID or ref_code → canonical UUID.
+    const policyId = await assertPolicyExists(supabase, policyIdParam)
 
     const { data, error } = await supabase
       .from('policy_workflow_steps')
@@ -45,10 +45,10 @@ export async function GET(_req: NextRequest, { params }: Params) {
 
 export async function POST(req: NextRequest, { params }: Params) {
   try {
-    const { policyId } = await params
-    assertUuid(policyId)
+    const { policyId: policyIdParam } = await params
     const { supabase, user, profile } = await requirePerm('edit')
-    const uuid = await assertPolicyExists(supabase, policyId)
+    // W26-C: accepts UUID or ref_code → canonical UUID.
+    const uuid = await assertPolicyExists(supabase, policyIdParam)
     const input = await parseJson(req, CreatePolicyWorkflowStepSchema)
     const actor = profile.name ?? profile.email ?? user.id
 

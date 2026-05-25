@@ -11,7 +11,7 @@ import type { NextRequest } from 'next/server'
 import { requirePerm } from '@/lib/api/auth'
 import { handle, NotFound, Conflict } from '@/lib/api/errors'
 import { ok } from '@/lib/api/response'
-import { assertUuid, parseJson } from '@/lib/api/validate'
+import { parseJson } from '@/lib/api/validate'
 import { cacheTags, revalidate, revalidateAll } from '@/lib/api/cache'
 import { writeAudit } from '@/lib/api/audit'
 import { AdvancePolicyWorkflowSchema } from '@/lib/api/schemas/policies'
@@ -30,10 +30,10 @@ type Params = { params: Promise<{ policyId: string }> }
 
 export async function POST(req: NextRequest, { params }: Params) {
   try {
-    const { policyId } = await params
-    assertUuid(policyId)
+    const { policyId: policyIdParam } = await params
+    // W26-C param parity: assertPolicyExists now accepts UUID or ref_code.
     const { supabase, user, profile } = await requirePerm('settings:edit')
-    await assertPolicyExists(supabase, policyId)
+    const policyId = await assertPolicyExists(supabase, policyIdParam)
     const input = await parseJson(req, AdvancePolicyWorkflowSchema)
 
     const actor = input.user_name ?? profile.name ?? profile.email ?? user.id

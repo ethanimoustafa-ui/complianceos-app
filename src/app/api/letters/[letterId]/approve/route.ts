@@ -24,12 +24,13 @@ import type { NextRequest } from 'next/server'
 import { requirePerm } from '@/lib/api/auth'
 import { Conflict, handle, NotFound } from '@/lib/api/errors'
 import { ok } from '@/lib/api/response'
-import { assertUuid, parseJson } from '@/lib/api/validate'
+import { parseJson } from '@/lib/api/validate'
 import { cacheTags, revalidateAll } from '@/lib/api/cache'
 import { writeAudit } from '@/lib/api/audit'
 import { z } from 'zod'
 import {
   LETTER_LIST_COLUMNS,
+  assertLetterExists,
   insertLetterTimeline,
 } from '@/lib/api/services/letters'
 
@@ -46,9 +47,10 @@ type Params = { params: Promise<{ letterId: string }> }
 
 export async function POST(req: NextRequest, { params }: Params) {
   try {
-    const { letterId } = await params
-    assertUuid(letterId)
+    const { letterId: letterIdParam } = await params
+    // W26-C param parity: resolve UUID or reference → canonical UUID.
     const { supabase, user, profile } = await requirePerm('edit')
+    const letterId = await assertLetterExists(supabase, letterIdParam)
     const body = await parseJson(req, ApproveLetterSchema)
 
     // W17.2 atomic conditional UPDATE: include status guard so a concurrent
@@ -64,8 +66,7 @@ export async function POST(req: NextRequest, { params }: Params) {
 
     if (error) throw error
 
-    // If the UPDATE matched 0 rows, the letter either doesn't exist or is not
-    // in pending-approval status. Distinguish the two cases.
+    // If the UPDATE matched 0 rows, the letter is not in pending-approval status.
     if (!data) {
       // Read the current status to surface the right error.
       const { data: current } = await supabase

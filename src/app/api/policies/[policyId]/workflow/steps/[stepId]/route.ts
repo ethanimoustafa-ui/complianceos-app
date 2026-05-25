@@ -21,6 +21,7 @@ import {
   recomputePolicyStatus,
   writePolicyActivity,
 } from '@/lib/api/services/policies'
+// W26-C: policyId may be UUID or ref_code; stepId is always UUID (no reference column on steps).
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -31,7 +32,8 @@ type Params = { params: Promise<{ policyId: string; stepId: string }> }
 export async function GET(_req: NextRequest, { params }: Params) {
   try {
     const { policyId, stepId } = await params
-    assertUuid(policyId, stepId)
+    // stepId is always a UUID; policyId may be UUID or ref_code (W26-C).
+    assertUuid(stepId)
     const { supabase } = await requireUser()
     const uuid = await assertPolicyExists(supabase, policyId)
     const row = await assertPolicyWorkflowStepExists(supabase, uuid, stepId)
@@ -45,7 +47,8 @@ export async function GET(_req: NextRequest, { params }: Params) {
 export async function PATCH(req: NextRequest, { params }: Params) {
   try {
     const { policyId, stepId } = await params
-    assertUuid(policyId, stepId)
+    // stepId is always a UUID; policyId may be UUID or ref_code (W26-C).
+    assertUuid(stepId)
     const { supabase, user, profile } = await requirePerm('edit')
     const uuid = await assertPolicyExists(supabase, policyId)
     const prev = await assertPolicyWorkflowStepExists(supabase, uuid, stepId)
@@ -120,7 +123,8 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 export async function DELETE(req: NextRequest, { params }: Params) {
   try {
     const { policyId, stepId } = await params
-    assertUuid(policyId, stepId)
+    // stepId is always a UUID; policyId may be UUID or ref_code (W26-C).
+    assertUuid(stepId)
     const { supabase, user, profile } = await requirePerm('edit')
     const uuid = await assertPolicyExists(supabase, policyId)
     const prev = await assertPolicyWorkflowStepExists(supabase, uuid, stepId)

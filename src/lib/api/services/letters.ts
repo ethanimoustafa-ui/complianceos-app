@@ -72,18 +72,28 @@ export function computeResponseDeadline(type: string, from: Date = new Date()): 
 
 // ---------- existence guard --------------------------------------------------
 
+// UUID v4-ish detector. The store may pass either a real UUID or a human
+// reference like `SAMA-NOB-2026-0001`. We probe the right column
+// accordingly and always return the canonical UUID.
+const LETTER_UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+// W26-C: accepts UUID OR reference string so transition-route siblings
+// (approve, reject, send, …) handle both param shapes — mirroring
+// assertObservationExists in services/observations.ts.
 export async function assertLetterExists(
   supabase: SupabaseClient,
-  letterId: string,
+  letterIdOrRef: string,
 ): Promise<string> {
+  const column = LETTER_UUID_RE.test(letterIdOrRef) ? 'id' : 'reference'
   const { data, error } = await supabase
     .from('letters')
     .select('id')
-    .eq('id', letterId)
+    .eq(column, letterIdOrRef)
     .is('deleted_at', null)
     .maybeSingle<{ id: string }>()
   if (error) throw error
-  if (!data) throw NotFound(`Letter ${letterId} not found`)
+  if (!data) throw NotFound(`Letter ${letterIdOrRef} not found`)
   return data.id
 }
 

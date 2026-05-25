@@ -19,6 +19,7 @@ import { useAuthStore } from '@/stores/auth-store'
 import { calculateComplianceReviewScore } from '@/lib/compliance-review-score'
 import { paginate } from '@/lib/pagination'
 import { ListSkeleton, CardSkeleton } from '@/components/ui/skeleton'
+import { formatLocalizedDate } from '@/lib/format-date'
 
 // Color/icon channels are static; the user-visible label comes from i18n
 // (`verdictLabelKeys`). Keeping these split avoids a per-render translate
@@ -47,7 +48,7 @@ interface ChecklistItem {
 const PAGE_SIZE = 10
 
 export default function ComplianceReviewPage() {
-  const { t, isRTL } = useTranslation()
+  const { t, isRTL, language } = useTranslation()
   const pathname = usePathname()
   const router = useRouter()
   const { circulars } = useCircularStore()
@@ -452,7 +453,7 @@ export default function ComplianceReviewPage() {
                             <p className="text-[10px] text-slate-400 mt-1">
                               {t('complianceReview.lastMarkedBy', {
                                 name: evaluation.evaluatedBy ?? t('inlineDeadlinePicker.unknown'),
-                                date: new Date(evaluation.evaluatedAt).toLocaleDateString(),
+                                date: formatLocalizedDate(evaluation.evaluatedAt, language),
                               })}
                             </p>
                           ) : isDerived ? (

@@ -7,11 +7,11 @@ import type { NextRequest } from 'next/server'
 import { requirePerm } from '@/lib/api/auth'
 import { Conflict, handle, NotFound } from '@/lib/api/errors'
 import { ok } from '@/lib/api/response'
-import { assertUuid } from '@/lib/api/validate'
 import { cacheTags, revalidateAll } from '@/lib/api/cache'
 import { writeAudit } from '@/lib/api/audit'
 import {
   LETTER_LIST_COLUMNS,
+  assertLetterExists,
   computeResponseDeadline,
   insertLetterTimeline,
 } from '@/lib/api/services/letters'
@@ -23,9 +23,10 @@ type Params = { params: Promise<{ letterId: string }> }
 
 export async function POST(_req: NextRequest, { params }: Params) {
   try {
-    const { letterId } = await params
-    assertUuid(letterId)
+    const { letterId: letterIdParam } = await params
+    // W26-C param parity: resolve UUID or reference → canonical UUID.
     const { supabase, user, profile } = await requirePerm('edit')
+    const letterId = await assertLetterExists(supabase, letterIdParam)
 
     const { data: current, error: readErr } = await supabase
       .from('letters')

@@ -50,13 +50,7 @@ export async function GET(req: NextRequest) {
         ...((pols ?? []) as { id: string }[]).map((r) => r.id),
       ]
       if (ids.length === 0) {
-        return ok(paginate([], q.page, q.pageSize, 0), {
-          cache: {
-            sMaxAge: 60,
-            staleWhileRevalidate: 300,
-            tags: [cacheTags.evaluations()],
-          },
-        })
+        return ok(paginate([], q.page, q.pageSize, 0), { cache: 'no-store' })
       }
       query = query.in('item_id', ids)
     }
@@ -66,13 +60,7 @@ export async function GET(req: NextRequest) {
       .order('evaluated_at', { ascending: false, nullsFirst: false })
       .range(from, to)
     if (error) throw error
-    return ok(paginate(data ?? [], q.page, q.pageSize, count ?? 0), {
-      cache: {
-        sMaxAge: 60,
-        staleWhileRevalidate: 300,
-        tags: [cacheTags.evaluations()],
-      },
-    })
+    return ok(paginate(data ?? [], q.page, q.pageSize, count ?? 0), { cache: 'no-store' })
   } catch (e) {
     return handle(e)
   }

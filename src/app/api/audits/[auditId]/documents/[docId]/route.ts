@@ -1,4 +1,5 @@
 // /api/audits/[auditId]/documents/[docId] — delete a single audit document.
+// W26-A: assertUuid on both params + dual-store timeline.
 //
 // Note: this only removes the metadata row. Storage cleanup (deleting the
 // blob at `storage_path`) is intentionally deferred — a Phase 6+ background
@@ -9,11 +10,13 @@ import type { NextRequest } from 'next/server'
 import { requirePerm } from '@/lib/api/auth'
 import { handle, NotFound } from '@/lib/api/errors'
 import { ok } from '@/lib/api/response'
+import { assertUuid } from '@/lib/api/validate'
 import { cacheTags, revalidateAll } from '@/lib/api/cache'
-import { writeAudit, writeAuditActivity } from '@/lib/api/audit'
+import { writeAudit } from '@/lib/api/audit'
 import {
   AUDIT_DOCUMENT_COLUMNS,
   assertAuditExists,
+  insertAuditTimeline,
 } from '@/lib/api/services/audits'
 
 export const runtime = 'nodejs'
@@ -24,6 +27,8 @@ type Params = { params: Promise<{ auditId: string; docId: string }> }
 export async function DELETE(_req: NextRequest, { params }: Params) {
   try {
     const { auditId, docId } = await params
+    // SEC-5: validate both route params.
+    assertUuid(auditId, docId)
     const { supabase, user, profile } = await requirePerm('audit:edit')
     await assertAuditExists(supabase, auditId)
 
@@ -38,23 +43,25 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
     if (!data) throw NotFound(`Document ${docId} not found`)
 
     const removed = data as { name: string }
-    await Promise.all([
+    const actorName = profile.name ?? profile.email ?? user.id
+    void Promise.all([
       writeAudit({
         actor_id: user.id,
-        actor_name: profile.name ?? profile.email ?? user.id,
+        actor_name: actorName,
         action: 'audit.document.delete',
         entity_type: 'audit_document',
         entity_id: docId,
         metadata: { audit_id: auditId, name: removed.name },
         supabase,
       }),
-      writeAuditActivity({
-        audit_id: auditId,
+      insertAuditTimeline({
+        auditId,
         action: 'document.removed',
-        description: `Document removed: ${removed.name}`,
-        user_id: user.id,
-        user_name: profile.name ?? profile.email ?? user.id,
-        metadata: { document_id: docId, name: removed.name },
+        i18nKey: 'auditDetail.activityRemovedDocument',
+        params: { name: removed.name },
+        userId: user.id,
+        userName: actorName,
+        metadata: { document_id: docId },
         supabase,
       }),
     ])

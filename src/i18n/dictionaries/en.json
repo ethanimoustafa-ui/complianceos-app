@@ -1266,7 +1266,24 @@
     "stepReviewInitiated": "Review Initiated"
   },
   "audits": {
-    "owner": "Owner"
+    "owner": "Owner",
+    "field": {
+      "title": "Title",
+      "description": "Description",
+      "status": "Status",
+      "priority": "Priority",
+      "type": "Audit Type",
+      "category": "Category",
+      "frequency": "Frequency",
+      "dueDate": "Due Date",
+      "assignee": "Lead Auditor",
+      "frameworks": "Frameworks",
+      "progress": "Progress"
+    },
+    "activity": {
+      "fieldsUpdated": "Audit updated — {{fields}}"
+    },
+    "versionHistory": "Version History"
   },
   "riskRegister": {
     "critical": "Critical",
@@ -2653,6 +2670,8 @@
     "activityCreatedAudit": "Created new audit: {{title}}",
     "activityUpdatedAudit": "Updated audit: {{title}}",
     "activityUploadedDocument": "Uploaded document: {{name}}",
+    "activityRemovedDocument": "Removed document: {{name}}",
+    "activityRemovedTeamMember": "Removed team member",
     "activityAddedComment": "Added comment: \"{{comment}}\"",
     "activityEditedComment": "Edited comment: \"{{comment}}\"",
     "activityDeletedComment": "Deleted comment: \"{{comment}}\"",

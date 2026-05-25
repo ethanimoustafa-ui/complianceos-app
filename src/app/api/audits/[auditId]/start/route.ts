@@ -1,12 +1,14 @@
 // POST /api/audits/[auditId]/start — transition status pending → in_progress.
+// W26-A: assertUuid + dual-store timeline.
 
 import type { NextRequest } from 'next/server'
 import { requirePerm } from '@/lib/api/auth'
 import { handle, NotFound, Conflict } from '@/lib/api/errors'
 import { ok } from '@/lib/api/response'
+import { assertUuid } from '@/lib/api/validate'
 import { cacheTags, revalidate, revalidateAll } from '@/lib/api/cache'
-import { writeAudit, writeAuditActivity } from '@/lib/api/audit'
-import { AUDIT_LIST_COLUMNS } from '@/lib/api/services/audits'
+import { writeAudit } from '@/lib/api/audit'
+import { AUDIT_LIST_COLUMNS, insertAuditTimeline } from '@/lib/api/services/audits'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -16,13 +18,15 @@ type Params = { params: Promise<{ auditId: string }> }
 export async function POST(_req: NextRequest, { params }: Params) {
   try {
     const { auditId } = await params
+    // SEC-5: validate route param before any DB access.
+    assertUuid(auditId)
     const { supabase, user, profile } = await requirePerm('audit:edit')
 
     const { data: current, error: readErr } = await supabase
       .from('audits')
-      .select('id, status')
+      .select('id, status, title')
       .eq('id', auditId)
-      .maybeSingle<{ id: string; status: string }>()
+      .maybeSingle<{ id: string; status: string; title: string }>()
     if (readErr) throw readErr
     if (!current) throw NotFound(`Audit ${auditId} not found`)
     if (current.status === 'in_progress') return ok({ id: auditId, status: 'in_progress' })
@@ -38,21 +42,24 @@ export async function POST(_req: NextRequest, { params }: Params) {
       .single()
     if (error || !data) throw error ?? NotFound('Transition returned no row')
 
-    await Promise.all([
+    const actorName = profile.name ?? profile.email ?? user.id
+
+    void Promise.all([
       writeAudit({
         actor_id: user.id,
-        actor_name: profile.name ?? profile.email ?? user.id,
+        actor_name: actorName,
         action: 'audit.start',
         entity_type: 'audit',
         entity_id: auditId,
         supabase,
       }),
-      writeAuditActivity({
-        audit_id: auditId,
+      insertAuditTimeline({
+        auditId,
         action: 'started',
-        description: 'Audit started',
-        user_id: user.id,
-        user_name: profile.name ?? profile.email ?? user.id,
+        i18nKey: 'auditDetail.activityStatusChanged',
+        params: { from: current.status, to: 'in_progress' },
+        userId: user.id,
+        userName: actorName,
         supabase,
       }),
     ])

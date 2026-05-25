@@ -157,6 +157,14 @@ const ENDPOINTS: Endpoint[] = [
   { method: 'PATCH',  path: `/api/advisory/${C}`, body: {} },
   { method: 'DELETE', path: `/api/advisory/${C}` },
   { method: 'POST',   path: `/api/advisory/${C}`, body: {} },
+  // Wave-26 — Reports / Compliance-evaluations surface.
+  { method: 'GET',    path: `/api/reports/compliance-evaluations` },
+  { method: 'POST',   path: `/api/reports/compliance-evaluations`, body: {} },
+  { method: 'GET',    path: `/api/reports/compliance-evaluations/rule:${C}::${C}` },
+  { method: 'PATCH',  path: `/api/reports/compliance-evaluations/rule:${C}::${C}`, body: {} },
+  { method: 'DELETE', path: `/api/reports/compliance-evaluations/rule:${C}::${C}` },
+  { method: 'POST',   path: `/api/reports/compliance-evaluations/bulk`, body: {} },
+  { method: 'GET',    path: `/api/reports/compliance-evaluations/score-summary` },
   // Wave-22 — Correspondence hub — auth gate must be the first check.
   { method: 'GET',    path: `/api/correspondence` },
   { method: 'POST',   path: `/api/correspondence`, body: {} },

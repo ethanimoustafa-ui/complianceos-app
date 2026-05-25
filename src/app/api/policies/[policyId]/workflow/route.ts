@@ -1,12 +1,12 @@
 // GET /api/policies/[policyId]/workflow — list workflow steps.
 // POST is exposed at /workflow/advance (see sibling route).
-// Wave-18: assertUuid + no-store.
+// Wave-18: assertPolicyExists + no-store.
+// W26-C: policyId may be UUID or ref_code (param parity audit).
 
 import type { NextRequest } from 'next/server'
 import { requireUser } from '@/lib/api/auth'
 import { handle } from '@/lib/api/errors'
 import { ok } from '@/lib/api/response'
-import { assertUuid } from '@/lib/api/validate'
 import {
   POLICY_WORKFLOW_STEP_COLUMNS,
   assertPolicyExists,
@@ -19,10 +19,10 @@ type Params = { params: Promise<{ policyId: string }> }
 
 export async function GET(_req: NextRequest, { params }: Params) {
   try {
-    const { policyId } = await params
-    assertUuid(policyId)
+    const { policyId: policyIdParam } = await params
     const { supabase } = await requireUser()
-    await assertPolicyExists(supabase, policyId)
+    // W26-C: accepts UUID or ref_code → canonical UUID.
+    const policyId = await assertPolicyExists(supabase, policyIdParam)
 
     const { data, error } = await supabase
       .from('policy_workflow_steps')

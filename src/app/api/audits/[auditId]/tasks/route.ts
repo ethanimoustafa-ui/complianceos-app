@@ -1,15 +1,16 @@
 // /api/audits/[auditId]/tasks — collection of tasks for an audit.
+// W26-A: assertUuid + dual-store timeline.
 
 import type { NextRequest } from 'next/server'
 import { requirePerm, requireUser } from '@/lib/api/auth'
 import { handle, NotFound } from '@/lib/api/errors'
 import { ok, paginate } from '@/lib/api/response'
-import { parseJson } from '@/lib/api/validate'
+import { parseJson, assertUuid } from '@/lib/api/validate'
 import { parsePagination, rangeFor } from '@/lib/api/pagination'
 import { cacheTags, revalidate, revalidateAll } from '@/lib/api/cache'
-import { writeAudit, writeAuditActivity } from '@/lib/api/audit'
+import { writeAudit } from '@/lib/api/audit'
 import { CreateAuditTaskSchema } from '@/lib/api/schemas/audits'
-import { assertAuditExists } from '@/lib/api/services/audits'
+import { assertAuditExists, insertAuditTimeline } from '@/lib/api/services/audits'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -22,6 +23,7 @@ type Params = { params: Promise<{ auditId: string }> }
 export async function GET(req: NextRequest, { params }: Params) {
   try {
     const { auditId } = await params
+    assertUuid(auditId)
     const { supabase } = await requireUser()
     await assertAuditExists(supabase, auditId)
 
@@ -48,6 +50,7 @@ export async function GET(req: NextRequest, { params }: Params) {
 export async function POST(req: NextRequest, { params }: Params) {
   try {
     const { auditId } = await params
+    assertUuid(auditId)
     const { supabase, user, profile } = await requirePerm('audit:edit')
     await assertAuditExists(supabase, auditId)
     const input = await parseJson(req, CreateAuditTaskSchema)
@@ -69,22 +72,24 @@ export async function POST(req: NextRequest, { params }: Params) {
     if (error || !data) throw error ?? NotFound('Insert returned no row')
 
     const created = data as { id: string }
-    await Promise.all([
+    const actorName = profile.name ?? profile.email ?? user.id
+    void Promise.all([
       writeAudit({
         actor_id: user.id,
-        actor_name: profile.name ?? profile.email ?? user.id,
+        actor_name: actorName,
         action: 'audit.task.create',
         entity_type: 'audit_task',
         entity_id: created.id,
         metadata: { audit_id: auditId, title: input.title },
         supabase,
       }),
-      writeAuditActivity({
-        audit_id: auditId,
+      insertAuditTimeline({
+        auditId,
         action: 'task.created',
-        description: `Task added: ${input.title}`,
-        user_id: user.id,
-        user_name: profile.name ?? profile.email ?? user.id,
+        i18nKey: 'auditDetail.activityCreatedTask',
+        params: { title: input.title },
+        userId: user.id,
+        userName: actorName,
         supabase,
       }),
     ])

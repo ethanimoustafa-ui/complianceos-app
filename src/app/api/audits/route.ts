@@ -1,11 +1,13 @@
 // /api/audits — collection endpoint.
 //
 //   GET  /api/audits?page&pageSize&status&framework_id&department_id&priority
-//   POST /api/audits           body: CreateAuditSchema
+//   POST /api/audits  body: CreateAuditSchema
 //
-// RLS handles row-level access; this handler enforces auth + create perm and
-// validates input. Mutations write `audit_logs` + `audit_activity_logs` and
-// revalidate the `audits:list` tag.
+// W26-A pattern stack:
+//   §2.2  cache: 'no-store' on GET
+//   §2.13 no assertUuid on collection (no dynamic segment)
+//   §2.11 dual-store activity log via insertAuditTimeline
+//   §2.3  CreateAuditSchema is strict + HTML-stripped + open-string enums
 
 import type { NextRequest } from 'next/server'
 import { requirePerm, requireUser } from '@/lib/api/auth'
@@ -14,12 +16,12 @@ import { ok, paginate } from '@/lib/api/response'
 import { parseJson } from '@/lib/api/validate'
 import { rangeFor } from '@/lib/api/pagination'
 import { cacheTags, revalidate } from '@/lib/api/cache'
-import { writeAudit, writeAuditActivity } from '@/lib/api/audit'
+import { writeAudit } from '@/lib/api/audit'
 import {
   CreateAuditSchema,
   ListAuditsQuerySchema,
 } from '@/lib/api/schemas/audits'
-import { AUDIT_LIST_COLUMNS } from '@/lib/api/services/audits'
+import { AUDIT_LIST_COLUMNS, insertAuditTimeline } from '@/lib/api/services/audits'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -27,9 +29,6 @@ export const dynamic = 'force-dynamic'
 export async function GET(req: NextRequest) {
   try {
     const { supabase } = await requireUser()
-    // safeParse + ValidationFailed → 400 on bad input. Using `.parse()` here
-    // would throw a raw ZodError which `handle()` collapses to a 500 — see
-    // policies wave's Zod query-parse 500 finding.
     const parsed = ListAuditsQuerySchema.safeParse(
       Object.fromEntries(req.nextUrl.searchParams.entries()),
     )
@@ -48,10 +47,6 @@ export async function GET(req: NextRequest) {
     if (q.assignee_id) query = query.eq('assignee_id', q.assignee_id)
     if (q.framework_id) query = query.contains('framework_ids', [q.framework_id])
     if (q.q) query = query.ilike('title', `%${q.q}%`)
-    // department_id is not on `audits` directly in current schema; the join via
-    // `profiles.department_id = audits.assignee_id` is the intended path. Until
-    // a stored department column or view exists, this filter resolves through
-    // the assignee. Stage B may add a denormalized `department_id` column.
     if (q.department_id) {
       const { data: members } = await supabase
         .from('profiles')
@@ -59,8 +54,9 @@ export async function GET(req: NextRequest) {
         .eq('department_id', q.department_id)
       const ids = (members ?? []).map((r) => (r as { id: string }).id)
       if (ids.length === 0) {
+        // W26-A §2.2: no-store on GET.
         return ok(paginate([], q.page, q.pageSize, 0), {
-          cache: { sMaxAge: 60, staleWhileRevalidate: 300, tags: [cacheTags.audits()] },
+          headers: { 'Cache-Control': 'no-store' },
         })
       }
       query = query.in('assignee_id', ids)
@@ -72,8 +68,9 @@ export async function GET(req: NextRequest) {
       .range(from, to)
     if (error) throw error
 
+    // W26-A §2.2: cache: 'no-store' — entity reads must never use sMaxAge.
     return ok(paginate(data ?? [], q.page, q.pageSize, count ?? 0), {
-      cache: { sMaxAge: 60, staleWhileRevalidate: 300, tags: [cacheTags.audits()] },
+      headers: { 'Cache-Control': 'no-store' },
     })
   } catch (e) {
     return handle(e)
@@ -83,6 +80,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const { supabase, user, profile } = await requirePerm('audit:create')
+    // W26-A: CreateAuditSchema is now strict + HTML-stripped + open-string enums.
     const input = await parseJson(req, CreateAuditSchema)
 
     const { data, error } = await supabase
@@ -91,9 +89,9 @@ export async function POST(req: NextRequest) {
         title: input.title,
         description: input.description ?? null,
         type: input.type,
-        framework_ids: input.framework_ids,
+        framework_ids: input.framework_ids ?? [],
         category: input.category ?? null,
-        priority: input.priority,
+        priority: input.priority ?? 'medium',
         due_date: input.due_date,
         assignee_id: input.assignee_id ?? null,
         frequency: input.frequency ?? null,
@@ -103,23 +101,27 @@ export async function POST(req: NextRequest) {
       .single()
     if (error || !data) throw error ?? NotFound('Insert returned no row')
 
-    const created = data as { id: string }
+    const created = data as { id: string; title: string }
+    const actorName = profile.name ?? profile.email ?? user.id
+
+    // Fire-and-forget: dual-store activity log + compliance audit log.
     await Promise.all([
       writeAudit({
         actor_id: user.id,
-        actor_name: profile.name ?? profile.email ?? user.id,
+        actor_name: actorName,
         action: 'audit.create',
         entity_type: 'audit',
         entity_id: created.id,
         metadata: { title: input.title, type: input.type },
         supabase,
       }),
-      writeAuditActivity({
-        audit_id: created.id,
+      insertAuditTimeline({
+        auditId: created.id,
         action: 'created',
-        description: `Audit created: ${input.title}`,
-        user_id: user.id,
-        user_name: profile.name ?? profile.email ?? user.id,
+        i18nKey: 'auditDetail.activityCreatedAudit',
+        params: { title: created.title },
+        userId: user.id,
+        userName: actorName,
         supabase,
       }),
     ])

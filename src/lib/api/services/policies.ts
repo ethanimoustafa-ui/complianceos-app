@@ -45,14 +45,23 @@ export const POLICY_EVIDENCE_COLUMNS =
 
 // --- assertions --------------------------------------------------------------
 
+// UUID v4-ish detector. The store maps policy.id to `ref_code || id` on
+// some paths, so this helper accepts either a real UUID or a human reference
+// like `POL-2026-0001`. We probe the right column accordingly and always
+// return the canonical UUID — mirrors assertObservationExists in
+// services/observations.ts (W26-C param-parity audit).
+const POLICY_UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
 export async function assertPolicyExists(
   supabase: SupabaseClient,
   policyId: string,
 ): Promise<string> {
+  const column = POLICY_UUID_RE.test(policyId) ? 'id' : 'ref_code'
   const { data, error } = await supabase
     .from('policies')
     .select('id')
-    .eq('id', policyId)
+    .eq(column, policyId)
     .is('deleted_at', null)
     .maybeSingle<{ id: string }>()
   if (error) throw error

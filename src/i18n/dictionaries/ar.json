@@ -1266,7 +1266,24 @@
     "stepReviewInitiated": "بدء المراجعة"
   },
   "audits": {
-    "owner": "المسؤول"
+    "owner": "المسؤول",
+    "field": {
+      "title": "العنوان",
+      "description": "الوصف",
+      "status": "الحالة",
+      "priority": "الأولوية",
+      "type": "نوع التدقيق",
+      "category": "الفئة",
+      "frequency": "التكرار",
+      "dueDate": "تاريخ الاستحقاق",
+      "assignee": "المدقق الرئيسي",
+      "frameworks": "الأطر التنظيمية",
+      "progress": "التقدم"
+    },
+    "activity": {
+      "fieldsUpdated": "تم تحديث التدقيق — {{fields}}"
+    },
+    "versionHistory": "سجل الإصدارات"
   },
   "riskRegister": {
     "critical": "حرج",
@@ -2653,6 +2670,8 @@
     "activityCreatedAudit": "تم إنشاء تدقيق جديد: {{title}}",
     "activityUpdatedAudit": "تم تحديث التدقيق: {{title}}",
     "activityUploadedDocument": "تم رفع مستند: {{name}}",
+    "activityRemovedDocument": "تم حذف مستند: {{name}}",
+    "activityRemovedTeamMember": "تم إزالة عضو الفريق",
     "activityAddedComment": "تمت إضافة تعليق: \"{{comment}}\"",
     "activityEditedComment": "تم تعديل التعليق: \"{{comment}}\"",
     "activityDeletedComment": "تم حذف التعليق: \"{{comment}}\"",
