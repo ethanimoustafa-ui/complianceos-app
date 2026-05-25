@@ -290,7 +290,7 @@ export const useTeamStore = create<TeamState>()((set, get) => ({
         updated = mapProfileRow(row, get().byId[id])
       } else {
         // Local-only fields (assignments/accessControls/burnoutSince) — patch
-        // in-memory without hitting the API.
+        // in-memory without hitting the API (unless accessControls changed).
         const existing = get().byId[id]
         if (!existing) throw new Error('Team member not found')
         updated = { ...existing }
@@ -298,7 +298,16 @@ export const useTeamStore = create<TeamState>()((set, get) => ({
 
       // Merge client-only fields the API doesn't yet persist.
       if (data.assignments !== undefined) updated.assignments = data.assignments
-      if (data.accessControls !== undefined) updated.accessControls = data.accessControls
+      if (data.accessControls !== undefined) {
+        updated.accessControls = data.accessControls
+        // I1: persist accessControls toggles to user_permissions via the
+        // permissions endpoint so backend requirePerm() checks are enforced.
+        const permsPayload: Record<string, boolean> = {}
+        for (const ac of data.accessControls) {
+          permsPayload[ac.label] = ac.enabled
+        }
+        await api.patch(`/team/members/${id}/permissions`, { permissions: permsPayload })
+      }
       if (data.burnoutSince !== undefined) updated.burnoutSince = data.burnoutSince
       if (data.department !== undefined) updated.department = data.department
       if (data.avatar !== undefined) updated.avatar = data.avatar

@@ -228,7 +228,7 @@ function errorMessage(e: unknown, fallback: string): string {
 
 interface ObservationState {
   observations: Observation[]
-  byId: Record<string, Observation>
+  byId: Record<string, ObservationWithComments>
   selectedObservation: ObservationWithComments | null
   filters: ObservationFilters
   pagination: PaginationState
@@ -357,8 +357,8 @@ export const useObservationStore = create<ObservationState>()((set, get) => ({
       }>('/observations', { page: 1, pageSize: 100 })
       const previousById = get().byId
       const observations = result.items.map((r) => mapRow(r, previousById[r.reference || r.id]))
-      const byId: Record<string, Observation> = {}
-      for (const o of observations) byId[o.id] = o
+      const byId: Record<string, ObservationWithComments> = {}
+      for (const o of observations) byId[o.id] = o as ObservationWithComments
       set({
         observations,
         byId,
@@ -884,9 +884,19 @@ export const useObservationStore = create<ObservationState>()((set, get) => ({
                 timeline: [timelineEntry, ...(selectedObservation.timeline || [])],
               }
             }
+            // B1 fix: also update byId so the modal's useEffect (which syncs
+            // from storeObservation / byId) reflects the new comment immediately
+            // without requiring a page refresh.
             const previous = state.byId[observationId]
             const byId = previous
-              ? { ...state.byId, [observationId]: { ...previous, timeline: [timelineEntry, ...(previous.timeline || [])] } }
+              ? {
+                  ...state.byId,
+                  [observationId]: {
+                    ...previous,
+                    comments: [...(previous.comments || []), optimisticComment],
+                    timeline: [timelineEntry, ...(previous.timeline || [])],
+                  },
+                }
               : state.byId
             return { observations, byId, selectedObservation, isMutating: true, error: null }
           })
@@ -911,7 +921,19 @@ export const useObservationStore = create<ObservationState>()((set, get) => ({
                 ),
               }
             }
-            return { selectedObservation, isMutating: false }
+            const prevById = state.byId[observationId]
+            const byId = prevById && newComment
+              ? {
+                  ...state.byId,
+                  [observationId]: {
+                    ...prevById,
+                    comments: prevById.comments?.map((c) =>
+                      c.id === tempId && newComment ? newComment : c,
+                    ),
+                  },
+                }
+              : state.byId
+            return { selectedObservation, byId, isMutating: false }
           })
         },
         revert: () => {
@@ -1391,7 +1413,22 @@ export const useObservationStore = create<ObservationState>()((set, get) => ({
                 timeline: [timelineEntry, ...(selectedObservation.timeline || [])],
               }
             }
-            return { observations, selectedObservation }
+            // B2 fix: also update byId so the activity timeline reflects the
+            // toggle immediately without a page refresh
+            const prevByIdEntry = state.byId[observationId]
+            const byId = prevByIdEntry
+              ? {
+                  ...state.byId,
+                  [observationId]: {
+                    ...prevByIdEntry,
+                    checklist: prevByIdEntry.checklist?.map((i) =>
+                      i.id === itemId ? { ...i, completed } : i,
+                    ),
+                    timeline: [timelineEntry, ...(prevByIdEntry.timeline || [])],
+                  },
+                }
+              : state.byId
+            return { observations, selectedObservation, byId }
           })
         },
         request: async () => {

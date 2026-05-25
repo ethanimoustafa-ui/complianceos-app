@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import Link from 'next/link'
 import { Icon } from '@iconify/react'
 import { Modal } from '@/components/ui/modal'
 import { Button } from '@/components/ui/button'
@@ -112,12 +113,23 @@ export function TransferLeadershipModal({
             </div>
           </>
         ) : (
+          // K1: empty-state with link to Settings so users know where to add team members.
           <div className="text-center py-8">
             <Icon icon="lucide:users" className="text-4xl text-slate-300 mx-auto mb-3" />
-            <p className="text-sm text-slate-500">
+            <p className="text-sm font-bold text-slate-700 mb-2">
               {t('observations.detail.noTeamMembersToTransfer')}
             </p>
-            <Button variant="ghost" onClick={handleClose} className="mt-4">
+            <p className="text-xs text-slate-500 mb-6">
+              {t('observations.detail.noTeamMembersToTransferHint')}{' '}
+              <Link
+                href="/settings"
+                onClick={handleClose}
+                className="text-emerald-600 hover:text-emerald-700 font-medium underline underline-offset-2"
+              >
+                {t('navigation.settings')}
+              </Link>
+            </p>
+            <Button variant="ghost" onClick={handleClose}>
               {t('common.close')}
             </Button>
           </div>

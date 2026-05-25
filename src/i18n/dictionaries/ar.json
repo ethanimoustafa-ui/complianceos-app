@@ -53,7 +53,9 @@
     "progress": "التقدم",
     "unassigned": "غير معين",
     "viewFullDetail": "فتح التفاصيل الكاملة",
-    "note": "ملاحظة"
+    "note": "ملاحظة",
+    "loadMore": "تحميل المزيد",
+    "more": "المزيد"
   },
   "navigation": {
     "dashboard": "لوحة التحكم",
@@ -556,7 +558,12 @@
     "letterSentToAuthority": "تم الإرسال إلى {{authority}}",
     "pendingAuthorityReply": "بانتظار رد {{authority}}",
     "statusSentToAuthority": "تم الإرسال إلى الجهة",
-    "selectDepartment": "اختر إدارة..."
+    "selectDepartment": "اختر إدارة...",
+    "no_attachment": "لا توجد مرفقات بعد",
+    "noAttachments": "لا توجد مرفقات بعد",
+    "delete": "حذف",
+    "deleteLetter": "حذف الرسالة",
+    "loadMore": "تحميل المزيد"
   },
   "observations": {
     "observation": "الملاحظة",
@@ -710,7 +717,8 @@
       "noLeader": "لم يتم تعيين قائد",
       "transferLeadership": "نقل القيادة",
       "transferLeadershipDescription": "اختر عضواً في الفريق لنقل القيادة إليه",
-      "noTeamMembersToTransfer": "لا يوجد أعضاء فريق متاحين لنقل القيادة إليهم",
+      "noTeamMembersToTransfer": "لا يوجد أعضاء فريق متاحين لنقل القيادة إليهم.",
+      "noTeamMembersToTransferHint": "أضف أعضاء الفريق في",
       "remediationPlan": "خطة المعالجة",
       "remediationStatus": {
         "draft": "مسودة",
@@ -1656,6 +1664,8 @@
     "createNewTemplate": "إنشاء قالب جديد",
     "buildReusableTemplate": "بناء قالب تدقيق قابل لإعادة الاستخدام",
     "templateNamePlaceholder": "مثال: المراجعة الأمنية الشهرية",
+    "templateIcon": "أيقونة القالب",
+    "selectedIcon": "المحدد",
     "describePurposeScope": "وصف الغرض والنطاق لهذا القالب...",
     "configureFramework": "تكوين",
     "adjustFrameworkSettings": "ضبط إعدادات الإطار والحدود",
@@ -2335,7 +2345,9 @@
     "viewRegistry": "عرض السجل",
     "reference": "المرجع",
     "phase": "المرحلة",
-    "articles": "المواد"
+    "articles": "المواد",
+    "correspondenceDeleted": "تم حذف المراسلة",
+    "deleteFailed": "فشل الحذف — يرجى المحاولة مرة أخرى"
   },
   "advisory": {
     "title": "طلبات الاستشارة",

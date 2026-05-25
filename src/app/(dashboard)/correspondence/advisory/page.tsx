@@ -1,7 +1,7 @@
 ﻿'use client'
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
-import { usePathname, useSearchParams } from 'next/navigation'
+import { useRouter, usePathname, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { Icon } from '@iconify/react'
 import { Modal } from '@/components/ui/modal'
@@ -40,6 +40,7 @@ function Toast({ message, onClose }: { message: string; onClose: () => void }) {
 
 export default function AdvisoryPage() {
   const { t, isRTL, language } = useTranslation()
+  const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
 
@@ -98,6 +99,8 @@ export default function AdvisoryPage() {
   // Advisory detail state
   const [newNoteContent, setNewNoteContent] = useState('')
   const [isDeleteAdvisoryOpen, setIsDeleteAdvisoryOpen] = useState(false)
+  // H4: Load More for advisory notes thread (default 5 visible)
+  const [notesVisible, setNotesVisible] = useState(5)
 
   // Advisory reassign
   const [reassignTarget, setReassignTarget] = useState('')
@@ -167,14 +170,18 @@ export default function AdvisoryPage() {
     setAdvisoryPage(1)
   }, [advisorySearchTerm, advisoryStatusFilter, advisoryPriorityFilter, advisoryBusinessUnitFilter, advisoryFrequencyFilter])
 
-  // Deep-link: auto-open advisory when ?id= is present
+  // Deep-link: auto-open advisory when ?id= is present.
+  // J1 fix: guard with isAdvisoryDetailOpen so the effect does NOT refire
+  // when advisoryRequests reconciles after fetchAll — without this guard the
+  // modal would reopen immediately after the user closes it because the URL
+  // still carries ?id= and the dep array change triggers the effect again.
   useEffect(() => {
     const id = searchParams.get('id')
-    if (!id) return
+    if (!id || isAdvisoryDetailOpen) return
     const advisory = advisoryStore.advisoryRequests.find(r => r.id === id)
     if (advisory) handleViewAdvisory(advisory)
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchParams, advisoryStore.advisoryRequests])
+  }, [searchParams, advisoryStore.advisoryRequests, isAdvisoryDetailOpen])
 
   // Advisory status config
   const advisoryStatusConfig: Record<AdvisoryStatus, { bg: string; text: string; labelKey: string }> = {
@@ -219,6 +226,24 @@ export default function AdvisoryPage() {
       if (fresh) setSelectedAdvisory(fresh)
     }).catch(() => { /* best-effort hydrate */ })
   }
+
+  // J1 fix: close handler that also strips ?id= from the URL so the deep-link
+  // useEffect does not refire and reopen the modal after advisoryRequests reconciles.
+  const handleCloseAdvisoryDetail = useCallback(() => {
+    setIsAdvisoryDetailOpen(false)
+    setNewNoteContent('')
+    if (searchParams.get('id')) {
+      router.replace(pathname)
+    }
+  }, [searchParams, router, pathname])
+
+  // A2 fix: assignedTo is stored as a UUID; resolve to display name from team store.
+  // Falls back to the raw value so pre-fix rows (stored as name strings) still render.
+  const resolveAssigneeName = useCallback((assignedTo: string | undefined): string | undefined => {
+    if (!assignedTo) return undefined
+    const member = teamStore.members.find((m) => m.id === assignedTo)
+    return member ? member.name : assignedTo
+  }, [teamStore.members])
 
   return (
     <div className={`flex flex-col h-full overflow-hidden ${isRTL ? 'rtl' : ''}`}>
@@ -450,7 +475,7 @@ export default function AdvisoryPage() {
                       {advisory.assignedTo && (
                         <div className={`flex items-center gap-2 bg-emerald-50 px-3 py-1.5 rounded-lg`}>
                           <Icon icon="lucide:user-check" className="text-emerald-600 text-sm" />
-                          <span className="text-xs font-bold text-emerald-700">{advisory.assignedTo}</span>
+                          <span className="text-xs font-bold text-emerald-700">{resolveAssigneeName(advisory.assignedTo)}</span>
                         </div>
                       )}
                       <Icon icon={isRTL ? 'lucide:chevron-left' : 'lucide:chevron-right'} className="text-slate-400 text-xl" />
@@ -583,10 +608,11 @@ export default function AdvisoryPage() {
               <label className={`text-xs font-bold text-slate-700 uppercase mb-2 block ${isRTL ? 'text-right' : ''}`}>
                 {t('advisory.assignedTo' as TranslationKey)}
               </label>
+              {/* A2 fix: use m.id (UUID) not m.name so assigned_to passes Uuid validation */}
               <EditableSelect
                 value={newAdvAssignedTo || null}
                 onChange={(id) => setNewAdvAssignedTo(id)}
-                items={teamStore.members.map((m) => ({ id: m.name, label: m.name }))}
+                items={teamStore.members.map((m) => ({ id: m.id, label: m.name }))}
                 placeholder="—"
                 isRTL={isRTL}
               />
@@ -648,7 +674,7 @@ export default function AdvisoryPage() {
       {/* Advisory Detail Modal */}
       <Modal
         isOpen={isAdvisoryDetailOpen}
-        onClose={() => { setIsAdvisoryDetailOpen(false); setNewNoteContent('') }}
+        onClose={handleCloseAdvisoryDetail}
         title={selectedAdvisory?.subject || t('advisory.requestDetails')}
         subtitle={selectedAdvisory ? `REF: ${selectedAdvisory.ref}` : undefined}
         size="lg"
@@ -682,7 +708,7 @@ export default function AdvisoryPage() {
               {selectedAdvisory.assignedTo && (
                 <div className={`bg-emerald-50 p-4 rounded-lg ${isRTL ? 'text-right' : ''}`}>
                   <p className="text-xs font-bold text-emerald-600 uppercase mb-1">{t('advisory.assignedTo')}</p>
-                  <p className="text-sm font-bold text-slate-900">{selectedAdvisory.assignedTo}</p>
+                  <p className="text-sm font-bold text-slate-900">{resolveAssigneeName(selectedAdvisory.assignedTo)}</p>
                 </div>
               )}
             </div>
@@ -700,8 +726,8 @@ export default function AdvisoryPage() {
                 {t('advisory.discussionThread')} ({selectedAdvisory.notes.length})
               </h4>
               {selectedAdvisory.notes.length > 0 ? (
-                <div className="space-y-3 max-h-48 overflow-y-auto">
-                  {selectedAdvisory.notes.map((note) => (
+                <div className="space-y-3">
+                  {selectedAdvisory.notes.slice(0, notesVisible).map((note) => (
                     <div key={note.id} className={`bg-slate-50 p-4 rounded-lg border-l-4 border-emerald-500 ${isRTL ? 'text-right border-l-0 border-r-4' : ''}`}>
                       <div className={`flex justify-between items-start mb-2`}>
                         <span className="text-xs font-bold text-slate-900">{note.author}</span>
@@ -710,6 +736,16 @@ export default function AdvisoryPage() {
                       <p className="text-sm text-slate-600">{note.content}</p>
                     </div>
                   ))}
+                  {/* H4: Load More for advisory notes */}
+                  {selectedAdvisory.notes.length > notesVisible && (
+                    <button
+                      type="button"
+                      onClick={() => setNotesVisible((n) => n + 5)}
+                      className={`text-xs font-bold text-emerald-600 hover:text-emerald-700 transition-colors cursor-pointer ${isRTL ? 'text-right w-full' : ''}`}
+                    >
+                      {t('common.loadMore')} ({selectedAdvisory.notes.length - notesVisible} {t('common.more')})
+                    </button>
+                  )}
                 </div>
               ) : (
                 <p className={`text-sm text-slate-400 ${isRTL ? 'text-right' : ''}`}>{t('advisory.noNotes')}</p>
@@ -753,7 +789,7 @@ export default function AdvisoryPage() {
                     onClick={() => {
                       advisoryStore.updateStatus(selectedAdvisory.id, 'completed')
                       setSelectedAdvisory({ ...selectedAdvisory, status: 'completed' })
-                      setIsAdvisoryDetailOpen(false)
+                      handleCloseAdvisoryDetail()
                       showToast(t('advisory.statusUpdated'))
                     }}
                     className={`flex-1 bg-emerald-600 text-white py-3 rounded-lg font-bold hover:bg-emerald-700 transition-colors flex items-center justify-center gap-2 cursor-pointer`}
@@ -772,7 +808,7 @@ export default function AdvisoryPage() {
                           showToast(t('advisory.assignmentUpdated'))
                         }
                       }}
-                      items={teamStore.members.filter((m) => m.status === 'active').map((m) => ({ id: m.name, label: m.name }))}
+                      items={teamStore.members.filter((m) => m.status === 'active').map((m) => ({ id: m.id, label: m.name }))}
                       placeholder={t('advisory.selectAssignee')}
                       isRTL={isRTL}
                     />
@@ -786,7 +822,7 @@ export default function AdvisoryPage() {
                 {t('common.delete')}
               </button>
               <button
-                onClick={() => { setIsAdvisoryDetailOpen(false); setNewNoteContent('') }}
+                onClick={handleCloseAdvisoryDetail}
                 className="px-6 bg-slate-100 text-slate-700 py-3 rounded-lg font-bold hover:bg-slate-200 transition-colors cursor-pointer"
               >
                 {t('common.close')}
@@ -804,7 +840,7 @@ export default function AdvisoryPage() {
           if (selectedAdvisory) {
             advisoryStore.delete(selectedAdvisory.id)
             setSelectedAdvisory(null)
-            setIsAdvisoryDetailOpen(false)
+            handleCloseAdvisoryDetail()
             setIsDeleteAdvisoryOpen(false)
             showToast(t('advisory.requestDeleted'))
           }

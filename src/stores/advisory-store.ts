@@ -54,6 +54,8 @@ interface AdvisoryApiRow {
   notes?: AdvisoryNoteApiRow[]
   timeline?: AdvisoryTimelineApiRow[]
   versions?: AdvisoryVersionApiRow[]
+  // F1: list responses embed a PostgREST count aggregate: [{count:N}]
+  advisory_notes?: Array<{ count: number } | AdvisoryNoteApiRow>
 }
 
 interface AdvisoryNoteApiRow {
@@ -129,6 +131,24 @@ function mapVersionRow(row: AdvisoryVersionApiRow): AdvisoryVersionRow {
 // embed is absent, `?? []` (not `?? undefined`). This prevents the P1
 // mapper-drop (GAP-17) where a list response overwrites a detail-hydrated row.
 function mapRow(row: AdvisoryApiRow, previous?: AdvisoryRequest): AdvisoryRequest {
+  // F1: when the list response includes advisory_notes:[{count:N}] (PostgREST
+  // aggregate embed), synthesise N stub note objects so advisory.notes.length
+  // returns the correct count for the list-row badge without a full detail fetch.
+  let resolvedNotes: AdvisoryNote[]
+  if (row.notes) {
+    // Full detail embed — map normally.
+    resolvedNotes = row.notes.map(mapNote)
+  } else if (row.advisory_notes && row.advisory_notes.length === 1 && 'count' in row.advisory_notes[0]) {
+    // List-level count embed: build count-many stub notes so .length is correct.
+    const n = (row.advisory_notes[0] as { count: number }).count
+    resolvedNotes = n > 0
+      ? Array.from({ length: n }, (_, i) => previous?.notes?.[i] ?? { id: `stub-${i}`, author: '', content: '', timestamp: '' })
+      : (previous?.notes ?? EMPTY_NOTES)
+  } else {
+    // No embed present — fall back to previously-fetched notes.
+    resolvedNotes = previous?.notes ?? EMPTY_NOTES
+  }
+
   return {
     id: row.id,
     ref: row.ref,
@@ -142,7 +162,7 @@ function mapRow(row: AdvisoryApiRow, previous?: AdvisoryRequest): AdvisoryReques
     assignedTo: row.assigned_to ?? undefined,
     // §1.6.a: read embed first; fall back to previous when API doesn't embed the array
     // (list response omits it); default to EMPTY stable reference (W19.7).
-    notes: row.notes ? row.notes.map(mapNote) : (previous?.notes ?? EMPTY_NOTES),
+    notes: resolvedNotes,
     timeline: row.timeline
       ? row.timeline.map(mapTimelineRow)
       : (previous?.timeline ?? EMPTY_TIMELINE),

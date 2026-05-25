@@ -53,7 +53,9 @@
     "progress": "Progress",
     "unassigned": "Unassigned",
     "viewFullDetail": "Open Full Detail",
-    "note": "Note"
+    "note": "Note",
+    "loadMore": "Load more",
+    "more": "more"
   },
   "navigation": {
     "dashboard": "Dashboard",
@@ -556,7 +558,12 @@
     "letterSentToAuthority": "Sent to {{authority}}",
     "pendingAuthorityReply": "Pending {{authority}} reply",
     "statusSentToAuthority": "Sent to authority",
-    "selectDepartment": "Select department..."
+    "selectDepartment": "Select department...",
+    "no_attachment": "No attachments yet",
+    "noAttachments": "No attachments yet",
+    "delete": "Delete",
+    "deleteLetter": "Delete letter",
+    "loadMore": "Load more"
   },
   "observations": {
     "observation": "observation",
@@ -710,7 +717,8 @@
       "noLeader": "No leader assigned",
       "transferLeadership": "Transfer Leadership",
       "transferLeadershipDescription": "Select a team member to transfer leadership to",
-      "noTeamMembersToTransfer": "No team members available to transfer leadership to",
+      "noTeamMembersToTransfer": "No team members available to transfer leadership to.",
+      "noTeamMembersToTransferHint": "Add team members in",
       "remediationPlan": "Remediation Plan",
       "remediationStatus": {
         "draft": "Draft",
@@ -1656,6 +1664,8 @@
     "createNewTemplate": "Create New Template",
     "buildReusableTemplate": "Build a reusable audit template",
     "templateNamePlaceholder": "e.g., Monthly Security Review",
+    "templateIcon": "Template Icon",
+    "selectedIcon": "Selected",
     "describePurposeScope": "Describe the purpose and scope of this template...",
     "configureFramework": "Configure",
     "adjustFrameworkSettings": "Adjust framework settings and thresholds",
@@ -2335,7 +2345,9 @@
     "viewRegistry": "View Registry",
     "reference": "Reference",
     "phase": "Phase",
-    "articles": "Articles"
+    "articles": "Articles",
+    "correspondenceDeleted": "Correspondence deleted",
+    "deleteFailed": "Delete failed — please try again"
   },
   "advisory": {
     "title": "Advisory Requests",

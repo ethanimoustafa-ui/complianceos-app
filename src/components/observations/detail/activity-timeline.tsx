@@ -1,11 +1,14 @@
 'use client'
 
-import { memo, useMemo } from 'react'
+import { memo, useMemo, useState } from 'react'
 import { useTranslation } from '@/i18n'
 import { formatTimelineDate } from '@/lib/format-date'
 import { dicebearAvatar } from '@/lib/avatar'
 import { Skeleton } from '@/components/ui/skeleton'
 import type { ObservationTimelineEntry } from '@/types'
+
+// H4: default number of timeline entries visible before "Load More".
+const TIMELINE_PAGE_SIZE = 5
 
 export interface ActivityTimelineProps {
   timeline: ObservationTimelineEntry[]
@@ -23,6 +26,8 @@ export const ActivityTimeline = memo(function ActivityTimeline({
   isLoaded = true,
 }: ActivityTimelineProps) {
   const { t } = useTranslation()
+  // H4: track how many entries to show; reset to default when timeline changes.
+  const [visibleCount, setVisibleCount] = useState(TIMELINE_PAGE_SIZE)
 
   // Newest-first. The store appends most entries at index 0 already, but
   // re-sort defensively in case mixed sources interleave older rows.
@@ -66,7 +71,7 @@ export const ActivityTimeline = memo(function ActivityTimeline({
         <p className="text-xs text-slate-400 italic">{t('auditDetail.noActivityYet')}</p>
       ) : (
         <div className={`space-y-3 ${isRTL ? 'border-r-2 mr-1 pr-4' : 'border-l-2 ml-1 pl-4'} border-slate-200`}>
-          {sorted.map((event, index) => {
+          {sorted.slice(0, visibleCount).map((event, index) => {
             // Prefer absolute formatTimelineDate; legacy local rows fall back
             // to translated dateKey.
             const formattedDate = event.dateKey
@@ -127,6 +132,16 @@ export const ActivityTimeline = memo(function ActivityTimeline({
               </div>
             )
           })}
+          {/* H4: Load More button — shown when there are hidden entries */}
+          {sorted.length > visibleCount && (
+            <button
+              type="button"
+              onClick={() => setVisibleCount((n) => n + TIMELINE_PAGE_SIZE)}
+              className={`mt-2 text-xs font-bold text-emerald-600 hover:text-emerald-700 transition-colors cursor-pointer ${isRTL ? 'text-right' : 'text-left'}`}
+            >
+              {t('common.loadMore')} ({sorted.length - visibleCount} {t('common.more')})
+            </button>
+          )}
         </div>
       )}
     </div>

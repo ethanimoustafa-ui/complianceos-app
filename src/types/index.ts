@@ -1441,6 +1441,9 @@ export interface FrequencySchedule {
   monthInQuarter?: 1 | 2 | 3
   monthOfYear?: number
   adhocDate?: string // ISO date for ad-hoc frequency
+  // H1: optional iconify icon ID persisted alongside frequency metadata so no
+  // extra DB column is required (the frequency_schedule jsonb absorbs it).
+  templateIcon?: string
 }
 
 export interface AuditTemplate {

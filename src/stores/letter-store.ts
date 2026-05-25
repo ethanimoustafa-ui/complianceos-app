@@ -84,6 +84,8 @@ interface LetterApiRow {
   status: string
   priority: 'standard' | 'urgent'
   created_by: string | null
+  // W25-D1: PostgREST FK embed — creator profile name resolved server-side.
+  creator?: { name: string | null } | null
   assigned_to: string | null
   sent_date: string | null
   response_deadline: string | null
@@ -227,7 +229,9 @@ function mapRow(row: LetterApiRow, previous?: Letter): Letter {
     bodyAr: row.body_ar ?? previous?.bodyAr ?? undefined,
     status: row.status as Letter['status'],
     priority: row.priority,
-    createdBy: row.created_by ?? previous?.createdBy ?? '',
+    // W25-D1: prefer the FK-joined creator.name; fall back to UUID only when
+    // the embed is absent (e.g. legacy rows written before the FK column existed).
+    createdBy: row.creator?.name ?? row.created_by ?? previous?.createdBy ?? '',
     assignedTo: row.assigned_to ?? previous?.assignedTo ?? undefined,
     // GAP-17 hardened mapper: read the GET's nested embed FIRST; fall back to
     // `previous` only when the embed is absent; default to EMPTY_* (stable ref).
@@ -280,11 +284,13 @@ function toCreatePayload(
     type: data.type,
     sub_category: data.subCategory || undefined,
     sama_department: data.samaDepartment || undefined,
-    subject: data.subject,
+    // W25-A1: subject/body are optional on draft — omit if empty so the
+    // minimal CreateLetterDraftSchema default ('') is used server-side.
+    subject: data.subject || undefined,
     subject_ar: data.subjectAr || undefined,
-    body: data.body,
+    body: data.body || undefined,
     body_ar: data.bodyAr || undefined,
-    priority: data.priority,
+    priority: data.priority || 'standard',
     assigned_to: data.assignedTo || undefined,
     recipient_name: data.recipientName || undefined,
     recipient_org: data.recipientOrg || undefined,

@@ -449,6 +449,28 @@ interface PolicyStoreState {
     ownerDepartment?: string | null,
   ) => void
 
+  // A6 fix — upload a document attachment via POST /api/policies/{id}/attachments.
+  // Optimistic local insert; rolls back + surfaces a toast on failure.
+  addAttachment: (
+    policyId: string,
+    file: { name: string; dataUrl: string; size: number; uploadedBy: string },
+  ) => Promise<void>
+
+  // A6 companion — remove an attachment from local state immediately; no
+  // dedicated DELETE route needed (matching circular pattern).
+  removeAttachment: (policyId: string, attachmentId: string) => void
+
+  // A7 fix — POST /api/policies/{id}/workflow/steps to persist the new step.
+  // Optimistic local insert; rolls back on failure.
+  addWorkflowStep: (
+    policyId: string,
+    step: {
+      step: string
+      description?: string
+      actionType?: string
+    },
+  ) => void
+
   clearError: () => void
 }
 
@@ -1023,6 +1045,147 @@ export const usePolicyStore = create<PolicyStoreState>()((set, get) => ({
         pushToast(revertMessage(e), 'error')
       }
     })()
+  },
+
+  // A7 fix — POST /api/policies/{id}/workflow/steps.
+  // Optimistic local insert into workflowTimeline; fires the server POST
+  // in the background; rolls back and surfaces a toast on failure.
+  addWorkflowStep: (policyId, { step, description, actionType }) => {
+    const previous = get().byId[policyId]
+    if (!previous) return
+    const isApproved = previous.status === 'approved'
+    const newStep: PolicyWorkflowStep = {
+      step,
+      description,
+      actionType,
+      date: '',
+      user: '',
+      status: isApproved ? ('current' as const) : ('pending' as const),
+    }
+    const today = new Date().toISOString().split('T')[0]
+    const entry: PolicyActivityEntry = {
+      id: Date.now().toString(),
+      timestamp: new Date().toISOString(),
+      date: today,
+      type: 'step_added',
+      textEn: `Workflow step "${step}" added`,
+      textAr: `تمت إضافة خطوة "${step}"`,
+    }
+    const optimistic: Policy = {
+      ...previous,
+      workflowTimeline: [...(previous.workflowTimeline ?? []), newStep],
+      ...(isApproved ? { status: 'under-review' as PolicyStatus } : {}),
+      activityLog: [...(previous.activityLog ?? []), entry],
+      updatedAt: new Date().toISOString(),
+    }
+    set((s) => ({
+      policies: s.policies.map((p) => (p.id === policyId ? optimistic : p)),
+      byId: { ...s.byId, [policyId]: optimistic },
+      selectedPolicy: s.selectedPolicy?.id === policyId ? optimistic : s.selectedPolicy,
+      isMutating: true,
+      error: null,
+    }))
+    void (async () => {
+      try {
+        const apiId = previous.uuid ?? policyId
+        const row = await api.post<PolicyWorkflowStepApiRow>(
+          `/policies/${apiId}/workflow/steps`,
+          {
+            step,
+            description: description ?? null,
+            action_type: actionType ?? null,
+          },
+        )
+        // Map the server response back — the server assigns id/sort_order.
+        const serverStep = mapPolicyWorkflowStepRow(row)
+        // Reconcile: replace the last-added step (tail) with the server-issued one.
+        set((s) => {
+          const policy = s.byId[policyId] ?? optimistic
+          const timeline = [...(policy.workflowTimeline ?? [])]
+          // Find and replace the optimistic step (the tail pending step).
+          const idx = timeline.findLastIndex(
+            (st) => st.step === step && st.status !== 'completed' && !st.date,
+          )
+          if (idx >= 0) timeline[idx] = serverStep
+          const reconciled: Policy = { ...policy, workflowTimeline: timeline }
+          return {
+            policies: s.policies.map((p) => (p.id === policyId ? reconciled : p)),
+            byId: { ...s.byId, [policyId]: reconciled },
+            selectedPolicy: s.selectedPolicy?.id === policyId ? reconciled : s.selectedPolicy,
+            isMutating: false,
+          }
+        })
+        // Refresh the detail so the Activity tab picks up the new row.
+        get().fetchById(policyId)
+      } catch (e) {
+        // Roll back the optimistic insert + surface a keyed toast.
+        set((s) => ({
+          policies: s.policies.map((p) => (p.id === policyId ? previous : p)),
+          byId: { ...s.byId, [policyId]: previous },
+          selectedPolicy: s.selectedPolicy?.id === policyId ? previous : s.selectedPolicy,
+          error: errorMessage(e, 'Failed to add workflow step'),
+          isMutating: false,
+        }))
+        pushToast(revertMessage(e), 'error')
+      }
+    })()
+  },
+
+  // A6: optimistic attachment upload — POST /api/policies/{id}/attachments.
+  // Uses the same dataUrl-as-storage_path pattern as circular attachments.
+  addAttachment: async (policyId, { name, dataUrl, size, uploadedBy }) => {
+    const previous = get().byId[policyId]
+    if (!previous) return
+    const tempId = `temp-${Date.now()}-${Math.random().toString(36).slice(2)}`
+    const optimistic: PolicyAttachment = {
+      id: tempId,
+      name,
+      dataUrl,
+      size,
+      uploadedAt: new Date().toISOString(),
+      uploadedBy,
+    }
+    const applyToState = (policy: Policy | undefined, atts: PolicyAttachment[]) => {
+      if (!policy) return
+      const next: Policy = { ...policy, attachments: atts }
+      set((s) => ({
+        policies: s.policies.map((p) => (p.id === policyId ? next : p)),
+        byId: { ...s.byId, [policyId]: next },
+        selectedPolicy: s.selectedPolicy?.id === policyId ? next : s.selectedPolicy,
+      }))
+    }
+    applyToState(previous, [optimistic, ...(previous.attachments ?? [])])
+    try {
+      const apiId = previous.uuid ?? policyId
+      const row = await api.post<PolicyAttachmentApiRow>(
+        `/policies/${apiId}/attachments`,
+        { name, storage_path: dataUrl, size },
+      )
+      const real = mapPolicyAttachmentRow(row)
+      const current = get().byId[policyId] ?? previous
+      applyToState(current, (current.attachments ?? []).map((a) => (a.id === tempId ? real : a)))
+    } catch (e) {
+      // Roll back on failure
+      applyToState(get().byId[policyId] ?? previous, (previous.attachments ?? []))
+      pushToast(revertMessage(e), 'error')
+      // eslint-disable-next-line no-console
+      console.error('[addAttachment] failed —', e)
+      throw e
+    }
+  },
+
+  removeAttachment: (policyId, attachmentId) => {
+    const policy = get().byId[policyId]
+    if (!policy) return
+    const next: Policy = {
+      ...policy,
+      attachments: (policy.attachments ?? []).filter((a) => a.id !== attachmentId),
+    }
+    set((s) => ({
+      policies: s.policies.map((p) => (p.id === policyId ? next : p)),
+      byId: { ...s.byId, [policyId]: next },
+      selectedPolicy: s.selectedPolicy?.id === policyId ? next : s.selectedPolicy,
+    }))
   },
 
   clearError: () => set({ error: null }),

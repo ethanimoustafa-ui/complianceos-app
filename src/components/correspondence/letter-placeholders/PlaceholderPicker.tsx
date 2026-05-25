@@ -1,6 +1,6 @@
 ﻿'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Icon } from '@iconify/react'
 import { cn } from '@/lib/utils'
 import type { PlaceholderDef, PlaceholderRefKind, PlaceholderValue } from '@/types'
@@ -57,10 +57,36 @@ function ReferencePicker({
 }) {
   const { t } = useTranslation()
   const observations = useObservationStore((s) => s.observations)
+  const observationsLastFetched = useObservationStore((s) => s.lastFetched)
+  const fetchObservations = useObservationStore((s) => s.fetchAll)
   const audits = useAuditStore((s) => s.audits)
+  const auditsLastFetched = useAuditStore((s) => s.lastFetched)
+  const fetchAudits = useAuditStore((s) => s.fetchAll)
   const letters = useLetterStore((s) => s.letters)
+  const lettersLastFetched = useLetterStore((s) => s.lastFetched)
+  const fetchLetters = useLetterStore((s) => s.fetchAll)
   const circulars = useCircularStore((s) => s.circulars)
+  const circularsLastFetched = useCircularStore((s) => s.lastFetched)
+  const fetchCirculars = useCircularStore((s) => s.fetchAll)
   const policies = usePolicyStore((s) => s.policies)
+  const policiesLastFetched = usePolicyStore((s) => s.lastFetched)
+  const fetchPolicies = usePolicyStore((s) => s.fetchAll)
+
+  // C1+C2: Eagerly hydrate each store the first time this picker renders —
+  // without this, the dropdowns are empty until the user visits the source page.
+  useEffect(() => {
+    if (!observationsLastFetched) void fetchObservations()
+    if (!auditsLastFetched)      void fetchAudits()
+    if (!lettersLastFetched)     void fetchLetters()
+    if (!circularsLastFetched)   void fetchCirculars()
+    if (!policiesLastFetched)    void fetchPolicies()
+  }, [
+    observationsLastFetched, fetchObservations,
+    auditsLastFetched, fetchAudits,
+    lettersLastFetched, fetchLetters,
+    circularsLastFetched, fetchCirculars,
+    policiesLastFetched, fetchPolicies,
+  ])
 
   const allowedKinds: PlaceholderRefKind[] = useMemo(
     () => def.refKinds && def.refKinds.length > 0 ? def.refKinds : ['observation', 'audit', 'letter', 'rule', 'policy'],

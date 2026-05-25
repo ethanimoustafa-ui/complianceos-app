@@ -51,6 +51,8 @@ interface CorrespondenceApiRow {
   thread_id: string | null
   archived: boolean
   assignee_id: string | null
+  // D2: FK embed — resolved display name for assignee_id UUID.
+  assignee?: { name: string | null } | null
   framework_ids?: string[] | null
   created_at: string
   updated_at: string
@@ -98,7 +100,8 @@ function mapRow(row: CorrespondenceApiRow, previous?: Correspondence): Correspon
     threadId: row.thread_id ?? undefined,
     archived: row.archived,
     reference: row.reference,
-    assignee: row.assignee_id ?? previous?.assignee ?? undefined,
+    // D2: prefer joined display name; fall back to raw UUID only when unavailable.
+    assignee: row.assignee?.name ?? row.assignee_id ?? previous?.assignee ?? undefined,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }

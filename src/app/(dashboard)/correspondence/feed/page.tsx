@@ -31,6 +31,7 @@ import { useFrameworkConfigStore } from '@/stores/framework-config-store'
 import { resolveAuthorityCode } from '@/lib/authority-display'
 import { useCorrespondenceTypeStore } from '@/stores/correspondence-type-store'
 import { EditableSelect } from '@/components/ui/editable-select'
+import { Skeleton } from '@/components/ui/skeleton'
 
 // Risk type for heatmap display (mapped from risk-store)
 interface HeatmapRisk {
@@ -84,6 +85,11 @@ export default function CorrespondenceFeedPage() {
   const trainingStore = useTrainingStore()
   const authStore = useAuthStore()
   const teamWorkloads = useTeamWorkloads(teamStore.members)
+
+  // F3: skeleton gating — show shimmer on first fetch (isLoading + empty list).
+  const isFeedLoading = correspondenceStore.isLoading && correspondenceStore.correspondence.length === 0
+  const isCircularsLoading = circularStore.isLoading && circularStore.circulars.length === 0
+  const isTeamLoading = teamStore.isLoading && teamStore.members.length === 0
 
   // Correspondence type store — seeded with the legacy literal union, but
   // user-added types persist and round-trip via the widened Correspondence.type.
@@ -153,6 +159,9 @@ export default function CorrespondenceFeedPage() {
   const [sendBusy, setSendBusy] = useState(false)
   const [saveDraftBusy, setSaveDraftBusy] = useState(false)
   const [archiveBusy, setArchiveBusy] = useState(false)
+  // H2: soft-delete busy + confirm state.
+  const [deleteBusy, setDeleteBusy] = useState(false)
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null)
 
   const showToast = useCallback((message: string) => {
     setToastMessage(message)
@@ -290,13 +299,22 @@ export default function CorrespondenceFeedPage() {
       .sort((a, b) => new Date(a.nextReviewDate).getTime() - new Date(b.nextReviewDate).getTime())[0] || null
   }, [policyStore.policies])
 
-  // Top 3 circulars for regulatory tracker view
+  // H3: top N regulatory items interleaved — 5 circulars + 5 policies sorted
+  // by recency so the Regulatory Tracker is never empty when either store has data.
   const topCirculars = useMemo(() => {
     const order: Record<string, number> = { 'in-progress': 0, overdue: 1, pending: 2, completed: 3 }
     return [...circularStore.circulars]
       .sort((a, b) => (order[a.status] ?? 2) - (order[b.status] ?? 2))
-      .slice(0, 3)
+      .slice(0, 5)
   }, [circularStore.circulars])
+
+  // H3: top 5 recent policies to interleave in Regulatory Tracker when no
+  // circulars are available yet.
+  const topPolicies = useMemo(() => {
+    return [...policyStore.policies]
+      .sort((a, b) => new Date(b.updatedAt ?? b.createdAt ?? 0).getTime() - new Date(a.updatedAt ?? a.createdAt ?? 0).getTime())
+      .slice(0, 5)
+  }, [policyStore.policies])
 
   // Deep-link: auto-open correspondence when ?id= is present
   useEffect(() => {
@@ -333,6 +351,22 @@ export default function CorrespondenceFeedPage() {
       }
     }
     setIsLetterDetailOpen(false)
+  }
+
+  // H2: hard-delete with audit trail (DELETE /api/correspondence/[id] calls
+  // writeAudit before the DB delete).
+  const handleDelete = async (letterId: string) => {
+    setDeleteBusy(true)
+    try {
+      await correspondenceStore.delete(letterId)
+      showToast(t('correspondence.correspondenceDeleted' as TranslationKey))
+      setIsLetterDetailOpen(false)
+      setDeleteConfirmId(null)
+    } catch {
+      showToast(t('correspondence.deleteFailed' as TranslationKey))
+    } finally {
+      setDeleteBusy(false)
+    }
   }
 
   const handleReviewItem = (item: UpcomingItem) => {
@@ -507,7 +541,18 @@ export default function CorrespondenceFeedPage() {
                 </div>
 
                 <div className="space-y-4">
-                  {topCirculars.map((circ) => (
+                  {/* F3: skeleton while circulars are first-loading */}
+                  {isCircularsLoading && Array.from({ length: 3 }).map((_, i) => (
+                    <div key={i} className="flex items-center gap-4 p-4 rounded-xl border border-slate-100 bg-slate-50">
+                      <Skeleton className="w-10 h-10 rounded-lg shrink-0" />
+                      <div className="flex-1 space-y-2">
+                        <Skeleton className="h-3 w-3/5" />
+                        <Skeleton className="h-2 w-2/5" />
+                      </div>
+                      <Skeleton className="h-5 w-16 rounded-full shrink-0" />
+                    </div>
+                  ))}
+                  {!isCircularsLoading && topCirculars.map((circ) => (
                     <CircularRow
                       key={circ.id}
                       circular={circ}
@@ -516,7 +561,32 @@ export default function CorrespondenceFeedPage() {
                       onClick={() => router.push(`/correspondence/regulatory-updates/rules`)}
                     />
                   ))}
-                  {topCirculars.length === 0 && (
+                  {/* H3: fallback to recent policies when no circulars exist yet */}
+                  {!isCircularsLoading && topCirculars.length === 0 && topPolicies.length > 0 && topPolicies.map((policy) => (
+                    <div
+                      key={policy.id}
+                      onClick={() => router.push(`/correspondence/regulatory-updates/policies`)}
+                      className="flex items-center justify-between p-4 rounded-xl border bg-slate-50 border-slate-100 cursor-pointer hover:bg-slate-100/80"
+                    >
+                      <div className="flex items-center gap-4">
+                        <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center border border-slate-200 shadow-sm">
+                          <Icon icon="lucide:scroll-text" className="text-slate-400" />
+                        </div>
+                        <div>
+                          <p className="text-sm font-bold text-slate-900">{policy.name}</p>
+                          <p className="text-[10px] text-slate-500">{policy.category}</p>
+                        </div>
+                      </div>
+                      <span className={`px-3 py-1 text-[10px] font-bold rounded-full ${
+                        policy.status === 'approved' ? 'bg-emerald-100 text-emerald-700' :
+                        policy.status === 'overdue' ? 'bg-rose-100 text-rose-700' :
+                        'bg-slate-100 text-slate-700'
+                      }`}>
+                        {policy.status}
+                      </span>
+                    </div>
+                  ))}
+                  {!isCircularsLoading && topCirculars.length === 0 && topPolicies.length === 0 && (
                     <p className="text-sm text-slate-400 text-center py-4">{t('correspondence.noRequirements')}</p>
                   )}
                 </div>
@@ -574,7 +644,22 @@ export default function CorrespondenceFeedPage() {
                       )}
                     </div>
                   </div>
-                  {(() => {
+                  {isFeedLoading ? (
+                    /* F3: shimmer while correspondence list is first-loading */
+                    <div className="space-y-4 max-h-[380px] overflow-y-auto pr-1 hide-scrollbar">
+                      {Array.from({ length: 4 }).map((_, i) => (
+                        <div key={i} className="flex gap-3">
+                          <Skeleton className="w-8 h-8 rounded-full shrink-0" />
+                          <div className="flex-1 space-y-2">
+                            <Skeleton className="h-3 w-3/5" />
+                            <Skeleton className="h-2 w-4/5" />
+                            <Skeleton className="h-2 w-1/3" />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                  (() => {
                     const filtered = correspondenceStore.correspondence
                       .filter(l => correspondenceFilter === 'all' ? true : correspondenceFilter === 'archived' ? l.archived : !l.archived)
                       .filter(l => typeFilter === 'all' ? true : l.type === typeFilter)
@@ -606,7 +691,8 @@ export default function CorrespondenceFeedPage() {
                         )}
                       </>
                     )
-                  })()}
+                  })()
+                  )}
                 </section>
 
                 {/* Policy Status + Rules & Circulars */}
@@ -749,10 +835,20 @@ export default function CorrespondenceFeedPage() {
                   </Link>
                 </div>
                 <div className="space-y-5">
-                  {teamStore.members.map((member) => (
+                  {/* F3: shimmer rows while team is first-loading */}
+                  {isTeamLoading && Array.from({ length: 3 }).map((_, i) => (
+                    <div key={i} className="flex items-center gap-3">
+                      <Skeleton className="w-9 h-9 rounded-full shrink-0" />
+                      <div className="flex-1 space-y-1.5">
+                        <Skeleton className="h-3 w-2/5" />
+                        <Skeleton className="h-2 w-full rounded-full" />
+                      </div>
+                    </div>
+                  ))}
+                  {!isTeamLoading && teamStore.members.map((member) => (
                     <TeamMemberRow key={member.id} member={{ name: member.name, avatar: member.avatar || member.name, load: teamWorkloads[member.id]?.percentage ?? member.workload, role: member.role }} />
                   ))}
-                  {teamStore.members.length === 0 && (
+                  {!isTeamLoading && teamStore.members.length === 0 && (
                     <p className="text-sm text-slate-400 text-center py-4">{t('correspondence.noMembers')}</p>
                   )}
                 </div>
@@ -1150,13 +1246,43 @@ export default function CorrespondenceFeedPage() {
             <div className={`flex gap-3 pt-4`}>
               <button
                 onClick={() => handleArchive(detailLetter.id)}
-                disabled={archiveBusy}
+                disabled={archiveBusy || deleteBusy}
                 aria-busy={archiveBusy || undefined}
                 className="flex-1 bg-slate-100 text-slate-700 py-3 rounded-lg font-bold hover:bg-slate-200 transition-colors cursor-pointer disabled:opacity-60 inline-flex items-center justify-center gap-2"
               >
                 {archiveBusy && <Icon icon="lucide:loader-2" className="animate-spin" />}
                 {detailLetter.archived ? t('correspondence.unarchive') : t('correspondence.archive')}
               </button>
+              {/* H2: Delete button — opens confirm dialog, then calls DELETE /api/correspondence/[id] */}
+              {deleteConfirmId === detailLetter.id ? (
+                <div className="flex gap-2 flex-1">
+                  <button
+                    onClick={() => handleDelete(detailLetter.id)}
+                    disabled={deleteBusy}
+                    aria-busy={deleteBusy || undefined}
+                    className="flex-1 bg-rose-600 text-white py-3 rounded-lg font-bold hover:bg-rose-700 transition-colors cursor-pointer disabled:opacity-60 inline-flex items-center justify-center gap-2"
+                  >
+                    {deleteBusy ? <Icon icon="lucide:loader-2" className="animate-spin" /> : <Icon icon="lucide:trash-2" />}
+                    {t('common.confirm')}
+                  </button>
+                  <button
+                    onClick={() => setDeleteConfirmId(null)}
+                    disabled={deleteBusy}
+                    className="px-4 bg-slate-100 text-slate-700 py-3 rounded-lg font-bold hover:bg-slate-200 transition-colors cursor-pointer disabled:opacity-60"
+                  >
+                    {t('common.cancel')}
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setDeleteConfirmId(detailLetter.id)}
+                  disabled={archiveBusy || deleteBusy}
+                  className="px-4 bg-rose-50 text-rose-600 py-3 rounded-lg font-bold hover:bg-rose-100 transition-colors cursor-pointer disabled:opacity-60 inline-flex items-center justify-center gap-2"
+                >
+                  <Icon icon="lucide:trash-2" />
+                  {t('common.delete')}
+                </button>
+              )}
             </div>
           </div>
         )}

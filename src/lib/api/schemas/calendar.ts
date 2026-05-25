@@ -11,7 +11,11 @@ const TimeString = z
   .string()
   .regex(/^\d{2}:\d{2}(:\d{2})?$/, { message: 'Invalid time (HH:mm[:ss])' })
 
-const EventType = z.enum(['deadline', 'meeting', 'submission', 'review'])
+// A3 fix: EventType was a closed enum but user-defined event types from
+// calendar_event_types table can have any key. Widen to open-string so
+// custom types pass schema validation. The enum guard is enforced at the
+// DB level via the calendar_event_types FK / application logic.
+const EventType = z.string().min(1).max(100)
 
 // ---------- calendar_events ---------------------------------------------------
 

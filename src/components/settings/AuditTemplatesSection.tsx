@@ -114,7 +114,11 @@ export function AuditTemplatesSection() {
               <tr key={tmpl.id} className="hover:bg-slate-50/50 transition-colors">
                 <td className="px-8 py-4">
                   <div className="flex items-center gap-3">
-                    <Icon icon="lucide:file-check" className="text-emerald-500" />
+                    {/* H1: show template's custom icon if set, else fall back to category default */}
+                    <Icon
+                      icon={tmpl.frequencySchedule?.templateIcon || 'lucide:file-check'}
+                      className="text-emerald-500"
+                    />
                     <span className="text-sm font-bold text-slate-700">{isRTL ? (tmpl.nameAr || tmpl.name) : tmpl.name}</span>
                   </div>
                 </td>
@@ -167,6 +171,34 @@ export function AuditTemplatesSection() {
   )
 }
 
+// H1: curated icon set for template icon picker — lucide icons via @iconify/react.
+const TEMPLATE_ICONS: { id: string; label: string }[] = [
+  { id: 'lucide:shield-check', label: 'Shield Check' },
+  { id: 'lucide:file-check', label: 'File Check' },
+  { id: 'lucide:clipboard-check', label: 'Clipboard Check' },
+  { id: 'lucide:scale', label: 'Scale' },
+  { id: 'lucide:lock', label: 'Lock' },
+  { id: 'lucide:building-2', label: 'Building' },
+  { id: 'lucide:landmark', label: 'Landmark' },
+  { id: 'lucide:gavel', label: 'Gavel' },
+  { id: 'lucide:search', label: 'Search' },
+  { id: 'lucide:trending-up', label: 'Trending Up' },
+  { id: 'lucide:bar-chart-2', label: 'Bar Chart' },
+  { id: 'lucide:pie-chart', label: 'Pie Chart' },
+  { id: 'lucide:database', label: 'Database' },
+  { id: 'lucide:server', label: 'Server' },
+  { id: 'lucide:cpu', label: 'CPU' },
+  { id: 'lucide:users', label: 'Users' },
+  { id: 'lucide:user-check', label: 'User Check' },
+  { id: 'lucide:briefcase', label: 'Briefcase' },
+  { id: 'lucide:dollar-sign', label: 'Dollar' },
+  { id: 'lucide:credit-card', label: 'Credit Card' },
+  { id: 'lucide:alert-triangle', label: 'Alert' },
+  { id: 'lucide:activity', label: 'Activity' },
+  { id: 'lucide:layers', label: 'Layers' },
+  { id: 'lucide:settings', label: 'Settings' },
+]
+
 function AuditTemplateFormModal({
   isOpen,
   onClose,
@@ -197,6 +229,8 @@ function AuditTemplateFormModal({
   const [description, setDescription] = useState(template?.defaultDescription ?? '')
   const [descriptionAr, setDescriptionAr] = useState(template?.defaultDescriptionAr ?? '')
   const [status, setStatus] = useState<'active' | 'draft'>(template?.status ?? 'active')
+  // H1: icon picker — stored in frequencySchedule.templateIcon (no DB column needed)
+  const [templateIcon, setTemplateIcon] = useState(template?.frequencySchedule?.templateIcon ?? '')
 
   // Reset on open
   useState(() => {
@@ -218,12 +252,14 @@ function AuditTemplateFormModal({
   })
 
   function buildSchedule(): FrequencySchedule | undefined {
-    if (frequency === 'ad_hoc') return adhocDate ? { adhocDate } : undefined
-    if (frequency === 'monthly') return { dayOfMonth }
-    if (frequency === 'quarterly') return { monthInQuarter, dayOfMonth }
-    if (frequency === 'semi_annual') return { monthOfYear: Math.min(monthOfYear, 6), dayOfMonth }
-    if (frequency === 'annual') return { monthOfYear, dayOfMonth }
-    return undefined
+    // H1: always embed templateIcon when selected so it persists in the jsonb column.
+    const icon = templateIcon || undefined
+    if (frequency === 'ad_hoc') return adhocDate ? { adhocDate, templateIcon: icon } : (icon ? { templateIcon: icon } : undefined)
+    if (frequency === 'monthly') return { dayOfMonth, templateIcon: icon }
+    if (frequency === 'quarterly') return { monthInQuarter, dayOfMonth, templateIcon: icon }
+    if (frequency === 'semi_annual') return { monthOfYear: Math.min(monthOfYear, 6), dayOfMonth, templateIcon: icon }
+    if (frequency === 'annual') return { monthOfYear, dayOfMonth, templateIcon: icon }
+    return icon ? { templateIcon: icon } : undefined
   }
 
   function handleSave() {
@@ -379,6 +415,43 @@ function AuditTemplateFormModal({
             dir="rtl"
             className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent resize-none"
           />
+        </div>
+        {/* H1: Icon picker — compact SVG icon grid */}
+        <div>
+          <label className="block text-sm font-medium text-slate-700 mb-2">{t('settings.templateIcon')}</label>
+          <div className="grid grid-cols-8 gap-1.5 p-3 bg-slate-50 rounded-xl border border-slate-200">
+            {/* "None" option */}
+            <button
+              type="button"
+              onClick={() => setTemplateIcon('')}
+              title="No icon"
+              className={`w-8 h-8 flex items-center justify-center rounded-lg border text-xs font-bold transition-colors cursor-pointer ${
+                templateIcon === ''
+                  ? 'bg-emerald-100 border-emerald-400 text-emerald-700'
+                  : 'bg-white border-slate-200 text-slate-400 hover:border-slate-400'
+              }`}
+            >
+              —
+            </button>
+            {TEMPLATE_ICONS.map((ic) => (
+              <button
+                key={ic.id}
+                type="button"
+                onClick={() => setTemplateIcon(ic.id)}
+                title={ic.label}
+                className={`w-8 h-8 flex items-center justify-center rounded-lg border transition-colors cursor-pointer ${
+                  templateIcon === ic.id
+                    ? 'bg-emerald-100 border-emerald-400 text-emerald-600'
+                    : 'bg-white border-slate-200 text-slate-500 hover:border-emerald-300 hover:text-emerald-600'
+                }`}
+              >
+                <Icon icon={ic.id} className="text-base" />
+              </button>
+            ))}
+          </div>
+          {templateIcon && (
+            <p className="mt-1 text-[11px] text-slate-400">{t('settings.selectedIcon')}: <span className="font-mono">{templateIcon}</span></p>
+          )}
         </div>
         {!name.trim() && (
           <p className="text-xs text-rose-600 text-end">

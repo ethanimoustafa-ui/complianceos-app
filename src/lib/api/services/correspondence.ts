@@ -5,10 +5,10 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { NotFound } from '../errors'
 
 export const CORRESPONDENCE_LIST_COLUMNS =
-  'id, reference, subject, from_party, to_parties, date, type, status, thread_id, archived, assignee_id, framework_ids, created_at, updated_at'
+  'id, reference, subject, from_party, to_parties, date, type, status, thread_id, archived, assignee_id, assignee:profiles!correspondence_assignee_id_fkey(name), framework_ids, created_at, updated_at'
 
 export const CORRESPONDENCE_DETAIL_COLUMNS =
-  'id, reference, subject, from_party, to_parties, date, type, status, body, thread_id, archived, assignee_id, framework_ids, created_at, updated_at'
+  'id, reference, subject, from_party, to_parties, date, type, status, body, thread_id, archived, assignee_id, assignee:profiles!correspondence_assignee_id_fkey(name), framework_ids, created_at, updated_at'
 
 export const CORRESPONDENCE_ATTACHMENT_COLUMNS =
   'id, correspondence_id, name, storage_path, type, size, uploaded_at, uploaded_by'

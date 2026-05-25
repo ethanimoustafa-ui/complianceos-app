@@ -102,6 +102,8 @@ export function EditableSelect({
   const [editingId, setEditingId] = useState<string | null>(null)
   const [draftLabel, setDraftLabel] = useState('')
   const [draftLabelAr, setDraftLabelAr] = useState('')
+  // B4: loading spinner while async onAdd/onEdit resolves.
+  const [submitBusy, setSubmitBusy] = useState(false)
   const rootRef = useRef<HTMLDivElement>(null)
 
   // Caller may override the placeholder; otherwise use the localized default.
@@ -138,13 +140,18 @@ export function EditableSelect({
 
   const submitDraft = async () => {
     const label = draftLabel.trim()
-    if (!label) return
+    if (!label || submitBusy) return
     const labelAr = draftLabelAr.trim() || undefined
-    if (view === 'add' && effectiveOnAdd) {
-      const newId = await effectiveOnAdd(label, labelAr)
-      if (typeof newId === 'string') onChange(newId)
-    } else if (view === 'edit' && editingId && effectiveOnEdit) {
-      effectiveOnEdit(editingId, label, labelAr)
+    setSubmitBusy(true)
+    try {
+      if (view === 'add' && effectiveOnAdd) {
+        const newId = await effectiveOnAdd(label, labelAr)
+        if (typeof newId === 'string') onChange(newId)
+      } else if (view === 'edit' && editingId && effectiveOnEdit) {
+        await effectiveOnEdit(editingId, label, labelAr)
+      }
+    } finally {
+      setSubmitBusy(false)
     }
     setView('list')
     setEditingId(null)
@@ -300,15 +307,18 @@ export function EditableSelect({
                 <button
                   type="button"
                   onClick={submitDraft}
-                  disabled={!draftLabel.trim()}
-                  className="flex-1 px-2 py-1.5 text-xs font-bold text-white bg-emerald-600 rounded-md hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                  disabled={!draftLabel.trim() || submitBusy}
+                  aria-busy={submitBusy || undefined}
+                  className="flex-1 px-2 py-1.5 text-xs font-bold text-white bg-emerald-600 rounded-md hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer inline-flex items-center justify-center gap-1.5"
                 >
+                  {submitBusy && <Icon icon="lucide:loader-2" className="animate-spin text-sm" />}
                   {view === 'add' ? t('editableSelect.add') : t('editableSelect.save')}
                 </button>
                 <button
                   type="button"
+                  disabled={submitBusy}
                   onClick={() => setView('list')}
-                  className="px-2 py-1.5 text-xs font-bold text-slate-600 bg-slate-100 rounded-md hover:bg-slate-200 cursor-pointer"
+                  className="px-2 py-1.5 text-xs font-bold text-slate-600 bg-slate-100 rounded-md hover:bg-slate-200 cursor-pointer disabled:opacity-50"
                 >
                   {t('editableSelect.cancel')}
                 </button>

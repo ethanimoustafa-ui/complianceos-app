@@ -62,6 +62,49 @@ const PlaceholderDef = z.object({
     .optional(),
 })
 
+// W25-A1: Minimal draft schema — only authority + type are required.
+// All content fields are optional so "Save as Draft" fires 201 without
+// subject/body validation. The full-validation schema below is used on
+// the submit-for-approval path.
+export const CreateLetterDraftSchema = z
+  .object({
+    // W24-2 fix: normalise to lowercase before the DB insert so that
+    // `authority:'SAMA'` hits the frameworks FK (which stores lowercase ids)
+    // instead of crashing with a FK violation → 500. Decision: normalise +
+    // accept either case (vs. rejecting uppercase with 400) so the API is
+    // lenient for callers that capitalise authority codes.
+    authority: z.string().min(1).max(100).transform((s) => s.toLowerCase()),
+    type: z.string().min(1).max(100), // letter type key — e.g. 'non-objection','inquiry','submission','notification'
+    sub_category: PlainText(200).optional(),
+    sama_department: PlainText(200).optional(),
+    subject: PlainText(2_000).optional(),
+    subject_ar: PlainText(2_000).optional(),
+    body: PlainText(50_000).optional(),
+    body_ar: PlainText(50_000).optional(),
+    priority: z.enum(['standard', 'urgent']).default('standard'),
+    assigned_to: Uuid.optional(),
+    recipient_name: PlainText(200).optional(),
+    recipient_org: PlainText(200).optional(),
+    recipient_city: PlainText(200).optional(),
+    recipient_name_ar: PlainText(200).optional(),
+    recipient_org_ar: PlainText(200).optional(),
+    recipient_city_ar: PlainText(200).optional(),
+    signer_name: PlainText(200).optional(),
+    signer_title: PlainText(200).optional(),
+    signer_name_ar: PlainText(200).optional(),
+    signer_title_ar: PlainText(200).optional(),
+    // SEC-3: signature_image_url must be http/https
+    signature_image_url: HttpUrl(2_000).optional(),
+    framework_ids: z.array(z.string().min(1)).default([]),
+    placeholder_defs: z.array(PlaceholderDef).default([]),
+    placeholder_values: z.record(z.string(), PlaceholderValue).default({}),
+    /** Optional template id whose `usage_count` should be incremented. */
+    template_id: Uuid.optional(),
+  })
+  .strict()
+export type CreateLetterDraftInput = z.infer<typeof CreateLetterDraftSchema>
+
+// Full-validation schema for submit-for-approval path (subject + body required).
 export const CreateLetterSchema = z
   .object({
     // W24-2 fix: normalise to lowercase before the DB insert so that

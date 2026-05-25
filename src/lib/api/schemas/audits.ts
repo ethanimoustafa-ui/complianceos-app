@@ -114,7 +114,12 @@ export type UpdateAuditCommentInput = z.infer<typeof UpdateAuditCommentSchema>
 export const CreateAuditTemplateSchema = z.object({
   name: z.string().min(1).max(200),
   name_ar: z.string().max(200).optional(),
-  audit_type: AuditType,
+  // A4/A5 fix: audit_type was a closed enum ['internal','sama','sharia'] but
+  // the AuditTypeSelect exposes all enabled correspondence-based frameworks
+  // (framework.id can be any slug). Widen to open-string so user-defined
+  // framework types pass validation. AuditType enum still enforced on the
+  // audit_create path where DB FK exists; templates are looser.
+  audit_type: z.string().min(1).max(100),
   category: z.string().min(1),
   priority: Priority.default('medium'),
   frequency: z.string().default('annual'),

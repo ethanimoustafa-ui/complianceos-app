@@ -14,11 +14,21 @@ import { renderBilingual } from '@/lib/i18n/server'
 
 // ---------- shared select columns -------------------------------------------
 
+// W25-F2/D3: include recipient_name + body excerpt so list rows can render an
+// inline preview without a second round-trip. body is needed for strip-tags
+// preview; recipient_name resolves the display name (not a join — stored as
+// plain text). subject_ar included for bilingual search.
+//
+// W25-D1: embed creator profile name via PostgREST FK join so the list column
+// shows "ComplianceOS Admin" instead of a raw UUID. The FK constraint on
+// letters.created_by is `sama_letters_created_by_fkey` (pre-rename name
+// preserved by Postgres). The embed alias `creator:profiles!sama_letters_created_by_fkey(name)`
+// delivers { creator: { name: '...' } | null } alongside the UUID column.
 export const LETTER_LIST_COLUMNS =
-  'id, reference, authority, type, sub_category, sama_department, subject, status, priority, created_by, assigned_to, sent_date, response_deadline, response_received_date, framework_ids, created_at, updated_at'
+  'id, reference, authority, type, sub_category, sama_department, subject, subject_ar, body, status, priority, created_by, creator:profiles!sama_letters_created_by_fkey(name), assigned_to, sent_date, response_deadline, response_received_date, recipient_name, recipient_org, framework_ids, created_at, updated_at'
 
 export const LETTER_DETAIL_COLUMNS =
-  'id, reference, authority, type, sub_category, sama_department, subject, subject_ar, body, body_ar, status, priority, created_by, assigned_to, sent_date, response_deadline, response_received_date, recipient_name, recipient_org, recipient_city, recipient_name_ar, recipient_org_ar, recipient_city_ar, signer_name, signer_title, signer_name_ar, signer_title_ar, signature_image_url, framework_ids, placeholder_defs, placeholder_values, created_at, updated_at'
+  'id, reference, authority, type, sub_category, sama_department, subject, subject_ar, body, body_ar, status, priority, created_by, creator:profiles!sama_letters_created_by_fkey(name), assigned_to, sent_date, response_deadline, response_received_date, recipient_name, recipient_org, recipient_city, recipient_name_ar, recipient_org_ar, recipient_city_ar, signer_name, signer_title, signer_name_ar, signer_title_ar, signature_image_url, framework_ids, placeholder_defs, placeholder_values, created_at, updated_at'
 
 export const LETTER_TEMPLATE_COLUMNS =
   'id, name, type, icon, color, description, status, default_subject_en, default_subject_ar, default_body_en, default_body_ar, default_signer_name, default_signer_title, default_signer_name_ar, default_signer_title_ar, default_signature_image_url, default_sama_department, default_recipient_name, default_recipient_org, default_recipient_city, default_recipient_name_ar, default_recipient_org_ar, default_recipient_city_ar, placeholder_defs, usage_count, created_at, updated_at'

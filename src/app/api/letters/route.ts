@@ -13,7 +13,7 @@ import { rangeFor } from '@/lib/api/pagination'
 import { cacheTags, revalidateAll } from '@/lib/api/cache'
 import { writeAudit } from '@/lib/api/audit'
 import {
-  CreateLetterSchema,
+  CreateLetterDraftSchema,
   ListLettersQuerySchema,
 } from '@/lib/api/schemas/letters'
 import {
@@ -104,7 +104,9 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const { supabase, user, profile } = await requirePerm('create')
-    const input = await parseJson(req, CreateLetterSchema)
+    // W25-A1: use the minimal draft schema so POST with only {authority,type}
+    // → 201. The submit-for-approval endpoint enforces subject+body.
+    const input = await parseJson(req, CreateLetterDraftSchema)
 
     // Reference generation with simple retry on unique-violation race.
     let inserted: Record<string, unknown> | null = null
@@ -119,9 +121,9 @@ export async function POST(req: NextRequest) {
           type: input.type,
           sub_category: input.sub_category ?? null,
           sama_department: input.sama_department ?? null,
-          subject: input.subject,
+          subject: input.subject ?? '',
           subject_ar: input.subject_ar ?? null,
-          body: input.body,
+          body: input.body ?? '',
           body_ar: input.body_ar ?? null,
           priority: input.priority,
           status: 'draft',

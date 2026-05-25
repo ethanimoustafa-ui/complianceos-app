@@ -121,7 +121,7 @@ export function PolicyDetailsContent({
   const [notePromptFor, setNotePromptFor] = useState<NotePromptFor>(null)
   const [noteText, setNoteText] = useState('')
 
-  const { policies: allPolicies, update } = usePolicyStore()
+  const { policies: allPolicies, update, addWorkflowStep, addAttachment, removeAttachment } = usePolicyStore()
   const { user: authUser } = useAuthStore()
   const { addNotification } = useNotificationStore()
   const fresh = allPolicies.find(p => p.id === policy.id) ?? policy
@@ -206,32 +206,19 @@ export function PolicyDetailsContent({
   )
 
   // ── Attachment handlers ──────────────────────────────────────────────
+  // A6: route through addAttachment (POST /api/policies/{id}/attachments) so
+  // uploads survive a page refresh. Previous implementation called update() which
+  // doesn't include attachments in the PATCH payload — silent server-side drop.
   async function handleDocAdd(files: FileList) {
-    const newAttachments: PolicyAttachment[] = []
     for (const file of Array.from(files)) {
       const dataUrl = await readFileAsDataUrl(file)
-      newAttachments.push({
-        id: Date.now().toString() + Math.random().toString(36).slice(2),
+      await addAttachment(fresh.id, {
         name: file.name,
         dataUrl,
         size: file.size,
-        uploadedAt: new Date().toISOString(),
         uploadedBy: actingUser,
       })
     }
-    const actEntries: PolicyActivityEntry[] = newAttachments.map(att => ({
-      id: att.id + '-log',
-      timestamp: new Date().toISOString(),
-      date: today,
-      type: 'document_uploaded' as const,
-      textEn: `Document "${att.name}" uploaded`,
-      textAr: `تم رفع المستند "${att.name}"`,
-      user: actingUser,
-    }))
-    update(fresh.id, {
-      attachments: [...(fresh.attachments ?? []), ...newAttachments],
-      activityLog: [...(fresh.activityLog ?? []), ...actEntries],
-    })
     showToast(t('policies.documentUploaded'))
   }
 
@@ -246,8 +233,9 @@ export function PolicyDetailsContent({
       textAr: `تم إزالة المستند "${removed?.name}"`,
       user: actingUser,
     }
+    // A6: use dedicated removeAttachment + update activityLog separately.
+    removeAttachment(fresh.id, attachmentId)
     update(fresh.id, {
-      attachments: (fresh.attachments ?? []).filter(a => a.id !== attachmentId),
       activityLog: [...(fresh.activityLog ?? []), actEntry],
     })
   }
@@ -316,30 +304,15 @@ export function PolicyDetailsContent({
   }
 
   // ── Workflow step handlers ───────────────────────────────────────────
+  // A7 fix: use addWorkflowStep which calls POST /api/policies/{id}/workflow/steps
+  // instead of local-only update(). The store handles optimistic insert + server
+  // reconciliation + rollback on failure.
   function handleAddStep() {
     if (!newStepName.trim()) return
-    const isApproved = fresh.status === 'approved'
-    const newStep: PolicyWorkflowStep = {
+    addWorkflowStep(fresh.id, {
       step: newStepName.trim(),
       description: newStepDesc.trim() || undefined,
       actionType: newStepAction,
-      date: '',
-      user: '',
-      status: isApproved ? 'current' as const : 'pending' as const,
-    }
-    const entry: PolicyActivityEntry = {
-      id: Date.now().toString(),
-      timestamp: new Date().toISOString(),
-      date: today,
-      type: 'step_added',
-      textEn: `Workflow step "${newStepName.trim()}" added`,
-      textAr: `تمت إضافة خطوة "${newStepName.trim()}" إلى مسار العمل`,
-      user: actingUser,
-    }
-    update(fresh.id, {
-      workflowTimeline: [...fresh.workflowTimeline, newStep],
-      ...(isApproved ? { status: 'under-review' as PolicyStatus } : {}),
-      activityLog: [...(fresh.activityLog ?? []), entry],
     })
     setNewStepName('')
     setNewStepDesc('')

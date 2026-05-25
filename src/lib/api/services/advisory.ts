@@ -15,8 +15,12 @@ import { getAdminClient, hasServiceRole } from '../admin'
 
 // ---------- shared select columns -------------------------------------------
 
+// F1 fix: include description (for inline preview) and advisory_notes count
+// (for the notes badge in list rows). PostgREST returns the count embed as
+// advisory_notes:[{count:N}] — mapRow coerces this to a length-N notes array
+// stub so advisory.notes.length works on the list without a full detail fetch.
 export const ADVISORY_LIST_COLUMNS =
-  'id, ref, subject, business_unit, status, priority, requested_by, requested_date, assigned_to, created_at, updated_at'
+  'id, ref, subject, description, business_unit, status, priority, requested_by, requested_date, assigned_to, created_at, updated_at, advisory_notes(count)'
 
 export const ADVISORY_DETAIL_COLUMNS =
   'id, ref, subject, description, business_unit, status, priority, requested_by, requested_date, assigned_to, created_at, updated_at'

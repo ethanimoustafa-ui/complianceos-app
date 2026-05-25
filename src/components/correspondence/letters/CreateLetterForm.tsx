@@ -249,11 +249,15 @@ export function CreateLetterForm({
     try {
       await store.create(letterBaseData())
       if (template?.id) templateStore.incrementUsage(template.id)
+      // W25-A1: only call onSuccess on the happy path — avoids the dual-toast
+      // (optimistic-success + API-error) that occurred when both branches ran.
+      onSuccess()
     } catch (err) {
       console.error('Failed to save letter draft', err)
+      // onSuccess is NOT called on error — the form stays open so the user can
+      // correct any issues. The store surfaces the error via store.error.
     } finally {
       setIsSavingDraft(false)
-      onSuccess()
     }
   }
 
@@ -263,11 +267,12 @@ export function CreateLetterForm({
       const newLetter = await store.create(letterBaseData())
       store.submitForApproval(newLetter.id)
       if (template?.id) templateStore.incrementUsage(template.id)
+      // W25-A1: only call onSuccess on the happy path.
+      onSuccess()
     } catch (err) {
       console.error('Failed to submit letter for approval', err)
     } finally {
       setIsSubmitting(false)
-      onSuccess()
     }
   }
 

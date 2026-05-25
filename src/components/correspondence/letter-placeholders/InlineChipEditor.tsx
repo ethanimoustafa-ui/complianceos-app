@@ -11,6 +11,8 @@ const TOKEN_RE = /\{\{\s*([a-zA-Z0-9_\-.]+)\s*\}\}/g
 interface InlineChipEditorProps {
   value: string
   onChange: (next: string) => void
+  /** G1: called when the editor loses focus — flush any pending save. */
+  onBlur?: () => void
   placeholderDefs: PlaceholderDef[]
   placeholderValues: Record<string, PlaceholderValue | undefined>
   onPlaceholderChange: (key: string, v: PlaceholderValue | undefined) => void
@@ -42,6 +44,7 @@ interface InlineChipEditorProps {
 export function InlineChipEditor({
   value,
   onChange,
+  onBlur,
   placeholderDefs,
   placeholderValues,
   onPlaceholderChange,
@@ -376,6 +379,7 @@ export function InlineChipEditor({
         onInput={handleInput}
         onPaste={handlePaste}
         onKeyDown={handleKeyDown}
+        onBlur={() => { handleInput(); onBlur?.() }}
         onCompositionStart={() => { isComposingRef.current = true }}
         onCompositionEnd={() => { isComposingRef.current = false; handleInput() }}
         dir={dir}

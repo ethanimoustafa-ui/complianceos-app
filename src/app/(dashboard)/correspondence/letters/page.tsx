@@ -297,6 +297,9 @@ export default function LettersPage() {
   // both; on field-level save we persist defs back to the Letter.
   const [editPlaceholderDefs, setEditPlaceholderDefs] = useState<PlaceholderDef[]>([])
   const [editPlaceholderValues, setEditPlaceholderValues] = useState<Record<string, PlaceholderValue | undefined>>({})
+  // H4: Activity timeline "Load More" — default 5 visible, each click adds 5.
+  const TIMELINE_PAGE_SIZE = 5
+  const [timelineVisible, setTimelineVisible] = useState(TIMELINE_PAGE_SIZE)
 
   useEffect(() => {
     if (selectedLetter) {
@@ -340,10 +343,28 @@ export default function LettersPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedLetter?.id])
 
+  // H4: Reset timeline pagination whenever a different letter is opened.
+  useEffect(() => {
+    setTimelineVisible(TIMELINE_PAGE_SIZE)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedLetter?.id])
+
   const isDraft = selectedLetter?.status === 'draft'
   const saveField = (patch: Partial<Letter>) => {
     if (selectedLetter) store.update(selectedLetter.id, patch)
   }
+
+  // G1: Refs that always hold the latest draft body state so flush handlers
+  // (beforeunload, visibilitychange, route change) can save without stale closures.
+  const pendingDraftBodyRef = useRef<{
+    letterId: string | null
+    subject: string
+    subjectAr: string
+    body: string
+    bodyAr: string
+    defs: PlaceholderDef[]
+    dirty: boolean
+  }>({ letterId: null, subject: '', subjectAr: '', body: '', bodyAr: '', defs: [], dirty: false })
 
   // Body/subject save path used by InlineChipEditor — also runs the
   // auto-promote pass so any newly-typed `{{token}}` becomes a real
@@ -362,8 +383,55 @@ export default function LettersPage() {
       editPlaceholderDefs,
     )
     setEditPlaceholderDefs(nextDefs)
+    // Update the pending ref so flush handlers have the latest state.
+    pendingDraftBodyRef.current = {
+      letterId: selectedLetter.id,
+      subject: merged.subject,
+      subjectAr: merged.subjectAr,
+      body: merged.body,
+      bodyAr: merged.bodyAr,
+      defs: nextDefs,
+      dirty: true,
+    }
     store.update(selectedLetter.id, { ...patch, placeholderDefs: nextDefs })
   }
+
+  // G1: Flush any pending body edit immediately (called by all flush triggers).
+  const flushDraftBody = useCallback(() => {
+    const pending = pendingDraftBodyRef.current
+    if (!pending.dirty || !pending.letterId) return
+    pending.dirty = false
+    store.update(pending.letterId, {
+      subject: pending.subject,
+      subjectAr: pending.subjectAr,
+      body: pending.body,
+      bodyAr: pending.bodyAr,
+      placeholderDefs: pending.defs,
+    })
+  }, [store])
+
+  // G1: Set up flush triggers — beforeunload, visibilitychange.
+  useEffect(() => {
+    const onBeforeUnload = () => flushDraftBody()
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') flushDraftBody()
+    }
+    window.addEventListener('beforeunload', onBeforeUnload)
+    document.addEventListener('visibilitychange', onVisibilityChange)
+    return () => {
+      window.removeEventListener('beforeunload', onBeforeUnload)
+      document.removeEventListener('visibilitychange', onVisibilityChange)
+    }
+  }, [flushDraftBody])
+
+  // G1: Flush when navigating away from detail view (view state change).
+  const prevViewRef = useRef(view)
+  useEffect(() => {
+    if (prevViewRef.current === 'detail' && view !== 'detail') {
+      flushDraftBody()
+    }
+    prevViewRef.current = view
+  }, [view, flushDraftBody])
 
   const updateDraftPlaceholderValue = (key: string, v: PlaceholderValue | undefined) => {
     if (!selectedLetter) return
@@ -1232,10 +1300,21 @@ export default function LettersPage() {
                               {getTypeLabel(letter.type)}
                             </span>
                           </td>
-                          <td className="px-6 py-4">
-                            <p className="text-sm text-slate-600 font-medium truncate max-w-xs">
-                              {letter.subject}
+                          <td className="px-6 py-4 max-w-xs">
+                            <p className="text-sm text-slate-600 font-medium truncate">
+                              {isRTL && letter.subjectAr ? letter.subjectAr : letter.subject}
                             </p>
+                            {letter.body && (
+                              <p className="text-[10px] text-slate-400 truncate mt-0.5">
+                                {letter.body.replace(/<[^>]*>/g, '').slice(0, 80)}
+                              </p>
+                            )}
+                            {letter.recipientName && (
+                              <p className="text-[10px] text-slate-400 mt-0.5">
+                                <span className="font-medium">{t('letters.recipientDept')}:</span>{' '}
+                                {letter.recipientName}
+                              </p>
+                            )}
                           </td>
                           <td className="px-6 py-4">
                             <span
@@ -1462,6 +1541,7 @@ export default function LettersPage() {
                                 setEditSubject(v)
                                 saveDraftBody({ subject: v })
                               }}
+                              onBlur={flushDraftBody}
                               placeholderDefs={editPlaceholderDefs}
                               placeholderValues={editPlaceholderValues}
                               onPlaceholderChange={updateDraftPlaceholderValue}
@@ -1486,6 +1566,7 @@ export default function LettersPage() {
                                 setEditBody(v)
                                 saveDraftBody({ body: v })
                               }}
+                              onBlur={flushDraftBody}
                               placeholderDefs={editPlaceholderDefs}
                               placeholderValues={editPlaceholderValues}
                               onPlaceholderChange={updateDraftPlaceholderValue}
@@ -1594,6 +1675,7 @@ export default function LettersPage() {
                                 setEditSubjectAr(v)
                                 saveDraftBody({ subjectAr: v })
                               }}
+                              onBlur={flushDraftBody}
                               placeholderDefs={editPlaceholderDefs}
                               placeholderValues={editPlaceholderValues}
                               onPlaceholderChange={updateDraftPlaceholderValue}
@@ -1621,6 +1703,7 @@ export default function LettersPage() {
                                 setEditBodyAr(v)
                                 saveDraftBody({ bodyAr: v })
                               }}
+                              onBlur={flushDraftBody}
                               placeholderDefs={editPlaceholderDefs}
                               placeholderValues={editPlaceholderValues}
                               onPlaceholderChange={updateDraftPlaceholderValue}
@@ -1924,7 +2007,7 @@ export default function LettersPage() {
                     )}
                     {selectedLetter && isDetailLoaded && (selectedLetter.attachments?.length ?? 0) === 0 && (
                       <p className="text-xs text-slate-400 italic text-center py-4">
-                        {t('letters.noAttachments' as Parameters<typeof t>[0]) || 'No attachments yet.'}
+                        {t('letters.noAttachments' as Parameters<typeof t>[0])}
                       </p>
                     )}
                     {selectedLetter?.attachments?.map((attachment) => (
@@ -1983,8 +2066,9 @@ export default function LettersPage() {
                       {t('letters.noActivityYet' as Parameters<typeof t>[0]) || 'No activity yet.'}
                     </p>
                   ) : (
+                    <>
                     <div className="space-y-6 relative before:absolute before:left-2 before:top-1 before:bottom-1 before:w-0.5 before:bg-slate-100">
-                      {[...(selectedLetter?.timeline ?? [])].reverse().map((event) => (
+                      {[...(selectedLetter?.timeline ?? [])].reverse().slice(0, timelineVisible).map((event) => (
                         <div key={event.id} className="relative pl-8">
                           <div
                             className={`absolute left-0 top-1 w-4 h-4 rounded-full border-2 ${
@@ -2005,6 +2089,16 @@ export default function LettersPage() {
                         </div>
                       ))}
                     </div>
+                    {(selectedLetter?.timeline?.length ?? 0) > timelineVisible && (
+                      <button
+                        onClick={() => setTimelineVisible((n) => n + TIMELINE_PAGE_SIZE)}
+                        className="w-full mt-4 py-2 text-[10px] font-bold text-slate-400 hover:text-emerald-600 hover:bg-slate-50 rounded-lg transition-colors cursor-pointer"
+                      >
+                        {t('letters.loadMore' as Parameters<typeof t>[0])}
+                        {' '}({(selectedLetter?.timeline?.length ?? 0) - timelineVisible})
+                      </button>
+                    )}
+                    </>
                   )}
                 </section>
               </div>
@@ -2227,7 +2321,7 @@ export default function LettersPage() {
           >
             <button onClick={() => { handleViewLetter(letter); setOpenMenuId(null); setMenuPosition(null) }}
               className="w-full px-4 py-2 text-left text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-2 cursor-pointer">
-              <Icon icon="lucide:eye" className="text-slate-400" /> View
+              <Icon icon="lucide:eye" className="text-slate-400" /> {t('common.view')}
             </button>
             {letter.status === 'draft' && (
               <button
@@ -2265,7 +2359,7 @@ export default function LettersPage() {
               setConfirmDeleteLetterId(letter.id)
             }}
               className="w-full px-4 py-2 text-left text-sm text-rose-600 hover:bg-rose-50 flex items-center gap-2 cursor-pointer">
-              <Icon icon="lucide:trash-2" /> Delete
+              <Icon icon="lucide:trash-2" /> {t('letters.delete' as Parameters<typeof t>[0])}
             </button>
           </div>,
           document.body
@@ -2285,7 +2379,7 @@ export default function LettersPage() {
             </div>
           </div>
           <h2 className="text-xl font-bold text-slate-900 text-center mb-2">
-            {t('letters.deleteLetter' as Parameters<typeof t>[0]) || 'Delete letter?'}
+            {t('letters.deleteLetter' as Parameters<typeof t>[0])}
           </h2>
           <p className="text-sm text-slate-500 text-center mb-6 leading-relaxed">
             This will permanently delete the letter and all its attachments, approval workflow steps, and activity. This cannot be undone.
@@ -2317,7 +2411,7 @@ export default function LettersPage() {
               className="flex-1 px-4 py-2.5 bg-rose-600 text-white rounded-xl text-sm font-bold hover:bg-rose-700 transition-colors cursor-pointer disabled:opacity-60 inline-flex items-center justify-center gap-2"
             >
               {deleteBusy && <Icon icon="lucide:loader-2" className="animate-spin" />}
-              {t('letters.deleteLetter' as Parameters<typeof t>[0]) || 'Delete letter'}
+              {t('letters.deleteLetter' as Parameters<typeof t>[0])}
             </button>
           </div>
         </div>
