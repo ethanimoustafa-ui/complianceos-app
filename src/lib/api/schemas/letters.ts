@@ -169,6 +169,7 @@ export const UpdateLetterSchema = z
         'sent',
         'response-received',
         'overdue',
+        'rejected',
       ])
       .optional(),
     recipient_name: PlainText(200).nullable().optional(),
@@ -201,6 +202,7 @@ export const ListLettersQuerySchema = z.object({
       'sent',
       'response-received',
       'overdue',
+      'rejected',
     ])
     .optional(),
   authority: z.string().optional(),

@@ -493,6 +493,7 @@ export type LetterStatus =
   | 'sent'
   | 'response-received'
   | 'overdue'
+  | 'rejected'
 
 // Widened to opaque string id so users can add custom letter types via
 // useLetterTypeStore. Default seeds match the legacy union values

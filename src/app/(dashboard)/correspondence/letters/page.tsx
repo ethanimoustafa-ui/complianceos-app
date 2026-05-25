@@ -249,7 +249,7 @@ export default function LettersPage() {
     const { col, dir } = sort
     const mul = dir === 'asc' ? 1 : -1
     const statusOrder: Record<LetterStatus, number> = {
-      draft: 0, 'pending-approval': 1, approved: 2, sent: 3, 'response-received': 4, overdue: 5,
+      draft: 0, 'pending-approval': 1, approved: 2, sent: 3, 'response-received': 4, overdue: 5, rejected: 6,
     }
     return [...filteredLetters].sort((a, b) => {
       switch (col) {
@@ -354,8 +354,9 @@ export default function LettersPage() {
     if (selectedLetter) store.update(selectedLetter.id, patch)
   }
 
-  // G1: Refs that always hold the latest draft body state so flush handlers
-  // (beforeunload, visibilitychange, route change) can save without stale closures.
+  // G1 / W25.1-RESIDUAL-1: Refs that always hold the latest draft body state
+  // so flush handlers (beforeunload, visibilitychange, route change) can save
+  // without stale closures.
   const pendingDraftBodyRef = useRef<{
     letterId: string | null
     subject: string
@@ -366,9 +367,69 @@ export default function LettersPage() {
     dirty: boolean
   }>({ letterId: null, subject: '', subjectAr: '', body: '', bodyAr: '', defs: [], dirty: false })
 
+  // W25.1-RESIDUAL-1: debounce timer ref + in-flight serialisation flag.
+  // Only ONE PATCH may be in-flight at a time; if a new idle-flush fires while
+  // a PATCH is still pending we skip it (the next idle-flush will include the
+  // latest content because pendingDraftBodyRef is always current).
+  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const patchInFlightRef = useRef(false)
+
+  // W25.1-RESIDUAL-1: actual network write — called after the debounce delay
+  // or immediately by flush triggers. Serialised: skipped when a PATCH is
+  // already in-flight (the next debounce flush will carry the latest content).
+  // On 412 (precondition_failed / stale ETag): refetch the letter to get a
+  // fresh updated_at token, then retry once. On second 412: surface a conflict
+  // toast so the user knows the letter was modified elsewhere.
+  const dispatchPatch = useCallback((pending: {
+    letterId: string
+    subject: string
+    subjectAr: string
+    body: string
+    bodyAr: string
+    defs: PlaceholderDef[]
+  }) => {
+    if (patchInFlightRef.current) return // serialise — skip intermediate flush
+    patchInFlightRef.current = true
+
+    const payload = {
+      subject: pending.subject,
+      subjectAr: pending.subjectAr,
+      body: pending.body,
+      bodyAr: pending.bodyAr,
+      placeholderDefs: pending.defs,
+    }
+
+    store.update(pending.letterId, payload)
+      .catch(async (err: unknown) => {
+        const is412 =
+          (err instanceof Error && err.message?.includes('412')) ||
+          // ApiClientError has a `.status` property
+          (err != null && typeof err === 'object' && 'status' in err && (err as { status: number }).status === 412) ||
+          (err != null && typeof err === 'object' && 'code' in err && (err as { code: string }).code === 'precondition_failed')
+        if (!is412) return // non-412 errors are already stored by the store
+        // Refetch to get the fresh updated_at token, then retry once.
+        try {
+          await store.fetchById(pending.letterId)
+          await store.update(pending.letterId, payload)
+        } catch {
+          // Second 412 (or any error on retry) — surface conflict toast.
+          showToast(t('letters.bodyConflictReload'))
+        }
+      })
+      .finally(() => {
+        patchInFlightRef.current = false
+        // If content changed while we were in-flight, the next idle debounce
+        // will fire and pick up the new content from pendingDraftBodyRef.
+      })
+  }, [store, showToast, t])
+
   // Body/subject save path used by InlineChipEditor — also runs the
   // auto-promote pass so any newly-typed `{{token}}` becomes a real
   // placeholder def stored on the letter.
+  //
+  // W25.1-RESIDUAL-1: debounced save — timer fires ~500 ms after the last
+  // keystroke (leading:false, trailing:true). Only updates the ref and local
+  // state on every call; the network PATCH is deferred to the debounce flush.
   const saveDraftBody = (patch: Partial<Pick<Letter, 'subject' | 'subjectAr' | 'body' | 'bodyAr'>>) => {
     if (!selectedLetter) return
     const merged = {
@@ -383,7 +444,7 @@ export default function LettersPage() {
       editPlaceholderDefs,
     )
     setEditPlaceholderDefs(nextDefs)
-    // Update the pending ref so flush handlers have the latest state.
+    // Update the pending ref so flush handlers always have the latest state.
     pendingDraftBodyRef.current = {
       letterId: selectedLetter.id,
       subject: merged.subject,
@@ -393,22 +454,30 @@ export default function LettersPage() {
       defs: nextDefs,
       dirty: true,
     }
-    store.update(selectedLetter.id, { ...patch, placeholderDefs: nextDefs })
+    // Debounce: cancel any outstanding timer, schedule a new one.
+    if (debounceTimerRef.current !== null) clearTimeout(debounceTimerRef.current)
+    debounceTimerRef.current = setTimeout(() => {
+      debounceTimerRef.current = null
+      const p = pendingDraftBodyRef.current
+      if (!p.dirty || !p.letterId) return
+      p.dirty = false
+      dispatchPatch(p as { letterId: string; subject: string; subjectAr: string; body: string; bodyAr: string; defs: PlaceholderDef[] })
+    }, 500)
   }
 
-  // G1: Flush any pending body edit immediately (called by all flush triggers).
+  // G1 / W25.1-RESIDUAL-1: Flush any pending body edit immediately (called by
+  // all flush triggers: blur, route change, visibility, beforeunload).
+  // Cancels the debounce timer and dispatches immediately.
   const flushDraftBody = useCallback(() => {
+    if (debounceTimerRef.current !== null) {
+      clearTimeout(debounceTimerRef.current)
+      debounceTimerRef.current = null
+    }
     const pending = pendingDraftBodyRef.current
     if (!pending.dirty || !pending.letterId) return
     pending.dirty = false
-    store.update(pending.letterId, {
-      subject: pending.subject,
-      subjectAr: pending.subjectAr,
-      body: pending.body,
-      bodyAr: pending.bodyAr,
-      placeholderDefs: pending.defs,
-    })
-  }, [store])
+    dispatchPatch(pending as { letterId: string; subject: string; subjectAr: string; body: string; bodyAr: string; defs: PlaceholderDef[] })
+  }, [dispatchPatch])
 
   // G1: Set up flush triggers — beforeunload, visibilitychange.
   useEffect(() => {
