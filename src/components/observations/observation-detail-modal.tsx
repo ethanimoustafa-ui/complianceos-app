@@ -153,7 +153,16 @@ export const ObservationDetailModal = memo(function ObservationDetailModal({
         })) || []
       )
       setLocalDocuments(source.documents || [])
-      setLocalRemediationDocs(source.remediationPlan?.documents || [])
+      // O6c: only reset remediationDocs when the source actually has remediation plan data.
+      // Avoid clearing localRemediationDocs when store updates don't include nested plan data
+      // (e.g., after a leadership transfer where remediationPlan is not re-fetched).
+      if (source.remediationPlan?.documents !== undefined) {
+        setLocalRemediationDocs(source.remediationPlan.documents)
+      } else if (!storeObservation) {
+        // First sync from observation prop — reset is safe
+        setLocalRemediationDocs([])
+      }
+      // If storeObservation exists but has no remediationPlan, keep previous localRemediationDocs
     }
   }, [storeObservation, observation?.id, isOpen])
 
@@ -283,17 +292,20 @@ export const ObservationDetailModal = memo(function ObservationDetailModal({
 
   if (!observation) return null
 
+  // O6b: prefer storeObservation (optimistic) over the prop for live-updated fields.
+  const liveObs = storeObservation || observation
+
   // Derived data
-  const displayAssignees = observation.assignees?.length
-    ? observation.assignees
-    : observation.team?.length
-      ? observation.team
-      : observation.assignee
-        ? [observation.assignee]
+  const displayAssignees = liveObs.assignees?.length
+    ? liveObs.assignees
+    : liveObs.team?.length
+      ? liveObs.team
+      : liveObs.assignee
+        ? [liveObs.assignee]
         : []
 
-  const leader = members.find(m => m.id === observation.leaderId) ||
-    observation.assignees?.find(a => a.id === observation.leaderId)
+  const leader = members.find(m => m.id === liveObs.leaderId) ||
+    liveObs.assignees?.find(a => a.id === liveObs.leaderId)
 
   const remediationDocIds = new Set(localRemediationDocs.map(d => d.id))
   const regularDocuments = localDocuments.filter(doc => !remediationDocIds.has(doc.id))
@@ -481,8 +493,8 @@ export const ObservationDetailModal = memo(function ObservationDetailModal({
         isOpen={showTransferModal}
         onClose={() => setShowTransferModal(false)}
         onTransfer={handleTransferLeadership}
-        assignees={observation.assignees || observation.team || []}
-        currentLeaderId={observation.leaderId}
+        assignees={liveObs.assignees || liveObs.team || []}
+        currentLeaderId={liveObs.leaderId}
       />
 
       {/* File Upload Modal */}

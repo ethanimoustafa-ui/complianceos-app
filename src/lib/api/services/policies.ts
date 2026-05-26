@@ -29,7 +29,7 @@ export const POLICY_VERSION_COLUMNS =
   'id, policy_id, version, date, author, text_en, text_ar, field_changes'
 
 export const POLICY_WORKFLOW_STEP_COLUMNS =
-  'id, policy_id, step, date, user_name, status, description, action_type, note, step_state, sort_order, updated_at'
+  'id, policy_id, step, date, user_name, status, description, action_type, note, step_state, sort_order, deadline, updated_at'
 
 export const POLICY_ACTIVITY_COLUMNS =
   'id, policy_id, timestamp, date, type, text_en, text_ar, user_name, note'

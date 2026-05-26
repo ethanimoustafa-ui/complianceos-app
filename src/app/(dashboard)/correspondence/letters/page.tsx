@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { createPortal } from 'react-dom'
-import { useSearchParams } from 'next/navigation'
+import { useSearchParams, useRouter, usePathname } from 'next/navigation'
 import Link from 'next/link'
 import { Icon } from '@iconify/react'
 import { Modal } from '@/components/ui/modal'
@@ -58,6 +58,8 @@ import type { LetterSortCol, LetterSortState } from '@/components/correspondence
 export default function LettersPage() {
   const { t, isRTL } = useTranslation()
   const searchParams = useSearchParams()
+  const router = useRouter()
+  const pathname = usePathname()
   const store = useLetterStore()
   const templateStore = useLetterTemplateStore()
   const letterTypeStore = useLetterTypeStore()
@@ -88,6 +90,8 @@ export default function LettersPage() {
   const [responseBusy, setResponseBusy] = useState(false)
   const [deleteBusy, setDeleteBusy] = useState(false)
   const [attachBusy, setAttachBusy] = useState(false)
+  // L3: "saved at HH:mm" indicator for the letter body editor.
+  const [bodySavedAt, setBodySavedAt] = useState<Date | null>(null)
   const letterContentRef = useRef<HTMLDivElement>(null)
 
   // Hydrate server-state on mount (Fix-1). Without this, reload wipes the
@@ -158,6 +162,9 @@ export default function LettersPage() {
   const [isViewTemplateModalOpen, setIsViewTemplateModalOpen] = useState(false)
   const [isEditTemplateModalOpen, setIsEditTemplateModalOpen] = useState(false)
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false)
+  // L8/M1: loading spinners for async template actions
+  const [isCopyingTemplateId, setIsCopyingTemplateId] = useState<string | null>(null)
+  const [isDeletingTemplate, setIsDeletingTemplate] = useState(false)
 
   const showToast = useCallback((message: string) => {
     setToastMessage(message)
@@ -400,6 +407,10 @@ export default function LettersPage() {
     }
 
     store.update(pending.letterId, payload)
+      .then(() => {
+        // L3: update "saved at HH:mm" indicator on successful write.
+        setBodySavedAt(new Date())
+      })
       .catch(async (err: unknown) => {
         const is412 =
           (err instanceof Error && err.message?.includes('412')) ||
@@ -411,6 +422,7 @@ export default function LettersPage() {
         try {
           await store.fetchById(pending.letterId)
           await store.update(pending.letterId, payload)
+          setBodySavedAt(new Date())
         } catch {
           // Second 412 (or any error on retry) — surface conflict toast.
           showToast(t('letters.bodyConflictReload'))
@@ -421,7 +433,7 @@ export default function LettersPage() {
         // If content changed while we were in-flight, the next idle debounce
         // will fire and pick up the new content from pendingDraftBodyRef.
       })
-  }, [store, showToast, t])
+  }, [store, showToast, t, setBodySavedAt])
 
   // Body/subject save path used by InlineChipEditor — also runs the
   // auto-promote pass so any newly-typed `{{token}}` becomes a real
@@ -562,9 +574,14 @@ export default function LettersPage() {
     setIsEditTemplateModalOpen(true)
   }
 
-  const handleDuplicateTemplate = (template: LetterTemplate) => {
-    templateStore.create({ ...template, name: `${template.name} (Copy)`, status: 'Draft' })
-    showToast('Template duplicated successfully')
+  const handleDuplicateTemplate = async (template: LetterTemplate) => {
+    setIsCopyingTemplateId(template.id)
+    try {
+      await templateStore.create({ ...template, name: `${template.name} (Copy)`, status: 'Draft' })
+      showToast('Template duplicated successfully')
+    } finally {
+      setIsCopyingTemplateId(null)
+    }
   }
 
   const handleDeleteTemplate = (template: LetterTemplate) => {
@@ -572,12 +589,16 @@ export default function LettersPage() {
     setIsDeleteConfirmOpen(true)
   }
 
-  const handleConfirmDelete = () => {
-    if (selectedTemplate) {
-      templateStore.delete(selectedTemplate.id)
+  const handleConfirmDelete = async () => {
+    if (!selectedTemplate) return
+    setIsDeletingTemplate(true)
+    try {
+      await templateStore.delete(selectedTemplate.id)
       showToast('Template deleted successfully')
       setIsDeleteConfirmOpen(false)
       setSelectedTemplate(null)
+    } finally {
+      setIsDeletingTemplate(false)
     }
   }
 
@@ -586,28 +607,36 @@ export default function LettersPage() {
     setIsEditTemplateModalOpen(true)
   }
 
-  const handleSaveTemplate = (templateData: Partial<LetterTemplate>) => {
+  const handleSaveTemplate = async (templateData: Partial<LetterTemplate>) => {
     const typeColors: Record<string, string> = {
       'non-objection': 'emerald', inquiry: 'blue', submission: 'amber', notification: 'rose',
     }
     const typeIcons: Record<string, string> = {
       'non-objection': 'lucide:user-check', inquiry: 'lucide:help-circle', submission: 'lucide:file-up', notification: 'lucide:alert-triangle',
     }
-    if (selectedTemplate) {
-      templateStore.update(selectedTemplate.id, templateData)
-      showToast('Template updated successfully')
-    } else {
-      const resolvedType = templateData.type || 'non-objection'
-      templateStore.create({
-        name: templateData.name || 'Untitled Template',
-        type: resolvedType,
-        icon: typeIcons[resolvedType] ?? 'lucide:mail',
-        color: typeColors[resolvedType] ?? 'slate',
-        description: templateData.description || '',
-        status: templateData.status || 'Draft',
-        ...templateData,
-      })
-      showToast('Template created successfully')
+    try {
+      if (selectedTemplate) {
+        await templateStore.update(selectedTemplate.id, templateData)
+        showToast('Template updated successfully')
+      } else {
+        const resolvedType = templateData.type || 'non-objection'
+        await templateStore.create({
+          name: templateData.name || 'Untitled Template',
+          type: resolvedType,
+          // L2: use user-picked icon/color; fall back to type-based defaults only
+          // when the TemplateEditForm didn't surface them (legacy call sites).
+          icon: templateData.icon || typeIcons[resolvedType] || 'lucide:mail',
+          color: templateData.color || typeColors[resolvedType] || 'slate',
+          description: templateData.description || '',
+          status: templateData.status || 'Draft',
+          ...templateData,
+        })
+        showToast('Template created successfully')
+      }
+    } catch {
+      // store.error is already set by the store; toast a fallback.
+      showToast('Failed to save template — please try again')
+      return
     }
     setIsEditTemplateModalOpen(false)
     setSelectedTemplate(null)
@@ -619,20 +648,28 @@ export default function LettersPage() {
     setIsCreateModalOpen(true)
   }
 
-  const handleViewLetter = (letter: Letter) => {
+  const handleViewLetter = useCallback((letter: Letter) => {
     store.setSelected(letter)
     setView('detail')
     window.scrollTo({ top: 0, behavior: 'smooth' })
+    // F4 J1 fix: strip ?id= immediately on open so that refresh doesn't
+    // re-trigger the deep-link effect and reopen the detail view.
+    if (searchParams.get('id')) {
+      router.replace(pathname)
+    }
     // Refresh the full detail (approval chain, attachments, timeline) which
     // the list endpoint may have truncated. Errors are swallowed by the
     // store; UI continues to render from cached row data.
     void store.fetchById(letter.id)
-  }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams, router, pathname, store])
 
-  // Deep-link: auto-switch to detail view when ?id= is present
+  // Deep-link: auto-switch to detail view when ?id= is present.
+  // Guard with view !== 'detail' so re-running when store.letters reconciles
+  // after fetchAll doesn't reopen the detail once the user has navigated away.
   useEffect(() => {
     const id = searchParams.get('id')
-    if (!id) return
+    if (!id || view === 'detail') return
     const letter = store.letters.find(l => l.id === id)
     if (letter) handleViewLetter(letter)
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1124,10 +1161,12 @@ export default function LettersPage() {
                               </Gate>
                               <button
                                 onClick={() => handleDuplicateTemplate(template)}
-                                className="p-1.5 hover:bg-slate-200 rounded text-slate-400 hover:text-slate-900 transition-colors cursor-pointer"
+                                disabled={isCopyingTemplateId === template.id}
+                                className="p-1.5 hover:bg-slate-200 rounded text-slate-400 hover:text-slate-900 transition-colors cursor-pointer disabled:opacity-60"
                                 title="Duplicate"
                               >
-                                <Icon icon="lucide:copy" />
+                                <Icon icon={isCopyingTemplateId === template.id ? 'lucide:loader-2' : 'lucide:copy'}
+                                  className={isCopyingTemplateId === template.id ? 'animate-spin' : ''} />
                               </button>
                               <Gate perm="Manage Letter Templates">
                                 <button
@@ -1508,6 +1547,14 @@ export default function LettersPage() {
             <div className="grid grid-cols-12 gap-8">
               {/* Letter Content */}
               <div className="col-span-12 lg:col-span-8">
+                {/* L3: "saved at HH:mm" indicator — appears above the letter content
+                    when an auto-save PATCH has completed. Fades out after 4s. */}
+                {isDraft && bodySavedAt && (
+                  <div className="mb-2 flex items-center gap-1.5 text-[11px] text-emerald-600 font-medium" data-pdf-hide>
+                    <Icon icon="lucide:check-circle" className="text-[13px]" />
+                    {`Saved at ${bodySavedAt.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}`}
+                  </div>
+                )}
                 <div
                   ref={letterContentRef}
                   dir={language === 'en' ? 'ltr' : 'rtl'}
@@ -1910,6 +1957,7 @@ export default function LettersPage() {
                         <div className="min-w-[200px]">
                           <EditableSelect
                             locked
+                            autoOpen
                             items={teamMembers
                               .filter((m) => m.status === 'active')
                               .map((m) => ({
@@ -2360,8 +2408,10 @@ export default function LettersPage() {
             </button>
             <button
               onClick={handleConfirmDelete}
-              className="flex-1 px-4 py-2.5 bg-rose-600 text-white rounded-xl text-sm font-bold hover:bg-rose-700 transition-colors cursor-pointer"
+              disabled={isDeletingTemplate}
+              className="flex-1 px-4 py-2.5 bg-rose-600 text-white rounded-xl text-sm font-bold hover:bg-rose-700 transition-colors cursor-pointer disabled:opacity-60 inline-flex items-center justify-center gap-2"
             >
+              {isDeletingTemplate && <Icon icon="lucide:loader-2" className="animate-spin" />}
               {t('letters.deleteTemplate')}
             </button>
           </div>

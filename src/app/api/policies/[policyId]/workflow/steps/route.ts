@@ -65,6 +65,7 @@ export async function POST(req: NextRequest, { params }: Params) {
         action_type: input.action_type ?? null,
         step_state: input.step_state ?? null,
         sort_order: sortOrder,
+        deadline: input.deadline ?? null,
       })
       .select(POLICY_WORKFLOW_STEP_COLUMNS)
       .single()

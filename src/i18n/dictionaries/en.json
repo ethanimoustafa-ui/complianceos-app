@@ -55,7 +55,8 @@
     "viewFullDetail": "Open Full Detail",
     "note": "Note",
     "loadMore": "Load more",
-    "more": "more"
+    "more": "more",
+    "saving": "Saving..."
   },
   "navigation": {
     "dashboard": "Dashboard",
@@ -1213,6 +1214,7 @@
     "actionNotifyManager": "Notify Manager",
     "actionRequestApproval": "Request Approval",
     "documentUploaded": "Document updated successfully",
+    "evidenceUploaded": "Evidence uploaded successfully",
     "policyUpdated": "Policy updated successfully!",
     "deletePolicy": "Delete Policy",
     "confirmDeletePolicy": "Are you sure you want to permanently delete this policy? This action cannot be undone.",

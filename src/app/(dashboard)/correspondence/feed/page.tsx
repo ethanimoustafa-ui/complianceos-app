@@ -191,14 +191,25 @@ export default function CorrespondenceFeedPage() {
     })
   }, [riskStore.risks])
 
-  // Computed metrics
+  // F5: Letter Submissions metric — count sent letters from letterStore (the
+  // formal SAMA letters module) within the current quarter.  The old formula
+  // only looked at correspondenceStore (the ad-hoc correspondence feed, a
+  // different table) so it never updated when a letter was sent via the
+  // Letters module.  Use `cache: 'no-store'` semantics — read live from the
+  // store; fetchLetters is called in the useEffect above.
   const samaSubmissionCount = useMemo(() => {
     const now = new Date()
     const qStart = new Date(now.getFullYear(), Math.floor(now.getMonth() / 3) * 3, 1)
-    return correspondenceStore.correspondence.filter(c =>
+    // Count sent letters from the Letters module in the current quarter.
+    const letterCount = letterStore.letters.filter(l =>
+      l.status === 'sent' && l.sentDate && new Date(l.sentDate) >= qStart
+    ).length
+    // Also include sama-typed entries from the correspondence feed (legacy path).
+    const feedCount = correspondenceStore.correspondence.filter(c =>
       c.type === 'sama' && new Date(c.date) >= qStart
     ).length
-  }, [correspondenceStore.correspondence])
+    return letterCount + feedCount
+  }, [letterStore.letters, correspondenceStore.correspondence])
 
   // W24-1 — locale-aware quarter label. AR → "الربع الثاني ٢٠٢٦", EN → "Q2 2026".
   const currentQuarterLabel = useMemo(() => {
@@ -561,8 +572,10 @@ export default function CorrespondenceFeedPage() {
                       onClick={() => router.push(`/correspondence/regulatory-updates/rules`)}
                     />
                   ))}
-                  {/* H3: fallback to recent policies when no circulars exist yet */}
-                  {!isCircularsLoading && topCirculars.length === 0 && topPolicies.length > 0 && topPolicies.map((policy) => (
+                  {/* F3: always show policies alongside circulars (not just as
+                      a fallback). topPolicies is always rendered so the tracker
+                      is never empty when policies exist even if circulars do too. */}
+                  {!isCircularsLoading && topPolicies.map((policy) => (
                     <div
                       key={policy.id}
                       onClick={() => router.push(`/correspondence/regulatory-updates/policies`)}
@@ -672,6 +685,13 @@ export default function CorrespondenceFeedPage() {
                               letter={letter}
                               onView={() => handleViewLetter(letter)}
                               onArchive={() => handleArchive(letter.id)}
+                              onDelete={() => {
+                                if (deleteConfirmId === letter.id) {
+                                  void handleDelete(letter.id)
+                                } else {
+                                  setDeleteConfirmId(letter.id)
+                                }
+                              }}
                               t={t}
                               isRTL={isRTL}
                             />
@@ -1359,6 +1379,13 @@ export default function CorrespondenceFeedPage() {
                       letter={letter}
                       onView={() => { setIsFeedAllOpen(false); handleViewLetter(letter) }}
                       onArchive={() => handleArchive(letter.id)}
+                      onDelete={() => {
+                        if (deleteConfirmId === letter.id) {
+                          void handleDelete(letter.id)
+                        } else {
+                          setDeleteConfirmId(letter.id)
+                        }
+                      }}
                       t={t}
                       isRTL={isRTL}
                     />
@@ -1513,12 +1540,15 @@ function CommunicationLogItem({
   letter,
   onView,
   onArchive,
+  onDelete,
   t,
   isRTL
 }: {
   letter: Correspondence
   onView: () => void
   onArchive: () => void
+  // F1: per-row soft-delete callback (optional — omit to hide the button).
+  onDelete?: () => void
   t: (key: TranslationKey, params?: Record<string, string | number>) => string
   isRTL: boolean
 }) {
@@ -1560,19 +1590,29 @@ function CommunicationLogItem({
             {t('correspondence.assignedTo')}: {letter.assignee}
           </p>
         )}
-        <div className={`flex gap-2 mt-2`}>
+        {/* F1: flex-wrap so action buttons don't overflow narrow cards */}
+        <div className={`flex flex-wrap gap-x-2 gap-y-1 mt-2`}>
           <button
             onClick={onView}
-            className="text-[9px] font-bold text-emerald-600 hover:text-emerald-700 cursor-pointer"
+            className="text-[9px] font-bold text-emerald-600 hover:text-emerald-700 cursor-pointer shrink-0"
           >
             {t('common.view')}
           </button>
           <button
             onClick={onArchive}
-            className="text-[9px] font-bold text-slate-500 hover:text-slate-700 cursor-pointer"
+            className="text-[9px] font-bold text-slate-500 hover:text-slate-700 cursor-pointer shrink-0"
           >
             {letter.archived ? t('correspondence.unarchive') : t('correspondence.archive')}
           </button>
+          {/* F1: per-row delete button */}
+          {onDelete && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onDelete() }}
+              className="text-[9px] font-bold text-rose-500 hover:text-rose-700 cursor-pointer shrink-0"
+            >
+              {t('common.delete')}
+            </button>
+          )}
         </div>
       </div>
     </div>

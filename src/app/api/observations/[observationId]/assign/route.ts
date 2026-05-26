@@ -86,11 +86,20 @@ export async function POST(req: NextRequest, { params }: Params) {
     if (!data) throw NotFound(`Observation ${observationId} not found`)
 
     const actor = observationActorName(profile, user.id)
-    // Choose the i18n key based on what changed: leader swap vs assignee update.
-    const timelineKey =
-      input.leader_id !== undefined
-        ? 'regulatoryUpdates.timeline.observationLeaderTransferred'
-        : 'regulatoryUpdates.timeline.observationAssigneesUpdated'
+    // O6d: pass from/to names so the i18n key `observationLeaderTransferred`
+    // can interpolate `{{from}}` and `{{to}}` instead of rendering the raw
+    // template literal. Fall back to a generic key when names aren't provided
+    // (e.g., pure assignees update).
+    const isLeaderTransfer = input.leader_id !== undefined
+    const timelineParams: Record<string, string> = isLeaderTransfer
+      ? {
+          from: input.from_leader_name ?? actor,
+          to: input.to_leader_name ?? String(input.leader_id ?? ''),
+        }
+      : {}
+    const timelineKey = isLeaderTransfer
+      ? 'regulatoryUpdates.timeline.observationLeaderTransferred'
+      : 'regulatoryUpdates.timeline.observationAssigneesUpdated'
     await Promise.all([
       writeAudit({
         actor_id: user.id,
@@ -110,7 +119,7 @@ export async function POST(req: NextRequest, { params }: Params) {
         action_type: 'assigned',
         user_id: user.id,
         user_name: actor,
-        ...renderBilingual(timelineKey, {}),
+        ...renderBilingual(timelineKey, timelineParams),
       }),
     ])
 

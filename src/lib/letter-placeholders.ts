@@ -34,10 +34,13 @@ export function reconcilePlaceholderDefs(
   ])
   const byKey = new Map(
     (defs ?? []).map((d) => {
-      // Legacy 'text' kind no longer exists — promote to 'date' on read.
+      // L7b: Legacy 'text' and 'textarea' kinds no longer exist in the schema
+      // (PlaceholderDef.type is 'date' | 'reference'). Promote both to 'date'
+      // on read so seeded templates with old placeholder types don't cause
+      // Zod validation failures when a letter is created from them.
       const legacyType = (d as { type?: string }).type
       const next: PlaceholderDef =
-        legacyType === 'text' ? { ...d, type: 'date' } : d
+        legacyType === 'text' || legacyType === 'textarea' ? { ...d, type: 'date' } : d
       return [d.key, next]
     }),
   )

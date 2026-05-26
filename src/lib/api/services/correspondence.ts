@@ -4,8 +4,11 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { NotFound } from '../errors'
 
+// F2: body added to list columns so the feed card can show the message
+// preview. Only the first 500 chars are rendered in the UI (the list
+// returns the full value; the component truncates via line-clamp CSS).
 export const CORRESPONDENCE_LIST_COLUMNS =
-  'id, reference, subject, from_party, to_parties, date, type, status, thread_id, archived, assignee_id, assignee:profiles!correspondence_assignee_id_fkey(name), framework_ids, created_at, updated_at'
+  'id, reference, subject, from_party, to_parties, date, type, status, body, thread_id, archived, assignee_id, assignee:profiles!correspondence_assignee_id_fkey(name), framework_ids, created_at, updated_at'
 
 export const CORRESPONDENCE_DETAIL_COLUMNS =
   'id, reference, subject, from_party, to_parties, date, type, status, body, thread_id, archived, assignee_id, assignee:profiles!correspondence_assignee_id_fkey(name), framework_ids, created_at, updated_at'

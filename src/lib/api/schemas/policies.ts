@@ -152,6 +152,8 @@ export const CreatePolicyWorkflowStepSchema = z
     step_state: WorkflowStepState.optional(),
     // SEC-11 / GAP-12: server-authoritative MAX+1; the route ignores client values.
     sort_order: z.number().int().min(0).optional(),
+    // P1: optional deadline for the step (YYYY-MM-DD).
+    deadline: DateString.nullable().optional(),
   })
   .strict()
 export type CreatePolicyWorkflowStepInput = z.infer<typeof CreatePolicyWorkflowStepSchema>

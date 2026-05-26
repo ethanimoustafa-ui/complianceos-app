@@ -158,18 +158,12 @@ export async function POST(req: NextRequest) {
 
     const created = inserted as { id: string; reference: string }
 
-    // Bump template usage_count when a template was used.
+    // L7c: Bump template usage_count atomically (avoids read-modify-write race
+    // when multiple concurrent users create letters from the same template).
     if (input.template_id) {
-      const { data: tpl } = await supabase
-        .from('letter_templates')
-        .select('usage_count')
-        .eq('id', input.template_id)
-        .maybeSingle<{ usage_count: number }>()
-      const next = (tpl?.usage_count ?? 0) + 1
-      await supabase
-        .from('letter_templates')
-        .update({ usage_count: next })
-        .eq('id', input.template_id)
+      await supabase.rpc('increment_template_usage_count', {
+        template_id: input.template_id,
+      })
     }
 
     const actor = profile.name ?? profile.email ?? user.id

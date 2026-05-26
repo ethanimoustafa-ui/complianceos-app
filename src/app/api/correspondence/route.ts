@@ -35,6 +35,8 @@ export async function GET(req: NextRequest) {
     let query = supabase
       .from('correspondence')
       .select(CORRESPONDENCE_LIST_COLUMNS, { count: 'exact' })
+      // F1: exclude soft-deleted rows (deleted_at set by the DELETE route).
+      .is('deleted_at', null)
 
     if (q.type) query = query.eq('type', q.type)
     if (q.status) query = query.eq('status', q.status)

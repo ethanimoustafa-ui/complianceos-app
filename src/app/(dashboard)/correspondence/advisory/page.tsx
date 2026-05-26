@@ -101,6 +101,13 @@ export default function AdvisoryPage() {
   const [isDeleteAdvisoryOpen, setIsDeleteAdvisoryOpen] = useState(false)
   // H4: Load More for advisory notes thread (default 5 visible)
   const [notesVisible, setNotesVisible] = useState(5)
+  // A1: skeleton loading while discussion thread fetches on modal open
+  const [notesLoading, setNotesLoading] = useState(false)
+  // A2: spinner on Create button while POST completes
+  const [createAdvisoryBusy, setCreateAdvisoryBusy] = useState(false)
+  // A3: temp optimistic note id for pending state
+  const [pendingNoteId, setPendingNoteId] = useState<string | null>(null)
+  const [addNoteBusy, setAddNoteBusy] = useState(false)
 
   // Advisory reassign
   const [reassignTarget, setReassignTarget] = useState('')
@@ -218,24 +225,34 @@ export default function AdvisoryPage() {
     return id
   }
 
-  const handleViewAdvisory = (advisory: AdvisoryRequest) => {
+  const handleViewAdvisory = useCallback((advisory: AdvisoryRequest) => {
     setSelectedAdvisory(advisory)
     setIsAdvisoryDetailOpen(true)
-    // Hydrate notes / discussion thread from the server when opening the modal.
-    void useAdvisoryStore.getState().fetchById(advisory.id).then((fresh) => {
-      if (fresh) setSelectedAdvisory(fresh)
-    }).catch(() => { /* best-effort hydrate */ })
-  }
-
-  // J1 fix: close handler that also strips ?id= from the URL so the deep-link
-  // useEffect does not refire and reopen the modal after advisoryRequests reconciles.
-  const handleCloseAdvisoryDetail = useCallback(() => {
-    setIsAdvisoryDetailOpen(false)
-    setNewNoteContent('')
+    setNotesVisible(5)
+    // J1 fix: strip ?id= immediately on open (not on close) so the deep-link
+    // useEffect never re-fires after fetchAll reconciles the advisoryRequests
+    // array (which previously caused the modal to reopen right after close).
     if (searchParams.get('id')) {
       router.replace(pathname)
     }
+    // A1: show skeleton while the thread fetches from server.
+    setNotesLoading(true)
+    void useAdvisoryStore.getState().fetchById(advisory.id).then((fresh) => {
+      if (fresh) setSelectedAdvisory(fresh)
+    }).catch(() => { /* best-effort hydrate */ }).finally(() => {
+      setNotesLoading(false)
+    })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams, router, pathname])
+
+  // Close handler — URL is already stripped on open (J1 fix in handleViewAdvisory),
+  // so no URL manipulation needed here.
+  const handleCloseAdvisoryDetail = useCallback(() => {
+    setIsAdvisoryDetailOpen(false)
+    setNewNoteContent('')
+    setNotesLoading(false)
+    setPendingNoteId(null)
+  }, [])
 
   // A2 fix: assignedTo is stored as a UUID; resolve to display name from team store.
   // Falls back to the raw value so pre-fix rows (stored as name strings) still render.
@@ -632,33 +649,40 @@ export default function AdvisoryPage() {
           </div>
           <div className={`flex gap-3 mt-6`}>
             <button
-              onClick={() => {
+              disabled={createAdvisoryBusy}
+              aria-busy={createAdvisoryBusy || undefined}
+              onClick={async () => {
                 if (!newAdvSubject || !newAdvBusinessUnit || !newAdvPriority || !newAdvDescription) {
                   showToast(t('correspondence.fillRequiredFields'))
                   return
                 }
-                advisoryStore.create({
-                  subject: newAdvSubject,
-                  description: newAdvDescription,
-                  businessUnit: newAdvBusinessUnit as BusinessUnit,
-                  status: 'pending',
-                  priority: newAdvPriority as AdvisoryPriority,
-                  requestedBy: newAdvRequestedBy || authStore.user?.name || 'Unknown',
-                  assignedTo: newAdvAssignedTo || undefined,
-                  requestedDate: new Date().toISOString().split('T')[0],
-                })
-                setNewAdvSubject('')
-                setNewAdvBusinessUnit('')
-                setNewAdvPriority('')
-                setNewAdvDescription('')
-                setNewAdvRequestedBy(authStore.user?.name || '')
-                setNewAdvAssignedTo('')
-                setIsNewAdvisoryOpen(false)
-                showToast(t('advisory.requestSubmitted'))
+                setCreateAdvisoryBusy(true)
+                try {
+                  await advisoryStore.create({
+                    subject: newAdvSubject,
+                    description: newAdvDescription,
+                    businessUnit: newAdvBusinessUnit as BusinessUnit,
+                    status: 'pending',
+                    priority: newAdvPriority as AdvisoryPriority,
+                    requestedBy: newAdvRequestedBy || authStore.user?.name || 'Unknown',
+                    assignedTo: newAdvAssignedTo || undefined,
+                    requestedDate: new Date().toISOString().split('T')[0],
+                  })
+                  setNewAdvSubject('')
+                  setNewAdvBusinessUnit('')
+                  setNewAdvPriority('')
+                  setNewAdvDescription('')
+                  setNewAdvRequestedBy(authStore.user?.name || '')
+                  setNewAdvAssignedTo('')
+                  setIsNewAdvisoryOpen(false)
+                  showToast(t('advisory.requestSubmitted'))
+                } finally {
+                  setCreateAdvisoryBusy(false)
+                }
               }}
-              className={`flex-1 bg-emerald-600 text-white py-3 rounded-lg font-bold hover:bg-emerald-700 transition-colors flex items-center justify-center gap-2 cursor-pointer`}
+              className={`flex-1 bg-emerald-600 text-white py-3 rounded-lg font-bold hover:bg-emerald-700 transition-colors flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60`}
             >
-              <Icon icon="lucide:send" className="text-lg" />
+              <Icon icon={createAdvisoryBusy ? 'lucide:loader-2' : 'lucide:send'} className={`text-lg ${createAdvisoryBusy ? 'animate-spin' : ''}`} />
               {t('advisory.submitRequest')}
             </button>
             <button
@@ -725,13 +749,41 @@ export default function AdvisoryPage() {
                 <Icon icon="lucide:message-circle" className="text-slate-400" />
                 {t('advisory.discussionThread')} ({selectedAdvisory.notes.length})
               </h4>
-              {selectedAdvisory.notes.length > 0 ? (
+              {/* A1: skeleton loading while thread fetches on first open */}
+              {notesLoading ? (
+                <div className="space-y-3">
+                  {Array.from({ length: 3 }).map((_, i) => (
+                    <div key={i} className={`bg-slate-50 p-4 rounded-lg border-l-4 border-slate-200 ${isRTL ? 'text-right border-l-0 border-r-4' : ''}`}>
+                      <div className={`flex justify-between items-start mb-2`}>
+                        <div className="h-3 w-24 bg-slate-200 rounded animate-pulse" />
+                        <div className="h-2 w-20 bg-slate-200 rounded animate-pulse" />
+                      </div>
+                      <div className="space-y-1.5">
+                        <div className="h-2.5 w-full bg-slate-200 rounded animate-pulse" />
+                        <div className="h-2.5 w-4/5 bg-slate-200 rounded animate-pulse" />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : selectedAdvisory.notes.length > 0 ? (
                 <div className="space-y-3">
                   {selectedAdvisory.notes.slice(0, notesVisible).map((note) => (
-                    <div key={note.id} className={`bg-slate-50 p-4 rounded-lg border-l-4 border-emerald-500 ${isRTL ? 'text-right border-l-0 border-r-4' : ''}`}>
+                    <div
+                      key={note.id}
+                      className={`bg-slate-50 p-4 rounded-lg border-l-4 border-emerald-500 ${isRTL ? 'text-right border-l-0 border-r-4' : ''} ${note.id === pendingNoteId ? 'opacity-60' : ''}`}
+                    >
                       <div className={`flex justify-between items-start mb-2`}>
-                        <span className="text-xs font-bold text-slate-900">{note.author}</span>
-                        <span className="text-[10px] text-slate-400">{formatLocalizedDate(note.timestamp, language, { year: 'numeric', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</span>
+                        <span className="text-xs font-bold text-slate-900">
+                          {note.author}
+                          {note.id === pendingNoteId && (
+                            <Icon icon="lucide:loader-2" className="inline ml-2 animate-spin text-slate-400" />
+                          )}
+                        </span>
+                        <span className="text-[10px] text-slate-400">
+                          {note.id === pendingNoteId
+                            ? '…'
+                            : formatLocalizedDate(note.timestamp, language, { year: 'numeric', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
+                        </span>
                       </div>
                       <p className="text-sm text-slate-600">{note.content}</p>
                     </div>
@@ -761,21 +813,45 @@ export default function AdvisoryPage() {
                   className={`w-full px-4 py-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 ${isRTL ? 'text-right' : ''}`}
                 />
                 <button
-                  onClick={() => {
-                    if (!newNoteContent.trim()) return
-                    advisoryStore.addNote(selectedAdvisory.id, {
-                      author: authStore.user?.name || 'Unknown',
-                      content: newNoteContent.trim(),
-                    })
-                    // Update local selectedAdvisory to reflect the new note
-                    const updated = useAdvisoryStore.getState().advisoryRequests.find(r => r.id === selectedAdvisory.id)
-                    if (updated) setSelectedAdvisory(updated)
+                  disabled={addNoteBusy}
+                  aria-busy={addNoteBusy || undefined}
+                  onClick={async () => {
+                    if (!newNoteContent.trim() || addNoteBusy) return
+                    const content = newNoteContent.trim()
+                    const author = authStore.user?.name || 'Unknown'
+                    // A3: optimistic insert — add a pending note immediately before the request
+                    const tempId = `temp-note-${Date.now()}`
+                    const optimisticNote = {
+                      id: tempId,
+                      author,
+                      content,
+                      timestamp: new Date().toISOString(),
+                    }
+                    setPendingNoteId(tempId)
+                    setSelectedAdvisory((prev) => prev ? { ...prev, notes: [...prev.notes, optimisticNote] } : prev)
                     setNewNoteContent('')
-                    showToast(t('advisory.noteAdded'))
+                    setAddNoteBusy(true)
+                    try {
+                      await advisoryStore.addNote(selectedAdvisory.id, { author, content })
+                      // Reconcile: replace optimistic entry with the server's real note
+                      const fresh = useAdvisoryStore.getState().byId[selectedAdvisory.id]
+                      if (fresh) setSelectedAdvisory(fresh)
+                      setPendingNoteId(null)
+                      showToast(t('advisory.noteAdded'))
+                    } catch {
+                      // Revert optimistic note on failure
+                      setSelectedAdvisory((prev) =>
+                        prev ? { ...prev, notes: prev.notes.filter((n) => n.id !== tempId) } : prev,
+                      )
+                      setPendingNoteId(null)
+                      showToast(t('correspondence.deleteFailed' as TranslationKey))
+                    } finally {
+                      setAddNoteBusy(false)
+                    }
                   }}
-                  className={`mt-2 px-4 py-2 bg-slate-100 text-slate-700 text-sm font-bold rounded-lg hover:bg-slate-200 transition-colors cursor-pointer flex items-center gap-2`}
+                  className={`mt-2 px-4 py-2 bg-slate-100 text-slate-700 text-sm font-bold rounded-lg hover:bg-slate-200 transition-colors cursor-pointer flex items-center gap-2 disabled:opacity-60`}
                 >
-                  <Icon icon="lucide:plus" />
+                  <Icon icon={addNoteBusy ? 'lucide:loader-2' : 'lucide:plus'} className={addNoteBusy ? 'animate-spin' : ''} />
                   {t('advisory.addNote')}
                 </button>
               </div>

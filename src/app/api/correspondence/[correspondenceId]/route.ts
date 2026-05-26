@@ -170,7 +170,7 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
     const { supabase, user, profile } = await requirePerm('delete')
     await assertCorrespondenceExists(supabase, correspondenceId)
 
-    // Audit FIRST — append-only trail survives even if cascade is interrupted.
+    // Audit FIRST — append-only trail survives even if the soft-delete write fails.
     await writeAudit({
       actor_id: user.id,
       actor_name: profile.name ?? profile.email ?? user.id,
@@ -180,10 +180,12 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
       supabase,
     })
 
-    // Hard-delete — FK cascade (migration 046) clears correspondence_attachments.
+    // F1: soft-delete — set deleted_at = now() so the row is excluded from
+    // all GET/PATCH queries (which filter `.is('deleted_at', null)`) while
+    // preserving the row for audit history.
     const { error } = await supabase
       .from('correspondence')
-      .delete()
+      .update({ deleted_at: new Date().toISOString() })
       .eq('id', correspondenceId)
     if (error) throw error
 

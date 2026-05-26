@@ -104,6 +104,8 @@ export function PolicyDetailsContent({
   const [newStepName, setNewStepName] = useState('')
   const [newStepDesc, setNewStepDesc] = useState('')
   const [newStepAction, setNewStepAction] = useState('move-to-next')
+  // P1: deadline for the new workflow step
+  const [newStepDeadline, setNewStepDeadline] = useState<string | undefined>(undefined)
 
   // Collapsible steps
   const [expandedStep, setExpandedStep] = useState<number | null>(null)
@@ -121,7 +123,7 @@ export function PolicyDetailsContent({
   const [notePromptFor, setNotePromptFor] = useState<NotePromptFor>(null)
   const [noteText, setNoteText] = useState('')
 
-  const { policies: allPolicies, update, addWorkflowStep, addAttachment, removeAttachment } = usePolicyStore()
+  const { policies: allPolicies, update, addWorkflowStep, addAttachment, removeAttachment, addEvidence } = usePolicyStore()
   const { user: authUser } = useAuthStore()
   const { addNotification } = useNotificationStore()
   const fresh = allPolicies.find(p => p.id === policy.id) ?? policy
@@ -248,35 +250,24 @@ export function PolicyDetailsContent({
   }
 
   // ── Evidence handlers ────────────────────────────────────────────────
+  // P2 fix: route through addEvidence (POST /api/policies/{id}/evidence) so
+  // uploads are persisted. The old implementation called update() which only
+  // PATCHes the top-level policy row — evidence is not included in that payload
+  // and was silently dropped on the next refresh.
   async function handleEvidenceAdd(files: FileList) {
     const cycleId = fresh.currentReviewCycleId ?? Date.now().toString()
     const cycleLabel = fresh.currentReviewCycleLabel ?? t('policies.currentReview')
-    const newEvidence: PolicyEvidence[] = []
     for (const file of Array.from(files)) {
       const dataUrl = await readFileAsDataUrl(file)
-      newEvidence.push({
-        id: Date.now().toString() + Math.random().toString(36).slice(2),
+      await addEvidence(fresh.id, {
         name: file.name,
         dataUrl,
-        uploadedAt: new Date().toISOString(),
         uploadedBy: actingUser,
         reviewCycleId: cycleId,
         reviewCycleLabel: cycleLabel,
       })
     }
-    const actEntries: PolicyActivityEntry[] = newEvidence.map(ev => ({
-      id: ev.id + '-log',
-      timestamp: new Date().toISOString(),
-      date: today,
-      type: 'evidence_uploaded' as const,
-      textEn: `Evidence "${ev.name}" uploaded for cycle "${ev.reviewCycleLabel}"`,
-      textAr: `تم رفع الدليل "${ev.name}" لدورة "${ev.reviewCycleLabel}"`,
-      user: actingUser,
-    }))
-    update(fresh.id, {
-      evidence: [...(fresh.evidence ?? []), ...newEvidence],
-      activityLog: [...(fresh.activityLog ?? []), ...actEntries],
-    })
+    showToast(t('policies.evidenceUploaded'))
   }
 
   function handleEvidenceRemove(evidenceId: string) {
@@ -309,14 +300,17 @@ export function PolicyDetailsContent({
   // reconciliation + rollback on failure.
   function handleAddStep() {
     if (!newStepName.trim()) return
+    // P1: pass deadline to the store so it's included in the workflow step
     addWorkflowStep(fresh.id, {
       step: newStepName.trim(),
       description: newStepDesc.trim() || undefined,
       actionType: newStepAction,
+      deadline: newStepDeadline,
     })
     setNewStepName('')
     setNewStepDesc('')
     setNewStepAction('move-to-next')
+    setNewStepDeadline(undefined)
     setShowAddStep(false)
   }
 
@@ -768,8 +762,26 @@ export function PolicyDetailsContent({
                       isRTL={isRTL}
                     />
                   </div>
+                  {/* P1: optional deadline for the new step */}
+                  <div>
+                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">
+                      {t('inlineDeadlinePicker.deadline')}
+                    </label>
+                    <input
+                      type="date"
+                      value={newStepDeadline ?? ''}
+                      max={fresh.nextReviewDate}
+                      onChange={(e) => setNewStepDeadline(e.target.value || undefined)}
+                      className="flex h-9 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                    />
+                    {fresh.nextReviewDate && (
+                      <p className="text-[10px] text-slate-400 mt-0.5">
+                        {t('inlineDeadlinePicker.mustBeBefore', { date: fresh.nextReviewDate })}
+                      </p>
+                    )}
+                  </div>
                   <div className="flex justify-end gap-2 pt-1">
-                    <Button variant="ghost" className="h-8 text-xs" onClick={() => { setShowAddStep(false); setNewStepName(''); setNewStepDesc('') }}>
+                    <Button variant="ghost" className="h-8 text-xs" onClick={() => { setShowAddStep(false); setNewStepName(''); setNewStepDesc(''); setNewStepDeadline(undefined) }}>
                       {t('common.cancel')}
                     </Button>
                     <Button

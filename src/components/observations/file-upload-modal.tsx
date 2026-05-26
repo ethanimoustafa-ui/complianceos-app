@@ -21,6 +21,8 @@ export function FileUploadModal({
   const [selectedFiles, setSelectedFiles] = useState<File[]>([])
   const [addToRemediationPlan, setAddToRemediationPlan] = useState(false)
   const [isDragging, setIsDragging] = useState(false)
+  // O1: track upload in-flight state to show spinner
+  const [isUploading, setIsUploading] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   // Reset state when modal opens
@@ -29,6 +31,7 @@ export function FileUploadModal({
       setSelectedFiles([])
       setAddToRemediationPlan(false)
       setIsDragging(false)
+      setIsUploading(false)
     }
   }, [isOpen])
 
@@ -67,12 +70,19 @@ export function FileUploadModal({
     setSelectedFiles((prev) => prev.filter((_, i) => i !== index))
   }
 
-  const handleConfirm = () => {
-    if (selectedFiles.length > 0) {
-      onConfirm(selectedFiles, addToRemediationPlan)
-      // Reset state
+  const handleConfirm = async () => {
+    if (selectedFiles.length === 0) return
+    setIsUploading(true)
+    try {
+      await (onConfirm as (files: File[], addToRemediationPlan: boolean) => Promise<void> | void)(
+        selectedFiles,
+        addToRemediationPlan,
+      )
+      // Reset state after successful upload
       setSelectedFiles([])
       setAddToRemediationPlan(false)
+    } finally {
+      setIsUploading(false)
     }
   }
 
@@ -188,16 +198,24 @@ export function FileUploadModal({
         <div className={`flex gap-3 mt-6`}>
           <button
             onClick={handleClose}
-            className="flex-1 px-4 py-2.5 text-sm font-medium text-slate-700 bg-slate-100 rounded-lg hover:bg-slate-200 transition-colors"
+            disabled={isUploading}
+            className="flex-1 px-4 py-2.5 text-sm font-medium text-slate-700 bg-slate-100 rounded-lg hover:bg-slate-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {t('common.cancel')}
           </button>
           <button
             onClick={handleConfirm}
-            disabled={selectedFiles.length === 0}
-            className="flex-1 px-4 py-2.5 text-sm font-medium text-white bg-emerald-600 rounded-lg hover:bg-emerald-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            disabled={selectedFiles.length === 0 || isUploading}
+            className="flex-1 px-4 py-2.5 text-sm font-medium text-white bg-emerald-600 rounded-lg hover:bg-emerald-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
           >
-            {t('observations.detail.uploadFiles', { count: selectedFiles.length })}
+            {isUploading ? (
+              <>
+                <Icon icon="lucide:loader-2" className="animate-spin text-base" />
+                {t('common.saving')}
+              </>
+            ) : (
+              t('observations.detail.uploadFiles', { count: selectedFiles.length })
+            )}
           </button>
         </div>
       </div>

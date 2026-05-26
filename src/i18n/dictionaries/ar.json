@@ -55,7 +55,8 @@
     "viewFullDetail": "فتح التفاصيل الكاملة",
     "note": "ملاحظة",
     "loadMore": "تحميل المزيد",
-    "more": "المزيد"
+    "more": "المزيد",
+    "saving": "جارٍ الحفظ..."
   },
   "navigation": {
     "dashboard": "لوحة التحكم",
@@ -1213,6 +1214,7 @@
     "actionNotifyManager": "إخطار المدير",
     "actionRequestApproval": "طلب موافقة",
     "documentUploaded": "تم تحديث المستند بنجاح",
+    "evidenceUploaded": "تم رفع الدليل بنجاح",
     "policyUpdated": "تم تحديث السياسة بنجاح!",
     "deletePolicy": "حذف السياسة",
     "confirmDeletePolicy": "هل أنت متأكد من حذف هذه السياسة نهائياً؟ لا يمكن التراجع عن هذا الإجراء.",

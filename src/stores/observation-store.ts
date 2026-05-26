@@ -1532,6 +1532,8 @@ export const useObservationStore = create<ObservationState>()((set, get) => ({
     const prevSelected = get().selectedObservation?.id === observationId ? get().selectedObservation : null
     const prevById = get().byId[observationId]
     const parentUpdatedAt = prevById?.updatedAt
+    // O6a: capture old leader id so we keep them in assignees list after transfer.
+    const oldLeaderId = prevById?.leaderId
     const timelineEntry: ObservationTimelineEntry = {
       id: crypto.randomUUID(),
       date: new Date().toISOString(),
@@ -1551,23 +1553,52 @@ export const useObservationStore = create<ObservationState>()((set, get) => ({
         errorMessage: revertMessage,
         apply: () => {
           set((state) => {
-            const observations = state.observations.map((obs) =>
-              obs.id === observationId
-                ? {
-                    ...obs,
-                    leaderId: newLeaderId,
-                    timeline: [timelineEntry, ...(obs.timeline || [])],
-                  }
-                : obs,
-            )
+            // O6a: ensure old leader stays in assignees after transfer.
+            function ensureOldLeaderInAssignees(
+              assignees: Observation['assignees'],
+              prevObs: Observation | undefined,
+            ): Observation['assignees'] {
+              if (!oldLeaderId || !prevObs) return assignees ?? []
+              const list = [...(assignees ?? [])]
+              if (!list.some((a) => a.id === oldLeaderId)) {
+                const oldLeaderMember =
+                  prevObs.assignees?.find((a) => a.id === oldLeaderId) ??
+                  (prevObs.leaderId === oldLeaderId
+                    ? { id: oldLeaderId, name: currentUser.name, avatar: currentUser.avatar || currentUser.name, role: currentUser.role }
+                    : null)
+                if (oldLeaderMember) list.push(oldLeaderMember)
+              }
+              return list
+            }
+
+            const observations = state.observations.map((obs) => {
+              if (obs.id !== observationId) return obs
+              return {
+                ...obs,
+                leaderId: newLeaderId,
+                assignees: ensureOldLeaderInAssignees(obs.assignees, obs),
+                timeline: [timelineEntry, ...(obs.timeline || [])],
+              }
+            })
             const previous = state.byId[observationId]
             const byId = previous
-              ? { ...state.byId, [observationId]: { ...previous, leaderId: newLeaderId } }
+              ? {
+                  ...state.byId,
+                  [observationId]: {
+                    ...previous,
+                    leaderId: newLeaderId,
+                    assignees: ensureOldLeaderInAssignees(previous.assignees, previous),
+                  },
+                }
               : state.byId
             const selectedObservation = state.selectedObservation?.id === observationId
               ? {
                   ...state.selectedObservation,
                   leaderId: newLeaderId,
+                  assignees: ensureOldLeaderInAssignees(
+                    state.selectedObservation.assignees,
+                    state.selectedObservation,
+                  ),
                   timeline: [timelineEntry, ...(state.selectedObservation.timeline || [])],
                 }
               : state.selectedObservation
@@ -1575,9 +1606,14 @@ export const useObservationStore = create<ObservationState>()((set, get) => ({
           })
         },
         request: async () => {
+          // O6d: pass from/to names for i18n interpolation in the server timeline write.
           await api.post(
             `/observations/${observationId}/assign`,
-            { leader_id: newLeaderId },
+            {
+              leader_id: newLeaderId,
+              from_leader_name: currentUser.name,
+              to_leader_name: newLeaderName,
+            },
             ifMatchHeader(parentUpdatedAt),
           )
         },

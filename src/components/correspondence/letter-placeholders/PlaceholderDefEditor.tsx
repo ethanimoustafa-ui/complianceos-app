@@ -10,19 +10,26 @@ interface PlaceholderDefEditorProps {
   defs: PlaceholderDef[]
   bodyEn?: string
   subjectEn?: string
+  // L6: also detect {{tokens}} typed in the AR editors
+  bodyAr?: string
+  subjectAr?: string
   onChange: (next: PlaceholderDef[]) => void
 }
 
 const REF_KINDS: PlaceholderRefKind[] = ['observation', 'audit', 'letter', 'rule', 'policy']
 
-export function PlaceholderDefEditor({ defs, bodyEn, subjectEn, onChange }: PlaceholderDefEditorProps) {
+export function PlaceholderDefEditor({ defs, bodyEn, subjectEn, bodyAr, subjectAr, onChange }: PlaceholderDefEditorProps) {
   const { t } = useTranslation()
   // Move TYPE_OPTIONS inside the component so `t` is in scope.
   const TYPE_OPTIONS: { value: PlaceholderType; label: string; icon: string }[] = [
     { value: 'date',      label: t('placeholderPicker.kindDate'),      icon: 'lucide:calendar' },
     { value: 'reference', label: t('placeholderPicker.kindReference'), icon: 'lucide:link' },
   ]
-  const reconciled = reconcilePlaceholderDefs(defs, bodyEn, subjectEn)
+  // L6: merge EN + AR body/subject before reconciling so {{tokens}} typed in
+  // either language surface the "created" indicator chip in the editor.
+  const combinedBody = [bodyEn, bodyAr].filter(Boolean).join('\n')
+  const combinedSubject = [subjectEn, subjectAr].filter(Boolean).join('\n')
+  const reconciled = reconcilePlaceholderDefs(defs, combinedBody, combinedSubject)
   const list = reconciled.length > 0 ? reconciled : defs
 
   if (list.length === 0) {

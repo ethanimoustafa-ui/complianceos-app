@@ -8,6 +8,7 @@ import { EditableSelect } from '@/components/ui/editable-select'
 import { PlaceholderDefEditor } from '@/components/correspondence/letter-placeholders/PlaceholderDefEditor'
 import { getDefaultDepartmentId } from '@/lib/letter-authority'
 import { reconcilePlaceholderDefs } from '@/lib/letter-placeholders'
+import { supabase as supabaseClient } from '@/lib/supabase/client'
 import type {
   LetterTemplate,
   TemplateStatus,
@@ -18,6 +19,9 @@ import { DynamicAuthoritySelect } from './DynamicAuthoritySelect'
 import { EditableAuthorityDeptField } from './EditableAuthorityDeptField'
 import { getRecipientDefaults } from './letter-helpers'
 
+// L5: Bucket used for signature images (same bucket as letter attachments).
+const SIGNATURE_BUCKET = 'sama_letter_attachments'
+
 // Template Edit Form Component
 export function TemplateEditForm({
   template,
@@ -26,7 +30,7 @@ export function TemplateEditForm({
 }: {
   template: LetterTemplate | null
   onClose: () => void
-  onSave: (data: Partial<LetterTemplate>) => void
+  onSave: (data: Partial<LetterTemplate>) => void | Promise<void>
 }) {
   const { t, isRTL } = useTranslation()
   const letterTypeStore = useLetterTypeStore()
@@ -40,6 +44,9 @@ export function TemplateEditForm({
   const [type, setType] = useState<string>(template?.type || 'non-objection')
   const [description, setDescription] = useState(template?.description || '')
   const [status, setStatus] = useState<TemplateStatus>(template?.status || 'Draft')
+  // L2: icon + color pickers
+  const [selectedIcon, setSelectedIcon] = useState<string>(template?.icon || 'lucide:file-text')
+  const [selectedColor, setSelectedColor] = useState<string>(template?.color || '#64748B')
   const [defaultSubjectEn, setDefaultSubjectEn] = useState(template?.defaultSubjectEn || '')
   const [defaultSubjectAr, setDefaultSubjectAr] = useState(template?.defaultSubjectAr || '')
   const [defaultBodyEn, setDefaultBodyEn]       = useState(template?.defaultBodyEn || '')
@@ -65,15 +72,22 @@ export function TemplateEditForm({
 
   const isCreateMode = template === null
 
+  // L1 fix: track whether the user has manually typed a recipient name so
+  // we don't stomp it when they change the target department dropdown.
+  const recipientEditedRef = useRef(false)
+
   const handleDeptChange = (dept: string) => {
     setDefaultSamaDepartment(dept)
-    const defaults = getRecipientDefaults(defaultAuthority, dept)
-    setDefaultRecipientName(defaults.en.name)
-    setDefaultRecipientOrg(defaults.en.org)
-    setDefaultRecipientCity(defaults.en.city)
-    setDefaultRecipientNameAr(defaults.ar.name)
-    setDefaultRecipientOrgAr(defaults.ar.org)
-    setDefaultRecipientCityAr(defaults.ar.city)
+    // L1: only auto-fill recipient fields when the user hasn't typed custom values.
+    if (!recipientEditedRef.current) {
+      const defaults = getRecipientDefaults(defaultAuthority, dept)
+      setDefaultRecipientName(defaults.en.name)
+      setDefaultRecipientOrg(defaults.en.org)
+      setDefaultRecipientCity(defaults.en.city)
+      setDefaultRecipientNameAr(defaults.ar.name)
+      setDefaultRecipientOrgAr(defaults.ar.org)
+      setDefaultRecipientCityAr(defaults.ar.city)
+    }
   }
 
   const handleAuthorityChange = (next: CircularAuthority) => {
@@ -81,13 +95,16 @@ export function TemplateEditForm({
     // Reset department to that authority's first option and re-derive defaults
     const nextDept = getDefaultDepartmentId(next)
     setDefaultSamaDepartment(nextDept)
-    const defaults = getRecipientDefaults(next, nextDept)
-    setDefaultRecipientName(defaults.en.name)
-    setDefaultRecipientOrg(defaults.en.org)
-    setDefaultRecipientCity(defaults.en.city)
-    setDefaultRecipientNameAr(defaults.ar.name)
-    setDefaultRecipientOrgAr(defaults.ar.org)
-    setDefaultRecipientCityAr(defaults.ar.city)
+    // L1: only auto-fill if the user hasn't manually typed custom recipient values.
+    if (!recipientEditedRef.current) {
+      const defaults = getRecipientDefaults(next, nextDept)
+      setDefaultRecipientName(defaults.en.name)
+      setDefaultRecipientOrg(defaults.en.org)
+      setDefaultRecipientCity(defaults.en.city)
+      setDefaultRecipientNameAr(defaults.ar.name)
+      setDefaultRecipientOrgAr(defaults.ar.org)
+      setDefaultRecipientCityAr(defaults.ar.city)
+    }
   }
 
   useEffect(() => {
@@ -97,23 +114,54 @@ export function TemplateEditForm({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const handleSignatureUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const [isUploadingSig, setIsUploadingSig] = useState(false)
+
+  // L5: Upload to Supabase storage → get a 1-year signed URL so the
+  // default_signature_image_url column stores an https:// URL (the Zod
+  // HttpUrl validator rejects base64 data: URIs).
+  const handleSignatureUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
-    const reader = new FileReader()
-    reader.onload = () => setDefaultSignatureImageUrl(reader.result as string)
-    reader.readAsDataURL(file)
     e.target.value = ''
+    setIsUploadingSig(true)
+    try {
+      const safeName = file.name.replace(/[^A-Za-z0-9._-]/g, '_')
+      const storagePath = `signatures/${Date.now()}-${safeName}`
+      const { error: uploadError } = await supabaseClient.storage
+        .from(SIGNATURE_BUCKET)
+        .upload(storagePath, file, {
+          cacheControl: '31536000',
+          upsert: false,
+          contentType: file.type || 'image/png',
+        })
+      if (uploadError) throw uploadError
+      // Create a signed URL valid for 1 year (templates have long lifetimes).
+      const { data: signedData, error: signError } = await supabaseClient.storage
+        .from(SIGNATURE_BUCKET)
+        .createSignedUrl(storagePath, 60 * 60 * 24 * 365)
+      if (signError || !signedData?.signedUrl) throw signError ?? new Error('No signed URL')
+      setDefaultSignatureImageUrl(signedData.signedUrl)
+    } catch (err) {
+      console.error('[TemplateEditForm] signature upload failed:', err)
+      // Graceful fallback: show the image locally via data URL for preview only
+      const reader = new FileReader()
+      reader.onload = () => setDefaultSignatureImageUrl(reader.result as string)
+      reader.readAsDataURL(file)
+    } finally {
+      setIsUploadingSig(false)
+    }
   }
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     setIsSaving(true)
-    setTimeout(() => {
-      onSave({
+    try {
+      await onSave({
         name,
         type,
         description,
         status,
+        icon: selectedIcon,
+        color: selectedColor,
         defaultSubjectEn: defaultSubjectEn || undefined,
         defaultSubjectAr: defaultSubjectAr || undefined,
         defaultBodyEn:    defaultBodyEn || undefined,
@@ -133,8 +181,9 @@ export function TemplateEditForm({
         defaultRecipientCityAr: defaultRecipientCityAr || undefined,
         placeholderDefs: reconcilePlaceholderDefs(placeholderDefs, defaultBodyEn, defaultSubjectEn),
       })
+    } finally {
       setIsSaving(false)
-    }, 500)
+    }
   }
 
   const tabs = [
@@ -267,6 +316,89 @@ export function TemplateEditForm({
               </button>
             </div>
           </div>
+
+          {/* L2: Icon + Color picker */}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className={`text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-2`}>
+                Icon
+              </label>
+              <div className="grid grid-cols-5 gap-1.5">
+                {[
+                  'lucide:file-text', 'lucide:clipboard-check', 'lucide:shield-question',
+                  'lucide:alert-circle', 'lucide:file-warning', 'lucide:mail',
+                  'lucide:send', 'lucide:inbox', 'lucide:stamp', 'lucide:book-open',
+                  'lucide:scale', 'lucide:building-2', 'lucide:file-check-2',
+                  'lucide:file-signature', 'lucide:file-search', 'lucide:scroll-text',
+                  'lucide:badge-check', 'lucide:gavel', 'lucide:landmark', 'lucide:briefcase',
+                ].map((icon) => (
+                  <button
+                    key={icon}
+                    type="button"
+                    title={icon.replace('lucide:', '')}
+                    onClick={() => setSelectedIcon(icon)}
+                    className={`w-full aspect-square flex items-center justify-center rounded-lg border-2 transition-all cursor-pointer text-base ${
+                      selectedIcon === icon
+                        ? 'border-emerald-500 bg-emerald-50 text-emerald-700'
+                        : 'border-slate-100 bg-slate-50 text-slate-500 hover:border-slate-300'
+                    }`}
+                  >
+                    <Icon icon={icon} />
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div>
+              <label className={`text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-2`}>
+                Color
+              </label>
+              <div className="grid grid-cols-4 gap-1.5">
+                {[
+                  { name: 'slate',   hex: '#475569' },
+                  { name: 'red',     hex: '#DC2626' },
+                  { name: 'orange',  hex: '#EA580C' },
+                  { name: 'amber',   hex: '#D97706' },
+                  { name: 'yellow',  hex: '#CA8A04' },
+                  { name: 'lime',    hex: '#65A30D' },
+                  { name: 'green',   hex: '#16A34A' },
+                  { name: 'emerald', hex: '#059669' },
+                  { name: 'teal',    hex: '#0D9488' },
+                  { name: 'cyan',    hex: '#0891B2' },
+                  { name: 'sky',     hex: '#0284C7' },
+                  { name: 'blue',    hex: '#2563EB' },
+                  { name: 'indigo',  hex: '#4F46E5' },
+                  { name: 'violet',  hex: '#7C3AED' },
+                  { name: 'purple',  hex: '#9333EA' },
+                  { name: 'fuchsia', hex: '#C026D3' },
+                  { name: 'pink',    hex: '#DB2777' },
+                  { name: 'rose',    hex: '#E11D48' },
+                ].map(({ name, hex }) => (
+                  <button
+                    key={name}
+                    type="button"
+                    title={name}
+                    onClick={() => setSelectedColor(hex)}
+                    style={{ backgroundColor: hex }}
+                    className={`w-full h-8 rounded-lg border-2 transition-all cursor-pointer ${
+                      selectedColor === hex
+                        ? 'border-slate-900 scale-110 shadow-md'
+                        : 'border-transparent hover:scale-105'
+                    }`}
+                  />
+                ))}
+              </div>
+              {/* Preview */}
+              <div className="mt-3 flex items-center gap-2 p-2 bg-slate-50 rounded-lg">
+                <div
+                  className="w-8 h-8 rounded-lg flex items-center justify-center text-white shrink-0"
+                  style={{ backgroundColor: selectedColor }}
+                >
+                  <Icon icon={selectedIcon} className="text-sm" />
+                </div>
+                <span className="text-xs text-slate-600 font-medium truncate">{name || 'Template preview'}</span>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
@@ -353,6 +485,8 @@ export function TemplateEditForm({
               defs={placeholderDefs}
               bodyEn={defaultBodyEn}
               subjectEn={defaultSubjectEn}
+              bodyAr={defaultBodyAr}
+              subjectAr={defaultSubjectAr}
               onChange={setPlaceholderDefs}
             />
           </div>
@@ -429,7 +563,12 @@ export function TemplateEditForm({
               className="hidden"
               onChange={handleSignatureUpload}
             />
-            {defaultSignatureImageUrl ? (
+            {isUploadingSig ? (
+              <div className="flex items-center justify-center h-28 border-2 border-dashed border-slate-200 rounded-xl">
+                <Icon icon="lucide:loader-2" className="animate-spin text-2xl text-emerald-500" />
+                <span className="ml-2 text-xs text-slate-500">Uploading…</span>
+              </div>
+            ) : defaultSignatureImageUrl ? (
               <div className="flex items-center gap-4">
                 <div className="border border-slate-200 rounded-xl p-3 bg-slate-50">
                   <img
@@ -508,7 +647,7 @@ export function TemplateEditForm({
                 <input
                   type="text"
                   value={defaultRecipientName}
-                  onChange={(e) => setDefaultRecipientName(e.target.value)}
+                  onChange={(e) => { recipientEditedRef.current = true; setDefaultRecipientName(e.target.value) }}
                   placeholder="e.g. Banking Supervision Department"
                   className="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-sm font-medium focus:ring-2 focus:ring-emerald-500 outline-none"
                 />

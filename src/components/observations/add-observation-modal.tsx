@@ -29,7 +29,8 @@ export interface ObservationFormData {
   source: ObservationSource
   title: string
   subTitle: string
-  reference: string
+  // O3/O5: reference is auto-generated server-side; removed from create form.
+  reference?: string
   severity: ObservationSeverity
   description: string
   department: string
@@ -43,7 +44,6 @@ export interface ObservationFormData {
 interface FormErrors {
   title?: string
   subTitle?: string
-  reference?: string
   severity?: string
   description?: string
   department?: string
@@ -56,6 +56,8 @@ export const AddObservationModal = memo(function AddObservationModal({ isOpen, o
   const { t, isRTL } = useTranslation()
   const { members } = useTeamStore()
   const activeMembers = members.filter(m => m.status === 'active')
+  // O4: track in-flight submit to show spinner on Create button
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   // Hydrate department list when the modal opens — the `DepartmentField`
   // pulls from `useDepartmentStore`, which starts cold on first render. Without
@@ -73,7 +75,6 @@ export const AddObservationModal = memo(function AddObservationModal({ isOpen, o
     source: 'sama',
     title: '',
     subTitle: '',
-    reference: '',
     severity: 'critical',
     description: '',
     department: '',
@@ -105,9 +106,7 @@ export const AddObservationModal = memo(function AddObservationModal({ isOpen, o
       newErrors.subTitle = t('observations.validation.subTitleRequired')
     }
 
-    if (!formData.reference.trim()) {
-      newErrors.reference = t('observations.validation.referenceRequired')
-    }
+    // O3: reference is auto-generated server-side — no client validation needed.
 
     if (!formData.description.trim()) {
       newErrors.description = t('observations.validation.descriptionRequired')
@@ -148,12 +147,11 @@ export const AddObservationModal = memo(function AddObservationModal({ isOpen, o
     }))
   }
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     // Mark all fields as touched
     setTouched({
       title: true,
       subTitle: true,
-      reference: true,
       description: true,
       department: true,
       dueDate: true,
@@ -168,34 +166,41 @@ export const AddObservationModal = memo(function AddObservationModal({ isOpen, o
       return
     }
 
-    // Convert selected team members to assignees format
-    const assignees = selectedAssignees.map(member => ({
-      id: member.id,
-      name: member.name,
-      avatar: member.avatar || member.name,
-      role: member.role,
-    }))
-    onSave({ ...formData, assignees, attachments: uploadedFiles, frameworkIds })
-    // Don't call onClose() here - parent will close the modal after processing
-    // Reset form for next time modal opens
-    setFormData({
-      source: 'sama',
-      title: '',
-      subTitle: '',
-      reference: '',
-      severity: 'critical',
-      description: '',
-      department: '',
-      assignees: [],
-      dueDate: '',
-      remediationSubmissionDueDate: '',
-      attachments: [],
-    })
-    setUploadedFiles([])
-    setSelectedAssignees([])
-    setErrors({})
-    setTouched({})
-    setFrameworkIds([])
+    // O4: show spinner while create is in-flight
+    setIsSubmitting(true)
+    try {
+      // Convert selected team members to assignees format
+      const assignees = selectedAssignees.map(member => ({
+        id: member.id,
+        name: member.name,
+        avatar: member.avatar || member.name,
+        role: member.role,
+      }))
+      await (onSave as (data: ObservationFormData) => Promise<void> | void)(
+        { ...formData, assignees, attachments: uploadedFiles, frameworkIds }
+      )
+      // Don't call onClose() here - parent will close the modal after processing
+      // Reset form for next time modal opens
+      setFormData({
+        source: 'sama',
+        title: '',
+        subTitle: '',
+        severity: 'critical',
+        description: '',
+        department: '',
+        assignees: [],
+        dueDate: '',
+        remediationSubmissionDueDate: '',
+        attachments: [],
+      })
+      setUploadedFiles([])
+      setSelectedAssignees([])
+      setErrors({})
+      setTouched({})
+      setFrameworkIds([])
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   return (
@@ -275,30 +280,7 @@ export const AddObservationModal = memo(function AddObservationModal({ isOpen, o
                 ) : null}
               </div>
 
-              <div>
-                <label className={`text-xs font-black uppercase text-slate-500 tracking-widest mb-2 block`}>
-                  {t('observations.form.referenceNumber')} <span className="text-rose-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  placeholder={t('observations.form.referencePlaceholder')}
-                  value={formData.reference}
-                  onChange={(e) => {
-                    setFormData((prev) => ({ ...prev, reference: e.target.value }))
-                    // Clear error when field becomes valid
-                    if (e.target.value.trim()) {
-                      setErrors((prev) => ({ ...prev, reference: undefined }))
-                    }
-                  }}
-                  onBlur={() => handleBlur('reference')}
-                  className={`w-full px-4 py-3 bg-slate-50 border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 ${
-                    touched.reference && errors.reference ? 'border-rose-300' : 'border-slate-200'
-                  }`}
-                />
-                {touched.reference && errors.reference ? (
-                  <p className="text-rose-500 text-xs mt-1">{errors.reference}</p>
-                ) : null}
-              </div>
+              {/* O3: reference is auto-generated server-side — input removed */}
 
               <SeverityField
                 value={formData.severity}
@@ -432,11 +414,18 @@ export const AddObservationModal = memo(function AddObservationModal({ isOpen, o
 
         {/* Footer */}
         <div className={`p-8 bg-slate-50 border-t border-slate-200 flex justify-end gap-3`}>
-          <Button variant="ghost" onClick={onClose}>
+          <Button variant="ghost" onClick={onClose} disabled={isSubmitting}>
             {t('common.cancel')}
           </Button>
-          <Button variant="primary" onClick={handleSubmit}>
-            {t('observations.modal.createButton')}
+          <Button variant="primary" onClick={handleSubmit} disabled={isSubmitting}>
+            {isSubmitting ? (
+              <>
+                <Icon icon="lucide:loader-2" className="animate-spin" />
+                {t('common.saving')}
+              </>
+            ) : (
+              t('observations.modal.createButton')
+            )}
           </Button>
         </div>
       </div>

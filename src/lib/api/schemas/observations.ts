@@ -99,6 +99,9 @@ export type ListObservationsQuery = z.infer<typeof ListObservationsQuerySchema>
 export const AssignObservationSchema = z
   .object({
     leader_id: Uuid.nullable().optional(),
+    // O6d: from/to leader names for i18n interpolation in the server activity write.
+    from_leader_name: PlainText(200).optional(),
+    to_leader_name: PlainText(200).optional(),
     assignees: z
       .array(
         z

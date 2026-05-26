@@ -43,6 +43,10 @@ interface EditableSelectProps {
   // `locked` wins over `mode` and over any onAdd/onEdit/onDelete/onReset
   // callbacks the caller passes.
   locked?: boolean
+  // L4: When `true`, opens the dropdown immediately on first render.
+  // Used for inline-edit cells where clicking the trigger text switches to
+  // this component — the user expects the dropdown to be open already.
+  autoOpen?: boolean
 }
 
 /**
@@ -87,6 +91,7 @@ export function EditableSelect({
   size = 'md',
   mode = 'default',
   locked = false,
+  autoOpen = false,
 }: EditableSelectProps) {
   const labelsOnly = mode === 'labels-only'
   // `locked` is the strongest gate — it suppresses every CRUD affordance
@@ -108,6 +113,12 @@ export function EditableSelect({
 
   // Caller may override the placeholder; otherwise use the localized default.
   const effectivePlaceholder = placeholder ?? t('editableSelect.selectPlaceholder')
+
+  // L4: auto-open on first render when requested (inline-edit pattern).
+  useEffect(() => {
+    if (autoOpen) setOpen(true)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   useEffect(() => {
     if (!open) return
@@ -189,7 +200,7 @@ export function EditableSelect({
       </button>
 
       {open && (
-        <div className="absolute z-50 mt-1 w-full min-w-[14rem] bg-white border border-slate-200 rounded-lg shadow-xl overflow-hidden">
+        <div className="absolute z-[9999] mt-1 w-full min-w-[14rem] bg-white border border-slate-200 rounded-lg shadow-xl overflow-hidden">
           {view === 'list' && (
             <>
               <div className="max-h-64 overflow-y-auto">

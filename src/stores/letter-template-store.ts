@@ -111,7 +111,10 @@ function toCreatePayload(
     icon: data.icon || typeIcons[data.type],
     color: data.color || typeColors[data.type],
     description: data.description ?? undefined,
-    status: data.status?.toLowerCase() === 'active' ? 'active' : 'archived',
+    // L7d: 'Draft' means "user's working draft, still visible in pickers" — map
+    // it to 'active' so templates don't vanish from the template picker.
+    // 'Archived' (if we ever add it) would map to 'archived'.
+    status: data.status?.toLowerCase() === 'archived' ? 'archived' : 'active',
     default_subject_en: data.defaultSubjectEn ?? undefined,
     default_subject_ar: data.defaultSubjectAr ?? undefined,
     default_body_en: data.defaultBodyEn ?? undefined,
@@ -140,7 +143,8 @@ function toUpdatePayload(patch: Partial<LetterTemplate>): Record<string, unknown
   if (patch.color !== undefined) out.color = patch.color
   if (patch.description !== undefined) out.description = patch.description
   if (patch.status !== undefined) {
-    out.status = patch.status.toLowerCase() === 'active' ? 'active' : 'archived'
+    // L7d: same mapping as toCreatePayload — 'Draft' stays 'active'.
+    out.status = patch.status.toLowerCase() === 'archived' ? 'archived' : 'active'
   }
   if (patch.defaultSubjectEn !== undefined) out.default_subject_en = patch.defaultSubjectEn
   if (patch.defaultSubjectAr !== undefined) out.default_subject_ar = patch.defaultSubjectAr

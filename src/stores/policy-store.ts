@@ -158,6 +158,7 @@ interface PolicyWorkflowStepApiRow {
   note: string | null
   step_state: string | null
   sort_order: number
+  deadline: string | null
   updated_at?: string
 }
 
@@ -217,6 +218,7 @@ function mapPolicyWorkflowStepRow(row: PolicyWorkflowStepApiRow): PolicyWorkflow
     actionType: row.action_type ?? undefined,
     note: row.note ?? undefined,
     stepState: (row.step_state as PolicyWorkflowStep['stepState']) ?? undefined,
+    deadline: row.deadline ?? undefined,
   }
 }
 
@@ -460,6 +462,19 @@ interface PolicyStoreState {
   // dedicated DELETE route needed (matching circular pattern).
   removeAttachment: (policyId: string, attachmentId: string) => void
 
+  // P2 fix — POST /api/policies/{id}/evidence to persist evidence.
+  // Optimistic local insert; rolls back + surfaces a toast on failure.
+  addEvidence: (
+    policyId: string,
+    file: {
+      name: string
+      dataUrl: string
+      uploadedBy: string
+      reviewCycleId: string
+      reviewCycleLabel: string
+    },
+  ) => Promise<void>
+
   // A7 fix — POST /api/policies/{id}/workflow/steps to persist the new step.
   // Optimistic local insert; rolls back on failure.
   addWorkflowStep: (
@@ -468,6 +483,7 @@ interface PolicyStoreState {
       step: string
       description?: string
       actionType?: string
+      deadline?: string
     },
   ) => void
 
@@ -1050,7 +1066,7 @@ export const usePolicyStore = create<PolicyStoreState>()((set, get) => ({
   // A7 fix — POST /api/policies/{id}/workflow/steps.
   // Optimistic local insert into workflowTimeline; fires the server POST
   // in the background; rolls back and surfaces a toast on failure.
-  addWorkflowStep: (policyId, { step, description, actionType }) => {
+  addWorkflowStep: (policyId, { step, description, actionType, deadline }) => {
     const previous = get().byId[policyId]
     if (!previous) return
     const isApproved = previous.status === 'approved'
@@ -1058,6 +1074,7 @@ export const usePolicyStore = create<PolicyStoreState>()((set, get) => ({
       step,
       description,
       actionType,
+      deadline,
       date: '',
       user: '',
       status: isApproved ? ('current' as const) : ('pending' as const),
@@ -1094,6 +1111,7 @@ export const usePolicyStore = create<PolicyStoreState>()((set, get) => ({
             step,
             description: description ?? null,
             action_type: actionType ?? null,
+            deadline: deadline ?? null,
           },
         )
         // Map the server response back — the server assigns id/sort_order.
@@ -1186,6 +1204,58 @@ export const usePolicyStore = create<PolicyStoreState>()((set, get) => ({
       byId: { ...s.byId, [policyId]: next },
       selectedPolicy: s.selectedPolicy?.id === policyId ? next : s.selectedPolicy,
     }))
+  },
+
+  // P2 fix — POST /api/policies/{id}/evidence.
+  // Uses dataUrl-as-storage_path pattern matching addAttachment above.
+  addEvidence: async (policyId, { name, dataUrl, uploadedBy, reviewCycleId, reviewCycleLabel }) => {
+    const previous = get().byId[policyId]
+    if (!previous) return
+    const tempId = `temp-${Date.now()}-${Math.random().toString(36).slice(2)}`
+    const optimistic: PolicyEvidence = {
+      id: tempId,
+      name,
+      dataUrl,
+      uploadedAt: new Date().toISOString(),
+      uploadedBy,
+      reviewCycleId,
+      reviewCycleLabel,
+    }
+    const applyToState = (policy: Policy | undefined, evs: PolicyEvidence[]) => {
+      if (!policy) return
+      const next: Policy = { ...policy, evidence: evs }
+      set((s) => ({
+        policies: s.policies.map((p) => (p.id === policyId ? next : p)),
+        byId: { ...s.byId, [policyId]: next },
+        selectedPolicy: s.selectedPolicy?.id === policyId ? next : s.selectedPolicy,
+      }))
+    }
+    applyToState(previous, [optimistic, ...(previous.evidence ?? [])])
+    try {
+      const apiId = previous.uuid ?? policyId
+      const row = await api.post<PolicyEvidenceApiRow>(
+        `/policies/${apiId}/evidence`,
+        {
+          name,
+          storage_path: dataUrl,
+          review_cycle_id: reviewCycleId,
+          review_cycle_label: reviewCycleLabel,
+        },
+      )
+      const real = mapPolicyEvidenceRow(row)
+      const current = get().byId[policyId] ?? previous
+      applyToState(
+        current,
+        (current.evidence ?? []).map((e) => (e.id === tempId ? real : e)),
+      )
+    } catch (e) {
+      // Roll back on failure
+      applyToState(get().byId[policyId] ?? previous, (previous.evidence ?? []))
+      pushToast(revertMessage(e), 'error')
+      // eslint-disable-next-line no-console
+      console.error('[addEvidence] failed —', e)
+      throw e
+    }
   },
 
   clearError: () => set({ error: null }),
