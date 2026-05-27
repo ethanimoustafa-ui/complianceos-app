@@ -285,6 +285,9 @@ export interface Observation {
   // when `due_date < current_date` and `status NOT IN ('closed','resolved','completed')`.
   // Maintained by a BEFORE INSERT/UPDATE trigger + a daily pg_cron resync.
   isOverdue?: boolean
+  // O7: set when "Mark as Remediated" is clicked (status→closed + archived_at→NOW()).
+  // Archived observations are hidden from the default list; visible via "Archived" filter.
+  archivedAt?: string | null
 }
 
 // Risk types
@@ -774,6 +777,9 @@ export type PolicyApprovalTier = 'board' | 'management' | 'sharia' | 'agm'
 // locale-matching column at render time.
 export interface PolicyVersionEntry { version: string; date: string; author: string; textEn: string; textAr: string }
 export interface PolicyWorkflowStep {
+  // P1-fix: server-issued UUID; undefined for optimistic-only rows added
+  // before the POST /workflow/steps response arrives.
+  id?: string
   step: string
   date: string
   user: string

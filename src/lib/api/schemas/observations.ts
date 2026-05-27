@@ -75,6 +75,8 @@ export const UpdateObservationSchema = z
     leader_id: Uuid.nullable().optional(),
     framework_ids: z.array(z.string().min(1)).optional(),
     progress: z.number().int().min(0).max(100).optional(),
+    // O7: archive / un-archive support. Null clears the archived_at timestamp.
+    archived_at: z.string().nullable().optional(),
   })
   .strict()
 export type UpdateObservationInput = z.infer<typeof UpdateObservationSchema>

@@ -112,7 +112,6 @@ export default function CorrespondenceFeedPage() {
   const fetchCourses = useTrainingStore((s) => s.fetchCourses)
   const fetchCorrespondenceTypes = useCorrespondenceTypeStore((s) => s.fetchAll)
   useEffect(() => {
-    void fetchCorrespondence()
     void fetchCirculars()
     void fetchLetters()
     void fetchRisks()
@@ -123,7 +122,6 @@ export default function CorrespondenceFeedPage() {
     void fetchCourses()
     void fetchCorrespondenceTypes()
   }, [
-    fetchCorrespondence,
     fetchCirculars,
     fetchLetters,
     fetchRisks,
@@ -154,6 +152,22 @@ export default function CorrespondenceFeedPage() {
   // Correspondence feed filter
   const [correspondenceFilter, setCorrespondenceFilter] = useState<'active' | 'archived' | 'all'>('active')
   const [typeFilter, setTypeFilter] = useState<Correspondence['type'] | 'all'>('all')
+
+  // W28 BUG A2/A3 — re-fetch correspondence whenever the archive filter
+  // changes. The server defaults `archived=false`, so without threading the
+  // dropdown's value into fetchAll, archived rows never reach the store and
+  // client-side filtering can't surface them. `force: true` bypasses the 30s
+  // TTL so toggling the dropdown always hits the wire. The API route already
+  // uses `cache: 'no-store'` for entity GETs (per CLAUDE.md memory).
+  useEffect(() => {
+    const archived =
+      correspondenceFilter === 'archived'
+        ? 'true'
+        : correspondenceFilter === 'all'
+          ? 'all'
+          : 'false'
+    void fetchCorrespondence({ filters: { archived }, force: true })
+  }, [correspondenceFilter, fetchCorrespondence])
 
   // Mutation busy states (parity with circulars/policies — every save
   // surfaces an inline spinner and disables to prevent double-fire).
@@ -1246,9 +1260,30 @@ export default function CorrespondenceFeedPage() {
       >
         {detailLetter && (
           <div className="space-y-4">
+            {/* F2: Type, To, Subject — mirror the Log Communication modal fields */}
+            <div className="grid grid-cols-2 gap-4">
+              <div className={`bg-slate-50 p-4 rounded-lg`}>
+                <p className="text-xs font-bold text-slate-500 uppercase mb-1">{t('common.type')}</p>
+                <p className="text-sm font-bold text-slate-900 capitalize">
+                  {correspondenceTypes.find(ct => ct.id === detailLetter.type)?.label ?? detailLetter.type}
+                </p>
+              </div>
+              <div className={`bg-slate-50 p-4 rounded-lg`}>
+                <p className="text-xs font-bold text-slate-500 uppercase mb-1">{t('common.status')}</p>
+                <p className="text-sm font-bold text-slate-900">
+                  {detailLetter.status === 'sent' ? t('correspondence.sent' as TranslationKey) : t('common.draft')}
+                </p>
+              </div>
+            </div>
             <div className={`bg-slate-50 p-4 rounded-lg`}>
-              <p className="text-xs font-bold text-slate-500 uppercase mb-1">{t('common.status')}</p>
-              <p className="text-sm font-bold text-slate-900">{detailLetter.status === 'sent' ? t('correspondence.sentToSama') : t('common.draft')}</p>
+              <p className="text-xs font-bold text-slate-500 uppercase mb-1">{t('correspondence.to' as TranslationKey)}</p>
+              <p className="text-sm font-bold text-slate-900">
+                {Array.isArray(detailLetter.to) ? detailLetter.to.join(', ') : detailLetter.to}
+              </p>
+            </div>
+            <div className={`bg-slate-50 p-4 rounded-lg`}>
+              <p className="text-xs font-bold text-slate-500 uppercase mb-1">{t('letters.subject' as TranslationKey)}</p>
+              <p className="text-sm font-bold text-slate-900">{detailLetter.subject}</p>
             </div>
             <div className={`bg-slate-50 p-4 rounded-lg`}>
               <p className="text-xs font-bold text-slate-500 uppercase mb-1">{t('common.date')}</p>

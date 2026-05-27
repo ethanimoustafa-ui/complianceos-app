@@ -488,7 +488,12 @@
     "stepPending": "قيد الانتظار",
     "stepAwaitingApproval": "بانتظار الموافقة",
     "submitForApproval": "إرسال للموافقة",
+    "approve": "اعتماد",
+    "approveSuccess": "تم اعتماد الخطاب",
+    "unassigned": "غير معين",
     "sendToSama": "إرسال إلى ساما",
+    "send": "إرسال",
+    "sent": "مرسل",
     "markResponseReceived": "تأكيد استلام الرد",
     "statusResponseReceived": "تم استلام الرد",
     "statusOverdue": "متأخر",
@@ -496,6 +501,7 @@
     "letterCreatedDraft": "تم إنشاء المسودة",
     "letterSubmittedApproval": "تم الإرسال للموافقة",
     "letterSentToSama": "مرسل إلى ساما",
+    "letterSent": "تم إرسال الخطاب إلى الجهة",
     "letterResponseReceived": "تم استلام الرد",
     "allStepsApproved": "تمت الموافقة على جميع الخطوات",
     "approvedBy": "وافق",
@@ -786,6 +792,9 @@
         "observationClosed": "تم التحقق من الملاحظة وإغلاقها",
         "tasksCompleted": "اكتملت جميع مهام المعالجة"
       },
+      "markRemediated": "تم التصحيح",
+      "markingRemediated": "جارٍ الأرشفة…",
+      "archivedFilter": "المؤرشفة",
       "uploadDocument": "رفع مستندات",
       "uploadDocumentDescription": "رفع مستندات لهذه الملاحظة",
       "dropFileHere": "اسحب الملفات هنا أو",
@@ -1097,7 +1106,11 @@
       "notes": "الملاحظات",
       "articleNumber": "رقم البند",
       "order": "الترتيب"
-    }
+    },
+    "selectTemplatePlaceholder": "استخدام نموذج…",
+    "saveAsTemplate": "حفظ كنموذج",
+    "saveTemplateConfirm": "حفظ",
+    "templateNamePlaceholder": "اسم النموذج…"
   },
   "policies": {
     "totalPolicies": "إجمالي السياسات",

@@ -488,7 +488,12 @@
     "stepPending": "Pending",
     "stepAwaitingApproval": "Awaiting Approval",
     "submitForApproval": "Submit for Approval",
+    "approve": "Approve",
+    "approveSuccess": "Letter approved",
+    "unassigned": "Unassigned",
     "sendToSama": "Send to SAMA",
+    "send": "Send",
+    "sent": "Sent",
     "markResponseReceived": "Mark Response Received",
     "statusResponseReceived": "Response Received",
     "statusOverdue": "Overdue",
@@ -496,6 +501,7 @@
     "letterCreatedDraft": "Draft Created",
     "letterSubmittedApproval": "Submitted for Approval",
     "letterSentToSama": "Sent to SAMA",
+    "letterSent": "Letter sent to authority",
     "letterResponseReceived": "Response Received",
     "allStepsApproved": "All Steps Approved",
     "approvedBy": "Approved by",
@@ -786,6 +792,9 @@
         "observationClosed": "Observation verified and closed",
         "tasksCompleted": "All remediation tasks completed"
       },
+      "markRemediated": "Mark as Remediated",
+      "markingRemediated": "Archiving…",
+      "archivedFilter": "Archived",
       "uploadDocument": "Upload Document",
       "uploadDocumentDescription": "Upload documents to this observation",
       "dropFileHere": "Drop files here or",
@@ -1097,7 +1106,11 @@
       "notes": "Notes",
       "articleNumber": "Article number",
       "order": "Order"
-    }
+    },
+    "selectTemplatePlaceholder": "Use a template…",
+    "saveAsTemplate": "Save as template",
+    "saveTemplateConfirm": "Save",
+    "templateNamePlaceholder": "Template name…"
   },
   "policies": {
     "totalPolicies": "Total Policies",

@@ -91,6 +91,8 @@ interface ObservationApiRow {
   framework_ids: string[]
   // Wave-20 — derived state from migration 060.
   is_overdue?: boolean
+  // O7: archive timestamp (migration 075).
+  archived_at?: string | null
   created_at: string
   updated_at: string
 }
@@ -173,6 +175,7 @@ function mapRow(row: ObservationApiRow, previous?: Observation): Observation {
     closureReview: previous?.closureReview,
     frameworkIds: (row.framework_ids ?? previous?.frameworkIds ?? []) as RegulatoryBodyId[],
     isOverdue: row.is_overdue ?? previous?.isOverdue ?? false,
+    archivedAt: row.archived_at ?? previous?.archivedAt ?? null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }
@@ -200,7 +203,7 @@ function toCreatePayload(
   }
 }
 
-function toUpdatePayload(patch: Partial<Observation>): Record<string, unknown> {
+function toUpdatePayload(patch: Partial<Observation> & { archivedAt?: string | null }): Record<string, unknown> {
   const out: Record<string, unknown> = {}
   if (patch.title !== undefined) out.title = patch.title
   if (patch.subTitle !== undefined) out.sub_title = patch.subTitle
@@ -215,6 +218,8 @@ function toUpdatePayload(patch: Partial<Observation>): Record<string, unknown> {
   if (patch.leaderId !== undefined) out.leader_id = patch.leaderId
   if (patch.frameworkIds !== undefined) out.framework_ids = patch.frameworkIds
   if (patch.progress !== undefined) out.progress = patch.progress
+  // O7: archive support — pass through explicitly set (including null to un-archive).
+  if ('archivedAt' in patch) out.archived_at = patch.archivedAt ?? null
   return out
 }
 
@@ -254,6 +259,8 @@ interface ObservationState {
   create: (data: Omit<Observation, 'id' | 'createdAt' | 'updatedAt'>, creator?: User) => Promise<Observation>
   update: (id: string, data: Partial<Observation>, editor?: User) => Promise<Observation>
   delete: (id: string) => Promise<void>
+  /** O7: set status='closed' + archived_at=NOW() atomically via PATCH. */
+  archive: (id: string, user?: User) => Promise<void>
 
   addComment: (observationId: string, content: string, author: User) => Promise<Comment>
   editComment: (observationId: string, commentId: string, newText: string, editor: User) => Promise<void>
@@ -395,6 +402,9 @@ export const useObservationStore = create<ObservationState>()((set, get) => ({
           is_edited: boolean
           edited_at: string | null
           created_at: string
+          // W28 B3 — joined profile for the commenter's display name (see
+          // OBSERVATION_UPDATE_COLUMNS_WITH_AUTHOR in services/observations.ts).
+          author?: { id: string; name: string | null } | null
         }>
         assignees?: Array<{ id: string; user_id: string | null; name: string; role: string | null }>
         remediation_plans?: Array<{
@@ -446,7 +456,13 @@ export const useObservationStore = create<ObservationState>()((set, get) => ({
         // The author field on Comment is typed as the full User; we only have an id +
         // best-effort name from the assignee list, so we cast through unknown.
         observation.comments = row.updates.map((u) => {
-          const authorName = previous?.assignees?.find((a) => a.id === u.author_id)?.name ?? 'User'
+          // W28 B3 — prefer the joined profile name from the API response.
+          // Fall back to the assignees-array lookup (legacy hack) and finally
+          // to 'User' so the UI never renders an empty string.
+          const authorName =
+            u.author?.name ??
+            previous?.assignees?.find((a) => a.id === u.author_id)?.name ??
+            'User'
           return {
             id: u.id,
             content: u.text,
@@ -460,7 +476,10 @@ export const useObservationStore = create<ObservationState>()((set, get) => ({
         })
         // Also map into observation.updates so legacy paths keep working.
         observation.updates = row.updates.map((u) => {
-          const authorName = previous?.assignees?.find((a) => a.id === u.author_id)?.name ?? 'User'
+          const authorName =
+            u.author?.name ??
+            previous?.assignees?.find((a) => a.id === u.author_id)?.name ??
+            'User'
           return {
             id: u.id,
             authorId: u.author_id,
@@ -554,10 +573,11 @@ export const useObservationStore = create<ObservationState>()((set, get) => ({
 
   create: async (data, creator) => {
     requirePermission('Manage Audit Findings', { storeName: 'observation', actionName: 'create' })
-    // W24-6b: reference is always generated server-side; use any user-provided
-    // value as the optimistic placeholder, or fall back to a temp marker.
+    // W28-D1 timing pivot: do NOT prepend a temp row on click.
+    // Spinner runs via `isMutating` during the POST; the real server row
+    // appears in the list only after the response resolves.
     const reference = data.reference || 'OBS-…'
-    // Auto-add creator as assignee in the local mirror so the UI shows it.
+    // Auto-add creator as assignee when the real row lands.
     const assignees = [...(data.assignees || [])]
     if (creator && !assignees.some((a) => a.id === creator.id)) {
       assignees.unshift({
@@ -567,70 +587,58 @@ export const useObservationStore = create<ObservationState>()((set, get) => ({
         role: creator.role,
       })
     }
-    // Wave-20.cleanup — canonical `optimisticMutation` lifecycle (apply +
-    // request + reconcile + revert + keyed toast). `apply()` inserts a temp
-    // row at the TOP of the list; `reconcile()` swaps the temp id for the
-    // server-assigned UUID; `revert()` drops the temp row and surfaces a
-    // localised toast.
-    const tempId = newTempId('temp-obs')
-    const now = new Date().toISOString()
-    const optimistic: Observation = {
-      ...(data as Omit<Observation, 'id' | 'createdAt' | 'updatedAt'>),
-      id: tempId,
-      reference,
-      assignees,
-      creatorId: creator?.id,
-      leaderId: data.leaderId ?? creator?.id,
-      documents: data.documents || [],
-      createdAt: now,
-      updatedAt: now,
-    } as Observation
     let created: Observation | null = null
     try {
       await optimisticMutation<ObservationApiRow>({
         context: 'observation.create',
-        // RTL-8 — keyed toast; the helper picks the conflict key for 412 and
-        // the generic revert key for everything else.
         errorMessage: revertMessage,
         apply: () => {
-          set((s) => ({
-            observations: [optimistic, ...s.observations],
-            byId: { ...s.byId, [tempId]: optimistic },
-            isMutating: true,
-            error: null,
-          }))
+          // Only set busy flag — no local row insert yet.
+          set({ isMutating: true, error: null })
         },
         request: () =>
           api.post<ObservationApiRow>(
             '/observations',
             toCreatePayload({ ...data, reference }, reference),
           ),
-        reconcile: (row) => {
+        reconcile: async (row) => {
           const real = mapRow(row)
           real.assignees = assignees
           real.documents = data.documents || []
           real.creatorId = creator?.id
           real.leaderId = real.leaderId ?? creator?.id
           created = real
-          set((s) => {
-            const { [tempId]: _drop, ...restById } = s.byId
-            return {
-              observations: s.observations.map((o) => (o.id === tempId ? real : o)),
-              byId: { ...restById, [real.id]: real },
-              isMutating: false,
+
+          // O5: persist assignees to DB via /assign endpoint so they survive
+          // a page reload. The POST /observations only stores scalar fields;
+          // assignees live in observation_assignees and need a separate write.
+          if (assignees.length > 0) {
+            try {
+              await api.post(`/observations/${real.reference || row.id}/assign`, {
+                leader_id: real.leaderId ?? creator?.id ?? null,
+                assignees: assignees.map((a) => ({
+                  user_id: a.id && UUID_RE.test(a.id) ? a.id : null,
+                  name: a.name,
+                  role: a.role || null,
+                })),
+              })
+            } catch {
+              // Non-fatal: assignees stay in local state even if the API call
+              // fails. The reconcile still inserts the row into the list.
             }
-          })
+          }
+
+          // Server confirmed — NOW insert the real row at the top of the list.
+          set((s) => ({
+            observations: [real, ...s.observations],
+            byId: { ...s.byId, [real.id]: real },
+            isMutating: false,
+          }))
           void get().fetchAll()
         },
         revert: () => {
-          set((s) => {
-            const { [tempId]: _drop, ...rest } = s.byId
-            return {
-              observations: s.observations.filter((o) => o.id !== tempId),
-              byId: rest,
-              isMutating: false,
-            }
-          })
+          // Nothing to remove — just clear busy flag.
+          set({ isMutating: false })
         },
       })
     } catch (e) {
@@ -825,6 +833,71 @@ export const useObservationStore = create<ObservationState>()((set, get) => ({
       })
     } catch (e) {
       set({ error: errorMessage(e, 'Failed to delete observation') })
+      throw e
+    }
+  },
+
+  // O7: archive (Mark as Remediated) -----------------------------------------
+  archive: async (id, _user) => {
+    requirePermission('Manage Audit Findings', { storeName: 'observation', actionName: 'update', id })
+    const snapshot = get().byId[id]
+    const now = new Date().toISOString()
+    try {
+      await optimisticMutation<ObservationApiRow>({
+        context: 'observation.archive',
+        errorMessage: revertMessage,
+        apply: () => {
+          // Optimistically mark as closed + archived so the row disappears from
+          // the default (non-archived) list immediately.
+          if (snapshot) {
+            const localPatch = {
+              ...snapshot,
+              status: 'closed' as Observation['status'],
+              archivedAt: now,
+              updatedAt: now,
+            }
+            set((s) => ({
+              observations: s.observations.map((o) => (o.id === id ? localPatch : o)),
+              byId: { ...s.byId, [id]: localPatch },
+              isMutating: true,
+              error: null,
+            }))
+          } else {
+            set({ isMutating: true, error: null })
+          }
+        },
+        request: () =>
+          api.patch<ObservationApiRow>(
+            `/observations/${id}`,
+            { status: 'closed', archived_at: now },
+            ifMatchHeader(snapshot?.updatedAt),
+          ),
+        reconcile: (row) => {
+          const next = mapRow(row, get().byId[id])
+          set((s) => ({
+            observations: s.observations.map((o) => (o.id === id ? next : o)),
+            byId: { ...s.byId, [id]: next },
+            selectedObservation:
+              s.selectedObservation?.id === id
+                ? ({ ...s.selectedObservation, ...next } as ObservationWithComments)
+                : s.selectedObservation,
+            isMutating: false,
+          }))
+        },
+        revert: () => {
+          if (snapshot) {
+            set((s) => ({
+              observations: s.observations.map((o) => (o.id === id ? snapshot : o)),
+              byId: { ...s.byId, [id]: snapshot },
+              isMutating: false,
+            }))
+          } else {
+            set({ isMutating: false })
+          }
+        },
+      })
+    } catch (e) {
+      set({ error: errorMessage(e, 'Failed to archive observation') })
       throw e
     }
   },
@@ -2056,11 +2129,10 @@ export const useObservationStore = create<ObservationState>()((set, get) => ({
   // ---- documents ---------------------------------------------------------
 
   addDocument: async (observationId, doc, uploader, addToRemediationPlan) => {
-    // Wave-20.cleanup — canonical optimistic via the helper. Entity-granular
-    // snapshot (Wave-11): just the affected observation slot is restored on
-    // failure.
-    const tempId = newTempId('temp-doc')
-    const optimisticDocument = { id: tempId, name: doc.name, type: doc.type }
+    // W28-D1 / O1 timing pivot: do NOT insert the document row optimistically.
+    // The upload button shows a spinner (`isMutating: true`) during the POST;
+    // the file row appears in the uploaded list ONLY after the server confirms.
+    // On error: spinner clears, toast surfaces, no stale row added.
     const timelineEntry: ObservationTimelineEntry = {
       id: crypto.randomUUID(),
       date: new Date().toISOString(),
@@ -2080,7 +2152,6 @@ export const useObservationStore = create<ObservationState>()((set, get) => ({
       userAvatar: uploader.avatar,
       actionType: 'document_add',
     }
-    // Entity-granular snapshot for rollback (Wave-11).
     const prevByIdRow = get().byId[observationId]
     const prevSelected = get().selectedObservation?.id === observationId ? get().selectedObservation : null
     try {
@@ -2088,71 +2159,8 @@ export const useObservationStore = create<ObservationState>()((set, get) => ({
         context: 'observation.addDocument',
         errorMessage: revertMessage,
         apply: () => {
-    set((state) => {
-      const observations = state.observations.map((obs) => {
-        if (obs.id !== observationId) return obs
-        const documents = [...(obs.documents || []), optimisticDocument]
-        let remediationPlan = obs.remediationPlan
-        if (addToRemediationPlan) {
-          if (remediationPlan) {
-            remediationPlan = {
-              ...remediationPlan,
-              documents: [...(remediationPlan.documents || []), optimisticDocument],
-            }
-          } else {
-            remediationPlan = {
-              id: crypto.randomUUID(),
-              title: '',
-              description: '',
-              dueDate: obs.dueDate || new Date().toISOString(),
-              status: 'draft' as const,
-              documents: [optimisticDocument],
-              createdAt: new Date().toISOString(),
-            }
-          }
-        }
-        return { ...obs, documents, remediationPlan }
-      })
-      let selectedObservation = state.selectedObservation
-      if (selectedObservation?.id === observationId) {
-        const documents = [...(selectedObservation.documents || []), optimisticDocument]
-        let remediationPlan = selectedObservation.remediationPlan
-        if (addToRemediationPlan) {
-          if (remediationPlan) {
-            remediationPlan = {
-              ...remediationPlan,
-              documents: [...(remediationPlan.documents || []), optimisticDocument],
-            }
-          } else {
-            remediationPlan = {
-              id: crypto.randomUUID(),
-              title: '',
-              description: '',
-              dueDate: selectedObservation.dueDate || new Date().toISOString(),
-              status: 'draft' as const,
-              documents: [optimisticDocument],
-              createdAt: new Date().toISOString(),
-            }
-          }
-        }
-        selectedObservation = {
-          ...selectedObservation,
-          documents,
-          remediationPlan,
-          timeline: [timelineEntry, ...(selectedObservation.timeline || [])],
-        }
-      }
-      const byId = prevByIdRow
-        ? {
-            ...state.byId,
-            [observationId]: {
-              ...prevByIdRow,
-              documents: [...(prevByIdRow.documents || []), optimisticDocument],
-            },
-          }
-        : state.byId
-      return { observations, byId, selectedObservation, isMutating: true, error: null }
-    })
+          // Only set busy flag — file row NOT inserted yet.
+          set({ isMutating: true, error: null })
         },
         request: () =>
           api.post<{ id: string; name: string; type: 'pdf' | 'image' | 'doc' }>(
@@ -2164,44 +2172,78 @@ export const useObservationStore = create<ObservationState>()((set, get) => ({
             },
           ),
         reconcile: (row) => {
-          // Swap the temp id for the server id everywhere it appears.
-          const swapId = <T extends { id: string }>(list: T[] | undefined): T[] | undefined =>
-            list?.map((d) => (d.id === tempId ? { ...d, id: row.id } : d))
+          // Server confirmed — NOW insert the real file row.
+          const realDocument = { id: row.id, name: doc.name, type: doc.type }
           set((state) => {
             const observations = state.observations.map((obs) => {
               if (obs.id !== observationId) return obs
-              return {
-                ...obs,
-                documents: swapId(obs.documents),
-                remediationPlan: obs.remediationPlan
-                  ? { ...obs.remediationPlan, documents: swapId(obs.remediationPlan.documents) }
-                  : obs.remediationPlan,
+              const documents = [...(obs.documents || []), realDocument]
+              let remediationPlan = obs.remediationPlan
+              if (addToRemediationPlan) {
+                if (remediationPlan) {
+                  remediationPlan = {
+                    ...remediationPlan,
+                    documents: [...(remediationPlan.documents || []), realDocument],
+                  }
+                } else {
+                  remediationPlan = {
+                    id: crypto.randomUUID(),
+                    title: '',
+                    description: '',
+                    dueDate: obs.dueDate || new Date().toISOString(),
+                    status: 'draft' as const,
+                    documents: [realDocument],
+                    createdAt: new Date().toISOString(),
+                  }
+                }
               }
+              return { ...obs, documents, remediationPlan }
             })
             let selectedObservation = state.selectedObservation
             if (selectedObservation?.id === observationId) {
+              const documents = [...(selectedObservation.documents || []), realDocument]
+              let remediationPlan = selectedObservation.remediationPlan
+              if (addToRemediationPlan) {
+                if (remediationPlan) {
+                  remediationPlan = {
+                    ...remediationPlan,
+                    documents: [...(remediationPlan.documents || []), realDocument],
+                  }
+                } else {
+                  remediationPlan = {
+                    id: crypto.randomUUID(),
+                    title: '',
+                    description: '',
+                    dueDate: selectedObservation.dueDate || new Date().toISOString(),
+                    status: 'draft' as const,
+                    documents: [realDocument],
+                    createdAt: new Date().toISOString(),
+                  }
+                }
+              }
               selectedObservation = {
                 ...selectedObservation,
-                documents: swapId(selectedObservation.documents),
-                remediationPlan: selectedObservation.remediationPlan
-                  ? {
-                      ...selectedObservation.remediationPlan,
-                      documents: swapId(selectedObservation.remediationPlan.documents),
-                    }
-                  : selectedObservation.remediationPlan,
+                documents,
+                remediationPlan,
+                timeline: [timelineEntry, ...(selectedObservation.timeline || [])],
               }
             }
             const previous = state.byId[observationId]
             const byId = previous
-              ? { ...state.byId, [observationId]: { ...previous, documents: swapId(previous.documents) } }
+              ? {
+                  ...state.byId,
+                  [observationId]: {
+                    ...previous,
+                    documents: [...(previous.documents || []), realDocument],
+                  },
+                }
               : state.byId
             return { observations, byId, selectedObservation, isMutating: false }
           })
         },
         revert: () => {
+          // Nothing to remove — just clear busy flag.
           set((state) => ({
-            observations: state.observations.map((o) => (o.id === observationId && prevByIdRow ? prevByIdRow : o)),
-            byId: prevByIdRow ? { ...state.byId, [observationId]: prevByIdRow } : state.byId,
             selectedObservation:
               state.selectedObservation?.id === observationId && prevSelected
                 ? prevSelected

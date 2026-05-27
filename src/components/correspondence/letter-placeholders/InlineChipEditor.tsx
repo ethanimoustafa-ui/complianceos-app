@@ -13,6 +13,8 @@ interface InlineChipEditorProps {
   onChange: (next: string) => void
   /** G1: called when the editor loses focus — flush any pending save. */
   onBlur?: () => void
+  /** L5: called when the editor gains focus — used to suppress server-reconciliation resets. */
+  onFocus?: () => void
   placeholderDefs: PlaceholderDef[]
   placeholderValues: Record<string, PlaceholderValue | undefined>
   onPlaceholderChange: (key: string, v: PlaceholderValue | undefined) => void
@@ -45,6 +47,7 @@ export function InlineChipEditor({
   value,
   onChange,
   onBlur,
+  onFocus,
   placeholderDefs,
   placeholderValues,
   onPlaceholderChange,
@@ -379,6 +382,7 @@ export function InlineChipEditor({
         onInput={handleInput}
         onPaste={handlePaste}
         onKeyDown={handleKeyDown}
+        onFocus={() => onFocus?.()}
         onBlur={() => { handleInput(); onBlur?.() }}
         onCompositionStart={() => { isComposingRef.current = true }}
         onCompositionEnd={() => { isComposingRef.current = false; handleInput() }}

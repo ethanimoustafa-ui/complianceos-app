@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback, memo } from 'react'
+import { useState, useEffect, memo } from 'react'
 import { Icon } from '@iconify/react'
 import { Modal } from '@/components/ui/modal'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -12,7 +12,7 @@ import { useTranslation } from '@/i18n'
 import { canTransferLeadership, canReviewRemediation, canUploadDocument, canRequestClosure, canReviewClosure } from '@/lib/permissions'
 import { TransferLeadershipModal } from './transfer-leadership-modal'
 import { FileUploadModal, getFileType } from './file-upload-modal'
-import { renderFieldLabel } from '@/lib/timeline-message'
+
 import {
   ChecklistSection,
   CommentsSection,
@@ -57,34 +57,15 @@ export const ObservationDetailModal = memo(function ObservationDetailModal({
   onClose,
   onChecklistToggle,
 }: ObservationDetailModalProps) {
-  const { t, isRTL, language } = useTranslation()
+  const { t, isRTL } = useTranslation()
 
   // Local state for checklist and comments - synced from prop, updated locally
   const [localChecklist, setLocalChecklist] = useState<LocalChecklistItem[]>([])
   const [localComments, setLocalComments] = useState<LocalComment[]>([])
 
-  // W24-4: version history
-  interface VersionEntry {
-    id: string
-    date: string
-    author: string
-    text_en: string
-    text_ar: string
-    field_changes: Array<{ field: string; from: string; to: string }> | null
-  }
-  const [versionHistory, setVersionHistory] = useState<VersionEntry[]>([])
-  const [expandedVersion, setExpandedVersion] = useState<string | null>(null)
-
-  const fetchVersionHistory = useCallback(async (obsId: string) => {
-    try {
-      const res = await fetch(`/api/observations/${obsId}/versions?pageSize=50`, { cache: 'no-store' })
-      if (!res.ok) return
-      const json = await res.json() as { data?: { items?: VersionEntry[] } }
-      setVersionHistory(json?.data?.items ?? [])
-    } catch {
-      // silently ignore — feature degrades gracefully
-    }
-  }, [])
+  // O6: version history UI hidden (table kept for audit; endpoint still live).
+  // fetchVersionHistory intentionally removed — the API route /versions is
+  // preserved for audit tooling but the modal no longer renders the section.
 
   const store = useObservationStore()
   const {
@@ -92,6 +73,7 @@ export const ObservationDetailModal = memo(function ObservationDetailModal({
     addChecklistItem, editChecklistItem, toggleChecklistItem, removeChecklistItem,
     transferLeadership, reviewRemediationPlan, addDocument, requestClosure, reviewClosure,
     fetchById, selectedObservation: storeObservation,
+    archive: archiveObservation,
   } = store
   // `isDetailLoaded(id)` mirrors the policy/circular stores — true only after
   // the detail GET resolves. Read defensively so the modal still compiles if
@@ -115,11 +97,10 @@ export const ObservationDetailModal = memo(function ObservationDetailModal({
     void fetchById(observation.id).finally(() => {
       if (!cancelled) setIsHydrating(false)
     })
-    void fetchVersionHistory(observation.id)
     return () => {
       cancelled = true
     }
-  }, [isOpen, observation?.id, fetchById, fetchVersionHistory])
+  }, [isOpen, observation?.id, fetchById])
 
   // Composite "detail loaded?" flag: prefer the store helper if present,
   // otherwise fall back to the local fetch state.
@@ -130,6 +111,8 @@ export const ObservationDetailModal = memo(function ObservationDetailModal({
   // Modal states
   const [showTransferModal, setShowTransferModal] = useState(false)
   const [showUploadModal, setShowUploadModal] = useState(false)
+  // O7: archive busy state for "Mark as Remediated" button spinner.
+  const [isArchiving, setIsArchiving] = useState(false)
 
   // Local documents state
   const [localDocuments, setLocalDocuments] = useState<{ id: string; name: string; type: 'pdf' | 'image' | 'doc' }[]>([])
@@ -272,6 +255,20 @@ export const ObservationDetailModal = memo(function ObservationDetailModal({
     await reviewClosure(observation.id, approved, user, notes)
   }
 
+  // O7: Mark as Remediated — archive the observation (status→closed, archived_at→NOW())
+  const handleMarkRemediated = async () => {
+    if (!observation) return
+    setIsArchiving(true)
+    try {
+      await archiveObservation(observation.id, user || undefined)
+      onClose()
+    } catch {
+      // Error is surfaced via the store's toast system
+    } finally {
+      setIsArchiving(false)
+    }
+  }
+
   // File upload
   const handleFileUpload = async (files: File[], addToRemediationPlan: boolean) => {
     if (!observation || !user || files.length === 0) return
@@ -378,75 +375,37 @@ export const ObservationDetailModal = memo(function ObservationDetailModal({
               isLoaded={detailLoaded}
             />
 
-            {/* Version History — W24-4 */}
-            <section>
-              <h3 className={`text-xs font-black uppercase text-slate-400 tracking-widest mb-3`}>
-                {t('observations.detail.versionHistory' as import('@/i18n').TranslationKey)}
-              </h3>
-              {versionHistory.length === 0 ? (
-                <p className="text-sm text-slate-400">
-                  {t('observations.detail.noVersionHistory' as import('@/i18n').TranslationKey)}
-                </p>
-              ) : (
-                <div className="space-y-2">
-                  {versionHistory.map((ver, idx) => {
-                    const isOpen = expandedVersion === ver.id
-                    const hasDiff = (ver.field_changes ?? []).length > 0
-                    const summary = language === 'ar' ? ver.text_ar : ver.text_en
-                    const displayNum = versionHistory.length - idx
-                    return (
-                      <div key={ver.id}>
-                        <button
-                          onClick={() => setExpandedVersion(isOpen ? null : ver.id)}
-                          className="w-full flex items-start gap-3 p-3 bg-slate-50 rounded-xl hover:bg-slate-100 transition-colors cursor-pointer text-left"
-                        >
-                          <span className="px-2 py-0.5 bg-slate-200 text-slate-700 rounded text-xs font-bold font-mono shrink-0">
-                            v{displayNum}
-                          </span>
-                          <div className="flex-1 min-w-0">
-                            <p className="text-xs font-bold text-slate-700">{summary}</p>
-                            <p className="text-[10px] text-slate-400 mt-0.5">
-                              {ver.date} • {ver.author}
-                            </p>
-                          </div>
-                          <Icon
-                            icon={isOpen ? 'lucide:chevron-up' : 'lucide:chevron-down'}
-                            className="text-slate-400 text-sm shrink-0 mt-0.5"
-                          />
-                        </button>
-                        {isOpen && hasDiff && (
-                          <div className="bg-amber-50 rounded-xl p-3 mt-1 space-y-1.5">
-                            <div className="grid grid-cols-3 gap-1 text-[10px] font-black text-slate-500 uppercase tracking-wider border-b border-amber-100 pb-1">
-                              <span>{t('observations.detail.fieldChanged' as import('@/i18n').TranslationKey)}</span>
-                              <span>{t('observations.detail.changedFrom' as import('@/i18n').TranslationKey)}</span>
-                              <span>{t('observations.detail.changedTo' as import('@/i18n').TranslationKey)}</span>
-                            </div>
-                            {(ver.field_changes ?? []).map((diff, i) => (
-                              <div key={`${diff.field}-${i}`} className="grid grid-cols-3 gap-1 text-[10px]">
-                                <span className="font-bold text-slate-600">{renderFieldLabel(diff.field, t)}</span>
-                                <span className="text-rose-600 line-through truncate">{diff.from || '—'}</span>
-                                <span className="text-emerald-600 truncate">{diff.to || '—'}</span>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                        {isOpen && !hasDiff && (
-                          <div className="bg-slate-50 rounded-xl p-3 mt-1">
-                            <p className="text-xs text-slate-400">{summary}</p>
-                          </div>
-                        )}
-                      </div>
-                    )
-                  })}
-                </div>
-              )}
-            </section>
+            {/* O6: Version History section hidden per W28 spec.
+                The observation_versions table and /versions API endpoint are
+                preserved for audit tooling — only the UI block is removed. */}
           </div>
         </div>
 
         {/* Sidebar Info */}
         <div className={`w-full lg:w-80 bg-slate-50 border-t lg:border-t-0 ${isRTL ? 'lg:border-r lg:border-l-0' : 'lg:border-l'} border-slate-200 p-8 space-y-8 shrink-0 overflow-y-auto hide-scrollbar`}>
           <SidebarSeverity severity={observation.severity} isRTL={isRTL} />
+
+          {/* O7: Mark as Remediated CTA — shown only when not already closed/archived */}
+          {liveObs.status !== 'closed' && !liveObs.archivedAt && (
+            <button
+              onClick={handleMarkRemediated}
+              disabled={isArchiving}
+              aria-busy={isArchiving || undefined}
+              className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white text-sm font-bold rounded-xl transition-colors cursor-pointer"
+            >
+              {isArchiving ? (
+                <>
+                  <Icon icon="lucide:loader-2" className="animate-spin text-base" />
+                  {t('observations.detail.markingRemediated' as import('@/i18n').TranslationKey)}
+                </>
+              ) : (
+                <>
+                  <Icon icon="lucide:check-circle-2" className="text-base" />
+                  {t('observations.detail.markRemediated' as import('@/i18n').TranslationKey)}
+                </>
+              )}
+            </button>
+          )}
 
           <DeadlineCountdown
             submissionDueDate={observation.remediationSubmissionDueDate}

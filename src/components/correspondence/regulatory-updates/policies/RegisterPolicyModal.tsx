@@ -36,12 +36,20 @@ import type {
   ReviewSchedule,
 } from '@/types'
 
-// Tier-driven default workflow (mirrors the prior inline constant).
-const TIER_WORKFLOWS: Record<PolicyApprovalTier, Array<{ step: string; description: string; actionType: string }>> = {
+// Tier-driven default workflow. Keys align with the five tiers seeded by
+// migration 074: board, agm, managerial, sharia, audit_committee.
+// The old `management` key is aliased to `managerial` for backward compat.
+const TIER_WORKFLOWS: Record<string, Array<{ step: string; description: string; actionType: string }>> = {
   board: [
     { step: 'Legal Review',           description: 'Initial legal assessment',             actionType: 'send-for-review'    },
     { step: 'Audit Committee Review', description: 'Reviewed by Audit Committee',          actionType: 'request-approval'   },
     { step: 'Board Approval',         description: 'Final approval by Board of Directors', actionType: 'request-approval'   },
+  ],
+  // P2: renamed from `management` → `managerial`; old key aliased for backward compat.
+  managerial: [
+    { step: 'Department Review',    description: 'Review by relevant department head', actionType: 'send-for-review'  },
+    { step: 'Compliance Review',    description: 'Compliance team assessment',         actionType: 'request-approval' },
+    { step: 'Managerial Approval',  description: 'Final approval by Management',       actionType: 'request-approval' },
   ],
   management: [
     { step: 'Department Review',   description: 'Review by relevant department head', actionType: 'send-for-review'  },
@@ -57,6 +65,11 @@ const TIER_WORKFLOWS: Record<PolicyApprovalTier, Array<{ step: string; descripti
     { step: 'Management Review', description: 'Executive management review',        actionType: 'notify-manager'   },
     { step: 'AGM Preparation',   description: 'Preparation of AGM documentation',   actionType: 'send-email'       },
     { step: 'AGM Approval',      description: 'Approval by Annual General Meeting', actionType: 'request-approval' },
+  ],
+  audit_committee: [
+    { step: 'Internal Audit Review', description: 'Review by internal audit team',        actionType: 'send-for-review'  },
+    { step: 'Committee Review',      description: 'Audit Committee deliberation',          actionType: 'request-approval' },
+    { step: 'Committee Approval',    description: 'Final approval by Audit Committee',     actionType: 'request-approval' },
   ],
 }
 
@@ -120,6 +133,7 @@ type Props = {
 export function RegisterPolicyModal({ isOpen, onClose, onCreated, t, isRTL }: Props) {
   const { create } = usePolicyStore()
   const { user: currentUser } = useAuthStore()
+  const [isCreating, setIsCreating] = useState(false)
   const teamMembers = useTeamStore((s) => s.members)
   const policyCategoryItems = usePolicyCategoryStore((s) => s.categories)
   const addPolicyCategory = usePolicyCategoryStore((s) => s.add)
@@ -215,10 +229,13 @@ export function RegisterPolicyModal({ isOpen, onClose, onCreated, t, isRTL }: Pr
   ].filter(Boolean) as string[]
   const formValid = missingFields.length === 0
 
-  function handleCreate() {
-    if (!formValid) return
+  // P3-D1: async — awaits the server-confirmed row so newPolicy.id is the
+  // canonical ref_code, not a local optimistic placeholder.
+  async function handleCreate() {
+    if (!formValid || isCreating) return
+    setIsCreating(true)
     const owner = OWNERS[formOwnerIdx]
-    if (!owner) return
+    if (!owner) { setIsCreating(false); return }
     const today = new Date().toISOString().split('T')[0]
     const selectedTmpl = selectedTemplateId ? policyTemplates.find((tp) => tp.id === selectedTemplateId) : null
     const tierSteps = (selectedTmpl?.defaultWorkflowSteps?.length ? selectedTmpl.defaultWorkflowSteps : null)
@@ -240,37 +257,41 @@ export function RegisterPolicyModal({ isOpen, onClose, onCreated, t, isRTL }: Pr
       textAr: `تم إنشاء السياسة بواسطة ${currentUser?.name ?? owner.name}`,
       user: currentUser?.name ?? owner.name,
     }]
-    const newPolicy = create({
-      name: formName,
-      description: formDescription,
-      status: 'draft',
-      category: formCategory as PolicyCategory,
-      version: formVersion || 'v1.0',
-      approvalTier: formTier as PolicyApprovalTier,
-      owner,
-      affectedDepartments: formAffectedDepartments,
-      businessOwnerDepartmentId: formBusinessOwnerDepartmentId || undefined,
-      lastReviewDate: '',
-      nextReviewDate: computeNextReview(formReviewSchedule),
-      reviewCycleDays: cadenceToReviewCycleDays(formReviewSchedule.cadence),
-      reviewSchedule: formReviewSchedule,
-      attachmentUrl: formDocFile?.name ?? '',
-      currentReviewCycleId: cycleId,
-      currentReviewCycleLabel: cycleLabel,
-      reviewCycleHistory: [],
-      // Wave-19.4 / Item-3 — dual-store. The initial-draft entry is purely
-      // client-side optimistic state and is replaced by the server-emitted
-      // row on first refresh.
-      versionHistory: [
-        { version: formVersion || 'v1.0', date: today, author: owner.name, textEn: 'Initial draft', textAr: 'المسودة الأولى' },
-      ],
-      workflowTimeline,
-      activityLog,
-    })
-    if (selectedTemplateId) incrementPolicyTemplateUsage(selectedTemplateId)
-    onCreated(t('policies.policyCreated'), newPolicy.id)
-    reset()
-    onClose()
+    try {
+      const newPolicy = await create({
+        name: formName,
+        description: formDescription,
+        status: 'draft',
+        category: formCategory as PolicyCategory,
+        version: formVersion || 'v1.0',
+        approvalTier: formTier as PolicyApprovalTier,
+        owner,
+        affectedDepartments: formAffectedDepartments,
+        businessOwnerDepartmentId: formBusinessOwnerDepartmentId || undefined,
+        lastReviewDate: '',
+        nextReviewDate: computeNextReview(formReviewSchedule),
+        reviewCycleDays: cadenceToReviewCycleDays(formReviewSchedule.cadence),
+        reviewSchedule: formReviewSchedule,
+        attachmentUrl: formDocFile?.name ?? '',
+        currentReviewCycleId: cycleId,
+        currentReviewCycleLabel: cycleLabel,
+        reviewCycleHistory: [],
+        // Wave-19.4 / Item-3 — dual-store. The initial-draft entry is purely
+        // client-side optimistic state and is replaced by the server-emitted
+        // row on first refresh.
+        versionHistory: [
+          { version: formVersion || 'v1.0', date: today, author: owner.name, textEn: 'Initial draft', textAr: 'المسودة الأولى' },
+        ],
+        workflowTimeline,
+        activityLog,
+      })
+      if (selectedTemplateId) incrementPolicyTemplateUsage(selectedTemplateId)
+      onCreated(t('policies.policyCreated'), newPolicy.id)
+      reset()
+      onClose()
+    } finally {
+      setIsCreating(false)
+    }
   }
 
   function handleClose() {
@@ -423,10 +444,11 @@ export function RegisterPolicyModal({ isOpen, onClose, onCreated, t, isRTL }: Pr
             <Button
               variant="primary"
               className="shadow-lg shadow-emerald-100"
-              onClick={handleCreate}
-              disabled={!formValid}
+              onClick={() => void handleCreate()}
+              disabled={!formValid || isCreating}
+              aria-busy={isCreating || undefined}
             >
-              {t('policies.createPolicy')}
+              {isCreating ? t('common.saving') : t('policies.createPolicy')}
             </Button>
           </div>
         </div>

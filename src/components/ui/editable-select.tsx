@@ -1,6 +1,7 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { type CSSProperties, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { Icon } from '@iconify/react'
 import { cn } from '@/lib/utils'
 import { useTranslation } from '@/i18n'
@@ -110,6 +111,13 @@ export function EditableSelect({
   // B4: loading spinner while async onAdd/onEdit resolves.
   const [submitBusy, setSubmitBusy] = useState(false)
   const rootRef = useRef<HTMLDivElement>(null)
+  // A2 z-index portal: position state for the portal-rendered dropdown.
+  // The dropdown is rendered into document.body so it escapes any
+  // `backdrop-filter` / `transform` stacking-context ancestor (W28-A2).
+  const portalRef = useRef<HTMLDivElement>(null)
+  const [dropdownStyle, setDropdownStyle] = useState<CSSProperties>({})
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => { setMounted(true) }, [])
 
   // Caller may override the placeholder; otherwise use the localized default.
   const effectivePlaceholder = placeholder ?? t('editableSelect.selectPlaceholder')
@@ -120,10 +128,31 @@ export function EditableSelect({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // A2: recalculate portal dropdown position whenever the dropdown opens or
+  // the trigger rect changes. Uses `useLayoutEffect` so the position is
+  // applied before the browser paints, avoiding a 1-frame jump.
+  useLayoutEffect(() => {
+    if (!open || !rootRef.current) return
+    const rect = rootRef.current.getBoundingClientRect()
+    const scrollY = window.scrollY || document.documentElement.scrollTop
+    const scrollX = window.scrollX || document.documentElement.scrollLeft
+    setDropdownStyle({
+      position: 'absolute',
+      top: rect.bottom + scrollY + 4,
+      left: rect.left + scrollX,
+      width: Math.max(rect.width, 224), // min-w-[14rem] = 224px
+      zIndex: 9999,
+    })
+  }, [open])
+
   useEffect(() => {
     if (!open) return
     const handler = (e: MouseEvent) => {
-      if (rootRef.current && !rootRef.current.contains(e.target as Node)) {
+      const target = e.target as Node
+      // Close if the click is outside BOTH the trigger root AND the portal panel.
+      const insideTrigger = rootRef.current?.contains(target) ?? false
+      const insidePortal  = portalRef.current?.contains(target) ?? false
+      if (!insideTrigger && !insidePortal) {
         setOpen(false)
         setView('list')
       }
@@ -199,8 +228,8 @@ export function EditableSelect({
         <Icon icon="lucide:chevron-down" className="text-slate-400 text-sm shrink-0" />
       </button>
 
-      {open && (
-        <div className="absolute z-[9999] mt-1 w-full min-w-[14rem] bg-white border border-slate-200 rounded-lg shadow-xl overflow-hidden">
+      {open && mounted && createPortal(
+        <div ref={portalRef} style={dropdownStyle} className="bg-white border border-slate-200 rounded-lg shadow-xl overflow-hidden">
           {view === 'list' && (
             <>
               <div className="max-h-64 overflow-y-auto">
@@ -336,7 +365,8 @@ export function EditableSelect({
               </div>
             </div>
           )}
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   )

@@ -129,6 +129,8 @@ export interface Observation {
   remediationPlan?: RemediationPlan
   closureRequest?: ClosureRequest   // Present when closure has been requested
   closureReview?: ClosureReview     // Present after closure has been reviewed
+  // O7: set when "Mark as Remediated" is clicked (status→closed + archived_at→NOW()).
+  archivedAt?: string | null
 }
 
 export const severityConfig: Record<

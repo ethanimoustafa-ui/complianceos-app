@@ -24,6 +24,9 @@ interface ObservationFiltersProps {
   onDueDateChange?: (date: string) => void
   submissionDueDateFilter?: string
   onSubmissionDueDateChange?: (date: string) => void
+  // O7: archive toggle
+  archiveFilter?: 'active' | 'archived'
+  onArchiveFilterChange?: (filter: 'active' | 'archived') => void
 }
 
 export function ObservationFilters({
@@ -39,6 +42,8 @@ export function ObservationFilters({
   onDueDateChange,
   submissionDueDateFilter,
   onSubmissionDueDateChange,
+  archiveFilter = 'active',
+  onArchiveFilterChange,
 }: ObservationFiltersProps) {
   const { t, isRTL, language } = useTranslation()
 
@@ -171,6 +176,20 @@ export function ObservationFilters({
               </button>
             ) : null}
           </div>
+        ) : null}
+        {/* O7: Archived filter chip */}
+        {onArchiveFilterChange ? (
+          <button
+            onClick={() => onArchiveFilterChange(archiveFilter === 'archived' ? 'active' : 'archived')}
+            className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold transition-colors ${
+              archiveFilter === 'archived'
+                ? 'bg-slate-800 text-white'
+                : 'bg-white border border-slate-200 text-slate-500 hover:text-slate-700'
+            }`}
+          >
+            <Icon icon="lucide:archive" className="text-sm" />
+            {t('observations.detail.archivedFilter' as import('@/i18n').TranslationKey)}
+          </button>
         ) : null}
         <button className="p-2 text-slate-400 hover:text-slate-600 transition-colors">
           <Icon icon="lucide:filter" className="text-xl" />

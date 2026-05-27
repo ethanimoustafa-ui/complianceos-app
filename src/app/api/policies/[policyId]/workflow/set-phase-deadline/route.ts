@@ -31,25 +31,27 @@ export async function POST(req: NextRequest, { params }: Params) {
     const input = await parseJson(req, SetPhaseDeadlineSchema)
 
     // Read previous deadline so we can label set vs changed.
+    // P1-fix: select `deadline` column, not `date` (date = step completion date).
     const { data: prev, error: readErr } = await supabase
       .from('policy_workflow_steps')
-      .select('id, date')
+      .select('id, deadline')
       .eq('id', input.step_id)
       .eq('policy_id', policyId)
-      .maybeSingle<{ id: string; date: string | null }>()
+      .maybeSingle<{ id: string; deadline: string | null }>()
     if (readErr) throw readErr
     if (!prev) throw NotFound(`Workflow step ${input.step_id} not found`)
 
+    // P1-fix: update `deadline` column (migration 072), not `date`.
     const { data, error } = await supabase
       .from('policy_workflow_steps')
-      .update({ date: input.deadline })
+      .update({ deadline: input.deadline })
       .eq('id', input.step_id)
       .eq('policy_id', policyId)
       .select(POLICY_WORKFLOW_STEP_COLUMNS)
       .single()
     if (error || !data) throw error ?? NotFound('Update returned no row')
 
-    const wasSet = prev.date != null
+    const wasSet = prev.deadline != null
     const activityType = wasSet ? 'phase_deadline_changed' : 'phase_deadline_set'
 
     await Promise.all([
@@ -61,7 +63,7 @@ export async function POST(req: NextRequest, { params }: Params) {
         entity_id: input.step_id,
         metadata: {
           policy_id: policyId,
-          previous: prev.date,
+          previous: prev.deadline,
           new: input.deadline,
         },
         supabase,

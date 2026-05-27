@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef, useMemo } from 'react'
+import { useState, useRef, useMemo, useEffect } from 'react'
 import { Icon } from '@iconify/react'
 import { Button } from '@/components/ui/button'
 import { Modal } from '@/components/ui/modal'
@@ -15,6 +15,7 @@ import { formatBytes } from '@/lib/format'
 import { FrameworkTagSelector } from '@/components/ui/framework-tag-selector'
 import type { RegulatoryBodyId } from '@/types'
 import { EditableSelect } from '@/components/ui/editable-select'
+import { useEntityTemplateStore } from '@/stores/entity-template-store'
 
 
 type Props = {
@@ -29,6 +30,16 @@ export function RegisterCircularModal({ isOpen, onClose, onCreated, t }: Props) 
   const { create, addPdfAttachment } = useCircularStore()
   const { departments: allDepartments, addDepartment, updateDepartment, removeDepartment } = useDepartmentStore()
   const { members: teamMembers } = useTeamStore()
+
+  // M2: template store
+  const { byType: templatesByType, fetchByType, saveTemplate } = useEntityTemplateStore()
+  const circularTemplates = templatesByType['circular'] ?? []
+  const [isSavingTemplate, setIsSavingTemplate] = useState(false)
+  const [templateNameInput, setTemplateNameInput] = useState('')
+  const [showSaveTemplateForm, setShowSaveTemplateForm] = useState(false)
+  useEffect(() => {
+    if (isOpen) void fetchByType('circular')
+  }, [isOpen, fetchByType])
 
   const [formTitle, setFormTitle] = useState('')
   const [formAuthority, setFormAuthority] = useState<CircularAuthority | ''>('')
@@ -57,6 +68,39 @@ export function RegisterCircularModal({ isOpen, onClose, onCreated, t }: Props) 
         .map((f) => ({ value: f.id, label: isRTL ? f.nameAr : f.name })),
     [frameworksAll, isRTL]
   )
+
+  // M2: apply a selected template to the form fields.
+  function applyTemplate(templateId: string) {
+    const tpl = circularTemplates.find((t) => t.id === templateId)
+    if (!tpl) return
+    const f = tpl.fields as Record<string, unknown>
+    if (typeof f.title === 'string') setFormTitle(f.title)
+    if (typeof f.authority === 'string') setFormAuthority(f.authority as CircularAuthority | '')
+    if (typeof f.priority === 'string') setFormPriority(f.priority as CircularPriority)
+    if (typeof f.description === 'string') setFormDescription(f.description)
+    if (Array.isArray(f.departments)) setFormDepartments(f.departments as string[])
+    if (typeof f.bo_dept === 'string') setFormBODept(f.bo_dept)
+  }
+
+  // M2: save current form state as a new template.
+  async function handleSaveTemplate() {
+    if (!templateNameInput.trim()) return
+    setIsSavingTemplate(true)
+    try {
+      await saveTemplate('circular', templateNameInput.trim(), undefined, {
+        title: formTitle,
+        authority: formAuthority,
+        priority: formPriority,
+        description: formDescription,
+        departments: formDepartments,
+        bo_dept: formBODept,
+      })
+      setTemplateNameInput('')
+      setShowSaveTemplateForm(false)
+    } finally {
+      setIsSavingTemplate(false)
+    }
+  }
 
   function toggleDepartment(dept: string) {
     setFormDepartments((prev) =>
@@ -155,6 +199,23 @@ export function RegisterCircularModal({ isOpen, onClose, onCreated, t }: Props) 
     >
       <div className="space-y-6">
         <p className="text-sm text-slate-500 -mt-2">{t('regulatoryUpdates.enterCircularDetails')}</p>
+
+        {/* M2: Select template row */}
+        {circularTemplates.length > 0 && (
+          <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl border border-slate-100">
+            <Icon icon="lucide:layout-template" className="text-slate-400 shrink-0" />
+            <div className="flex-1">
+              <EditableSelect
+                locked
+                value={null}
+                onChange={(id) => { if (id) applyTemplate(id) }}
+                items={circularTemplates.map((tpl) => ({ id: tpl.id, label: tpl.name }))}
+                placeholder={t('regulatoryUpdates.selectTemplatePlaceholder' as any)}
+                isRTL={isRTL}
+              />
+            </div>
+          </div>
+        )}
 
         <div className="grid grid-cols-2 gap-8">
           {/* Left column */}
@@ -429,6 +490,48 @@ export function RegisterCircularModal({ isOpen, onClose, onCreated, t }: Props) 
               </p>
             )
           })()}
+          {/* M2: Save as template inline form */}
+          {showSaveTemplateForm ? (
+            <div className="flex items-center gap-2 self-stretch">
+              <input
+                type="text"
+                autoFocus
+                className="flex-1 h-9 rounded-lg border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                placeholder={t('regulatoryUpdates.templateNamePlaceholder' as any)}
+                value={templateNameInput}
+                onChange={(e) => setTemplateNameInput(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') void handleSaveTemplate(); if (e.key === 'Escape') setShowSaveTemplateForm(false) }}
+              />
+              <Button
+                variant="secondary"
+                className="h-9 px-3 text-xs"
+                onClick={() => void handleSaveTemplate()}
+                disabled={isSavingTemplate || !templateNameInput.trim()}
+              >
+                {isSavingTemplate ? (
+                  <Icon icon="lucide:loader-2" className="animate-spin text-sm" />
+                ) : (
+                  t('regulatoryUpdates.saveTemplateConfirm' as any)
+                )}
+              </Button>
+              <button
+                type="button"
+                onClick={() => { setShowSaveTemplateForm(false); setTemplateNameInput('') }}
+                className="text-slate-400 hover:text-slate-600"
+              >
+                <Icon icon="lucide:x" className="text-sm" />
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setShowSaveTemplateForm(true)}
+              className="self-start text-xs text-slate-500 hover:text-emerald-700 flex items-center gap-1.5 transition-colors"
+            >
+              <Icon icon="lucide:save" className="text-[13px]" />
+              {t('regulatoryUpdates.saveAsTemplate' as any)}
+            </button>
+          )}
           <div className="flex justify-end gap-3">
             <Button variant="ghost" onClick={onClose}>{t('common.cancel')}</Button>
             <Button

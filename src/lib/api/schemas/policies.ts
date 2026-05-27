@@ -191,6 +191,8 @@ export const UpdatePolicyWorkflowStepSchema = z
     note: PlainText(5_000).nullable().optional(),
     date: DateString.nullable().optional(),
     user_name: PlainText(200).nullable().optional(),
+    // P1: step-level deadline (YYYY-MM-DD); nullable to allow clearing.
+    deadline: DateString.nullable().optional(),
   })
   .strict()
 export type UpdatePolicyWorkflowStepInput = z.infer<typeof UpdatePolicyWorkflowStepSchema>

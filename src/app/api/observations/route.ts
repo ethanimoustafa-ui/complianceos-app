@@ -23,7 +23,7 @@ import {
   observationActorName,
   recomputeObservationDerivedState,
 } from '@/lib/api/services/observations'
-import { insertWithRefCode } from '@/lib/api/services/refcode'
+
 import { renderBilingual } from '@/lib/i18n/server'
 
 export const runtime = 'nodejs'
@@ -84,28 +84,61 @@ export async function POST(req: NextRequest) {
     const { supabase, user, profile } = await requirePerm('observation:create')
     const input = await parseJson(req, CreateObservationSchema)
 
-    // Wave-20 / Q1 — server-generated `reference` via the platform helper.
-    // Slug source: observation title. Column name stays `reference` (legacy).
-    const data = await insertWithRefCode<{ id: string; reference: string }>({
-      supabase,
-      table: 'observations',
-      refCodeColumn: 'reference',
-      slugSource: input.title,
-      insertPayload: {
-        title: input.title,
-        sub_title: input.sub_title ?? null,
-        description: input.description,
-        source: input.source,
-        severity: input.severity,
-        due_date: input.due_date,
-        remediation_submission_due: input.remediation_submission_due ?? null,
-        department: input.department ?? null,
-        leader_id: input.leader_id ?? null,
-        creator_id: user.id,
-        framework_ids: input.framework_ids ?? [],
-      },
-      selectColumns: OBSERVATION_LIST_COLUMNS,
-    })
+    // O3: server-generated `reference` with fixed OBS prefix → OBS-YYYY-00001.
+    // Uses a retry-on-unique-violation loop (same pattern as insertWithRefCode)
+    // so concurrent POSTs never collide. Five-digit zero-padded sequence within
+    // each calendar year. The generic insertWithRefCode helper uses 4-digit
+    // padding from a title-derived slug; we inline the OBS variant here.
+    const obsYear = new Date().getUTCFullYear()
+    const obsPrefix = `OBS-${obsYear}-`
+    const obsInsertPayload = {
+      title: input.title,
+      sub_title: input.sub_title ?? null,
+      description: input.description,
+      source: input.source,
+      severity: input.severity,
+      due_date: input.due_date,
+      remediation_submission_due: input.remediation_submission_due ?? null,
+      department: input.department ?? null,
+      leader_id: input.leader_id ?? null,
+      creator_id: user.id,
+      framework_ids: input.framework_ids ?? [],
+    }
+
+    let data: { id: string; reference: string } | null = null
+    let lastInsertError: unknown = null
+    for (let attempt = 0; attempt < 8; attempt++) {
+      if (attempt > 0) {
+        await new Promise((r) => setTimeout(r, 10 + Math.floor(Math.random() * 50)))
+      }
+      // Read the current max to compute next seq.
+      const { data: maxRow } = await supabase
+        .from('observations')
+        .select('reference')
+        .ilike('reference', `${obsPrefix}%`)
+        .order('reference', { ascending: false })
+        .limit(1)
+        .maybeSingle<{ reference: string }>()
+      let obsSeq = 1
+      if (maxRow?.reference) {
+        const tail = maxRow.reference.slice(obsPrefix.length)
+        const n = Number(tail)
+        if (Number.isFinite(n) && n >= 1) obsSeq = n + 1
+      }
+      const obsRef = `${obsPrefix}${String(obsSeq).padStart(5, '0')}`
+      const { data: inserted, error: insertErr } = await supabase
+        .from('observations')
+        .insert({ ...obsInsertPayload, reference: obsRef })
+        .select(OBSERVATION_LIST_COLUMNS)
+        .single()
+      if (!insertErr && inserted) {
+        data = inserted as unknown as { id: string; reference: string }
+        break
+      }
+      lastInsertError = insertErr
+      if (insertErr && (insertErr as { code?: string }).code !== '23505') break
+    }
+    if (!data) throw lastInsertError ?? new Error('Failed to insert observation')
 
     const created = data as unknown as { id: string; reference: string }
     const actor = observationActorName(profile, user.id)

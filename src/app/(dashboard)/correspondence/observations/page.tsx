@@ -74,6 +74,8 @@ export default function ObservationsPage() {
   const [statusFilter, setStatusFilter] = useState<ObservationStatus | 'all'>('all')
   const [dueDateFilter, setDueDateFilter] = useState('')
   const [submissionDueDateFilter, setSubmissionDueDateFilter] = useState('')
+  // O7: archive filter. 'active' = not archived (default); 'archived' = archived only.
+  const [archiveFilter, setArchiveFilter] = useState<'active' | 'archived'>('active')
 
   // State for pagination
   const [currentPage, setCurrentPage] = useState(1)
@@ -82,6 +84,12 @@ export default function ObservationsPage() {
   // Filter observations
   const filteredObservations = useMemo(() => {
     return observations.filter((obs) => {
+      // O7: archive filter — default hides archived rows; 'archived' shows only archived.
+      const matchesArchive =
+        archiveFilter === 'archived'
+          ? Boolean(obs.archivedAt)
+          : !obs.archivedAt
+
       // Search filter (title, subtitle, reference)
       const matchesSearch =
         searchQuery === '' ||
@@ -108,9 +116,9 @@ export default function ObservationsPage() {
         !submissionDueDateFilter ||
         (obs.remediationSubmissionDueDate && obs.remediationSubmissionDueDate <= submissionDueDateFilter)
 
-      return matchesSearch && matchesSource && matchesSeverity && matchesStatus && matchesDueDate && matchesSubmissionDueDate
+      return matchesArchive && matchesSearch && matchesSource && matchesSeverity && matchesStatus && matchesDueDate && matchesSubmissionDueDate
     })
-  }, [observations, searchQuery, sourceFilter, severityFilter, statusFilter, dueDateFilter, submissionDueDateFilter])
+  }, [observations, archiveFilter, searchQuery, sourceFilter, severityFilter, statusFilter, dueDateFilter, submissionDueDateFilter])
 
   // Handle row click
   const handleRowClick = (observation: Observation) => {
@@ -258,7 +266,7 @@ export default function ObservationsPage() {
   }, [observations])
 
   // Check if any filters are active
-  const hasActiveFilters = searchQuery !== '' || sourceFilter !== 'all' || severityFilter !== 'all' || statusFilter !== 'all' || dueDateFilter !== '' || submissionDueDateFilter !== ''
+  const hasActiveFilters = searchQuery !== '' || sourceFilter !== 'all' || severityFilter !== 'all' || statusFilter !== 'all' || dueDateFilter !== '' || submissionDueDateFilter !== '' || archiveFilter !== 'active'
 
   // Clear all filters
   const handleClearFilters = () => {
@@ -268,6 +276,7 @@ export default function ObservationsPage() {
     setStatusFilter('all')
     setDueDateFilter('')
     setSubmissionDueDateFilter('')
+    setArchiveFilter('active')
   }
 
   // Export observations with localization
@@ -369,6 +378,8 @@ export default function ObservationsPage() {
             onDueDateChange={setDueDateFilter}
             submissionDueDateFilter={submissionDueDateFilter}
             onSubmissionDueDateChange={setSubmissionDueDateFilter}
+            archiveFilter={archiveFilter}
+            onArchiveFilterChange={setArchiveFilter}
           />
 
           {showSkeleton ? (

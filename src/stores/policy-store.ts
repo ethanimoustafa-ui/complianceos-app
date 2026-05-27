@@ -210,6 +210,9 @@ function mapPolicyVersionRow(row: PolicyVersionApiRow): PolicyVersionEntry {
 
 function mapPolicyWorkflowStepRow(row: PolicyWorkflowStepApiRow): PolicyWorkflowStep {
   return {
+    // P1-fix: carry the server-issued UUID so setPhaseDeadline can call
+    // POST /workflow/set-phase-deadline with the correct step_id.
+    id: row.id,
     step: row.step,
     date: row.date ?? '',
     user: row.user_name ?? '',
@@ -404,8 +407,10 @@ interface PolicyStoreState {
   fetchById: (id: string) => Policy | null
   getNextId: () => string
 
-  /** Returns the locally-optimistic policy; background POST reconciles state. */
-  create: (data: Omit<Policy, 'id' | 'createdAt' | 'updatedAt'>) => Policy
+  /** Returns a Promise that resolves with the server-confirmed policy row.
+   *  The list insert is gated on the server response so the returned `id`
+   *  is always the canonical server-issued ref_code (D1 timing pattern). */
+  create: (data: Omit<Policy, 'id' | 'createdAt' | 'updatedAt'>) => Promise<Policy>
   update: (id: string, data: Partial<Policy>) => void
   delete: (id: string) => void
   setSelected: (policy: Policy | null) => void
@@ -584,66 +589,38 @@ export const usePolicyStore = create<PolicyStoreState>()((set, get) => ({
     return `POL-${String(maxNum + 1).padStart(3, '0')}`
   },
 
-  create: (data) => {
+  create: async (data) => {
+    // P3-D1: async create — the list insert is gated on the server response
+    // so the returned id is always the canonical server-issued ref_code.
+    // RegisterPolicyModal awaits this before using newPolicy.id.
     requirePermission('Approve Policy Reviews', { storeName: 'policy', actionName: 'create' })
     const now = new Date().toISOString()
-    const id = get().getNextId()
     let nextReviewDate = data.nextReviewDate
     let reviewCycleDays = data.reviewCycleDays
     if (data.reviewSchedule) {
       nextReviewDate = computeNextReview(data.reviewSchedule)
       reviewCycleDays = cadenceToReviewCycleDays(data.reviewSchedule.cadence)
     }
-    const optimistic: Policy = {
-      ...data,
-      id,
-      nextReviewDate,
-      reviewCycleDays,
-      createdAt: now,
-      updatedAt: now,
+    set({ isMutating: true, error: null })
+    try {
+      // Wave-19 / Q1: do NOT inject `ref_code` — server generates it.
+      const payload = toCreatePayload({ ...data, nextReviewDate, reviewCycleDays })
+      const row = await api.post<PolicyApiRow>('/policies', payload)
+      const created = mapRow(row)
+      set((s) => ({
+        policies: [created, ...s.policies],
+        byId: { ...s.byId, [created.id]: created },
+        isMutating: false,
+      }))
+      // Reconcile with server so any computed fields (workflow steps,
+      // activity log, etc.) authored by the route handler land in state.
+      void get().fetchAll(true)
+      return created
+    } catch (e) {
+      set({ error: errorMessage(e, 'Failed to create policy'), isMutating: false })
+      pushToast(revertMessage(e), 'error')
+      throw e
     }
-    set((s) => ({
-      policies: [optimistic, ...s.policies],
-      byId: { ...s.byId, [id]: optimistic },
-      isMutating: true,
-      error: null,
-    }))
-
-    void (async () => {
-      try {
-        // Wave-19 / Q1: do NOT inject `ref_code` — server generates it.
-        const payload = toCreatePayload({ ...optimistic })
-        const row = await api.post<PolicyApiRow>('/policies', payload)
-        const created = mapRow(row, optimistic)
-        // The server may return a different stable id — surface it on the
-        // optimistic row so subsequent calls (PATCH/DELETE) hit the same id.
-        set((s) => {
-          const { [id]: _drop, ...restById } = s.byId
-          return {
-            policies: s.policies.map((p) => (p.id === id ? created : p)),
-            byId: { ...restById, [created.id]: created },
-            isMutating: false,
-          }
-        })
-        // Reconcile with server so any computed fields (workflow steps,
-        // activity log, etc.) authored by the route handler land in state.
-        void get().fetchAll()
-      } catch (e) {
-        // Roll back optimistic insert.
-        set((s) => {
-          const { [id]: _drop, ...rest } = s.byId
-          return {
-            policies: s.policies.filter((p) => p.id !== id),
-            byId: rest,
-            error: errorMessage(e, 'Failed to create policy'),
-            isMutating: false,
-          }
-        })
-        pushToast(revertMessage(e), 'error')
-      }
-    })()
-
-    return optimistic
   },
 
   update: (id, data) => {
@@ -694,18 +671,11 @@ export const usePolicyStore = create<PolicyStoreState>()((set, get) => ({
   },
 
   delete: (id) => {
+    // P3-D1: wait for server confirmation before removing from local state.
+    // Avoids ghost entries disappearing before the DELETE actually completes.
     const previous = get().byId[id]
     if (!previous) return
-    set((s) => {
-      const { [id]: _drop, ...rest } = s.byId
-      return {
-        policies: s.policies.filter((p) => p.id !== id),
-        byId: rest,
-        selectedPolicy: s.selectedPolicy?.id === id ? null : s.selectedPolicy,
-        isMutating: true,
-        error: null,
-      }
-    })
+    set({ isMutating: true, error: null })
 
     void (async () => {
       try {
@@ -713,15 +683,17 @@ export const usePolicyStore = create<PolicyStoreState>()((set, get) => ({
         // Wave-19.3 / P18-BUG-1 — route takes the canonical UUID.
         const apiId = previous.uuid ?? id
         await api.delete(`/policies/${apiId}`, ifMatchHeader(previous.updatedAt))
-        set({ isMutating: false })
+        set((s) => {
+          const { [id]: _drop, ...rest } = s.byId
+          return {
+            policies: s.policies.filter((p) => p.id !== id),
+            byId: rest,
+            selectedPolicy: s.selectedPolicy?.id === id ? null : s.selectedPolicy,
+            isMutating: false,
+          }
+        })
       } catch (e) {
-        // Roll back.
-        set((s) => ({
-          policies: [previous, ...s.policies],
-          byId: { ...s.byId, [id]: previous },
-          error: errorMessage(e, 'Failed to delete policy'),
-          isMutating: false,
-        }))
+        set({ error: errorMessage(e, 'Failed to delete policy'), isMutating: false })
         pushToast(revertMessage(e), 'error')
       }
     })()
@@ -840,12 +812,13 @@ export const usePolicyStore = create<PolicyStoreState>()((set, get) => ({
     if (!validation.ok) {
       return { ok: false, reason: validation.reason }
     }
-    const previous = policy.workflowTimeline[stepIndex].deadline
-    const newTimeline = policy.workflowTimeline.map((step, i) =>
-      i === stepIndex ? { ...step, deadline: deadline || undefined } : step,
+    const step = policy.workflowTimeline[stepIndex]
+    const previous = step.deadline
+    const newTimeline = policy.workflowTimeline.map((s, i) =>
+      i === stepIndex ? { ...s, deadline: deadline || undefined } : s,
     )
     const today = new Date().toISOString().split('T')[0]
-    const stepLabel = policy.workflowTimeline[stepIndex].step
+    const stepLabel = step.step
     const action = previous
       ? deadline ? 'phase_deadline_changed' : 'phase_deadline_set'
       : 'phase_deadline_set'
@@ -866,10 +839,50 @@ export const usePolicyStore = create<PolicyStoreState>()((set, get) => ({
         : `تم مسح الموعد النهائي لـ "${stepLabel}"`,
       user: actingUser,
     }
-    get().update(policyId, {
-      workflowTimeline: newTimeline,
-      activityLog: [...(policy.activityLog ?? []), entry],
+    // Optimistic local update immediately (keeps UI responsive).
+    set((s) => {
+      const cur = s.byId[policyId]
+      if (!cur) return {}
+      const next: Policy = { ...cur, workflowTimeline: newTimeline, activityLog: [...(cur.activityLog ?? []), entry] }
+      return {
+        byId: { ...s.byId, [policyId]: next },
+        policies: s.policies.map((p) => (p.id === policyId ? next : p)),
+        selectedPolicy: s.selectedPolicy?.id === policyId ? next : s.selectedPolicy,
+      }
     })
+
+    // P1-fix: fire POST /workflow/set-phase-deadline so the deadline column
+    // on policy_workflow_steps is actually written. Requires the step UUID.
+    const stepId = step.id
+    if (stepId && isPersistedId(stepId)) {
+      const apiId = policy.uuid ?? policyId
+      void (async () => {
+        try {
+          await api.post(
+            `/policies/${apiId}/workflow/set-phase-deadline`,
+            { step_id: stepId, deadline: deadline ?? null },
+          )
+        } catch (e) {
+          // Roll back the optimistic update on failure.
+          set((s) => {
+            const cur = s.byId[policyId]
+            if (!cur) return {}
+            const rolled: Policy = {
+              ...cur,
+              workflowTimeline: cur.workflowTimeline.map((st, i) =>
+                i === stepIndex ? { ...st, deadline: previous } : st,
+              ),
+            }
+            return {
+              byId: { ...s.byId, [policyId]: rolled },
+              policies: s.policies.map((p) => (p.id === policyId ? rolled : p)),
+              selectedPolicy: s.selectedPolicy?.id === policyId ? rolled : s.selectedPolicy,
+            }
+          })
+          pushToast(revertMessage(e), 'error')
+        }
+      })()
+    }
     return { ok: true }
   },
 

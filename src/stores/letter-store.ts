@@ -44,7 +44,7 @@ import type {
 } from '@/types'
 import { api, ApiClientError } from '@/lib/api-client'
 import { requirePermission } from '@/lib/rbac-store-gate'
-import { newTempId } from '@/lib/optimistic'
+// newTempId removed — W28-D1 create no longer uses a temp row
 import { useUserLogStore } from '@/stores/user-log-store'
 import { supabase as supabaseClient } from '@/lib/supabase/client'
 
@@ -384,6 +384,7 @@ interface LetterState {
   uploadAttachment: (letterId: string, file: File) => Promise<Attachment>
 
   submitForApproval: (id: string) => Promise<void>
+  approve: (id: string, comment?: string) => Promise<void>
   approveStep: (id: string, step: 1 | 2 | 3, notes?: string) => Promise<void>
   rejectStep: (id: string, step: 1 | 2 | 3, notes: string) => Promise<void>
   send: (id: string) => Promise<void>
@@ -503,50 +504,24 @@ export const useLetterStore = create<LetterState>()((set, get) => ({
   },
 
   create: async (data) => {
-    // OPTIMISTIC: insert a temp letter immediately, swap with server row on
-    // success, roll back on failure.
-    const tempId = newTempId('temp-letter')
-    const now = new Date().toISOString()
-    const optimistic: Letter = {
-      ...(data as Omit<Letter, 'id' | 'reference' | 'createdAt' | 'updatedAt'>),
-      id: tempId,
-      reference: '',
-      approvalChain: EMPTY_APPROVAL_CHAIN,
-      timeline: EMPTY_TIMELINE,
-      versions: [],
-      attachments: EMPTY_ATTACHMENTS,
-      relatedObservations: EMPTY_RELATED_OBSERVATIONS,
-      createdAt: now,
-      updatedAt: now,
-    } as Letter
-    set((state) => ({
-      letters: [optimistic, ...state.letters],
-      byId: { ...state.byId, [tempId]: optimistic },
-      isMutating: true,
-      error: null,
-    }))
+    // W28-D1 timing pivot: do NOT prepend a temp row on click.
+    // Spinner runs via `isMutating` during the POST; the real server row
+    // appears in the list only after the response resolves.
+    set({ isMutating: true, error: null })
     try {
       const row = await api.post<LetterApiRow>('/letters', toCreatePayload(data))
       const created = mapRow(row)
-      set((state) => {
-        const { [tempId]: _drop, ...restById } = state.byId
-        return {
-          letters: state.letters.map((l) => (l.id === tempId ? created : l)),
-          byId: { ...restById, [created.id]: created },
-          isMutating: false,
-        }
-      })
+      set((state) => ({
+        letters: [created, ...state.letters],
+        byId: { ...state.byId, [created.id]: created },
+        isMutating: false,
+      }))
       void get().fetchAll()
       return created
     } catch (e) {
-      set((state) => {
-        const { [tempId]: _drop, ...rest } = state.byId
-        return {
-          letters: state.letters.filter((l) => l.id !== tempId),
-          byId: rest,
-          error: errorMessage(e, 'Failed to create letter'),
-          isMutating: false,
-        }
+      set({
+        error: errorMessage(e, 'Failed to create letter'),
+        isMutating: false,
       })
       throw e
     }
@@ -723,6 +698,38 @@ export const useLetterStore = create<LetterState>()((set, get) => ({
     } catch (e) {
       set({
         error: errorMessage(e, 'Failed to submit letter for approval'),
+        isMutating: false,
+      })
+      throw e
+    }
+  },
+
+  // W28-BUG-B2 — direct admin approve (bypasses chain when no steps configured).
+  // Calls POST /api/letters/[letterId]/approve (W25.1-RESIDUAL-3).
+  approve: async (id, comment) => {
+    requirePermission('Approve SAMA Letters', {
+      storeName: 'letter',
+      actionName: 'approve',
+      id,
+    })
+    set({ isMutating: true, error: null })
+    try {
+      await api.post<LetterApiRow>(`/letters/${id}/approve`, {
+        comment: comment ?? undefined,
+      })
+      const detail = await api.get<LetterApiRow>(`/letters/${id}`)
+      const previous = get().byId[id]
+      const updated = mapRow(detail, previous)
+      set((state) => ({
+        letters: state.letters.map((l) => (l.id === id ? updated : l)),
+        byId: { ...state.byId, [id]: updated },
+        selectedLetter:
+          state.selectedLetter?.id === id ? updated : state.selectedLetter,
+        isMutating: false,
+      }))
+    } catch (e) {
+      set({
+        error: errorMessage(e, 'Failed to approve letter'),
         isMutating: false,
       })
       throw e

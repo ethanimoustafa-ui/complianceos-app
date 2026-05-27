@@ -13,7 +13,7 @@ import { renderBilingual, renderI18nKey } from '@/lib/i18n/server'
 // BEFORE INSERT/UPDATE trigger + a daily pg_cron resync.
 
 export const OBSERVATION_LIST_COLUMNS =
-  'id, reference, title, sub_title, description, source, severity, status, due_date, remediation_submission_due, department, leader_id, creator_id, progress, framework_ids, is_overdue, created_at, updated_at'
+  'id, reference, title, sub_title, description, source, severity, status, due_date, remediation_submission_due, department, leader_id, creator_id, progress, framework_ids, is_overdue, archived_at, created_at, updated_at'
 
 export const OBSERVATION_DETAIL_COLUMNS = OBSERVATION_LIST_COLUMNS
 
@@ -34,6 +34,14 @@ export const REMEDIATION_PLAN_COLUMNS =
 // `observation_updates` is the storage table for comments.
 export const OBSERVATION_UPDATE_COLUMNS =
   'id, observation_id, author_id, text, is_edited, edited_at, created_at, updated_at'
+
+// W28 B3 — for read paths that render the commenter's name, embed the author
+// profile via the `observation_updates.author_id → profiles(id)` FK. Mirrors
+// the `creator:profiles!sama_letters_created_by_fkey(name)` pattern used in
+// `src/lib/api/services/letters.ts`. The FK auto-name from migration 008 is
+// `observation_updates_author_id_fkey` (default Postgres pattern: `<table>_<col>_fkey`).
+export const OBSERVATION_UPDATE_COLUMNS_WITH_AUTHOR =
+  'id, observation_id, author_id, text, is_edited, edited_at, created_at, updated_at, author:profiles!observation_updates_author_id_fkey(id, name)'
 
 export const OBSERVATION_ASSIGNEE_COLUMNS =
   'id, observation_id, user_id, name, role, updated_at'
@@ -108,6 +116,9 @@ export interface ObservationDetail {
     edited_at: string | null
     created_at: string
     updated_at: string
+    // W28 B3 — joined profile for the commenter's display name. Supabase returns
+    // an object for to-one FK embeds (not an array) when the FK is NOT NULL.
+    author: { id: string; name: string | null } | null
   }>
   remediation_plans: unknown[]
   closure_request: unknown
@@ -148,7 +159,7 @@ export async function getObservationDetail(
       .order('uploaded_at', { ascending: false }),
     supabase
       .from('observation_updates')
-      .select(OBSERVATION_UPDATE_COLUMNS)
+      .select(OBSERVATION_UPDATE_COLUMNS_WITH_AUTHOR)
       .eq('observation_id', observationId)
       .order('created_at', { ascending: true })
       .range(0, PAGE),
@@ -169,12 +180,26 @@ export async function getObservationDetail(
       .maybeSingle(),
   ])
 
+  // W28 B3 — Supabase types embedded FKs as arrays even for to-one relations.
+  // Normalize `author` to a single object so the API contract is stable for
+  // the store / modal.
+  const updatesRaw =
+    (updates.data as unknown as Array<
+      Omit<ObservationDetail['updates'][number], 'author'> & {
+        author: { id: string; name: string | null } | { id: string; name: string | null }[] | null
+      }
+    > | null) ?? []
+  const updatesNormalized: ObservationDetail['updates'] = updatesRaw.map((u) => ({
+    ...u,
+    author: Array.isArray(u.author) ? (u.author[0] ?? null) : u.author,
+  }))
+
   return {
     ...obs,
     assignees: (assignees.data as ObservationDetail['assignees']) ?? [],
     checklist: (checklist.data as ObservationDetail['checklist']) ?? [],
     documents: (documents.data as ObservationDetail['documents']) ?? [],
-    updates: (updates.data as ObservationDetail['updates']) ?? [],
+    updates: updatesNormalized,
     remediation_plans: plans.data ?? [],
     closure_request: closureReq.data ?? null,
     closure_review: closureRev.data ?? null,

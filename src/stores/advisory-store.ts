@@ -346,28 +346,16 @@ export const useAdvisoryStore = create<AdvisoryState>()((set, get) => ({
   },
 
   create: async (data) => {
-    // GAP-14: optimistic insert — temp row immediately, swap with server row on success.
-    const tempId = newTempId('temp-adv')
-    const now = new Date().toISOString()
-    const optimistic: AdvisoryRequest = {
-      ...(data as Omit<AdvisoryRequest, 'id' | 'ref' | 'createdAt' | 'updatedAt'>),
-      id: tempId,
-      ref: '',
-      notes: EMPTY_NOTES,
-      createdAt: now,
-      updatedAt: now,
-    } as AdvisoryRequest
-
-    let created: AdvisoryRequest = optimistic
+    // D1 timing pivot (W28): do NOT prepend a temp row on click.
+    // Spinner runs via `isMutating` during the POST; the real server row
+    // appears in the list only after the response resolves. This prevents
+    // the contradictory "row visible + spinner spinning" state.
+    let created: AdvisoryRequest | null = null
 
     await optimisticMutation({
       apply: () => {
-        set((state) => ({
-          advisoryRequests: [optimistic, ...state.advisoryRequests],
-          byId: { ...state.byId, [tempId]: optimistic },
-          isMutating: true,
-          error: null,
-        }))
+        // Only set the busy flag — no local row insert yet.
+        set({ isMutating: true, error: null })
       },
       request: async () => {
         const row = await api.post<AdvisoryApiRow>('/advisory', toCreatePayload(data))
@@ -375,31 +363,22 @@ export const useAdvisoryStore = create<AdvisoryState>()((set, get) => ({
       },
       reconcile: (real) => {
         created = real
-        set((state) => {
-          const { [tempId]: _drop, ...restById } = state.byId
-          return {
-            advisoryRequests: state.advisoryRequests.map((a) =>
-              a.id === tempId ? real : a,
-            ),
-            byId: { ...restById, [real.id]: real },
-            isMutating: false,
-          }
-        })
+        // Server confirmed — NOW insert the real row at the top of the list.
+        set((state) => ({
+          advisoryRequests: [real, ...state.advisoryRequests],
+          byId: { ...state.byId, [real.id]: real },
+          isMutating: false,
+        }))
         void get().fetchAll()
       },
       revert: () => {
-        set((state) => {
-          const { [tempId]: _drop, ...rest } = state.byId
-          return {
-            advisoryRequests: state.advisoryRequests.filter((a) => a.id !== tempId),
-            byId: rest,
-            isMutating: false,
-          }
-        })
+        // Nothing to remove from the list — just clear busy flag.
+        set({ isMutating: false })
       },
       context: 'advisory.create',
     })
 
+    if (!created) throw new Error('Failed to create advisory request')
     return created
   },
 
@@ -547,43 +526,30 @@ export const useAdvisoryStore = create<AdvisoryState>()((set, get) => ({
   },
 
   addNote: async (id, note) => {
+    // W28-A5 fix: Story 10 design intent — addNote is NOT optimistic. After the
+    // server confirms the POST, refresh the full advisory via fetchById so
+    // byId[id].notes reflects the server truth. Previously we appended `created`
+    // directly to byId[id].notes, but when the row was hydrated from a list
+    // response the notes array was synthesised from a count-only embed
+    // (stub notes — see mapRow §F1). Appending to that stub array produced an
+    // inconsistent notes list that the detail panel could read as "(0)" until
+    // a hard reload. fetchById replaces the array with real server data.
     set({ isMutating: true, error: null })
     try {
-      const row = await api.post<AdvisoryNoteApiRow>(`/advisory/${id}`, {
+      await api.post<AdvisoryNoteApiRow>(`/advisory/${id}`, {
         author: note.author,
         content: note.content,
       })
-      const created = mapNote(row)
-      const nowIso = new Date().toISOString()
-      set((state) => ({
-        advisoryRequests: state.advisoryRequests.map((r) =>
-          r.id === id
-            ? { ...r, notes: [...r.notes, created], updatedAt: nowIso }
-            : r,
-        ),
-        byId: state.byId[id]
-          ? {
-              ...state.byId,
-              [id]: {
-                ...state.byId[id],
-                notes: [...state.byId[id].notes, created],
-                updatedAt: nowIso,
-              },
-            }
-          : state.byId,
-        selectedRequest:
-          state.selectedRequest?.id === id
-            ? {
-                ...state.selectedRequest,
-                notes: [...state.selectedRequest.notes, created],
-                updatedAt: nowIso,
-              }
-            : state.selectedRequest,
-        isMutating: false,
-      }))
     } catch (e) {
       set({ error: errorMessage(e, 'Failed to add note'), isMutating: false })
       throw e
+    }
+    // Round-trip refresh — keep isMutating true until byId is fully reconciled
+    // so callers reading byId[id] after `await addNote(...)` see the new note.
+    try {
+      await get().fetchById(id)
+    } finally {
+      set({ isMutating: false })
     }
   },
 

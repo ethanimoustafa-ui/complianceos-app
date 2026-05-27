@@ -66,11 +66,12 @@ export async function POST(_req: NextRequest, { params }: Params) {
         supabase,
       }),
       // Wave-21 P6 fix — dual-store timeline write with authority interpolation.
+      // L1: guard against null authority (shouldn't happen but prevents 500).
       insertLetterTimeline(
         supabase,
         letterId,
         'letters.letterSentToAuthority',
-        { authority: current.authority.toUpperCase() },
+        { authority: (current.authority ?? 'AUTHORITY').toUpperCase() },
         actor,
         'completed',
       ),

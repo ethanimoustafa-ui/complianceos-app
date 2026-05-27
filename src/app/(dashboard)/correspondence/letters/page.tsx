@@ -87,6 +87,7 @@ export default function LettersPage() {
   const isMutating = useLetterStore((s) => s.isMutating)
   const [confirmDeleteLetterId, setConfirmDeleteLetterId] = useState<string | null>(null)
   const [submitBusy, setSubmitBusy] = useState(false)
+  const [approveBusy, setApproveBusy] = useState(false)
   const [sendBusy, setSendBusy] = useState(false)
   const [responseBusy, setResponseBusy] = useState(false)
   const [deleteBusy, setDeleteBusy] = useState(false)
@@ -305,8 +306,8 @@ export default function LettersPage() {
   // both; on field-level save we persist defs back to the Letter.
   const [editPlaceholderDefs, setEditPlaceholderDefs] = useState<PlaceholderDef[]>([])
   const [editPlaceholderValues, setEditPlaceholderValues] = useState<Record<string, PlaceholderValue | undefined>>({})
-  // H4: Activity timeline "Load More" — default 5 visible, each click adds 5.
-  const TIMELINE_PAGE_SIZE = 5
+  // L2: Activity timeline "Load More" — default 10 visible, each click adds 10.
+  const TIMELINE_PAGE_SIZE = 10
   const [timelineVisible, setTimelineVisible] = useState(TIMELINE_PAGE_SIZE)
 
   useEffect(() => {
@@ -381,6 +382,9 @@ export default function LettersPage() {
   // latest content because pendingDraftBodyRef is always current).
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const patchInFlightRef = useRef(false)
+  // L5: track whether any body/subject editor is focused so we can suppress
+  // server-reconciliation resets mid-keystroke.
+  const bodyEditorFocusedRef = useRef(false)
 
   // W25.1-RESIDUAL-1: actual network write — called after the debounce delay
   // or immediately by flush triggers. Serialised: skipped when a PATCH is
@@ -456,7 +460,11 @@ export default function LettersPage() {
       `${merged.subject}\n${merged.subjectAr}`,
       editPlaceholderDefs,
     )
-    setEditPlaceholderDefs(nextDefs)
+    // L5: only update defs state when the defs array has actually changed so we
+    // don't trigger an unnecessary InlineChipEditor rebuild on every keystroke.
+    if (JSON.stringify(nextDefs) !== JSON.stringify(editPlaceholderDefs)) {
+      setEditPlaceholderDefs(nextDefs)
+    }
     // Update the pending ref so flush handlers always have the latest state.
     pendingDraftBodyRef.current = {
       letterId: selectedLetter.id,
@@ -653,10 +661,11 @@ export default function LettersPage() {
     store.setSelected(letter)
     setView('detail')
     window.scrollTo({ top: 0, behavior: 'smooth' })
-    // F4 J1 fix: strip ?id= immediately on open so that refresh doesn't
-    // re-trigger the deep-link effect and reopen the detail view.
-    if (searchParams.get('id')) {
-      router.replace(pathname)
+    // L4: Preserve ?id= in the URL so F5 (hard refresh) re-opens the same
+    // detail view instead of falling back to the list. Only update the URL
+    // if the id has changed (avoids spurious history entries).
+    if (searchParams.get('id') !== letter.id) {
+      router.replace(`${pathname}?id=${letter.id}`)
     }
     // Refresh the full detail (approval chain, attachments, timeline) which
     // the list endpoint may have truncated. Errors are swallowed by the
@@ -666,8 +675,10 @@ export default function LettersPage() {
   }, [searchParams, router, pathname, store])
 
   // Deep-link: auto-switch to detail view when ?id= is present.
-  // Guard with view !== 'detail' so re-running when store.letters reconciles
-  // after fetchAll doesn't reopen the detail once the user has navigated away.
+  // On hard refresh, store.letters is empty until fetchAll resolves; we wait
+  // for the list to contain the target letter before opening it.
+  // Guard with view !== 'detail' so reconciliation after fetchAll doesn't
+  // reopen the detail once the user has navigated away via handleBackToDashboard.
   useEffect(() => {
     const id = searchParams.get('id')
     if (!id || view === 'detail') return
@@ -679,6 +690,8 @@ export default function LettersPage() {
   const handleBackToDashboard = () => {
     setView('dashboard')
     store.setSelected(null)
+    // L4: clear ?id= so refresh from list view doesn't re-open the detail.
+    router.replace(pathname)
   }
 
   const handleOpenCreateModal = (type: LetterType = 'non-objection') => {
@@ -771,7 +784,8 @@ export default function LettersPage() {
 
   // Pure mail helper — opens mailto and marks the letter sent. Safe to call without a PDF download
   // (e.g. from the summary table where the letter content DOM is not rendered).
-  const openAuthorityMail = useCallback((letter: Letter, lang: 'en' | 'ar') => {
+  // L1: await send + catch so errors are surfaced instead of silently dropped.
+  const openAuthorityMail = useCallback(async (letter: Letter, lang: 'en' | 'ar') => {
     const toEmail = getDepartmentEmail(letter.authority, letter.samaDepartment) ?? ''
     const subjectText = getEmailSubjectFor(letter.type, lang)
     const letterSubj = lang === 'ar'
@@ -781,7 +795,17 @@ export default function LettersPage() {
     const emailBody = buildLetterEmailBody(letter.type, lang, letter.reference, letterSubj)
     const mailto = `mailto:${toEmail}?subject=${encodeURIComponent(emailSubject)}&body=${encodeURIComponent(emailBody)}`
     window.open(mailto, '_blank')
-    store.send(letter.id)
+    try {
+      await store.send(letter.id)
+    } catch (err: unknown) {
+      const is409 =
+        err != null && typeof err === 'object' && 'status' in err &&
+        (err as { status: number }).status === 409
+      if (!is409) {
+        showToast(t('letters.sendFailed' as Parameters<typeof t>[0]) || 'Failed to mark letter as sent')
+      }
+      // 409 = already sent; treat as success (idempotent)
+    }
     showToast(t('letters.pdfDownloadedAttachToEmail'))
   }, [store, showToast, t])
 
@@ -789,7 +813,7 @@ export default function LettersPage() {
   const handleSendToSama = useCallback(async () => {
     if (!selectedLetter) return
     await handleDownloadPdf()
-    openAuthorityMail(selectedLetter, language)
+    await openAuthorityMail(selectedLetter, language)
   }, [selectedLetter, handleDownloadPdf, openAuthorityMail, language])
 
   // Auto-trigger send after navigating from table to detail view
@@ -1524,6 +1548,27 @@ export default function LettersPage() {
                     {t('letters.submitForApproval')}
                   </button>
                 )}
+                {/* W28-BUG-B2 — Admin direct-approve when no chain configured. */}
+                {selectedLetter?.status === 'pending-approval' && (
+                  <button
+                    onClick={async () => {
+                      if (!selectedLetter) return
+                      setApproveBusy(true)
+                      try {
+                        await store.approve(selectedLetter.id)
+                        showToast(t('letters.approveSuccess'))
+                      } finally {
+                        setApproveBusy(false)
+                      }
+                    }}
+                    disabled={approveBusy}
+                    aria-busy={approveBusy || undefined}
+                    className={`px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-emerald-700 transition-colors shadow-lg shadow-emerald-100 cursor-pointer disabled:opacity-60`}
+                  >
+                    <Icon icon={approveBusy ? 'lucide:loader-2' : 'lucide:check-circle'} className={approveBusy ? 'animate-spin' : ''} />
+                    {t('letters.approve')}
+                  </button>
+                )}
                 {selectedLetter?.status === 'approved' && (
                   <button
                     onClick={async () => {
@@ -1535,7 +1580,7 @@ export default function LettersPage() {
                     className={`px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-emerald-700 transition-colors shadow-lg shadow-emerald-100 cursor-pointer disabled:opacity-60`}
                   >
                     <Icon icon={sendBusy ? 'lucide:loader-2' : 'lucide:send'} className={sendBusy ? 'animate-spin' : ''} />
-                    {t('letters.sendToSama')}
+                    {t('letters.send')}
                   </button>
                 )}
                 {(selectedLetter?.status === 'sent' || selectedLetter?.status === 'overdue') && (
@@ -1674,7 +1719,8 @@ export default function LettersPage() {
                                 setEditSubject(v)
                                 saveDraftBody({ subject: v })
                               }}
-                              onBlur={flushDraftBody}
+                              onFocus={() => { bodyEditorFocusedRef.current = true }}
+                              onBlur={() => { bodyEditorFocusedRef.current = false; flushDraftBody() }}
                               placeholderDefs={editPlaceholderDefs}
                               placeholderValues={editPlaceholderValues}
                               onPlaceholderChange={updateDraftPlaceholderValue}
@@ -1699,7 +1745,8 @@ export default function LettersPage() {
                                 setEditBody(v)
                                 saveDraftBody({ body: v })
                               }}
-                              onBlur={flushDraftBody}
+                              onFocus={() => { bodyEditorFocusedRef.current = true }}
+                              onBlur={() => { bodyEditorFocusedRef.current = false; flushDraftBody() }}
                               placeholderDefs={editPlaceholderDefs}
                               placeholderValues={editPlaceholderValues}
                               onPlaceholderChange={updateDraftPlaceholderValue}
@@ -1808,7 +1855,8 @@ export default function LettersPage() {
                                 setEditSubjectAr(v)
                                 saveDraftBody({ subjectAr: v })
                               }}
-                              onBlur={flushDraftBody}
+                              onFocus={() => { bodyEditorFocusedRef.current = true }}
+                              onBlur={() => { bodyEditorFocusedRef.current = false; flushDraftBody() }}
                               placeholderDefs={editPlaceholderDefs}
                               placeholderValues={editPlaceholderValues}
                               onPlaceholderChange={updateDraftPlaceholderValue}
@@ -1836,7 +1884,8 @@ export default function LettersPage() {
                                 setEditBodyAr(v)
                                 saveDraftBody({ bodyAr: v })
                               }}
-                              onBlur={flushDraftBody}
+                              onFocus={() => { bodyEditorFocusedRef.current = true }}
+                              onBlur={() => { bodyEditorFocusedRef.current = false; flushDraftBody() }}
                               placeholderDefs={editPlaceholderDefs}
                               placeholderValues={editPlaceholderValues}
                               onPlaceholderChange={updateDraftPlaceholderValue}
@@ -1998,7 +2047,7 @@ export default function LettersPage() {
                           className="text-xs font-bold text-emerald-600 cursor-pointer hover:text-emerald-700 transition-colors group/name flex items-center gap-1"
                           title="Click to edit"
                         >
-                          {selectedLetter?.assignedTo || <span className="text-slate-300 font-normal italic">Unassigned</span>}
+                          {selectedLetter?.assignedTo || <span className="text-slate-300 font-normal italic">{t('letters.unassigned')}</span>}
                           <Icon icon="lucide:pencil" className="text-[9px] text-slate-300 group-hover/name:text-emerald-400" />
                         </span>
                       )}
@@ -2202,7 +2251,8 @@ export default function LettersPage() {
                   ) : (
                     <>
                     <div className="space-y-6 relative before:absolute before:left-2 before:top-1 before:bottom-1 before:w-0.5 before:bg-slate-100">
-                      {[...(selectedLetter?.timeline ?? [])].reverse().slice(0, timelineVisible).map((event) => (
+                      {/* L2: server returns timeline newest-first (date DESC); no reverse needed. */}
+                      {(selectedLetter?.timeline ?? []).slice(0, timelineVisible).map((event) => (
                         <div key={event.id} className="relative pl-8">
                           <div
                             className={`absolute left-0 top-1 w-4 h-4 rounded-full border-2 ${
@@ -2473,7 +2523,7 @@ export default function LettersPage() {
             {letter.status === 'approved' && (
               <button onClick={(e) => { e.stopPropagation(); handleViewLetter(letter); setPendingSend(true); setOpenMenuId(null); setMenuPosition(null) }}
                 className="w-full px-4 py-2 text-left text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-2 cursor-pointer">
-                <Icon icon="lucide:send" className="text-emerald-500" /> {t('letters.sendToSama')}
+                <Icon icon="lucide:send" className="text-emerald-500" /> {t('letters.send')}
               </button>
             )}
             {(letter.status === 'sent' || letter.status === 'overdue') && (

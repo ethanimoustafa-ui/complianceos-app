@@ -34,6 +34,15 @@ interface CorrespondenceFilters {
   status?: Correspondence['status'][]
   dateRange?: { from: string; to: string }
   search?: string
+  /** Server-side archived filter. Mirrors ListCorrespondenceQuerySchema:
+   *  'true'  → only archived rows
+   *  'false' → only active rows (default)
+   *  'all'   → both archived and active rows
+   *  Required because the API defaults `archived` to `'false'`, so without
+   *  threading this through, archived rows never appear regardless of any
+   *  client-side filter (W28 BUG A2/A3).
+   */
+  archived?: 'true' | 'false' | 'all'
 }
 
 // ---------- API row shape ---------------------------------------------------
@@ -269,6 +278,9 @@ export const useCorrespondenceStore = create<CorrespondenceState>()((set, get) =
         type: filters.type?.[0],
         status: filters.status?.[0],
         q: filters.search,
+        // Thread server-side archived filter — without this the API defaults
+        // to 'false' and archived rows never reach the store (W28 BUG A2/A3).
+        archived: filters.archived,
       })
       const previousById = get().byId
       const correspondence = result.items.map((row) => mapRow(row, previousById[row.id]))
