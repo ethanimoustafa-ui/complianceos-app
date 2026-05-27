@@ -20,6 +20,7 @@ import { ReviewSchedulePicker } from '@/components/ui/ReviewSchedulePicker'
 import { computeNextReview, cadenceToReviewCycleDays } from '@/lib/review-schedule'
 import { usePolicyStore } from '@/stores/policy-store'
 import { usePolicyTemplateStore } from '@/stores/policy-template-store'
+import { useEntityTemplateStore } from '@/stores/entity-template-store'
 import { usePolicyCategoryStore } from '@/stores/policy-category-store'
 import { useTeamStore } from '@/stores/team-store'
 import { useDepartmentStore } from '@/stores/department-store'
@@ -147,6 +148,33 @@ export function RegisterPolicyModal({ isOpen, onClose, onCreated, t, isRTL }: Pr
     templates: policyTemplates,
     incrementUsage: incrementPolicyTemplateUsage,
   } = usePolicyTemplateStore()
+
+  // M2: entity-template store for saving current form as a reusable template.
+  const { fetchByType: fetchEntityTemplates, saveTemplate: saveEntityTemplate } = useEntityTemplateStore()
+  const [showSavePolicyTemplateForm, setShowSavePolicyTemplateForm] = useState(false)
+  const [policyTemplateNameInput, setPolicyTemplateNameInput] = useState('')
+  const [isSavingPolicyTemplate, setIsSavingPolicyTemplate] = useState(false)
+  useEffect(() => {
+    if (isOpen) void fetchEntityTemplates('policy')
+  }, [isOpen, fetchEntityTemplates])
+
+  async function handleSavePolicyTemplate() {
+    if (!policyTemplateNameInput.trim()) return
+    setIsSavingPolicyTemplate(true)
+    try {
+      await saveEntityTemplate('policy', policyTemplateNameInput.trim(), undefined, {
+        name: formName,
+        category: formCategory,
+        approvalTier: formTier,
+        description: formDescription,
+        version: formVersion,
+      })
+      setPolicyTemplateNameInput('')
+      setShowSavePolicyTemplateForm(false)
+    } finally {
+      setIsSavingPolicyTemplate(false)
+    }
+  }
 
   // Wave-19.7 — approval-tier dropdown options driven by enum_value_definitions.
   const tierRows = useEnumValuesStore((s) => s.byDomain['policy.approval_tier'] ?? EMPTY_ENUM_VALUES)
@@ -389,7 +417,7 @@ export function RegisterPolicyModal({ isOpen, onClose, onCreated, t, isRTL }: Pr
                 value={formBusinessOwnerDepartmentId || null}
                 onChange={(id) => setFormBusinessOwnerDepartmentId(id)}
                 items={departments.map((d) => ({ id: d.id, label: d.name, labelAr: d.nameAr, isDefault: d.isDefault }))}
-                onAdd={(label, labelAr) => addDepartment(label, labelAr ?? label).id}
+                onAdd={(label, labelAr) => addDepartment(label, labelAr ?? label).then(d => d.id)}
                 onEdit={(id, label, labelAr) => updateDepartment(id, { name: label, nameAr: labelAr ?? label })}
                 onDelete={(id) => removeDepartment(id)}
                 placeholder={t('regulatoryUpdates.selectDepartment' as any)}
@@ -438,6 +466,51 @@ export function RegisterPolicyModal({ isOpen, onClose, onCreated, t, isRTL }: Pr
             <p className="text-xs text-rose-600 self-end">
               {t('regulatoryUpdates.missingRequired')}: {missingFields.join(', ')}
             </p>
+          )}
+          {/* M2: Save current form as entity template */}
+          {showSavePolicyTemplateForm ? (
+            <div className="flex items-center gap-2 self-stretch">
+              <input
+                type="text"
+                autoFocus
+                className="flex-1 h-9 rounded-lg border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                placeholder={t('regulatoryUpdates.templateNamePlaceholder' as any)}
+                value={policyTemplateNameInput}
+                onChange={(e) => setPolicyTemplateNameInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') void handleSavePolicyTemplate()
+                  if (e.key === 'Escape') setShowSavePolicyTemplateForm(false)
+                }}
+              />
+              <Button
+                variant="secondary"
+                className="h-9 px-3 text-xs"
+                onClick={() => void handleSavePolicyTemplate()}
+                disabled={isSavingPolicyTemplate || !policyTemplateNameInput.trim()}
+              >
+                {isSavingPolicyTemplate ? (
+                  <Icon icon="lucide:loader-2" className="animate-spin text-sm" />
+                ) : (
+                  t('regulatoryUpdates.saveTemplateConfirm' as any)
+                )}
+              </Button>
+              <button
+                type="button"
+                onClick={() => { setShowSavePolicyTemplateForm(false); setPolicyTemplateNameInput('') }}
+                className="text-slate-400 hover:text-slate-600"
+              >
+                <Icon icon="lucide:x" className="text-sm" />
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setShowSavePolicyTemplateForm(true)}
+              className="self-start text-xs text-slate-500 hover:text-emerald-700 flex items-center gap-1.5 transition-colors"
+            >
+              <Icon icon="lucide:save" className="text-[13px]" />
+              {t('regulatoryUpdates.saveAsTemplate' as any)}
+            </button>
           )}
           <div className="flex justify-end gap-3">
             <Button variant="ghost" onClick={handleClose}>{t('common.cancel')}</Button>

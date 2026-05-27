@@ -49,14 +49,33 @@ export async function POST(req: NextRequest, { params }: Params) {
 
     const safeName = safeBasename(input.name) // SEC-10
 
+    // P4 (W29): prevent duplicate review cycle IDs on each upload.
+    // If the policy already has a current_review_cycle_id, attach evidence to
+    // THAT cycle (ignore the client's review_cycle_id). Only fall back to the
+    // client's value when no open cycle exists on the policy.
+    const { data: policyRow } = await supabase
+      .from('policies')
+      .select('current_review_cycle_id, current_review_cycle_label, status')
+      .eq('id', uuid)
+      .is('deleted_at', null)
+      .maybeSingle<{
+        current_review_cycle_id: string | null
+        current_review_cycle_label: string | null
+        status: string | null
+      }>()
+
+    const resolvedCycleId = policyRow?.current_review_cycle_id ?? input.review_cycle_id
+    const resolvedCycleLabel =
+      policyRow?.current_review_cycle_label ?? input.review_cycle_label
+
     const { data, error } = await supabase
       .from('policy_evidence')
       .insert({
         policy_id: uuid,
         name: safeName,
         storage_path: input.storage_path,
-        review_cycle_id: input.review_cycle_id,
-        review_cycle_label: input.review_cycle_label,
+        review_cycle_id: resolvedCycleId,
+        review_cycle_label: resolvedCycleLabel,
         notes: input.notes ?? null,
         uploaded_by: user.id,
       })

@@ -299,7 +299,7 @@ export function EditPolicyModal({ isOpen, onClose, policy, onSaved, t, isRTL }: 
                 value={formBusinessOwnerDepartmentId || null}
                 onChange={(id) => setFormBusinessOwnerDepartmentId(id)}
                 items={departments.map((d) => ({ id: d.id, label: d.name, labelAr: d.nameAr, isDefault: d.isDefault }))}
-                onAdd={(label, labelAr) => addDepartment(label, labelAr ?? label).id}
+                onAdd={(label, labelAr) => addDepartment(label, labelAr ?? label).then(d => d.id)}
                 onEdit={(id, label, labelAr) => updateDepartment(id, { name: label, nameAr: labelAr ?? label })}
                 onDelete={(id) => removeDepartment(id)}
                 placeholder={t('regulatoryUpdates.selectDepartment' as any)}

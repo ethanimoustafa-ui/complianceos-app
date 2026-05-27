@@ -16,10 +16,10 @@ import { NotFound } from '../errors'
 // read the persisted flag (O(1)) instead of recomputing it from
 // `next_review_date` per render.
 export const POLICY_LIST_COLUMNS =
-  'id, ref_code, name, status, category, version, approval_tier, owner_id, owner_name, owner_department, business_owner_department_id, last_review_date, next_review_date, overdue_count, is_expired, framework_ids, affected_departments, created_at, updated_at'
+  'id, ref_code, name, status, category, version, approval_tier, owner_id, owner_name, owner_department, business_owner_department_id, last_review_date, next_review_date, overdue_count, is_expired, framework_ids, affected_departments, archived_at, created_at, updated_at'
 
 export const POLICY_DETAIL_COLUMNS =
-  'id, ref_code, name, description, status, category, version, approval_tier, owner_id, owner_name, owner_department, business_owner_department_id, last_review_date, next_review_date, review_cycle_days, approved_date, overdue_count, last_overdue_date, current_review_cycle_id, current_review_cycle_label, current_review_cycle_date, review_schedule, is_expired, framework_ids, affected_departments, created_at, updated_at'
+  'id, ref_code, name, description, status, category, version, approval_tier, owner_id, owner_name, owner_department, business_owner_department_id, last_review_date, next_review_date, review_cycle_days, approved_date, overdue_count, last_overdue_date, current_review_cycle_id, current_review_cycle_label, current_review_cycle_date, review_schedule, is_expired, framework_ids, affected_departments, archived_at, created_at, updated_at'
 
 // GAP-19 / W18: structured per-field diff jsonb on policy_versions (migration
 // 054). `field_changes` column added by 054 — older rows are NULL.
@@ -37,11 +37,14 @@ export const POLICY_ACTIVITY_COLUMNS =
 export const POLICY_REVIEW_CYCLE_COLUMNS =
   'id, policy_id, label, initiated_at, updated_at'
 
+// P2 (W29): same display-name JOIN for attachments.
 export const POLICY_ATTACHMENT_COLUMNS =
-  'id, policy_id, name, storage_path, size, uploaded_at, uploaded_by, updated_at'
+  'id, policy_id, name, storage_path, size, uploaded_at, uploaded_by, uploaded_by_profile:profiles(name, email), updated_at'
 
+// P2 (W29): include joined profile name so 'uploaded_by' renders as a display
+// name rather than a raw UUID. Supabase PostgREST JOIN syntax: column:related_table(field).
 export const POLICY_EVIDENCE_COLUMNS =
-  'id, policy_id, name, storage_path, uploaded_at, uploaded_by, review_cycle_id, review_cycle_label, notes, updated_at'
+  'id, policy_id, name, storage_path, uploaded_at, uploaded_by, uploaded_by_profile:profiles(name, email), review_cycle_id, review_cycle_label, notes, updated_at'
 
 // --- assertions --------------------------------------------------------------
 
@@ -142,6 +145,7 @@ export interface PolicyDetail {
   review_schedule: unknown
   framework_ids: string[]
   affected_departments: string[]
+  archived_at: string | null
   created_at: string
   updated_at: string
   current_version: unknown

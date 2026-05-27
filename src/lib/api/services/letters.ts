@@ -24,11 +24,15 @@ import { renderBilingual } from '@/lib/i18n/server'
 // letters.created_by is `sama_letters_created_by_fkey` (pre-rename name
 // preserved by Postgres). The embed alias `creator:profiles!sama_letters_created_by_fkey(name)`
 // delivers { creator: { name: '...' } | null } alongside the UUID column.
+// W29-L8: include signature_image_url in list columns so list rows don't
+// temporarily clear the signature when they win the byId merge race ahead of
+// the detail-fetch. signature_image_url is a stored https URL (~50 chars) so
+// including it in the list payload is acceptable.
 export const LETTER_LIST_COLUMNS =
-  'id, reference, authority, type, sub_category, sama_department, subject, subject_ar, body, status, priority, created_by, creator:profiles!sama_letters_created_by_fkey(name), assigned_to, sent_date, response_deadline, response_received_date, recipient_name, recipient_org, framework_ids, created_at, updated_at'
+  'id, reference, authority, type, sub_category, sama_department, subject, subject_ar, body, status, priority, created_by, creator:profiles!sama_letters_created_by_fkey(name), assigned_to, sent_date, response_deadline, response_received_date, response_note, recipient_name, recipient_org, framework_ids, signature_image_url, created_at, updated_at'
 
 export const LETTER_DETAIL_COLUMNS =
-  'id, reference, authority, type, sub_category, sama_department, subject, subject_ar, body, body_ar, status, priority, created_by, creator:profiles!sama_letters_created_by_fkey(name), assigned_to, sent_date, response_deadline, response_received_date, recipient_name, recipient_org, recipient_city, recipient_name_ar, recipient_org_ar, recipient_city_ar, signer_name, signer_title, signer_name_ar, signer_title_ar, signature_image_url, framework_ids, placeholder_defs, placeholder_values, created_at, updated_at'
+  'id, reference, authority, type, sub_category, sama_department, subject, subject_ar, body, body_ar, status, priority, created_by, creator:profiles!sama_letters_created_by_fkey(name), assigned_to, sent_date, response_deadline, response_received_date, response_note, recipient_name, recipient_org, recipient_city, recipient_name_ar, recipient_org_ar, recipient_city_ar, signer_name, signer_title, signer_name_ar, signer_title_ar, signature_image_url, framework_ids, placeholder_defs, placeholder_values, created_at, updated_at'
 
 export const LETTER_TEMPLATE_COLUMNS =
   'id, name, type, icon, color, description, status, default_subject_en, default_subject_ar, default_body_en, default_body_ar, default_signer_name, default_signer_title, default_signer_name_ar, default_signer_title_ar, default_signature_image_url, default_sama_department, default_recipient_name, default_recipient_org, default_recipient_city, default_recipient_name_ar, default_recipient_org_ar, default_recipient_city_ar, placeholder_defs, usage_count, created_at, updated_at'

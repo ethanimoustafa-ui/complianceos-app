@@ -707,6 +707,7 @@ export default function CorrespondenceFeedPage() {
                                   setDeleteConfirmId(letter.id)
                                 }
                               }}
+                              isConfirmingDelete={deleteConfirmId === letter.id}
                               t={t}
                               isRTL={isRTL}
                             />
@@ -1422,6 +1423,7 @@ export default function CorrespondenceFeedPage() {
                           setDeleteConfirmId(letter.id)
                         }
                       }}
+                      isConfirmingDelete={deleteConfirmId === letter.id}
                       t={t}
                       isRTL={isRTL}
                     />
@@ -1577,6 +1579,7 @@ function CommunicationLogItem({
   onView,
   onArchive,
   onDelete,
+  isConfirmingDelete,
   t,
   isRTL
 }: {
@@ -1585,6 +1588,9 @@ function CommunicationLogItem({
   onArchive: () => void
   // F1: per-row soft-delete callback (optional — omit to hide the button).
   onDelete?: () => void
+  // F1: when true the delete button shows a "Confirm?" pill so the user
+  // gets visual feedback on first click and only needs ONE further click.
+  isConfirmingDelete?: boolean
   t: (key: TranslationKey, params?: Record<string, string | number>) => string
   isRTL: boolean
 }) {
@@ -1640,14 +1646,23 @@ function CommunicationLogItem({
           >
             {letter.archived ? t('correspondence.unarchive') : t('correspondence.archive')}
           </button>
-          {/* F1: per-row delete button */}
+          {/* F1: per-row delete button — shows confirm pill on first click */}
           {onDelete && (
-            <button
-              onClick={(e) => { e.stopPropagation(); onDelete() }}
-              className="text-[9px] font-bold text-rose-500 hover:text-rose-700 cursor-pointer shrink-0"
-            >
-              {t('common.delete')}
-            </button>
+            isConfirmingDelete ? (
+              <button
+                onClick={(e) => { e.stopPropagation(); onDelete() }}
+                className="text-[9px] font-bold text-white bg-rose-600 hover:bg-rose-700 px-1.5 py-0.5 rounded cursor-pointer shrink-0"
+              >
+                {t('common.confirm')}?
+              </button>
+            ) : (
+              <button
+                onClick={(e) => { e.stopPropagation(); onDelete() }}
+                className="text-[9px] font-bold text-rose-500 hover:text-rose-700 cursor-pointer shrink-0"
+              >
+                {t('common.delete')}
+              </button>
+            )
           )}
         </div>
       </div>

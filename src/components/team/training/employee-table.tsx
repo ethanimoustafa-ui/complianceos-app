@@ -135,10 +135,7 @@ export function EmployeeTable({ employees, onViewEmployee, onHrReminder, onExpor
                       isDefault: dept.isDefault,
                     })),
                   ]}
-                  onAdd={(label, labelAr) => {
-                    const created = addDepartment(label, labelAr ?? label)
-                    return created.name
-                  }}
+                  onAdd={(label, labelAr) => addDepartment(label, labelAr ?? label).then(d => d.name)}
                   onEdit={(id, label, labelAr) => {
                     const dept = departments.find((d) => d.name === id)
                     if (dept) updateDepartment(dept.id, { name: label, nameAr: labelAr ?? label })

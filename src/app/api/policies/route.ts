@@ -45,6 +45,9 @@ export async function GET(req: NextRequest) {
       query = query.eq('business_owner_department_id', q.owner_department_id)
     if (q.leader_id) query = query.eq('owner_id', q.leader_id)
     if (q.q) query = query.ilike('name', `%${q.q}%`)
+    // P6 (W29): archive filter — default 'active' hides archived rows.
+    if (q.archive_filter === 'active') query = query.is('archived_at', null)
+    else if (q.archive_filter === 'archived') query = query.not('archived_at', 'is', null)
 
     const [from, to] = rangeFor(q.page, q.pageSize)
     const { data, error, count } = await query

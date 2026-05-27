@@ -14,6 +14,8 @@ import { useTeamStore } from '@/stores/team-store'
 import { useCan } from '@/lib/permissions'
 import { EditableSelect } from '@/components/ui/editable-select'
 import { InlineDeadlinePicker } from '@/components/ui/inline-deadline-picker'
+// P3 (W29): skeleton loaders for detail sections during initial fetch.
+import { Skeleton } from '@/components/ui/skeleton'
 import {
   formatPolicyStatus,
   formatPolicyApprovalTier,
@@ -95,6 +97,10 @@ export function PolicyDetailsContent({
   const [expandedVersion, setExpandedVersion] = useState<number | null>(null)
   const canApprovePolicy = useCan('Approve Policy Reviews')
 
+  // P5 (W29): activity Load More — show 10 newest first, Load More appends older.
+  const TIMELINE_PAGE_SIZE = 10
+  const [timelineVisible, setTimelineVisible] = useState(TIMELINE_PAGE_SIZE)
+
   // Attachment file upload
   const docFileRef = useRef<HTMLInputElement>(null)
 
@@ -130,12 +136,16 @@ export function PolicyDetailsContent({
   const [notePromptFor, setNotePromptFor] = useState<NotePromptFor>(null)
   const [noteText, setNoteText] = useState('')
 
-  const { policies: allPolicies, update, addWorkflowStep, addAttachment, removeAttachment, addEvidence } = usePolicyStore()
+  const { policies: allPolicies, update, addWorkflowStep, addAttachment, removeAttachment, addEvidence, advanceWorkflowStep, loadMorePolicyActivity, policyActivityPagination } = usePolicyStore()
   const { user: authUser } = useAuthStore()
   const { addNotification } = useNotificationStore()
   const fresh = allPolicies.find(p => p.id === policy.id) ?? policy
   const actingUser = authUser?.name ?? fresh.owner.name
   const today = new Date().toISOString().split('T')[0]
+
+  // P3 (W29): detect pre-fetch state — description empty + no workflow steps means
+  // the detail GET hasn't resolved yet. Show skeletons in description/detail sections.
+  const isDetailPrefetch = !fresh.description && fresh.workflowTimeline.length === 0 && !fresh.activityLog
 
   // W18-cleanup — every enum chip below routes through `src/lib/format/enum.ts`.
   // The per-component label maps that used to live here were removed in favour
@@ -433,9 +443,12 @@ export function PolicyDetailsContent({
     const note = noteText.trim() || undefined
     const tl = fresh.workflowTimeline
 
-    // Helper: mark current step completed and advance next
+    // Helper: mark current step completed and advance next.
+    // P1 (W29): also fires advanceWorkflowStep to persist the step completion on
+    // the server (was previously local-only, causing "nothing sticks" symptom).
     function advanceStep(textEn: string, textAr: string) {
       const ci = tl.findIndex(s => s.status === 'current')
+      const currentStep = ci >= 0 ? tl[ci] : null
       const newTl = tl.map((s, i) => {
         if (i === ci) return { ...s, status: 'completed' as const, date: today, user: actingUser, note, stepState: undefined }
         if (i === ci + 1 && s.status === 'pending') {
@@ -468,6 +481,13 @@ export function PolicyDetailsContent({
         workflowTimeline: newTl,
         activityLog: [...(fresh.activityLog ?? []), actEntry],
       })
+      // P1 (W29): persist step completion to server. Fire-and-forget (toast on error).
+      void advanceWorkflowStep(fresh.id, {
+        action: allDone ? 'approve' : 'submit-for-review',
+        stepId: currentStep?.id,
+        note,
+        userName: actingUser,
+      })
       if (allDone) onApprove()
     }
 
@@ -486,6 +506,13 @@ export function PolicyDetailsContent({
         user: actingUser, note,
       }
       update(fresh.id, { status: 'under-review', workflowTimeline: newTl, activityLog: [...(fresh.activityLog ?? []), actEntry] })
+      // P1 (W29): persist submit-for-review to server.
+      void advanceWorkflowStep(fresh.id, {
+        action: 'submit-for-review',
+        stepId: currentStep?.id,
+        note,
+        userName: actingUser,
+      })
       onSubmitForReview()
 
     } else if (notePromptFor === 'advance') {
@@ -581,12 +608,15 @@ export function PolicyDetailsContent({
         workflowTimeline: [...reset, { step: 'Review Initiated', date: today, user: actingUser, status: 'current', note }],
         activityLog: [...(fresh.activityLog ?? []), actEntry],
       })
+      // P1 (W29): persist initiate-review to server.
+      void advanceWorkflowStep(fresh.id, { action: 'initiate-review', note, userName: actingUser })
       onInitiateReview()
 
     } else if (notePromptFor === 'undo') {
       const lastCompleted = [...tl].reverse().findIndex(s => s.status === 'completed')
       if (lastCompleted === -1) { closePrompt(); return }
       const realIdx = tl.length - 1 - lastCompleted
+      const revertedStepId = tl[realIdx]?.id
       const newTl = tl.map((s, i) => {
         if (i === realIdx) return { ...s, status: 'current' as const, date: '', note, stepState: undefined }
         if (s.status === 'current') return { ...s, status: 'pending' as const, stepState: undefined }
@@ -604,6 +634,13 @@ export function PolicyDetailsContent({
         status: anyCompleted ? 'under-review' : 'draft',
         workflowTimeline: newTl,
         activityLog: [...(fresh.activityLog ?? []), actEntry],
+      })
+      // P1 (W29): persist undo to server.
+      void advanceWorkflowStep(fresh.id, {
+        action: 'undo',
+        stepId: revertedStepId,
+        note,
+        userName: actingUser,
       })
     }
 
@@ -654,11 +691,20 @@ export function PolicyDetailsContent({
         {/* ── Overview tab ──────────────────────────────────────────── */}
         {activeTab === 'overview' && (
           <div className="space-y-5">
+            {/* P3 (W29): skeleton while detail GET is in flight. */}
             <section>
               <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-2">
                 {t('policies.description')}
               </h3>
-              <p className="text-sm text-slate-600 leading-relaxed">{fresh.description || '—'}</p>
+              {isDetailPrefetch ? (
+                <div className="space-y-2">
+                  <Skeleton className="h-4 w-full rounded" />
+                  <Skeleton className="h-4 w-4/5 rounded" />
+                  <Skeleton className="h-4 w-3/5 rounded" />
+                </div>
+              ) : (
+                <p className="text-sm text-slate-600 leading-relaxed">{fresh.description || '—'}</p>
+              )}
             </section>
 
             {/* Multi-document section */}
@@ -819,6 +865,15 @@ export function PolicyDetailsContent({
                       {isAddingStep ? t('common.saving') : t('common.add')}
                     </Button>
                   </div>
+                </div>
+              )}
+
+              {/* P3 (W29): skeleton while detail GET is in flight. */}
+              {isDetailPrefetch && (
+                <div className="space-y-2">
+                  {[1, 2, 3].map((i) => (
+                    <Skeleton key={i} className="h-12 w-full rounded-xl" />
+                  ))}
                 </div>
               )}
 
@@ -1194,6 +1249,14 @@ export function PolicyDetailsContent({
                 )
               })()}
 
+              {/* P1-d (W29): when ALL steps are completed, show "Reinitiate Review". */}
+              {fresh.workflowTimeline.length > 0 && fresh.workflowTimeline.every(s => s.status === 'completed') && (
+                <Button variant="outline" className="w-full text-emerald-600 border-emerald-200 hover:bg-emerald-50" onClick={() => setNotePromptFor('initiate')}>
+                  <Icon icon="lucide:refresh-cw" className="w-4 h-4" />
+                  {t('policies.initiateReview')}
+                </Button>
+              )}
+
               {/* Overdue / requires-review: initiate review */}
               {(fresh.status === 'expired' || fresh.status === 'overdue' || fresh.status === 'requires-review') && (
                 <Button variant="outline" className="w-full text-amber-600 border-amber-200 hover:bg-amber-50" onClick={() => setNotePromptFor('initiate')}>
@@ -1202,6 +1265,7 @@ export function PolicyDetailsContent({
                 </Button>
               )}
 
+              {/* P1-e (W29): Undo always available when at least one step completed. */}
               {fresh.workflowTimeline.some(s => s.status === 'completed') && (
                 <Button variant="outline" className="w-full text-rose-600 border-rose-200 hover:bg-rose-50"
                   onClick={() => setNotePromptFor('undo')}>
@@ -1299,32 +1363,57 @@ export function PolicyDetailsContent({
               <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-4">
                 {t('policies.activityTimeline')}
               </h3>
-              <div className={`space-y-3 relative before:absolute before:start-2 before:top-2 before:bottom-2 before:w-0.5 before:bg-slate-100`}>
-                {[...(fresh.activityLog ?? [])].sort((a, b) => b.timestamp.localeCompare(a.timestamp)).map((entry) => (
-                  <div key={entry.id} className="relative ps-8">
-                    <div className={cn(
-                      'absolute start-0 top-1 w-4 h-4 rounded-full border-2',
-                      entry.type === 'workflow_approved' ? 'bg-emerald-100 border-emerald-500' :
-                      entry.type === 'document_removed' || entry.type === 'evidence_removed' || entry.type === 'step_reverted' || entry.type === 'step_denied' ? 'bg-rose-100 border-rose-400' :
-                      'bg-slate-100 border-slate-400'
-                    )} />
-                    {/* Fix C — show only current language text */}
-                    <p className="text-xs font-bold text-slate-900">
-                      {isRTL ? entry.textAr : entry.textEn}
-                    </p>
-                    <p className="text-[10px] text-slate-400">{entry.date}{entry.user && ` • ${entry.user}`}</p>
-                    {entry.note && (
-                      <div className="mt-1 p-2 bg-slate-50 rounded-lg border border-slate-100 inline-block max-w-xs">
-                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">{t('common.note')}</p>
-                        <p className="text-[10px] text-slate-600">{entry.note}</p>
-                      </div>
+              {/* P5 (W29): sorted newest-first, sliced to timelineVisible, Load More button. */}
+              {(() => {
+                const allEntries = [...(fresh.activityLog ?? [])].sort((a, b) => b.timestamp.localeCompare(a.timestamp))
+                const visibleEntries = allEntries.slice(0, timelineVisible)
+                const actPagination = policyActivityPagination[fresh.id]
+                const hasMore = timelineVisible < allEntries.length || actPagination?.hasMore
+                const isLoadingMore = actPagination?.loadingMore ?? false
+                return (
+                  <>
+                    <div className={`space-y-3 relative before:absolute before:start-2 before:top-2 before:bottom-2 before:w-0.5 before:bg-slate-100`}>
+                      {visibleEntries.map((entry) => (
+                        <div key={entry.id} className="relative ps-8">
+                          <div className={cn(
+                            'absolute start-0 top-1 w-4 h-4 rounded-full border-2',
+                            entry.type === 'workflow_approved' ? 'bg-emerald-100 border-emerald-500' :
+                            entry.type === 'document_removed' || entry.type === 'evidence_removed' || entry.type === 'step_reverted' || entry.type === 'step_denied' ? 'bg-rose-100 border-rose-400' :
+                            'bg-slate-100 border-slate-400'
+                          )} />
+                          {/* Fix C — show only current language text */}
+                          <p className="text-xs font-bold text-slate-900">
+                            {isRTL ? entry.textAr : entry.textEn}
+                          </p>
+                          <p className="text-[10px] text-slate-400">{entry.date}{entry.user && ` • ${entry.user}`}</p>
+                          {entry.note && (
+                            <div className="mt-1 p-2 bg-slate-50 rounded-lg border border-slate-100 inline-block max-w-xs">
+                              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">{t('common.note')}</p>
+                              <p className="text-[10px] text-slate-600">{entry.note}</p>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                      {allEntries.length === 0 && (
+                        <p className="text-xs text-slate-400 italic">{t('policies.noActivityYet')}</p>
+                      )}
+                    </div>
+                    {hasMore && (
+                      <button
+                        onClick={() => {
+                          setTimelineVisible((v) => v + TIMELINE_PAGE_SIZE)
+                          void loadMorePolicyActivity(fresh.id)
+                        }}
+                        disabled={isLoadingMore}
+                        className="mt-3 flex items-center gap-2 text-xs font-bold text-emerald-600 hover:text-emerald-700 disabled:opacity-50"
+                      >
+                        <Icon icon={isLoadingMore ? 'lucide:loader-2' : 'lucide:chevron-down'} className={`text-sm${isLoadingMore ? ' animate-spin' : ''}`} />
+                        {isLoadingMore ? t('common.loading') : t('common.loadMore')}
+                      </button>
                     )}
-                  </div>
-                ))}
-                {(fresh.activityLog ?? []).length === 0 && (
-                  <p className="text-xs text-slate-400 italic">{t('policies.noActivityYet')}</p>
-                )}
-              </div>
+                  </>
+                )
+              })()}
             </section>
 
             <section>
@@ -1429,13 +1518,14 @@ export function PolicyDetailsContent({
             <Icon icon="lucide:edit" className="w-4 h-4" />
             {t('policies.editPolicy')}
           </Button>
-          {fresh.status !== 'expired' && (
+          {/* P6 (W29): use archivedAt (not status) to determine archive/unarchive state. */}
+          {!fresh.archivedAt && (
             <Button variant="outline" className="w-full border-amber-200 text-amber-700 hover:bg-amber-50" onClick={onArchive}>
               <Icon icon="lucide:archive" className="w-4 h-4" />
               {t('policies.archivePolicy')}
             </Button>
           )}
-          {fresh.status === 'expired' && (
+          {fresh.archivedAt && (
             <Button variant="outline" className="w-full border-emerald-200 text-emerald-700 hover:bg-emerald-50" onClick={onUnarchive}>
               <Icon icon="lucide:archive-restore" className="w-4 h-4" />
               {t('policies.unarchivePolicy')}
@@ -1469,7 +1559,7 @@ function PolicyBusinessOwnerSection({ policy, t }: { policy: Policy; t: (key: an
         onChange={(id) => update(policy.id, { businessOwnerDepartmentId: id || undefined })}
         items={departments.map((d) => ({ id: d.id, label: d.name, labelAr: d.nameAr, isDefault: d.isDefault }))}
         placeholder={t('policies.selectBusinessOwner')}
-        onAdd={(label, labelAr) => addDepartment(label, labelAr ?? label).id}
+        onAdd={(label, labelAr) => addDepartment(label, labelAr ?? label).then(d => d.id)}
         onEdit={(id, label, labelAr) => updateDepartment(id, { name: label, nameAr: labelAr ?? label })}
         onDelete={(id) => removeDepartment(id)}
       />

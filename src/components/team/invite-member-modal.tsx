@@ -168,7 +168,7 @@ export function InviteMemberModal({ isOpen, onClose, onSuccess }: InviteMemberMo
                     }}
                     items={deptList.map((d) => ({ id: d.id, label: d.name, labelAr: d.nameAr, isDefault: d.isDefault }))}
                     placeholder={t('observations.form.selectDepartment' as import('@/i18n').TranslationKey)}
-                    onAdd={(label, labelAr) => addDepartment(label, labelAr ?? label).id}
+                    onAdd={(label, labelAr) => addDepartment(label, labelAr ?? label).then(d => d.id)}
                     onEdit={(id, label, labelAr) => updateDepartment(id, { name: label, nameAr: labelAr ?? label })}
                     onDelete={(id) => removeDepartment(id)}
                   />

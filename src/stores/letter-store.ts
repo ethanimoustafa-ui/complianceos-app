@@ -90,6 +90,7 @@ interface LetterApiRow {
   sent_date: string | null
   response_deadline: string | null
   response_received_date: string | null
+  response_note?: string | null
   recipient_name?: string | null
   recipient_org?: string | null
   recipient_city?: string | null
@@ -248,6 +249,7 @@ function mapRow(row: LetterApiRow, previous?: Letter): Letter {
     responseDeadline: row.response_deadline ?? previous?.responseDeadline ?? undefined,
     responseReceivedDate:
       row.response_received_date ?? previous?.responseReceivedDate ?? undefined,
+    responseNote: row.response_note !== undefined ? row.response_note : previous?.responseNote,
     recipientName: row.recipient_name ?? previous?.recipientName ?? undefined,
     recipientOrg: row.recipient_org ?? previous?.recipientOrg ?? undefined,
     recipientCity: row.recipient_city ?? previous?.recipientCity ?? undefined,
@@ -385,10 +387,11 @@ interface LetterState {
 
   submitForApproval: (id: string) => Promise<void>
   approve: (id: string, comment?: string) => Promise<void>
+  reject: (id: string, comment: string) => Promise<void>
   approveStep: (id: string, step: 1 | 2 | 3, notes?: string) => Promise<void>
   rejectStep: (id: string, step: 1 | 2 | 3, notes: string) => Promise<void>
   send: (id: string) => Promise<void>
-  markResponseReceived: (id: string) => Promise<void>
+  markResponseReceived: (id: string, responseNote?: string | null) => Promise<void>
 
   setFilters: (filters: LetterFilters) => void
   clearFilters: () => void
@@ -581,42 +584,31 @@ export const useLetterStore = create<LetterState>()((set, get) => ({
   },
 
   delete: async (id) => {
+    // W29-L1 D1 timing pivot (mirrors policy-store.ts pattern from W28):
+    // Row stays visible with isMutating spinner until server confirms 200.
+    // Only removed from list AFTER the DELETE resolves successfully.
     const snapshot = get().byId[id]
-    const prevIndex = get().letters.findIndex((l) => l.id === id)
-    set((state) => {
-      const { [id]: _drop, ...rest } = state.byId
-      return {
-        letters: state.letters.filter((l) => l.id !== id),
-        byId: rest,
-        selectedLetter:
-          state.selectedLetter?.id === id ? null : state.selectedLetter,
-        isMutating: true,
-        error: null,
-      }
-    })
+    if (!snapshot) return
+    set({ isMutating: true, error: null })
+
     try {
       // Wave-21 ETag: thread If-Match on delete.
       const ifMatchHeaders = snapshot?.updatedAt
         ? { 'If-Match': `W/"${snapshot.updatedAt}"` }
         : undefined
       await api.delete(`/letters/${id}`, ifMatchHeaders)
-      set({ isMutating: false })
+      set((state) => {
+        const { [id]: _drop, ...rest } = state.byId
+        return {
+          letters: state.letters.filter((l) => l.id !== id),
+          byId: rest,
+          selectedLetter:
+            state.selectedLetter?.id === id ? null : state.selectedLetter,
+          isMutating: false,
+        }
+      })
     } catch (e) {
-      if (snapshot) {
-        set((state) => {
-          const list = [...state.letters]
-          const insertAt = prevIndex >= 0 && prevIndex <= list.length ? prevIndex : list.length
-          list.splice(insertAt, 0, snapshot)
-          return {
-            letters: list,
-            byId: { ...state.byId, [id]: snapshot },
-            error: errorMessage(e, 'Failed to delete letter'),
-            isMutating: false,
-          }
-        })
-      } else {
-        set({ error: errorMessage(e, 'Failed to delete letter'), isMutating: false })
-      }
+      set({ error: errorMessage(e, 'Failed to delete letter'), isMutating: false })
       throw e
     }
   },
@@ -627,6 +619,14 @@ export const useLetterStore = create<LetterState>()((set, get) => ({
       actionName: 'uploadAttachment',
       id: letterId,
     })
+    // W29-L4: guard empty / oversized files before hitting storage.
+    if (file.size === 0) {
+      throw new Error('Cannot upload an empty file.')
+    }
+    const MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024 // 20 MB
+    if (file.size > MAX_ATTACHMENT_BYTES) {
+      throw new Error(`File is too large (max 20 MB). File size: ${Math.round(file.size / 1024 / 1024)} MB.`)
+    }
     set({ isMutating: true, error: null })
     try {
       // 1) Upload file bytes to the private `sama_letter_attachments` bucket.
@@ -736,6 +736,35 @@ export const useLetterStore = create<LetterState>()((set, get) => ({
     }
   },
 
+  // W29-L6: admin direct-reject (companion to approve). Calls POST /api/letters/[id]/reject.
+  reject: async (id, comment) => {
+    requirePermission('Approve SAMA Letters', {
+      storeName: 'letter',
+      actionName: 'reject',
+      id,
+    })
+    set({ isMutating: true, error: null })
+    try {
+      await api.post<LetterApiRow>(`/letters/${id}/reject`, { comment })
+      const detail = await api.get<LetterApiRow>(`/letters/${id}`)
+      const previous = get().byId[id]
+      const updated = mapRow(detail, previous)
+      set((state) => ({
+        letters: state.letters.map((l) => (l.id === id ? updated : l)),
+        byId: { ...state.byId, [id]: updated },
+        selectedLetter:
+          state.selectedLetter?.id === id ? updated : state.selectedLetter,
+        isMutating: false,
+      }))
+    } catch (e) {
+      set({
+        error: errorMessage(e, 'Failed to reject letter'),
+        isMutating: false,
+      })
+      throw e
+    }
+  },
+
   approveStep: async (id, step, notes) => {
     const user = requirePermission('Approve SAMA Letters', {
       storeName: 'letter',
@@ -834,7 +863,7 @@ export const useLetterStore = create<LetterState>()((set, get) => ({
     }
   },
 
-  markResponseReceived: async (id) => {
+  markResponseReceived: async (id, responseNote) => {
     requirePermission('Approve SAMA Letters', {
       storeName: 'letter',
       actionName: 'markResponseReceived',
@@ -842,7 +871,9 @@ export const useLetterStore = create<LetterState>()((set, get) => ({
     })
     set({ isMutating: true, error: null })
     try {
-      await api.post<LetterApiRow>(`/letters/${id}/mark-response-received`)
+      await api.post<LetterApiRow>(`/letters/${id}/mark-response-received`, {
+        response_note: responseNote ?? null,
+      })
       const detail = await api.get<LetterApiRow>(`/letters/${id}`)
       const previous = get().byId[id]
       const updated = mapRow(detail, previous)

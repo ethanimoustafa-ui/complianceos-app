@@ -52,13 +52,13 @@ interface DepartmentState {
 
   fetchAll(): Promise<void>
   /**
-   * Optimistic add — returns a tentative `Department` synchronously so
-   * `EditableSelect` consumers (`onAdd={(l, ar) => addDepartment(l, ar).id}`)
-   * keep working. The real server-issued UUID lands a moment later via the
-   * background POST; the optimistic row is replaced in `byId` once the API
-   * responds. On failure, the optimistic row is removed and `error` is set.
+   * Async add — inserts an optimistic row immediately (so the list updates
+   * before the server responds) then awaits the POST and returns the real
+   * server-issued `Department`. Callers that need the canonical UUID (e.g.
+   * `EditableSelect.onAdd`) should `await` and use `.id` from the result.
+   * On failure the optimistic row is rolled back and `error` is set.
    */
-  addDepartment(name: string, nameAr: string): Department
+  addDepartment(name: string, nameAr: string): Promise<Department>
   removeDepartment(id: string): Promise<void>
   updateDepartment(id: string, data: Partial<Omit<Department, 'id' | 'isDefault'>>): Promise<void>
   getDepartments(): Department[]
@@ -88,10 +88,11 @@ export const useDepartmentStore = create<DepartmentState>()((set, get) => ({
     }
   },
 
-  addDepartment: (name, nameAr) => {
-    // Optimistic local insert. The temp id is a slug; consumers that use
-    // `.id` (EditableSelect) get a stable string back synchronously. We
-    // replace the temp row with the real server row once the POST returns.
+  addDepartment: async (name, nameAr) => {
+    // Optimistic local insert so the dropdown updates immediately.
+    // We await the real POST and return the server-issued row so callers
+    // that need the canonical UUID (EditableSelect.onAdd → onChange) can
+    // select the stable id rather than the transient temp id.
     const tempId = `tmp-${slugify(name) || Date.now()}`
     const slug = slugify(name) || `dept-${Date.now()}`
     const optimistic: Department = { id: tempId, name, nameAr, isDefault: false, key: slug }
@@ -101,36 +102,35 @@ export const useDepartmentStore = create<DepartmentState>()((set, get) => ({
       isMutating: true,
       error: null,
     }))
-    ;(async () => {
-      try {
-        const row = await api.post<DepartmentApiRow>('/settings/departments', {
-          key: slug,
-          name_en: name,
-          name_ar: nameAr,
-        })
-        const created = mapRow(row)
-        set((s) => {
-          const { [tempId]: _drop, ...rest } = s.byId
-          return {
-            departments: s.departments.map((d) => (d.id === tempId ? created : d)),
-            byId: { ...rest, [created.id]: created },
-            isMutating: false,
-          }
-        })
-      } catch (e) {
-        // Roll back optimistic insert.
-        set((s) => {
-          const { [tempId]: _drop, ...rest } = s.byId
-          return {
-            departments: s.departments.filter((d) => d.id !== tempId),
-            byId: rest,
-            error: errorMessage(e, 'Failed to add department'),
-            isMutating: false,
-          }
-        })
-      }
-    })()
-    return optimistic
+    try {
+      const row = await api.post<DepartmentApiRow>('/settings/departments', {
+        key: slug,
+        name_en: name,
+        name_ar: nameAr,
+      })
+      const created = mapRow(row)
+      set((s) => {
+        const { [tempId]: _drop, ...rest } = s.byId
+        return {
+          departments: s.departments.map((d) => (d.id === tempId ? created : d)),
+          byId: { ...rest, [created.id]: created },
+          isMutating: false,
+        }
+      })
+      return created
+    } catch (e) {
+      // Roll back optimistic insert.
+      set((s) => {
+        const { [tempId]: _drop, ...rest } = s.byId
+        return {
+          departments: s.departments.filter((d) => d.id !== tempId),
+          byId: rest,
+          error: errorMessage(e, 'Failed to add department'),
+          isMutating: false,
+        }
+      })
+      throw e
+    }
   },
 
   removeDepartment: async (id) => {

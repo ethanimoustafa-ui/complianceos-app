@@ -144,15 +144,20 @@ export const ObservationTableRow = memo(function ObservationTableRow({
       </td>
       <td className={`py-4 ${isRTL ? 'pl-4 text-left' : 'pr-4 text-right'}`}>
         {isClosed ? (
-          <Icon
-            icon="lucide:check-circle-2"
-            className="text-emerald-500 text-xl"
-          />
+          // O4: align check icon with the Actions column — use inline-flex
+          <span className="inline-flex justify-end w-full">
+            <Icon
+              icon="lucide:check-circle-2"
+              className="text-emerald-500 text-xl"
+            />
+          </span>
         ) : !canEdit ? (
-          <Icon
-            icon="lucide:check-circle-2"
-            className="text-slate-300 text-xl"
-          />
+          <span className="inline-flex justify-end w-full">
+            <Icon
+              icon="lucide:check-circle-2"
+              className="text-slate-300 text-xl"
+            />
+          </span>
         ) : (
           <div className="relative">
             <button

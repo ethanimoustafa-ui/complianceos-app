@@ -89,6 +89,15 @@ export const AddObservationModal = memo(function AddObservationModal({ isOpen, o
   const [touched, setTouched] = useState<Record<string, boolean>>({})
   const [frameworkIds, setFrameworkIds] = useState<RegulatoryBodyId[]>([])
 
+  // O2: reset validation state when the modal closes so stale errors/touched
+  // flags don't show on the next open (spurious "Department is required" on mount).
+  useEffect(() => {
+    if (!isOpen) {
+      setErrors({})
+      setTouched({})
+    }
+  }, [isOpen])
+
   const handleSourceSelect = (source: ObservationSource) => {
     setFormData((prev) => ({ ...prev, source }))
   }

@@ -65,6 +65,9 @@ interface ObservationData {
   assignees?: { id?: string; name?: string; avatar?: string; role?: string }[]
   documents?: { id: string; name: string; type: string }[]
   frameworkIds?: RegulatoryBodyId[]
+  /** O7: the observation creator is the implicit Observation Leader; exclude
+   *  them from the assignee picker so they don't appear twice. */
+  creatorId?: string
 }
 
 interface EditObservationModalProps {
@@ -86,7 +89,13 @@ export const EditObservationModal = memo(function EditObservationModal({
   const [selectedAssignees, setSelectedAssignees] = useState<TeamMember[]>([])
   const [frameworkIds, setFrameworkIds] = useState<RegulatoryBodyId[]>([])
   const { members } = useTeamStore()
-  const activeMembers = useMemo(() => members.filter(m => m.status === 'active'), [members])
+  // O7: exclude the observation creator from the assignee picker — they are
+  // the implicit Observation Leader and adding them as a team member is
+  // redundant (and confusing in the UI).
+  const activeMembers = useMemo(
+    () => members.filter(m => m.status === 'active' && m.id !== observation?.creatorId),
+    [members, observation?.creatorId],
+  )
 
   // Hydrate department list when the modal opens — same reason as the add modal.
   const fetchDepartments = useDepartmentStore((s) => s.fetchAll)

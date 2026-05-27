@@ -158,12 +158,22 @@ export async function POST(req: NextRequest) {
 
     const created = inserted as { id: string; reference: string }
 
-    // L7c: Bump template usage_count atomically (avoids read-modify-write race
-    // when multiple concurrent users create letters from the same template).
+    // L7c / W29-L3: Bump template usage_count atomically (avoids read-modify-write
+    // race when multiple concurrent users create letters from the same template).
+    // Always awaits the RPC and surfaces errors to logs; does NOT abort the letter
+    // creation on failure (non-critical counter). Previous code discarded the
+    // return value so silent failures went undetected.
     if (input.template_id) {
-      await supabase.rpc('increment_template_usage_count', {
+      const { error: rpcErr } = await supabase.rpc('increment_template_usage_count', {
         template_id: input.template_id,
       })
+      if (rpcErr) {
+        // eslint-disable-next-line no-console
+        console.error('[api/letters] increment_template_usage_count failed', {
+          rpcErr,
+          template_id: input.template_id,
+        })
+      }
     }
 
     const actor = profile.name ?? profile.email ?? user.id

@@ -102,15 +102,33 @@ export const ObservationTable = memo(function ObservationTable({
 
   const totalPages = Math.ceil(totalItems / itemsPerPage)
 
+  // O1: SortIcon rendered inline inside a flex wrapper so the clear-X lives
+  // next to the chevron — mirrors the LetterSortHeader pattern.
   const SortIcon = ({ field }: { field: SortField }) => {
-    if (sortField !== field) {
-      return <Icon icon="lucide:arrow-up-down" className={`text-[10px] inline ${isRTL ? 'mr-1' : 'ml-1'} opacity-30`} />
-    }
+    const active = sortField === field
     return (
-      <Icon
-        icon={sortDirection === 'asc' ? 'lucide:arrow-up' : 'lucide:arrow-down'}
-        className={`text-[10px] inline ${isRTL ? 'mr-1' : 'ml-1'} text-emerald-600`}
-      />
+      <span className="inline-flex items-center gap-0.5">
+        <Icon
+          icon={
+            !active
+              ? 'lucide:chevrons-up-down'
+              : sortDirection === 'asc'
+                ? 'lucide:chevron-up'
+                : 'lucide:chevron-down'
+          }
+          className={`text-[10px] ${active ? 'text-emerald-600' : 'opacity-30'}`}
+        />
+        {active && (
+          <button
+            onClick={handleClearSort}
+            className="text-slate-400 hover:text-rose-500 transition-colors cursor-pointer leading-none"
+            title="Clear sort"
+            aria-label="Clear sort"
+          >
+            <Icon icon="lucide:x" className="text-[10px]" />
+          </button>
+        )}
+      </span>
     )
   }
 
@@ -136,31 +154,6 @@ export const ObservationTable = memo(function ObservationTable({
 
   return (
     <>
-      {/* O2: active-sort indicator with clear button */}
-      {sortField && (
-        <div className="flex items-center gap-2 mb-2 mt-1">
-          <span className="text-xs text-slate-500">
-            {t('observations.table.sortedBy')}
-          </span>
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-50 border border-emerald-200 rounded-full text-xs font-bold text-emerald-700">
-            {sortField === 'id' ? t('observations.table.id')
-              : sortField === 'source' ? t('observations.table.source')
-              : sortField === 'title' ? t('observations.table.findingTitle')
-              : sortField === 'severity' ? t('observations.table.severity')
-              : sortField === 'dueDate' ? t('observations.table.dueDate')
-              : t('observations.table.status')}
-            <Icon icon={sortDirection === 'asc' ? 'lucide:arrow-up' : 'lucide:arrow-down'} className="text-[10px]" />
-            <button
-              onClick={handleClearSort}
-              className="ml-0.5 text-emerald-500 hover:text-rose-500 transition-colors cursor-pointer"
-              title="Clear sort"
-              aria-label="Clear sort"
-            >
-              <Icon icon="lucide:x" className="text-[10px]" />
-            </button>
-          </span>
-        </div>
-      )}
       <div className="overflow-x-auto overflow-y-visible hide-scrollbar">
         <table className="w-full border-separate border-spacing-y-2">
           <thead>

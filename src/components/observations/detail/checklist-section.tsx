@@ -26,6 +26,8 @@ export interface ChecklistSectionProps {
   completionKey?: string
   addPlaceholderKey?: string
   removeTooltipKey?: string
+  /** O4: when true the add-input, edit, and remove controls are hidden. */
+  readOnly?: boolean
 }
 
 export const ChecklistSection = memo(function ChecklistSection({
@@ -41,6 +43,7 @@ export const ChecklistSection = memo(function ChecklistSection({
   completionKey,
   addPlaceholderKey,
   removeTooltipKey,
+  readOnly = false,
 }: ChecklistSectionProps) {
   const { t } = useTranslation()
   const [newItemText, setNewItemText] = useState('')
@@ -111,26 +114,28 @@ export const ChecklistSection = memo(function ChecklistSection({
         ) : null}
       </div>
 
-      {/* Add new checklist item */}
-      <div className={`flex items-center gap-2 mb-4`}>
-        <input
-          type="text"
-          placeholder={t((addPlaceholderKey || 'observations.detail.addChecklistItem') as Parameters<typeof t>[0])}
-          value={newItemText}
-          onChange={(e) => setNewItemText(e.target.value)}
-          onKeyDown={handleKeyDown}
-          disabled={isAdding}
-          className={`flex-1 px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent ${isRTL ? 'text-right' : ''}`}
-        />
-        <button
-          onClick={() => void handleAdd()}
-          disabled={!newItemText.trim() || isAdding}
-          aria-busy={isAdding || undefined}
-          className="p-2.5 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
-        >
-          <Icon icon={isAdding ? 'lucide:loader-2' : 'lucide:plus'} className={`text-lg${isAdding ? ' animate-spin' : ''}`} />
-        </button>
-      </div>
+      {/* Add new checklist item — hidden in read-only (closed) mode (O4) */}
+      {!readOnly && (
+        <div className={`flex items-center gap-2 mb-4`}>
+          <input
+            type="text"
+            placeholder={t((addPlaceholderKey || 'observations.detail.addChecklistItem') as Parameters<typeof t>[0])}
+            value={newItemText}
+            onChange={(e) => setNewItemText(e.target.value)}
+            onKeyDown={handleKeyDown}
+            disabled={isAdding}
+            className={`flex-1 px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent ${isRTL ? 'text-right' : ''}`}
+          />
+          <button
+            onClick={() => void handleAdd()}
+            disabled={!newItemText.trim() || isAdding}
+            aria-busy={isAdding || undefined}
+            className="p-2.5 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+          >
+            <Icon icon={isAdding ? 'lucide:loader-2' : 'lucide:plus'} className={`text-lg${isAdding ? ' animate-spin' : ''}`} />
+          </button>
+        </div>
+      )}
 
       {/* Checklist items */}
       {items.length > 0 ? (
@@ -144,7 +149,7 @@ export const ChecklistSection = memo(function ChecklistSection({
                   : 'border-slate-200 hover:border-emerald-300 hover:bg-slate-50'
               }`}
             >
-              {editingItemId === item.id ? (
+              {!readOnly && editingItemId === item.id ? (
                 /* Editing mode */
                 <div className={`flex items-center gap-2 flex-1`}>
                   <input
@@ -175,8 +180,8 @@ export const ChecklistSection = memo(function ChecklistSection({
                 <>
                   <button
                     type="button"
-                    onClick={() => onToggle(item.id, item.completed)}
-                    className={`flex items-center gap-3 flex-1 cursor-pointer ${isRTL ? 'text-right' : 'text-left'}`}
+                    onClick={readOnly ? undefined : () => onToggle(item.id, item.completed)}
+                    className={`flex items-center gap-3 flex-1 ${readOnly ? 'cursor-default' : 'cursor-pointer'} ${isRTL ? 'text-right' : 'text-left'}`}
                   >
                     {item.completed ? (
                       <Icon
@@ -199,7 +204,8 @@ export const ChecklistSection = memo(function ChecklistSection({
                       }}
                     />
                   ) : null}
-                  {onEdit ? (
+                  {/* Edit/remove hidden in read-only (closed) mode (O4) */}
+                  {!readOnly && onEdit ? (
                     <button
                       onClick={() => handleStartEdit(item)}
                       className="p-1 text-slate-300 hover:text-blue-500 opacity-0 group-hover:opacity-100 transition-all cursor-pointer"
@@ -208,13 +214,15 @@ export const ChecklistSection = memo(function ChecklistSection({
                       <Icon icon="lucide:pencil" className="text-lg" />
                     </button>
                   ) : null}
-                  <button
-                    onClick={() => onRemove(item.id)}
-                    className="p-1 text-slate-300 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-all cursor-pointer"
-                    title={t((removeTooltipKey || 'observations.detail.removeItem') as Parameters<typeof t>[0])}
-                  >
-                    <Icon icon="lucide:x" className="text-lg" />
-                  </button>
+                  {!readOnly && (
+                    <button
+                      onClick={() => onRemove(item.id)}
+                      className="p-1 text-slate-300 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-all cursor-pointer"
+                      title={t((removeTooltipKey || 'observations.detail.removeItem') as Parameters<typeof t>[0])}
+                    >
+                      <Icon icon="lucide:x" className="text-lg" />
+                    </button>
+                  )}
                 </>
               )}
             </div>

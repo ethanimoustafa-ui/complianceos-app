@@ -229,10 +229,15 @@ export function EditableSelect({
       </button>
 
       {open && mounted && createPortal(
-        <div ref={portalRef} style={dropdownStyle} className="bg-white border border-slate-200 rounded-lg shadow-xl overflow-hidden">
+        <div
+          ref={portalRef}
+          style={dropdownStyle}
+          className="bg-white border border-slate-200 rounded-lg shadow-xl overflow-hidden"
+          onWheel={(e) => e.stopPropagation()}
+        >
           {view === 'list' && (
             <>
-              <div className="max-h-64 overflow-y-auto">
+              <div className="max-h-[320px] overflow-y-auto">
                 {items.length === 0 && (
                   <div className="px-3 py-3 text-xs text-slate-400 italic">{t('editableSelect.noOptions')}</div>
                 )}

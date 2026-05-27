@@ -931,7 +931,7 @@ export default function ReportsRisksPage() {
                           onChange={(id) => assignDept(storeRisk.id, id)}
                           items={deptList.map((d) => ({ id: d.id, label: d.name, labelAr: d.nameAr, isDefault: d.isDefault }))}
                           placeholder="Assign a department..."
-                          onAdd={(label, labelAr) => addDept(label, labelAr ?? label).id}
+                          onAdd={(label, labelAr) => addDept(label, labelAr ?? label).then(d => d.id)}
                           onEdit={(id, label, labelAr) => updateDept(id, { name: label, nameAr: labelAr ?? label })}
                           onDelete={(id) => removeDept(id)}
                           isRTL={isRTL}

@@ -44,9 +44,10 @@ export async function POST(req: NextRequest, { params }: Params) {
     const body = await parseJson(req, RejectLetterSchema)
 
     // W17.2 atomic conditional UPDATE: status guard prevents double-rejection.
+    // W29-L6: persist rejection_reason column for display in letter detail.
     const { data, error } = await supabase
       .from('letters')
-      .update({ status: 'rejected' })
+      .update({ status: 'rejected', rejection_reason: body.comment })
       .eq('id', letterId)
       .eq('status', 'pending-approval')
       .is('deleted_at', null)

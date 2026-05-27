@@ -110,6 +110,8 @@ export const UpdatePolicySchema = z
     current_review_cycle_id: z.string().max(200).nullable().optional(),
     current_review_cycle_label: PlainText(200).nullable().optional(),
     current_review_cycle_date: DateString.nullable().optional(),
+    // P6 (W29): archive/unarchive — nullable ISO timestamp or null to unarchive.
+    archived_at: z.string().nullable().optional(),
   })
   // SEC-8: reject unknown keys.
   .strict()
@@ -126,6 +128,8 @@ export const ListPoliciesQuerySchema = z.object({
   owner_department_id: Uuid.optional(),
   leader_id: Uuid.optional(),
   q: z.string().max(200).optional(),
+  // P6 (W29): 'active' (default) = archived_at IS NULL; 'archived' = archived_at IS NOT NULL; 'all' = no filter.
+  archive_filter: z.enum(['active', 'archived', 'all']).default('active'),
 })
 export type ListPoliciesQuery = z.infer<typeof ListPoliciesQuerySchema>
 

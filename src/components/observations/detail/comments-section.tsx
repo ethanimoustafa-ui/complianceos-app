@@ -29,6 +29,8 @@ export interface CommentsSectionProps {
   isRTL: boolean
   /** Render skeleton rows when the detail GET hasn't resolved yet. */
   isLoaded?: boolean
+  /** O4: when true the add-textarea and edit/delete controls are hidden. */
+  readOnly?: boolean
 }
 
 export const CommentsSection = memo(function CommentsSection({
@@ -39,6 +41,7 @@ export const CommentsSection = memo(function CommentsSection({
   onDelete,
   isRTL,
   isLoaded = true,
+  readOnly = false,
 }: CommentsSectionProps) {
   const { t } = useTranslation()
   const [updateText, setUpdateText] = useState('')
@@ -151,7 +154,8 @@ export const CommentsSection = memo(function CommentsSection({
                         </span>
                       ) : null}
                     </p>
-                    {(canEdit || canDelete) && !isEditing ? (
+                    {/* Edit/delete hidden in read-only (closed) mode (O4) */}
+                    {!readOnly && (canEdit || canDelete) && !isEditing ? (
                       <div className={`flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity`}>
                         {canEdit ? (
                           <button
@@ -222,29 +226,32 @@ export const CommentsSection = memo(function CommentsSection({
             )
           })
         )}
-        <div className="relative">
-          <textarea
-            placeholder={t('observations.detail.writeUpdate')}
-            value={updateText}
-            onChange={(e) => setUpdateText(e.target.value)}
-            onKeyDown={handleKeyDown}
-            disabled={isSubmitting}
-            rows={2}
-            className={`w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 disabled:opacity-50 resize-none ${isRTL ? 'pr-4' : 'pr-12'}`}
-          />
-          <button
-            onClick={handleSendComment}
-            disabled={!updateText.trim() || isSubmitting}
-            aria-busy={isSubmitting || undefined}
-            className={`absolute right-3 bottom-10 text-emerald-600 hover:text-emerald-700 transition-colors disabled:text-slate-300 disabled:cursor-not-allowed cursor-pointer`}
-          >
-            {isSubmitting ? (
-              <Icon icon="lucide:loader-2" className="animate-spin" />
-            ) : (
-              <Icon icon="lucide:send-horizontal" className={isRTL ? 'rotate-180' : ''} />
-            )}
-          </button>
-        </div>
+        {/* Add-comment textarea hidden in read-only (closed) mode (O4) */}
+        {!readOnly && (
+          <div className="relative">
+            <textarea
+              placeholder={t('observations.detail.writeUpdate')}
+              value={updateText}
+              onChange={(e) => setUpdateText(e.target.value)}
+              onKeyDown={handleKeyDown}
+              disabled={isSubmitting}
+              rows={2}
+              className={`w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 disabled:opacity-50 resize-none ${isRTL ? 'pr-4' : 'pr-12'}`}
+            />
+            <button
+              onClick={handleSendComment}
+              disabled={!updateText.trim() || isSubmitting}
+              aria-busy={isSubmitting || undefined}
+              className={`absolute right-3 bottom-10 text-emerald-600 hover:text-emerald-700 transition-colors disabled:text-slate-300 disabled:cursor-not-allowed cursor-pointer`}
+            >
+              {isSubmitting ? (
+                <Icon icon="lucide:loader-2" className="animate-spin" />
+              ) : (
+                <Icon icon="lucide:send-horizontal" className={isRTL ? 'rotate-180' : ''} />
+              )}
+            </button>
+          </div>
+        )}
       </div>
     </section>
   )

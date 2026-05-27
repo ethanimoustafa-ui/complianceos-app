@@ -203,7 +203,7 @@ export function EditCircularModal({ circular, isOpen, onClose, onSaved, t, isRTL
                     labelAr: dept.nameAr,
                     isDefault: dept.isDefault,
                   }))}
-                  onAdd={(label, labelAr) => addDepartment(label, labelAr ?? label).name}
+                  onAdd={(label, labelAr) => addDepartment(label, labelAr ?? label).then(d => d.name)}
                   onEdit={(id, label, labelAr) => {
                     const dept = allDepartments.find((d) => d.name === id)
                     if (dept) updateDepartment(dept.id, { name: label, nameAr: labelAr ?? label })

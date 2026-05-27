@@ -56,7 +56,11 @@
     "note": "Note",
     "loadMore": "Load more",
     "more": "more",
-    "saving": "Saving..."
+    "saving": "Saving...",
+    "filterAll": "All",
+    "filterActive": "Active",
+    "filterArchived": "Archived",
+    "archived": "Archived"
   },
   "navigation": {
     "dashboard": "Dashboard",
@@ -583,6 +587,7 @@
   },
   "observations": {
     "observation": "observation",
+    "deleteSuccess": "Observation deleted",
     "title": "Observations Tracker",
     "subtitle": "Audit & Remediation Management",
     "addObservation": "Add Observation",

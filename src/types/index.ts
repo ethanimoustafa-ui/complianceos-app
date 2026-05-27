@@ -563,6 +563,7 @@ export interface Letter {
   sentDate?: string
   responseDeadline?: string
   responseReceivedDate?: string
+  responseNote?: string | null
   recipientName?: string
   recipientOrg?: string
   recipientCity?: string
@@ -884,6 +885,8 @@ export interface Policy {
   // O(1) read for StatCard counts; consumers should prefer this over inline
   // `nextReviewDate < new Date()` checks.
   isExpired?: boolean
+  // P6 (W29): set when "Archive Policy" is clicked (migration 081). Null = active.
+  archivedAt?: string | null
   createdAt: string
   updatedAt: string
 }

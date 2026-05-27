@@ -392,7 +392,7 @@ export default function AdvisoryPage() {
                     { id: '', label: t('advisory.allUnits') },
                     ...departments.map((d) => ({ id: d.id, label: d.name, labelAr: d.nameAr, isDefault: d.isDefault })),
                   ]}
-                  onAdd={(label, labelAr) => addDepartment(label, labelAr ?? label).id}
+                  onAdd={(label, labelAr) => addDepartment(label, labelAr ?? label).then(d => d.id)}
                   onEdit={(id, label, labelAr) => updateDepartment(id, { name: label, nameAr: labelAr ?? label })}
                   onDelete={(id) => removeDepartment(id)}
                   placeholder={t('advisory.allUnits')}
@@ -601,7 +601,7 @@ export default function AdvisoryPage() {
                 value={newAdvBusinessUnit || null}
                 onChange={(id) => setNewAdvBusinessUnit(id as BusinessUnit)}
                 items={departments.map((d) => ({ id: d.id, label: d.name, labelAr: d.nameAr, isDefault: d.isDefault }))}
-                onAdd={(label, labelAr) => addDepartment(label, labelAr ?? label).id}
+                onAdd={(label, labelAr) => addDepartment(label, labelAr ?? label).then(d => d.id)}
                 onEdit={(id, label, labelAr) => updateDepartment(id, { name: label, nameAr: labelAr ?? label })}
                 onDelete={(id) => removeDepartment(id)}
                 placeholder={t('advisory.selectUnit')}

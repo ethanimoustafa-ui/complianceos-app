@@ -49,6 +49,8 @@ export default function RegulatoryUpdatesPoliciesPage() {
     setSelected, reviewAlerts, checkAndUpdateStatuses,
     fetchAll: fetchAllPolicies,
     fetchById: fetchPolicyById,
+    archivePolicy, unarchivePolicy,
+    archiveFilter, setArchiveFilter,
   } = usePolicyStore()
 
   // Hydrate from the API on mount — otherwise the page renders the empty
@@ -94,6 +96,10 @@ export default function RegulatoryUpdatesPoliciesPage() {
   const [policyCategoryFilter, setPolicyCategoryFilter] = useState<PolicyCategory | 'all'>('all')
   const [policyStatusFilter, setPolicyStatusFilter] = useState<PolicyStatus | 'all'>('all')
   const [currentPage, setCurrentPage] = useState(1)
+
+  // P6 (W29): refetch whenever the archive filter changes so the API applies
+  // the correct archived_at predicate (active / archived / all).
+  useEffect(() => { fetchAllPolicies(true) }, [archiveFilter]) // eslint-disable-line react-hooks/exhaustive-deps
   const PAGE_SIZE = 10
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false)
@@ -128,17 +134,22 @@ export default function RegulatoryUpdatesPoliciesPage() {
           policy.description.toLowerCase().includes(policySearchQuery.toLowerCase())
         const matchesCategory = policyCategoryFilter === 'all' || policy.category === policyCategoryFilter
         const matchesStatus = policyStatusFilter === 'all' || policy.status === policyStatusFilter
-        return matchesSearch && matchesCategory && matchesStatus
+        // P6 (W29): client-side archive filter (belt-and-suspenders with API filter).
+        const matchesArchive =
+          archiveFilter === 'all' ? true :
+          archiveFilter === 'archived' ? !!policy.archivedAt :
+          !policy.archivedAt
+        return matchesSearch && matchesCategory && matchesStatus && matchesArchive
       })
       .sort((a, b) => {
         if (!a.nextReviewDate) return 1
         if (!b.nextReviewDate) return -1
         return a.nextReviewDate.localeCompare(b.nextReviewDate)
       })
-  }, [policies, policySearchQuery, policyCategoryFilter, policyStatusFilter])
+  }, [policies, policySearchQuery, policyCategoryFilter, policyStatusFilter, archiveFilter])
 
   // Reset to page 1 when filters change.
-  useEffect(() => { setCurrentPage(1) }, [policySearchQuery, policyCategoryFilter, policyStatusFilter])
+  useEffect(() => { setCurrentPage(1) }, [policySearchQuery, policyCategoryFilter, policyStatusFilter, archiveFilter])
 
   const { items: paginatedPolicies, totalPages } = useMemo(
     () => paginate(filteredPolicies, currentPage, PAGE_SIZE),
@@ -259,6 +270,25 @@ export default function RegulatoryUpdatesPoliciesPage() {
           <StatCard label={t('policies.expired')} value={policyStats.expired} subtext={t('policies.needsReview')} borderColor="rose" valueColor="rose" />
         </div>
 
+        {/* P6 (W29): Archive filter — Active / Archived / All */}
+        <div className="flex items-center gap-2 mb-3">
+          <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">{t('policies.archivePolicy').replace(' Policy', '')}:</span>
+          {(['active', 'archived', 'all'] as const).map((f) => (
+            <button
+              key={f}
+              onClick={() => { setArchiveFilter(f); fetchAllPolicies(true) }}
+              className={cn(
+                'px-3 py-1 rounded-lg text-xs font-bold transition-colors border',
+                archiveFilter === f
+                  ? 'bg-emerald-600 text-white border-emerald-600'
+                  : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50',
+              )}
+            >
+              {f === 'active' ? t('common.filterActive') : f === 'archived' ? t('common.filterArchived') : t('common.filterAll')}
+            </button>
+          ))}
+        </div>
+
         {/* Filter Bar */}
         <RegDocFilterBar
           variant="policy"
@@ -288,12 +318,13 @@ export default function RegulatoryUpdatesPoliciesPage() {
         {showPoliciesSkeleton ? (
           <CardSkeleton count={4} className="grid-cols-1" />
         ) : filteredPolicies.length === 0 ? (
-          (policySearchQuery || policyCategoryFilter !== 'all' || policyStatusFilter !== 'all') ? (
+          (policySearchQuery || policyCategoryFilter !== 'all' || policyStatusFilter !== 'all' || archiveFilter !== 'active') ? (
             <NoResultsEmptyState
               onClearFilters={() => {
                 setPolicySearchQuery('')
                 setPolicyCategoryFilter('all')
                 setPolicyStatusFilter('all')
+                setArchiveFilter('active')
               }}
             />
           ) : (
@@ -366,36 +397,18 @@ export default function RegulatoryUpdatesPoliciesPage() {
             onDeleteOpen={() => setIsDeleteModalOpen(true)}
             onEditOpen={() => setIsEditModalOpen(true)}
             onArchive={() => {
-              update(selectedPolicy.id, {
-                status: 'expired',
-                activityLog: [...(selectedPolicy.activityLog ?? []), {
-                  id: Date.now().toString(),
-                  timestamp: new Date().toISOString(),
-                  date: new Date().toISOString().split('T')[0],
-                  type: 'edited' as const,
-                  textEn: 'Policy archived',
-                  textAr: 'تم أرشفة السياسة',
-                  user: currentUser?.name ?? 'Unknown',
-                }],
+              // P6 (W29): use archivePolicy which PATCHes archived_at (not status).
+              void archivePolicy(selectedPolicy.id, currentUser?.name ?? 'Unknown').then(() => {
+                showToast(t('policies.archivedToast'))
+                setSelected(null)
               })
-              showToast(t('policies.archivedToast'))
-              setSelected(null)
             }}
             onUnarchive={() => {
-              update(selectedPolicy.id, {
-                status: 'approved',
-                activityLog: [...(selectedPolicy.activityLog ?? []), {
-                  id: Date.now().toString(),
-                  timestamp: new Date().toISOString(),
-                  date: new Date().toISOString().split('T')[0],
-                  type: 'edited' as const,
-                  textEn: 'Policy unarchived',
-                  textAr: 'تمت استعادة السياسة',
-                  user: currentUser?.name ?? 'Unknown',
-                }],
+              // P6 (W29): use unarchivePolicy which clears archived_at.
+              void unarchivePolicy(selectedPolicy.id, currentUser?.name ?? 'Unknown').then(() => {
+                showToast(t('policies.unarchivedToast'))
+                setSelected(null)
               })
-              showToast(t('policies.unarchivedToast'))
-              setSelected(null)
             }}
             showToast={showToast}
             t={t}

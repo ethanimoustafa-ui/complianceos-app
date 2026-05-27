@@ -109,6 +109,8 @@ interface PolicyApiRow {
   affected_departments: string[]
   // Wave-19 / Q3 — persisted `policies.is_expired` from migration 055.
   is_expired?: boolean
+  // P6 (W29): archived_at from migration 081. Set when Archive button is clicked.
+  archived_at?: string | null
   created_at: string
   updated_at: string
   // Detail-GET-only nested children. Wave-19.3 / P18-BUG-1 — `mapRow` now
@@ -169,6 +171,8 @@ interface PolicyAttachmentApiRow {
   size: number | null
   uploaded_at: string
   uploaded_by: string | null
+  // P2 (W29): joined profiles row so we can render display name instead of raw UUID.
+  uploaded_by_profile?: { name: string | null; email: string | null } | null
 }
 
 interface PolicyEvidenceApiRow {
@@ -177,6 +181,8 @@ interface PolicyEvidenceApiRow {
   storage_path: string
   uploaded_at: string
   uploaded_by: string | null
+  // P2 (W29): joined profiles row so we can render display name instead of raw UUID.
+  uploaded_by_profile?: { name: string | null; email: string | null } | null
   review_cycle_id: string
   review_cycle_label: string
   notes: string | null
@@ -225,6 +231,22 @@ function mapPolicyWorkflowStepRow(row: PolicyWorkflowStepApiRow): PolicyWorkflow
   }
 }
 
+// P2 (W29): resolve uploaded_by UUID to a display name via the joined profile.
+// Preference: profile.name > profile.email > raw UUID (last resort, not shown to user).
+function resolveUploaderName(row: {
+  uploaded_by?: string | null
+  uploaded_by_profile?: { name: string | null; email: string | null } | null
+}): string {
+  if (row.uploaded_by_profile?.name) return row.uploaded_by_profile.name
+  if (row.uploaded_by_profile?.email) return row.uploaded_by_profile.email
+  // Fallback for legacy rows before the JOIN was added — uploaded_by may be a
+  // display name (old path) or a UUID (new path). Return empty string rather
+  // than surfacing a UUID to the user.
+  const v = row.uploaded_by ?? ''
+  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+  return UUID_RE.test(v) ? '' : v
+}
+
 function mapPolicyAttachmentRow(row: PolicyAttachmentApiRow): PolicyAttachment {
   return {
     id: row.id,
@@ -232,7 +254,7 @@ function mapPolicyAttachmentRow(row: PolicyAttachmentApiRow): PolicyAttachment {
     dataUrl: row.storage_path,
     size: row.size ?? 0,
     uploadedAt: row.uploaded_at,
-    uploadedBy: row.uploaded_by ?? '',
+    uploadedBy: resolveUploaderName(row),
   }
 }
 
@@ -242,7 +264,7 @@ function mapPolicyEvidenceRow(row: PolicyEvidenceApiRow): PolicyEvidence {
     name: row.name,
     dataUrl: row.storage_path,
     uploadedAt: row.uploaded_at,
-    uploadedBy: row.uploaded_by ?? '',
+    uploadedBy: resolveUploaderName(row),
     reviewCycleId: row.review_cycle_id,
     reviewCycleLabel: row.review_cycle_label,
     notes: row.notes ?? undefined,
@@ -320,6 +342,8 @@ function mapRow(row: PolicyApiRow, previous?: Policy): Policy {
     frameworkIds: (row.framework_ids ?? previous?.frameworkIds ?? []) as RegulatoryBodyId[],
     // Wave-19 / Q3 — persisted `policies.is_expired` from migration 055.
     isExpired: row.is_expired ?? previous?.isExpired,
+    // P6 (W29): archived_at from migration 081.
+    archivedAt: row.archived_at !== undefined ? row.archived_at : previous?.archivedAt,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }
@@ -378,6 +402,8 @@ function toUpdatePayload(patch: Partial<Policy>): Record<string, unknown> {
     out.current_review_cycle_label = patch.currentReviewCycleLabel
   if (patch.currentReviewCycleDate !== undefined)
     out.current_review_cycle_date = patch.currentReviewCycleDate
+  // P6 (W29): archive/unarchive.
+  if (patch.archivedAt !== undefined) out.archived_at = patch.archivedAt ?? null
   return out
 }
 
@@ -492,6 +518,28 @@ interface PolicyStoreState {
     },
   ) => void
 
+  // P1 (W29): POST /api/policies/{id}/workflow/advance to persist step completion.
+  // Mirrors advanceStep in circular-store. Optimistic local update; server confirms
+  // the step status + policy status transition and emits an activity-log row.
+  advanceWorkflowStep: (
+    policyId: string,
+    opts: {
+      action: 'submit-for-review' | 'approve' | 'undo' | 'initiate-review'
+      stepId?: string
+      note?: string
+      userName?: string
+    },
+  ) => Promise<void>
+
+  // P6 (W29): archive / unarchive a policy.
+  // PATCHes archived_at; optimistic archivedAt update in store.
+  archivePolicy: (policyId: string, actorName: string) => Promise<void>
+  unarchivePolicy: (policyId: string, actorName: string) => Promise<void>
+
+  // Archive filter state (P6).
+  archiveFilter: 'active' | 'archived' | 'all'
+  setArchiveFilter: (f: 'active' | 'archived' | 'all') => void
+
   clearError: () => void
 }
 
@@ -513,6 +561,8 @@ export const usePolicyStore = create<PolicyStoreState>()((set, get) => ({
   isMutating: false,
   error: null,
   lastFetched: null,
+  // P6 (W29): archive filter — default 'active' (hide archived rows).
+  archiveFilter: 'active' as const,
 
   fetchAll: (force = false) => {
     const state = get()
@@ -523,13 +573,14 @@ export const usePolicyStore = create<PolicyStoreState>()((set, get) => ({
     set({ isLoading: true, error: null })
     void (async () => {
       try {
+        const archiveFilter = get().archiveFilter
         const result = await api.get<{
           items: PolicyApiRow[]
           page: number
           pageSize: number
           total: number
           totalPages: number
-        }>('/policies', { page: 1, pageSize: 100 })
+        }>('/policies', { page: 1, pageSize: 100, archive_filter: archiveFilter })
         const previousById = get().byId
         const policies = result.items.map((r) => mapRow(r, previousById[r.ref_code || r.id]))
         const byId: Record<string, Policy> = {}
@@ -1268,6 +1319,89 @@ export const usePolicyStore = create<PolicyStoreState>()((set, get) => ({
       // eslint-disable-next-line no-console
       console.error('[addEvidence] failed —', e)
       throw e
+    }
+  },
+
+  // P6 (W29): archive / unarchive a policy by PATCHing archived_at.
+  // Optimistic archivedAt update; roll back on failure.
+  archivePolicy: async (policyId, actorName) => {
+    const previous = get().byId[policyId]
+    if (!previous) return
+    const now = new Date().toISOString()
+    const optimistic: Policy = { ...previous, archivedAt: now, updatedAt: now }
+    set((s) => ({
+      policies: s.policies.map((p) => (p.id === policyId ? optimistic : p)),
+      byId: { ...s.byId, [policyId]: optimistic },
+      selectedPolicy: s.selectedPolicy?.id === policyId ? optimistic : s.selectedPolicy,
+      isMutating: true,
+    }))
+    try {
+      const apiId = previous.uuid ?? policyId
+      await api.patch(`/policies/${apiId}`, { archived_at: now }, ifMatchHeader(previous.updatedAt))
+    } catch (e) {
+      set((s) => ({
+        policies: s.policies.map((p) => (p.id === policyId ? previous : p)),
+        byId: { ...s.byId, [policyId]: previous },
+        selectedPolicy: s.selectedPolicy?.id === policyId ? previous : s.selectedPolicy,
+        isMutating: false,
+      }))
+      pushToast(revertMessage(e), 'error')
+      throw e
+    }
+    set({ isMutating: false })
+  },
+
+  unarchivePolicy: async (policyId, actorName) => {
+    const previous = get().byId[policyId]
+    if (!previous) return
+    const optimistic: Policy = { ...previous, archivedAt: null, updatedAt: new Date().toISOString() }
+    set((s) => ({
+      policies: s.policies.map((p) => (p.id === policyId ? optimistic : p)),
+      byId: { ...s.byId, [policyId]: optimistic },
+      selectedPolicy: s.selectedPolicy?.id === policyId ? optimistic : s.selectedPolicy,
+      isMutating: true,
+    }))
+    try {
+      const apiId = previous.uuid ?? policyId
+      await api.patch(`/policies/${apiId}`, { archived_at: null }, ifMatchHeader(previous.updatedAt))
+    } catch (e) {
+      set((s) => ({
+        policies: s.policies.map((p) => (p.id === policyId ? previous : p)),
+        byId: { ...s.byId, [policyId]: previous },
+        selectedPolicy: s.selectedPolicy?.id === policyId ? previous : s.selectedPolicy,
+        isMutating: false,
+      }))
+      pushToast(revertMessage(e), 'error')
+      throw e
+    }
+    set({ isMutating: false })
+  },
+
+  setArchiveFilter: (f) => set({ archiveFilter: f }),
+
+  // P1 (W29): persist workflow step advancement to the server.
+  // Mirrors the circular-store advanceStep pattern. Fires AFTER the optimistic
+  // local update in handleConfirmAction (PolicyDetailsContent) so the step state
+  // is already reflected in the UI. A server error surfaces a toast but does NOT
+  // roll back the local state (the local update is the "truth" for the session;
+  // the next fetchById will reconcile if the server rejects).
+  advanceWorkflowStep: async (policyId, { action, stepId, note, userName }) => {
+    const policy = get().byId[policyId]
+    if (!policy) return
+    const apiId = policy.uuid ?? policyId
+    try {
+      await api.post<PolicyApiRow>(`/policies/${apiId}/workflow/advance`, {
+        action,
+        ...(stepId ? { step_id: stepId } : {}),
+        ...(note ? { note } : {}),
+        ...(userName ? { user_name: userName } : {}),
+      })
+      // Refresh detail so activity log picks up the server-emitted entry.
+      get().fetchById(policyId)
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.error('[advanceWorkflowStep] server persist failed —', action, e)
+      pushToast(revertMessage(e), 'error')
     }
   },
 

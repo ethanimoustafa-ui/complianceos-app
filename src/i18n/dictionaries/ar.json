@@ -56,7 +56,11 @@
     "note": "ملاحظة",
     "loadMore": "تحميل المزيد",
     "more": "المزيد",
-    "saving": "جارٍ الحفظ..."
+    "saving": "جارٍ الحفظ...",
+    "filterAll": "الكل",
+    "filterActive": "نشط",
+    "filterArchived": "مؤرشف",
+    "archived": "مؤرشف"
   },
   "navigation": {
     "dashboard": "لوحة التحكم",
@@ -583,6 +587,7 @@
   },
   "observations": {
     "observation": "الملاحظة",
+    "deleteSuccess": "تم حذف الملاحظة",
     "title": "متتبع الملاحظات",
     "subtitle": "إدارة التدقيق والمعالجة",
     "addObservation": "إضافة ملاحظة",

@@ -31,12 +31,9 @@ export function RegisterCircularModal({ isOpen, onClose, onCreated, t }: Props) 
   const { departments: allDepartments, addDepartment, updateDepartment, removeDepartment } = useDepartmentStore()
   const { members: teamMembers } = useTeamStore()
 
-  // M2: template store
-  const { byType: templatesByType, fetchByType, saveTemplate } = useEntityTemplateStore()
+  // M2: template store — Select Template dropdown only (Save button moved to Policy/Audit per W29 M2).
+  const { byType: templatesByType, fetchByType } = useEntityTemplateStore()
   const circularTemplates = templatesByType['circular'] ?? []
-  const [isSavingTemplate, setIsSavingTemplate] = useState(false)
-  const [templateNameInput, setTemplateNameInput] = useState('')
-  const [showSaveTemplateForm, setShowSaveTemplateForm] = useState(false)
   useEffect(() => {
     if (isOpen) void fetchByType('circular')
   }, [isOpen, fetchByType])
@@ -80,26 +77,6 @@ export function RegisterCircularModal({ isOpen, onClose, onCreated, t }: Props) 
     if (typeof f.description === 'string') setFormDescription(f.description)
     if (Array.isArray(f.departments)) setFormDepartments(f.departments as string[])
     if (typeof f.bo_dept === 'string') setFormBODept(f.bo_dept)
-  }
-
-  // M2: save current form state as a new template.
-  async function handleSaveTemplate() {
-    if (!templateNameInput.trim()) return
-    setIsSavingTemplate(true)
-    try {
-      await saveTemplate('circular', templateNameInput.trim(), undefined, {
-        title: formTitle,
-        authority: formAuthority,
-        priority: formPriority,
-        description: formDescription,
-        departments: formDepartments,
-        bo_dept: formBODept,
-      })
-      setTemplateNameInput('')
-      setShowSaveTemplateForm(false)
-    } finally {
-      setIsSavingTemplate(false)
-    }
   }
 
   function toggleDepartment(dept: string) {
@@ -274,7 +251,7 @@ export function RegisterCircularModal({ isOpen, onClose, onCreated, t }: Props) 
                     labelAr: dept.nameAr,
                     isDefault: dept.isDefault,
                   }))}
-                  onAdd={(label, labelAr) => addDepartment(label, labelAr ?? label).name}
+                  onAdd={(label, labelAr) => addDepartment(label, labelAr ?? label).then(d => d.name)}
                   onEdit={(id, label, labelAr) => {
                     const dept = allDepartments.find((d) => d.name === id)
                     if (dept) updateDepartment(dept.id, { name: label, nameAr: labelAr ?? label })
@@ -490,48 +467,9 @@ export function RegisterCircularModal({ isOpen, onClose, onCreated, t }: Props) 
               </p>
             )
           })()}
-          {/* M2: Save as template inline form */}
-          {showSaveTemplateForm ? (
-            <div className="flex items-center gap-2 self-stretch">
-              <input
-                type="text"
-                autoFocus
-                className="flex-1 h-9 rounded-lg border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
-                placeholder={t('regulatoryUpdates.templateNamePlaceholder' as any)}
-                value={templateNameInput}
-                onChange={(e) => setTemplateNameInput(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Enter') void handleSaveTemplate(); if (e.key === 'Escape') setShowSaveTemplateForm(false) }}
-              />
-              <Button
-                variant="secondary"
-                className="h-9 px-3 text-xs"
-                onClick={() => void handleSaveTemplate()}
-                disabled={isSavingTemplate || !templateNameInput.trim()}
-              >
-                {isSavingTemplate ? (
-                  <Icon icon="lucide:loader-2" className="animate-spin text-sm" />
-                ) : (
-                  t('regulatoryUpdates.saveTemplateConfirm' as any)
-                )}
-              </Button>
-              <button
-                type="button"
-                onClick={() => { setShowSaveTemplateForm(false); setTemplateNameInput('') }}
-                className="text-slate-400 hover:text-slate-600"
-              >
-                <Icon icon="lucide:x" className="text-sm" />
-              </button>
-            </div>
-          ) : (
-            <button
-              type="button"
-              onClick={() => setShowSaveTemplateForm(true)}
-              className="self-start text-xs text-slate-500 hover:text-emerald-700 flex items-center gap-1.5 transition-colors"
-            >
-              <Icon icon="lucide:save" className="text-[13px]" />
-              {t('regulatoryUpdates.saveAsTemplate' as any)}
-            </button>
-          )}
+          {/* M2: Save-as-template button removed from Rules per W29 M2.
+              The Select Template dropdown above is kept (already wired, harmless).
+              Template creation for Rules is now handled in Settings > Templates. */}
           <div className="flex justify-end gap-3">
             <Button variant="ghost" onClick={onClose}>{t('common.cancel')}</Button>
             <Button

@@ -8,8 +8,8 @@ import { Button } from '@/components/ui/button'
 import { useTranslation } from '@/i18n'
 import { exportObservations } from '@/lib/export'
 import { Gate } from '@/components/auth/gate'
-import { DeleteConfirmationDialog } from '@/components/ui/delete-confirmation-dialog'
 import { useObservationStore } from '@/stores/observation-store'
+import { useToastStore } from '@/stores/toast-store'
 import { ListSkeleton } from '@/components/ui/skeleton'
 import { useAuthStore } from '@/stores/auth-store'
 import { ObservationStats } from '@/components/observations/observation-stats'
@@ -20,6 +20,7 @@ import { ObservationDetailModal } from '@/components/observations/observation-de
 import { AddObservationModal } from '@/components/observations/add-observation-modal'
 import type { ObservationFormData } from '@/components/observations/add-observation-modal'
 import { EditObservationModal } from '@/components/observations/edit-observation-modal'
+import { api } from '@/lib/api-client'
 import type {
   Observation,
   ObservationSource,
@@ -43,6 +44,7 @@ export default function ObservationsPage() {
 
   // Get current user for creator assignment
   const user = useAuthStore((state) => state.user)
+  const pushToast = useToastStore((s) => s.pushToast)
 
   // First-fetch detector (Wave-2 Agent E): show skeleton while the very first
   // GET is in flight and the list is still empty. Refetches keep stale data
@@ -64,8 +66,7 @@ export default function ObservationsPage() {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false)
   const [isEditModalOpen, setIsEditModalOpen] = useState(false)
   const [observationToEdit, setObservationToEdit] = useState<Observation | null>(null)
-  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
-  const [observationToDelete, setObservationToDelete] = useState<string | null>(null)
+  // O6: no confirm dialog — delete fires directly on click.
 
   // State for filters
   const [searchQuery, setSearchQuery] = useState('')
@@ -205,6 +206,27 @@ export default function ObservationsPage() {
       }
 
       await updateObservation(observationId, updates, user || undefined)
+
+      // O7: persist assignees to DB via /assign endpoint.
+      // The PATCH route only handles scalar columns; assignees live in
+      // observation_assignees and require a separate write. Without this call,
+      // team-member changes are local-only and vanish on the next page reload.
+      if (updates.assignees !== undefined) {
+        try {
+          const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+          await api.post(`/observations/${observationId}/assign`, {
+            assignees: (updates.assignees as Array<{ id?: string; name: string; role?: string }>).map((a) => ({
+              user_id: a.id && UUID_RE.test(a.id) ? a.id : null,
+              name: a.name,
+              role: a.role || null,
+            })),
+          })
+        } catch (assignErr) {
+          // Non-fatal: local state already reflects the change via updateObservation.
+          console.warn('Failed to persist assignees', assignErr)
+        }
+      }
+
       setIsEditModalOpen(false)
       setObservationToEdit(null)
     } catch (error) {
@@ -212,22 +234,14 @@ export default function ObservationsPage() {
     }
   }
 
-  // Handle delete click
-  const handleDeleteClick = (observationId: string) => {
-    setObservationToDelete(observationId)
-    setIsDeleteDialogOpen(true)
-  }
-
-  // Handle delete confirm - calls Zustand store
-  const handleDeleteConfirm = async () => {
-    if (observationToDelete) {
-      try {
-        await deleteObservation(observationToDelete)
-        setIsDeleteDialogOpen(false)
-        setObservationToDelete(null)
-      } catch (error) {
-        console.error('Failed to delete observation:', error)
-      }
+  // O6: delete fires immediately — no confirm dialog (Hani W29 spec).
+  // D1 timing: the store removes the row only after the server responds.
+  const handleDeleteClick = async (observationId: string) => {
+    try {
+      await deleteObservation(observationId)
+      pushToast(t('observations.deleteSuccess' as import('@/i18n').TranslationKey), 'success')
+    } catch (error) {
+      console.error('Failed to delete observation:', error)
     }
   }
 
@@ -433,26 +447,7 @@ export default function ObservationsPage() {
         onSave={handleEditSave}
       />
 
-      {/* Delete Confirmation Dialog — strong confirm (mirrors policy/circular).
-          Requires typing "DELETE" before the action can fire because cascade
-          removes comments, documents, remediation plans, and activity. */}
-      <DeleteConfirmationDialog
-        isOpen={isDeleteDialogOpen}
-        onClose={() => {
-          setIsDeleteDialogOpen(false)
-          setObservationToDelete(null)
-        }}
-        onConfirm={handleDeleteConfirm}
-        itemType={t('observations.observation')}
-        itemName={observations.find((o) => o.id === observationToDelete)?.title}
-        requireConfirmation
-        description={(() => {
-          const name = observations.find((o) => o.id === observationToDelete)?.title
-          return name
-            ? `This will permanently delete the observation "${name}" and all its comments, documents, remediation plans, and activity. This cannot be undone.`
-            : 'This will permanently delete the observation and all its comments, documents, remediation plans, and activity. This cannot be undone.'
-        })()}
-      />
+      {/* O6: delete confirmation dialog removed — delete fires directly with a toast. */}
     </>
   )
 }

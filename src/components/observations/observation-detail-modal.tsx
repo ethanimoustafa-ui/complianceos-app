@@ -293,6 +293,11 @@ export const ObservationDetailModal = memo(function ObservationDetailModal({
   // O6b: prefer storeObservation (optimistic) over the prop for live-updated fields.
   const liveObs = storeObservation || observation
 
+  // O4: an observation is "closed" (remediated) when archived_at is set.
+  // Prefer archived_at as the signal (W28 O7 added this column) over status
+  // alone, because status alone could be 'closed' without archiving.
+  const isClosed = Boolean(liveObs.archivedAt) || liveObs.status === 'closed'
+
   // Derived data
   const displayAssignees = liveObs.assignees?.length
     ? liveObs.assignees
@@ -321,9 +326,18 @@ export const ObservationDetailModal = memo(function ObservationDetailModal({
               <Icon icon={'lucide:arrow-left'} className="text-xl" />
             </button>
             <div className={isRTL ? 'text-right' : ''}>
-              <h2 className="text-2xl font-bold font-display text-slate-900">
-                {observation.title}
-              </h2>
+              <div className="flex items-center gap-2 flex-wrap">
+                <h2 className="text-2xl font-bold font-display text-slate-900">
+                  {observation.title}
+                </h2>
+                {/* O4: closed badge — shown when the observation has been remediated */}
+                {isClosed && (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-100 border border-emerald-300 rounded-full text-[10px] font-black uppercase text-emerald-700 tracking-wider">
+                    <Icon icon="lucide:check-circle-2" className="text-xs" />
+                    {t('observations.statusOptions.closed' as import('@/i18n').TranslationKey)}
+                  </span>
+                )}
+              </div>
               {observation.subTitle ? (
                 <p className="text-sm text-slate-500 mt-1">{observation.subTitle}</p>
               ) : null}
@@ -354,17 +368,18 @@ export const ObservationDetailModal = memo(function ObservationDetailModal({
               </p>
             </section>
 
-            {/* Remediation Checklist */}
+            {/* Remediation Checklist — read-only when closed (O4) */}
             <ChecklistSection
               items={localChecklist}
-              onAdd={handleAddChecklistItem}
-              onEdit={handleEditChecklistItem}
-              onRemove={handleRemoveChecklistItem}
-              onToggle={handleChecklistItemToggle}
+              onAdd={isClosed ? (() => {}) : handleAddChecklistItem}
+              onEdit={isClosed ? undefined : handleEditChecklistItem}
+              onRemove={isClosed ? (() => {}) : handleRemoveChecklistItem}
+              onToggle={isClosed ? (() => {}) : handleChecklistItemToggle}
               isRTL={isRTL}
+              readOnly={isClosed}
             />
 
-            {/* Updates & Discussion */}
+            {/* Updates & Discussion — read-only when closed (O4) */}
             <CommentsSection
               comments={localComments}
               user={user}
@@ -373,6 +388,7 @@ export const ObservationDetailModal = memo(function ObservationDetailModal({
               onDelete={handleDeleteComment}
               isRTL={isRTL}
               isLoaded={detailLoaded}
+              readOnly={isClosed}
             />
 
             {/* O6: Version History section hidden per W28 spec.

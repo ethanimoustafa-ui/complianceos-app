@@ -382,9 +382,16 @@ function PolicyCardContent({ policy, t }: { policy: Policy; t: RegDocCardProps['
       <div className={cn('flex-1 space-y-1.5 min-w-0')}>
         <div className={cn('flex items-center gap-2', )}>
           <h4 className="text-sm font-bold text-slate-900 truncate">{policy.name}</h4>
-          <span className={cn('px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0', statusStyle.bg, statusStyle.text)}>
-            {formatPolicyStatus(t, policy.status)}
-          </span>
+          {/* P6 (W29): show "Archived" tag instead of status when archived_at is set. */}
+          {policy.archivedAt ? (
+            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0 bg-slate-200 text-slate-600">
+              {t('common.archived')}
+            </span>
+          ) : (
+            <span className={cn('px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0', statusStyle.bg, statusStyle.text)}>
+              {formatPolicyStatus(t, policy.status)}
+            </span>
+          )}
         </div>
         <div className={cn('flex items-center gap-2', )}>
           <span className="text-xs font-mono font-bold text-slate-400">{policy.id}</span>
@@ -410,15 +417,21 @@ function PolicyCardContent({ policy, t }: { policy: Policy; t: RegDocCardProps['
             <p className="text-[10px] text-slate-400">{policyBusinessOwnerLabel(policy, useDepartmentStore.getState().departments) ?? getDeptLabel(policy.owner.department)}</p>
           </div>
         </div>
+        {/* P6 (W29): archived rows show "Last Reviewed" date; active rows show "Next Review". */}
         <div className={cn('shrink-0 text-right')}>
-          <p className="text-[10px] font-bold text-slate-400 uppercase mb-0.5">{t('policies.nextReview')}</p>
+          <p className="text-[10px] font-bold text-slate-400 uppercase mb-0.5">
+            {policy.archivedAt ? t('policies.lastReview') : t('policies.nextReview')}
+          </p>
           <p className={cn(
             'text-xs font-bold',
+            policy.archivedAt ? 'text-slate-400' :
             urgency === 'expired' ? 'text-rose-600' :
             urgency === 'warning' ? 'text-amber-600' :
             'text-slate-700'
           )}>
-            {policy.nextReviewDate || '—'}
+            {policy.archivedAt
+              ? (policy.lastReviewDate || '—')
+              : (policy.nextReviewDate || '—')}
           </p>
         </div>
       </div>

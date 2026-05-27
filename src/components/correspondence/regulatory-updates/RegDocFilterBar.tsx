@@ -109,7 +109,7 @@ export function RegDocFilterBar({
                     isDefault: dept.isDefault,
                   })),
                 ]}
-                onAdd={(label, labelAr) => addDepartment(label, labelAr ?? label).id}
+                onAdd={(label, labelAr) => addDepartment(label, labelAr ?? label).then(d => d.id)}
                 onEdit={(id, label, labelAr) => {
                   const dept = allDepartments.find((d) => d.name === id)
                   if (dept) updateDepartment(dept.id, { name: label, nameAr: labelAr ?? label })

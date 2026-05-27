@@ -88,8 +88,15 @@ export default function LettersPage() {
   const [confirmDeleteLetterId, setConfirmDeleteLetterId] = useState<string | null>(null)
   const [submitBusy, setSubmitBusy] = useState(false)
   const [approveBusy, setApproveBusy] = useState(false)
+  // W29-L6: reject-with-reason modal state
+  const [rejectModalLetterId, setRejectModalLetterId] = useState<string | null>(null)
+  const [rejectReason, setRejectReason] = useState('')
+  const [rejectBusy, setRejectBusy] = useState(false)
   const [sendBusy, setSendBusy] = useState(false)
   const [responseBusy, setResponseBusy] = useState(false)
+  // W29-L2: "Mark Response Received" — reveals optional note modal before firing.
+  const [responseNoteModalLetterId, setResponseNoteModalLetterId] = useState<string | null>(null)
+  const [responseNoteText, setResponseNoteText] = useState('')
   const [deleteBusy, setDeleteBusy] = useState(false)
   const [attachBusy, setAttachBusy] = useState(false)
   // L3: "saved at HH:mm" indicator for the letter body editor.
@@ -115,6 +122,9 @@ export default function LettersPage() {
   const lettersLastFetched = useLetterStore((s) => s.lastFetched)
   const showLettersSkeleton =
     lettersLoading && store.letters.length === 0 && lettersLastFetched === null
+  // W29-L7: deepLinkId is read early; isAwaitingDeepLink is derived below after
+  // `view` state is declared (avoids "used before assignment" TS error).
+  const deepLinkId = searchParams.get('id')
 
   // Helper to get translated template name and description based on template ID
   const getTranslatedTemplateName = useCallback((templateId: string, originalName: string) => {
@@ -146,6 +156,9 @@ export default function LettersPage() {
   }, [t])
 
   const [view, setView] = useState<'dashboard' | 'detail'>('dashboard')
+  // W29-L7: suppress list flash on hard-refresh with ?id= param.
+  // Derived AFTER `view` is declared.
+  const isAwaitingDeepLink = !!(deepLinkId && view !== 'detail')
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
   const [selectedLetterType, setSelectedLetterType] = useState<LetterType>('non-objection')
   const [toastMessage, setToastMessage] = useState<string | null>(null)
@@ -1230,6 +1243,11 @@ export default function LettersPage() {
               </div>
             </div>
           </div>
+        ) : isAwaitingDeepLink ? (
+          /* W29-L7: Deep-link pending — show skeleton instead of list flash */
+          <div className="p-6">
+            <ListSkeleton rows={5} columns={6} />
+          </div>
         ) : view === 'dashboard' ? (
           <div>
             {/* Stats Section */}
@@ -1572,25 +1590,40 @@ export default function LettersPage() {
                   </button>
                 )}
                 {/* W28-BUG-B2 — Admin direct-approve when no chain configured. */}
+                {/* W29-L6 — Reject-with-reason button alongside Approve. */}
                 {selectedLetter?.status === 'pending-approval' && (
-                  <button
-                    onClick={async () => {
-                      if (!selectedLetter) return
-                      setApproveBusy(true)
-                      try {
-                        await store.approve(selectedLetter.id)
-                        showToast(t('letters.approveSuccess'))
-                      } finally {
-                        setApproveBusy(false)
-                      }
-                    }}
-                    disabled={approveBusy}
-                    aria-busy={approveBusy || undefined}
-                    className={`px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-emerald-700 transition-colors shadow-lg shadow-emerald-100 cursor-pointer disabled:opacity-60`}
-                  >
-                    <Icon icon={approveBusy ? 'lucide:loader-2' : 'lucide:check-circle'} className={approveBusy ? 'animate-spin' : ''} />
-                    {t('letters.approve')}
-                  </button>
+                  <>
+                    <button
+                      onClick={() => {
+                        if (!selectedLetter) return
+                        setRejectReason('')
+                        setRejectModalLetterId(selectedLetter.id)
+                      }}
+                      disabled={approveBusy || rejectBusy}
+                      className={`px-4 py-2 bg-rose-50 text-rose-700 border border-rose-200 rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-rose-100 transition-colors cursor-pointer disabled:opacity-60`}
+                    >
+                      <Icon icon="lucide:x-circle" />
+                      {t('letters.reject' as Parameters<typeof t>[0]) || 'Reject'}
+                    </button>
+                    <button
+                      onClick={async () => {
+                        if (!selectedLetter) return
+                        setApproveBusy(true)
+                        try {
+                          await store.approve(selectedLetter.id)
+                          showToast(t('letters.approveSuccess'))
+                        } finally {
+                          setApproveBusy(false)
+                        }
+                      }}
+                      disabled={approveBusy || rejectBusy}
+                      aria-busy={approveBusy || undefined}
+                      className={`px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-emerald-700 transition-colors shadow-lg shadow-emerald-100 cursor-pointer disabled:opacity-60`}
+                    >
+                      <Icon icon={approveBusy ? 'lucide:loader-2' : 'lucide:check-circle'} className={approveBusy ? 'animate-spin' : ''} />
+                      {t('letters.approve')}
+                    </button>
+                  </>
                 )}
                 {selectedLetter?.status === 'approved' && (
                   <button
@@ -1608,10 +1641,11 @@ export default function LettersPage() {
                 )}
                 {(selectedLetter?.status === 'sent' || selectedLetter?.status === 'overdue') && (
                   <button
-                    onClick={async () => {
+                    onClick={() => {
                       if (!selectedLetter) return
-                      setResponseBusy(true)
-                      try { await store.markResponseReceived(selectedLetter.id) } finally { setResponseBusy(false) }
+                      // W29-L2: open optional-note modal instead of firing immediately.
+                      setResponseNoteText('')
+                      setResponseNoteModalLetterId(selectedLetter.id)
                     }}
                     disabled={responseBusy}
                     aria-busy={responseBusy || undefined}
@@ -2017,13 +2051,17 @@ export default function LettersPage() {
                       ) : (
                         <span
                           onClick={() => setEditingMeta('samaDepartment')}
-                          className="text-xs font-bold text-slate-900 cursor-pointer hover:text-emerald-600 transition-colors group/dept flex items-center gap-1 truncate max-w-[180px]"
-                          title="Click to edit"
+                          className="text-xs font-bold text-slate-900 cursor-pointer hover:text-emerald-600 transition-colors group/dept flex items-center gap-1 break-words max-w-[180px]"
+                          title={
+                            selectedLetter
+                              ? (getDepartmentLabel(selectedLetter.authority, editDepartment, isRTL ? 'ar' : 'en') || '—')
+                              : 'Click to edit'
+                          }
                         >
                           {selectedLetter
                             ? (getDepartmentLabel(selectedLetter.authority, editDepartment, isRTL ? 'ar' : 'en') || '—')
                             : ''}
-                          <Icon icon="lucide:pencil" className="text-[9px] text-slate-300 group-hover/dept:text-emerald-400" />
+                          <Icon icon="lucide:pencil" className="text-[9px] text-slate-300 group-hover/dept:text-emerald-400 shrink-0" />
                         </span>
                       )}
                     </div>
@@ -2084,6 +2122,29 @@ export default function LettersPage() {
                     </div>
                   </div>
                 </section>
+
+                {/* W29-L2: Response note — shown once response has been received */}
+                {selectedLetter?.status === 'response-received' && (
+                  <section className="glass-card p-6 rounded-2xl">
+                    <h4 className="text-xs font-black text-slate-500 uppercase tracking-widest mb-3">
+                      {t('letters.responseSection' as Parameters<typeof t>[0]) || 'Response'}
+                    </h4>
+                    {selectedLetter.responseNote ? (
+                      <p className="text-xs text-slate-700 leading-relaxed whitespace-pre-wrap">
+                        {selectedLetter.responseNote}
+                      </p>
+                    ) : (
+                      <p className="text-xs text-slate-400 italic">
+                        {t('letters.noResponseNote' as Parameters<typeof t>[0]) || 'No response note recorded.'}
+                      </p>
+                    )}
+                    {selectedLetter.responseReceivedDate && (
+                      <p className="text-[10px] text-slate-400 mt-2">
+                        {formatDate(selectedLetter.responseReceivedDate)}
+                      </p>
+                    )}
+                  </section>
+                )}
 
                 {/* Approval Chain — skeleton until full detail arrives */}
                 {selectedLetter && !isDetailLoaded && (
@@ -2581,6 +2642,116 @@ export default function LettersPage() {
           document.body
         )
       })()}
+
+      {/* W29-L6: Reject with required reason modal */}
+      <Modal
+        isOpen={rejectModalLetterId !== null}
+        onClose={() => { if (!rejectBusy) { setRejectModalLetterId(null); setRejectReason('') } }}
+        size="sm"
+      >
+        <div className="p-8">
+          <div className="flex items-center justify-center mb-5">
+            <div className="w-14 h-14 bg-rose-50 rounded-full flex items-center justify-center">
+              <Icon icon="lucide:x-circle" className="text-2xl text-rose-600" />
+            </div>
+          </div>
+          <h2 className="text-xl font-bold text-slate-900 text-center mb-1">
+            {t('letters.rejectLetter' as Parameters<typeof t>[0]) || 'Reject Letter'}
+          </h2>
+          <p className="text-sm text-slate-500 text-center mb-4">
+            {t('letters.rejectReasonRequired' as Parameters<typeof t>[0]) || 'A reason is required. This will be recorded in the activity log.'}
+          </p>
+          <textarea
+            value={rejectReason}
+            onChange={(e) => setRejectReason(e.target.value)}
+            placeholder={t('letters.rejectReasonPlaceholder' as Parameters<typeof t>[0]) || 'State the reason for rejection…'}
+            rows={4}
+            className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-rose-500 outline-none resize-none mb-4"
+          />
+          <div className="flex gap-3">
+            <button
+              onClick={() => { setRejectModalLetterId(null); setRejectReason('') }}
+              disabled={rejectBusy}
+              className="flex-1 px-4 py-2.5 bg-slate-100 text-slate-600 rounded-xl text-sm font-bold hover:bg-slate-200 transition-colors cursor-pointer disabled:opacity-50"
+            >
+              {t('common.cancel')}
+            </button>
+            <button
+              onClick={async () => {
+                if (!rejectModalLetterId || !rejectReason.trim()) return
+                setRejectBusy(true)
+                try {
+                  await store.reject(rejectModalLetterId, rejectReason.trim())
+                  setRejectModalLetterId(null)
+                  setRejectReason('')
+                  showToast(t('letters.rejectSuccess' as Parameters<typeof t>[0]) || 'Letter rejected.')
+                } finally {
+                  setRejectBusy(false)
+                }
+              }}
+              disabled={rejectBusy || !rejectReason.trim()}
+              aria-busy={rejectBusy || undefined}
+              className="flex-1 px-4 py-2.5 bg-rose-600 text-white rounded-xl text-sm font-bold hover:bg-rose-700 transition-colors cursor-pointer disabled:opacity-60 inline-flex items-center justify-center gap-2"
+            >
+              {rejectBusy && <Icon icon="lucide:loader-2" className="animate-spin" />}
+              {t('letters.confirmReject' as Parameters<typeof t>[0]) || 'Confirm Reject'}
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* W29-L2: Mark Response Received — optional note modal */}
+      <Modal
+        isOpen={responseNoteModalLetterId !== null}
+        onClose={() => { if (!responseBusy) { setResponseNoteModalLetterId(null); setResponseNoteText('') } }}
+        size="sm"
+      >
+        <div className="p-8">
+          <h2 className="text-xl font-bold text-slate-900 mb-2">
+            {t('letters.markResponseReceived')}
+          </h2>
+          <p className="text-sm text-slate-500 mb-4">
+            {t('letters.responseNoteOptional' as Parameters<typeof t>[0]) || 'Optionally add a note about the response received.'}
+          </p>
+          <textarea
+            value={responseNoteText}
+            onChange={(e) => setResponseNoteText(e.target.value)}
+            placeholder={t('letters.responseNotePlaceholder' as Parameters<typeof t>[0]) || 'e.g. Acknowledged by SAMA via email on 28 May 2026'}
+            rows={4}
+            className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500 outline-none resize-none mb-4"
+          />
+          <div className="flex gap-3">
+            <button
+              onClick={() => { setResponseNoteModalLetterId(null); setResponseNoteText('') }}
+              disabled={responseBusy}
+              className="flex-1 px-4 py-2.5 bg-slate-100 text-slate-600 rounded-xl text-sm font-bold hover:bg-slate-200 transition-colors cursor-pointer disabled:opacity-50"
+            >
+              {t('common.cancel')}
+            </button>
+            <button
+              onClick={async () => {
+                if (!responseNoteModalLetterId) return
+                const id = responseNoteModalLetterId
+                setResponseBusy(true)
+                try {
+                  await store.markResponseReceived(id, responseNoteText.trim() || null)
+                  setResponseNoteModalLetterId(null)
+                  setResponseNoteText('')
+                  showToast(t('letters.responseReceivedSuccess' as Parameters<typeof t>[0]) || 'Response marked as received.')
+                } finally {
+                  setResponseBusy(false)
+                }
+              }}
+              disabled={responseBusy}
+              aria-busy={responseBusy || undefined}
+              className="flex-1 px-4 py-2.5 bg-emerald-600 text-white rounded-xl text-sm font-bold hover:bg-emerald-700 transition-colors cursor-pointer disabled:opacity-60 inline-flex items-center justify-center gap-2"
+            >
+              {responseBusy && <Icon icon="lucide:loader-2" className="animate-spin" />}
+              {t('common.save')}
+            </button>
+          </div>
+        </div>
+      </Modal>
 
       {/* Strong Delete Letter Confirm — phrased to match circular/policy parity */}
       <Modal

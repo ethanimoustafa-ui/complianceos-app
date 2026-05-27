@@ -191,9 +191,7 @@ export function ObservationFilters({
             {t('observations.detail.archivedFilter' as import('@/i18n').TranslationKey)}
           </button>
         ) : null}
-        <button className="p-2 text-slate-400 hover:text-slate-600 transition-colors">
-          <Icon icon="lucide:filter" className="text-xl" />
-        </button>
+        {/* O5: non-functional funnel icon removed */}
       </div>
     </div>
   )

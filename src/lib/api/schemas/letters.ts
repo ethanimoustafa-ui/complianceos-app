@@ -191,6 +191,8 @@ export const UpdateLetterSchema = z
     placeholder_defs: z.array(PlaceholderDef).optional(),
     placeholder_values: z.record(z.string(), PlaceholderValue).optional(),
     response_deadline: IsoDateTime.nullable().optional(),
+    // W29-L2: optional note attached when marking response received.
+    response_note: z.string().max(5_000).nullable().optional(),
   })
   .strict()
 export type UpdateLetterInput = z.infer<typeof UpdateLetterSchema>

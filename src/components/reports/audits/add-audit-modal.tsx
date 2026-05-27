@@ -17,6 +17,7 @@ import type { Audit, AuditAuthority, AuditCategory, ReviewSchedule, RegulatoryBo
 import { ReviewSchedulePicker } from '@/components/ui/ReviewSchedulePicker'
 import { computeNextReview } from '@/lib/review-schedule'
 import { useAuditTemplateStore } from '@/stores/audit-template-store'
+import { useEntityTemplateStore } from '@/stores/entity-template-store'
 import { useFrameworkConfigStore, frameworkIconTextClass } from '@/stores/framework-config-store'
 import { FrameworkTagSelector } from '@/components/ui/framework-tag-selector'
 import { useAuditCategoryStore } from '@/stores/audit-category-store'
@@ -51,6 +52,14 @@ export function AddAuditModal({ isOpen, onClose, onSuccess, initialValues }: Add
   const { members } = useTeamStore()
   const currentUser = useAuthStore((state) => state.user)
   const { templates: auditTemplates, incrementUsage } = useAuditTemplateStore()
+  // M2: entity-template store for saving current form as a reusable template.
+  const { fetchByType: fetchAuditEntityTemplates, saveTemplate: saveAuditEntityTemplate } = useEntityTemplateStore()
+  const [showSaveAuditTemplateForm, setShowSaveAuditTemplateForm] = useState(false)
+  const [auditTemplateNameInput, setAuditTemplateNameInput] = useState('')
+  const [isSavingAuditTemplate, setIsSavingAuditTemplate] = useState(false)
+  useEffect(() => {
+    if (isOpen) void fetchAuditEntityTemplates('audit')
+  }, [isOpen, fetchAuditEntityTemplates])
   // Editable audit categories
   const auditCategoryItems = useAuditCategoryStore((s) => s.categories)
   const addAuditCategory = useAuditCategoryStore((s) => s.add)
@@ -90,6 +99,7 @@ export function AddAuditModal({ isOpen, onClose, onSuccess, initialValues }: Add
     handleSubmit,
     reset,
     setValue,
+    getValues,
     formState: { errors },
   } = useForm<AuditFormData>({
     resolver: zodResolver(auditSchema),
@@ -202,7 +212,30 @@ export function AddAuditModal({ isOpen, onClose, onSuccess, initialValues }: Add
     setSelectedTemplateId('')
     setSchedule({ cadence: 'yearly', dayOfMonth: 1 })
     setFrameworkIds([])
+    setShowSaveAuditTemplateForm(false)
+    setAuditTemplateNameInput('')
     onClose()
+  }
+
+  // M2: save current form values as a reusable entity template.
+  async function handleSaveAuditTemplate() {
+    if (!auditTemplateNameInput.trim()) return
+    setIsSavingAuditTemplate(true)
+    try {
+      const currentValues = getValues()
+      await saveAuditEntityTemplate('audit', auditTemplateNameInput.trim(), undefined, {
+        title: currentValues.title ?? '',
+        type: selectedType,
+        category: currentValues.category,
+        priority: currentValues.priority,
+        frequency: currentValues.frequency,
+        description: currentValues.description ?? '',
+      })
+      setAuditTemplateNameInput('')
+      setShowSaveAuditTemplateForm(false)
+    } finally {
+      setIsSavingAuditTemplate(false)
+    }
   }
 
   return (
@@ -438,18 +471,65 @@ export function AddAuditModal({ isOpen, onClose, onSuccess, initialValues }: Add
         </div>
 
         {/* Footer */}
-        <div className="p-8 bg-slate-50 border-t border-slate-200 flex justify-end gap-3">
-          <Button variant="ghost" onClick={handleClose} disabled={isMutating}>
-            {t('common.cancel')}
-          </Button>
-          <LoadingButton
-            variant="primary"
-            loading={isMutating}
-            loadingLabel={t('auditDetail.creating')}
-            onClick={handleSubmit(onSubmit)}
-          >
-            {t('auditDetail.createAudit')}
-          </LoadingButton>
+        <div className="p-8 bg-slate-50 border-t border-slate-200 flex flex-col gap-3">
+          {/* M2: Save current form as entity template */}
+          {showSaveAuditTemplateForm ? (
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                autoFocus
+                className="flex-1 h-9 rounded-lg border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                placeholder={t('regulatoryUpdates.templateNamePlaceholder' as any)}
+                value={auditTemplateNameInput}
+                onChange={(e) => setAuditTemplateNameInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') void handleSaveAuditTemplate()
+                  if (e.key === 'Escape') setShowSaveAuditTemplateForm(false)
+                }}
+              />
+              <Button
+                variant="secondary"
+                className="h-9 px-3 text-xs"
+                onClick={() => void handleSaveAuditTemplate()}
+                disabled={isSavingAuditTemplate || !auditTemplateNameInput.trim()}
+              >
+                {isSavingAuditTemplate ? (
+                  <Icon icon="lucide:loader-2" className="animate-spin text-sm" />
+                ) : (
+                  t('regulatoryUpdates.saveTemplateConfirm' as any)
+                )}
+              </Button>
+              <button
+                type="button"
+                onClick={() => { setShowSaveAuditTemplateForm(false); setAuditTemplateNameInput('') }}
+                className="text-slate-400 hover:text-slate-600"
+              >
+                <Icon icon="lucide:x" className="text-sm" />
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setShowSaveAuditTemplateForm(true)}
+              className="self-start text-xs text-slate-500 hover:text-emerald-700 flex items-center gap-1.5 transition-colors"
+            >
+              <Icon icon="lucide:save" className="text-[13px]" />
+              {t('regulatoryUpdates.saveAsTemplate' as any)}
+            </button>
+          )}
+          <div className="flex justify-end gap-3">
+            <Button variant="ghost" onClick={handleClose} disabled={isMutating}>
+              {t('common.cancel')}
+            </Button>
+            <LoadingButton
+              variant="primary"
+              loading={isMutating}
+              loadingLabel={t('auditDetail.creating')}
+              onClick={handleSubmit(onSubmit)}
+            >
+              {t('auditDetail.createAudit')}
+            </LoadingButton>
+          </div>
         </div>
       </div>
     </Modal>

@@ -196,7 +196,9 @@ function toCreatePayload(
     source: data.source,
     severity: data.severity,
     due_date: data.dueDate,
-    remediation_submission_due: data.remediationSubmissionDueDate ?? undefined,
+    // O3: use `||` not `??` so an empty string '' is treated as absent (undefined),
+    // not sent as an empty string that fails the server-side DateString min(1) guard.
+    remediation_submission_due: data.remediationSubmissionDueDate || undefined,
     department: data.department || undefined,
     leader_id: data.leaderId ?? undefined,
     framework_ids: data.frameworkIds ?? [],
