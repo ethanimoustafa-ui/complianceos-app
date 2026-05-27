@@ -29,6 +29,7 @@ import { Gate } from '@/components/auth/gate'
 import { useTeamWorkloads } from '@/hooks/useWorkload'
 import { useFrameworkConfigStore } from '@/stores/framework-config-store'
 import { resolveAuthorityCode } from '@/lib/authority-display'
+import { formatPolicyStatus } from '@/lib/format/enum'
 import { useCorrespondenceTypeStore } from '@/stores/correspondence-type-store'
 import { EditableSelect } from '@/components/ui/editable-select'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -595,7 +596,7 @@ export default function CorrespondenceFeedPage() {
                         policy.status === 'overdue' ? 'bg-rose-100 text-rose-700' :
                         'bg-slate-100 text-slate-700'
                       }`}>
-                        {policy.status}
+                        {formatPolicyStatus(t, policy.status)}
                       </span>
                     </div>
                   ))}

@@ -492,6 +492,7 @@
     "markResponseReceived": "تأكيد استلام الرد",
     "statusResponseReceived": "تم استلام الرد",
     "statusOverdue": "متأخر",
+    "statusRejected": "مرفوض",
     "letterCreatedDraft": "تم إنشاء المسودة",
     "letterSubmittedApproval": "تم الإرسال للموافقة",
     "letterSentToSama": "مرسل إلى ساما",
@@ -595,6 +596,7 @@
     "sama": "ساما",
     "regulatoryUpdates": "التحديثات التنظيمية",
     "table": {
+      "sortedBy": "مرتب حسب:",
       "id": "المعرف",
       "source": "المصدر",
       "findingTitle": "عنوان النتيجة",

@@ -856,6 +856,7 @@ export default function LettersPage() {
       case 'sent': return t('letters.statusSentToAuthority')
       case 'response-received': return t('letters.statusResponseReceived')
       case 'overdue': return t('letters.statusOverdue')
+      case 'rejected': return t('letters.statusRejected')
       default: return status
     }
   }
@@ -1417,7 +1418,7 @@ export default function LettersPage() {
                                 {letter.body.replace(/<[^>]*>/g, '').slice(0, 80)}
                               </p>
                             )}
-                            {letter.recipientName && (
+                            {letter.recipientName && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(letter.recipientName) && (
                               <p className="text-[10px] text-slate-400 mt-0.5">
                                 <span className="font-medium">{t('letters.recipientDept')}:</span>{' '}
                                 {letter.recipientName}
@@ -1937,7 +1938,7 @@ export default function LettersPage() {
                           title="Click to edit"
                         >
                           {selectedLetter
-                            ? (getDepartmentLabel(selectedLetter.authority, editDepartment, isRTL ? 'ar' : 'en') || t('departments.compliance'))
+                            ? (getDepartmentLabel(selectedLetter.authority, editDepartment, isRTL ? 'ar' : 'en') || '—')
                             : ''}
                           <Icon icon="lucide:pencil" className="text-[9px] text-slate-300 group-hover/dept:text-emerald-400" />
                         </span>

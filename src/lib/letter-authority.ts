@@ -117,7 +117,9 @@ export function getDepartmentLabel(authority: LetterAuthority, deptId: string | 
   if (!deptId) return ''
   const list = AUTHORITY_DEPARTMENTS[key(authority)] || []
   const found = list.find(d => d.id === deptId)
-  if (!found) return deptId
+  // R1: return '' (not deptId) when not found — callers must not leak the
+  // raw UUID/id into the UI. The call site provides a fallback label ('—').
+  if (!found) return ''
   return lang === 'ar' ? found.ar : found.en
 }
 

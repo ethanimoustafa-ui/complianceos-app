@@ -137,10 +137,15 @@ export const ObservationTable = memo(function ObservationTable({
       {sortField && (
         <div className="flex items-center gap-2 mb-2 mt-1">
           <span className="text-xs text-slate-500">
-            {t('observations.table.sortedBy' as 'observations.table.id')}:
+            {t('observations.table.sortedBy')}
           </span>
           <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-50 border border-emerald-200 rounded-full text-xs font-bold text-emerald-700">
-            {sortField}
+            {sortField === 'id' ? t('observations.table.id')
+              : sortField === 'source' ? t('observations.table.source')
+              : sortField === 'title' ? t('observations.table.findingTitle')
+              : sortField === 'severity' ? t('observations.table.severity')
+              : sortField === 'dueDate' ? t('observations.table.dueDate')
+              : t('observations.table.status')}
             <Icon icon={sortDirection === 'asc' ? 'lucide:arrow-up' : 'lucide:arrow-down'} className="text-[10px]" />
             <button
               onClick={handleClearSort}

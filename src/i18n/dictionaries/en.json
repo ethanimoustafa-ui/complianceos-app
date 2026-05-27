@@ -492,6 +492,7 @@
     "markResponseReceived": "Mark Response Received",
     "statusResponseReceived": "Response Received",
     "statusOverdue": "Overdue",
+    "statusRejected": "Rejected",
     "letterCreatedDraft": "Draft Created",
     "letterSubmittedApproval": "Submitted for Approval",
     "letterSentToSama": "Sent to SAMA",
@@ -595,6 +596,7 @@
     "sama": "SAMA",
     "regulatoryUpdates": "Regulatory Updates",
     "table": {
+      "sortedBy": "Sorted by:",
       "id": "ID",
       "source": "Source",
       "findingTitle": "Finding Title",
