@@ -23,6 +23,34 @@ import {
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
+// Security: `signature_image_url` is admin-writeable via template edit. If we
+// pass an arbitrary URL into <Image src>, @react-pdf/renderer will fetch it
+// from inside the deploy env — classic SSRF vector to cloud-metadata
+// (169.254.169.254), RFC1918 hosts, or localhost. Allowlist to the project's
+// Supabase storage host only; fail closed (signature omitted, text-only
+// signer block still renders) if the URL doesn't match.
+const ALLOWED_SIGNATURE_HOST: string | null = (() => {
+  const raw = process.env.NEXT_PUBLIC_SUPABASE_URL
+  if (!raw) return null
+  try {
+    return new URL(raw).hostname.toLowerCase()
+  } catch {
+    return null
+  }
+})()
+
+function isAllowedSignatureUrl(input: string | null | undefined): boolean {
+  if (!input || !ALLOWED_SIGNATURE_HOST) return false
+  let parsed: URL
+  try {
+    parsed = new URL(input)
+  } catch {
+    return false
+  }
+  if (parsed.protocol !== 'https:') return false
+  return parsed.hostname.toLowerCase() === ALLOWED_SIGNATURE_HOST
+}
+
 const styles = StyleSheet.create({
   page: {
     paddingTop: 48,
@@ -182,9 +210,9 @@ export async function GET(
 
           {letter.signer_name || letter.signature_image_url ? (
             <View style={styles.signerBlock}>
-              {letter.signature_image_url ? (
+              {isAllowedSignatureUrl(letter.signature_image_url) ? (
                 /* eslint-disable-next-line jsx-a11y/alt-text */
-                <Image src={letter.signature_image_url} style={styles.signature} />
+                <Image src={letter.signature_image_url as string} style={styles.signature} />
               ) : null}
               {letter.signer_name ? (
                 <Text style={styles.signerName}>{letter.signer_name}</Text>
