@@ -44,6 +44,9 @@ export function SourcesSection() {
   const [addNameAr, setAddNameAr] = useState('')
   const [addSort, setAddSort] = useState('')
   const [addError, setAddError] = useState<string | null>(null)
+  // W27.3-β: in-flight spinners for async saves
+  const [isSavingAdd, setIsSavingAdd] = useState(false)
+  const [isDeletingSource, setIsDeletingSource] = useState(false)
 
   const [pendingDelete, setPendingDelete] = useState<{ id: string; key: string; nameEn: string } | null>(null)
 
@@ -108,17 +111,23 @@ export function SourcesSection() {
       return
     }
     const sortNum = addSort.trim() ? Number.parseInt(addSort, 10) : undefined
+    setIsSavingAdd(true)
     try {
       await addValue(DOMAIN, key, en, ar, Number.isFinite(sortNum as number) ? sortNum : undefined)
       setAdding(false)
-    } catch { /* toast shown via store */ }
+    } catch { /* toast shown via store */ } finally {
+      setIsSavingAdd(false)
+    }
   }
 
   async function confirmDelete() {
     if (!pendingDelete) return
+    setIsDeletingSource(true)
     try {
       await removeValue(pendingDelete.id)
-    } catch { /* toast shown via store */ }
+    } catch { /* toast shown via store */ } finally {
+      setIsDeletingSource(false)
+    }
     setPendingDelete(null)
   }
 
@@ -270,13 +279,15 @@ export function SourcesSection() {
           </div>
           {addError && <p className="text-xs text-rose-600">{addError}</p>}
           <div className="flex justify-end gap-2 pt-2">
-            <Button variant="ghost" onClick={() => setAdding(false)}>{t('common.cancel')}</Button>
+            <Button variant="ghost" onClick={() => setAdding(false)} disabled={isSavingAdd}>{t('common.cancel')}</Button>
             <Button
               variant="primary"
-              disabled={!addKey.trim() || !addNameEn.trim() || !addNameAr.trim()}
+              disabled={!addKey.trim() || !addNameEn.trim() || !addNameAr.trim() || isSavingAdd}
+              aria-busy={isSavingAdd || undefined}
               onClick={() => void saveAdd()}
             >
-              {t('common.add')}
+              {isSavingAdd && <Icon icon="lucide:loader-2" className="animate-spin" />}
+              {isSavingAdd ? t('common.saving') : t('common.add')}
             </Button>
           </div>
         </div>
@@ -294,9 +305,10 @@ export function SourcesSection() {
             {t('settings.sources.deleteConfirmBody' as import('@/i18n').TranslationKey)}
           </p>
           <div className={`flex justify-end gap-3`}>
-            <Button variant="outline" onClick={() => setPendingDelete(null)}>{t('common.cancel')}</Button>
-            <Button variant="danger" onClick={() => void confirmDelete()}>
-              {t('common.delete')}
+            <Button variant="outline" onClick={() => setPendingDelete(null)} disabled={isDeletingSource}>{t('common.cancel')}</Button>
+            <Button variant="danger" disabled={isDeletingSource} aria-busy={isDeletingSource || undefined} onClick={() => void confirmDelete()}>
+              {isDeletingSource && <Icon icon="lucide:loader-2" className="animate-spin" />}
+              {isDeletingSource ? t('common.deleting') : t('common.delete')}
             </Button>
           </div>
         </div>

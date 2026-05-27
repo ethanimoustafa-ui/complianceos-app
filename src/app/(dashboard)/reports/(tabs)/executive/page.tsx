@@ -180,6 +180,13 @@ export default function ReportsExecutivePage() {
   const severityLabels: Record<Severity, string> = { critical: t('reports.critical'), high: t('reports.high'), medium: t('reports.medium'), low: t('reports.low') }
   const statusLabels: Record<FindingStatus, string> = { remediation: t('reports.remediation'), resolved: t('reports.resolved'), verified: t('reports.verified'), open: t('reports.open') }
   const riskDistributionLabels: Record<string, string> = { operational: t('reports.operational'), financial: t('reports.financial'), compliance: t('reports.compliance'), strategic: t('reports.strategic'), reputational: t('reports.reputational') }
+  // Audit-type label map — shared between the findings table and the detail drawer.
+  const auditCategoryLabels: Record<string, string> = {
+    sama: t('reports.samaInspection'),
+    internal: t('reports.internalAudit'),
+    'sharia-board': t('reports.shariaAudit'),
+    sharia: t('reports.shariaAudit'),
+  }
   const monthLabels: Record<string, string> = {
     'Jan': t('calendar.monthsShort.jan'), 'Feb': t('calendar.monthsShort.feb'), 'Mar': t('calendar.monthsShort.mar'), 'Apr': t('calendar.monthsShort.apr'),
     'May': t('calendar.monthsShort.may'), 'Jun': t('calendar.monthsShort.jun'), 'Jul': t('calendar.monthsShort.jul'), 'Aug': t('calendar.monthsShort.aug'),
@@ -622,7 +629,7 @@ export default function ReportsExecutivePage() {
                           <td className="px-2 py-2">
                             <div className="flex flex-col">
                               <span className="text-[11px] font-bold text-slate-900">{finding.auditName}</span>
-                              <span className="text-[9px] text-slate-500 uppercase tracking-tight">{finding.category}</span>
+                              <span className="text-[9px] text-slate-500 uppercase tracking-tight">{auditCategoryLabels[finding.category] || finding.category}</span>
                             </div>
                           </td>
                           <td className="px-2 py-2">
@@ -816,14 +823,8 @@ export default function ReportsExecutivePage() {
       <Drawer isOpen={isDrawerOpen} onClose={() => setIsDrawerOpen(false)} size="md" hideBackdrop isRTL={isRTL}>
         {selectedFinding && (() => {
           const sourceAudit = storeAudits.find(a => a.id === selectedFinding.sourceAuditId)
-          // Presentational label map. Dynamic correspondence-based types
-          // fall through to a generic inspection label + framework name.
-          const auditTypeLabels: Record<string, string> = {
-            sama: t('reports.samaInspection'),
-            internal: t('reports.internalAudit'),
-            'sharia-board': t('reports.shariaAudit'),
-            sharia: t('reports.shariaAudit'),
-          }
+          // auditCategoryLabels defined above (shared with the findings table row).
+          const auditTypeLabels = auditCategoryLabels
           const docTypeIcons: Record<string, string> = { pdf: 'lucide:file-text', image: 'lucide:image', doc: 'lucide:file' }
           const docTypeColors: Record<string, string> = { pdf: 'text-rose-500', image: 'text-blue-500', doc: 'text-emerald-500' }
           return (

@@ -6,6 +6,7 @@ import { useSearchParams, useRouter, usePathname } from 'next/navigation'
 import Link from 'next/link'
 import { Icon } from '@iconify/react'
 import { Modal } from '@/components/ui/modal'
+import { NoDataEmptyState, NoResultsEmptyState } from '@/components/ui/empty-state'
 import { ListSkeleton, Skeleton } from '@/components/ui/skeleton'
 import { formatTimelineDate, formatLocalizedDate } from '@/lib/format-date'
 import { cn } from '@/lib/utils'
@@ -1071,23 +1072,24 @@ export default function LettersPage() {
                   <tbody className="divide-y divide-slate-100">
                     {filteredTemplates.length === 0 ? (
                       <tr>
-                        <td colSpan={7} className="px-6 py-12 text-center">
-                          <div className="flex flex-col items-center gap-3">
-                            <div className="w-12 h-12 bg-slate-100 rounded-full flex items-center justify-center">
-                              <Icon icon="lucide:file-x" className="text-2xl text-slate-400" />
-                            </div>
-                            <p className="text-sm text-slate-500">{t('letters.noTemplatesFound')}</p>
-                            <button
-                              onClick={() => {
+                        <td colSpan={7} className="px-6 py-4">
+                          {(templateSearch || templateTypeFilter !== 'All' || templateStatusFilter !== 'All') ? (
+                            <NoResultsEmptyState
+                              onClearFilters={() => {
                                 setTemplateSearch('')
                                 setTemplateTypeFilter('All')
                                 setTemplateStatusFilter('All')
                               }}
-                              className="text-xs font-bold text-emerald-600 hover:underline cursor-pointer"
-                            >
-                              {t('common.clearFilters')}
-                            </button>
-                          </div>
+                              searchTerm={templateSearch || undefined}
+                            />
+                          ) : (
+                            <NoDataEmptyState
+                              title={t('emptyStates.templates.title')}
+                              description={t('emptyStates.templates.description')}
+                              ctaLabel={t('emptyStates.templates.cta')}
+                              onAdd={handleCreateTemplate}
+                            />
+                          )}
                         </td>
                       </tr>
                     ) : (
@@ -1457,11 +1459,20 @@ export default function LettersPage() {
                     })}
                     {sortedLetters.length === 0 && (
                       <tr>
-                        <td colSpan={7} className="px-6 py-12 text-center">
-                          <div className="flex flex-col items-center gap-2 text-slate-400">
-                            <Icon icon="lucide:mail-x" className="text-3xl" />
-                            <p className="text-sm font-medium">{t('letters.noLettersYet' as Parameters<typeof t>[0]) || t('common.noResults')}</p>
-                          </div>
+                        <td colSpan={7} className="px-6 py-4">
+                          {(letterSearch || authorityFilter.size > 0 || dateFilter !== 'any') ? (
+                            <NoResultsEmptyState
+                              onClearFilters={resetFilters}
+                              searchTerm={letterSearch || undefined}
+                            />
+                          ) : (
+                            <NoDataEmptyState
+                              title={t('emptyStates.letters.title')}
+                              description={t('emptyStates.letters.description')}
+                              ctaLabel={t('emptyStates.letters.cta')}
+                              onAdd={() => handleOpenCreateModal()}
+                            />
+                          )}
                         </td>
                       </tr>
                     )}
@@ -1997,7 +2008,7 @@ export default function LettersPage() {
 
                 {/* Approval Chain — skeleton until full detail arrives */}
                 {selectedLetter && !isDetailLoaded && (
-                  <section className="glass-card p-6 rounded-2xl space-y-3">
+                  <section className="glass-card p-6 rounded-2xl space-y-3" data-skeleton="true" role="status" aria-busy="true" aria-live="polite">
                     <Skeleton className="h-3 w-32" />
                     <Skeleton className="h-6 w-full" />
                     <Skeleton className="h-6 w-full" />
@@ -2123,10 +2134,10 @@ export default function LettersPage() {
                   </h4>
                   <div className="space-y-3">
                     {selectedLetter && !isDetailLoaded && (
-                      <>
+                      <div data-skeleton="true" role="status" aria-busy="true" aria-live="polite" className="space-y-3">
                         <Skeleton className="h-12 w-full" />
                         <Skeleton className="h-12 w-full" />
-                      </>
+                      </div>
                     )}
                     {selectedLetter && isDetailLoaded && (selectedLetter.attachments?.length ?? 0) === 0 && (
                       <p className="text-xs text-slate-400 italic text-center py-4">
@@ -2179,7 +2190,7 @@ export default function LettersPage() {
                     {t('letters.activityTimeline')}
                   </h4>
                   {selectedLetter && !isDetailLoaded ? (
-                    <div className="space-y-4">
+                    <div className="space-y-4" data-skeleton="true" role="status" aria-busy="true" aria-live="polite">
                       <Skeleton className="h-4 w-3/4" />
                       <Skeleton className="h-4 w-2/3" />
                       <Skeleton className="h-4 w-1/2" />

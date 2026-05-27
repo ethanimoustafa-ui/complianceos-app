@@ -569,7 +569,11 @@
     "noAttachments": "No attachments yet",
     "delete": "Delete",
     "deleteLetter": "Delete letter",
-    "loadMore": "Load more"
+    "loadMore": "Load more",
+    "smartPlaceholders": {
+      "heading": "Smart placeholders",
+      "body": "Insert {{token}} tokens (e.g. {{candidate_name}}) into the subject or body. Each token surfaces below — pick its type (date or document reference) so composers see the right input."
+    }
   },
   "observations": {
     "observation": "observation",
@@ -2954,6 +2958,46 @@
       "department.create": "Created department",
       "department.update": "Updated department",
       "department.delete": "Deleted department"
+    }
+  },
+  "emptyStates": {
+    "noResults": "No results found",
+    "noResultsDesc": "No items match your current filters. Try adjusting or clearing them.",
+    "noResultsSearch": "No items match \"{{searchTerm}}\". Try adjusting your search or filters.",
+    "clearFilters": "Clear filters",
+    "observations": {
+      "title": "No observations yet",
+      "description": "Start tracking compliance findings by adding your first observation.",
+      "cta": "Add Observation"
+    },
+    "letters": {
+      "title": "No letters yet",
+      "description": "Draft your first regulatory letter to get started.",
+      "cta": "Draft New Letter"
+    },
+    "policies": {
+      "title": "No policies yet",
+      "description": "Register your first policy to begin tracking compliance.",
+      "cta": "Create Policy"
+    },
+    "rules": {
+      "title": "No circulars yet",
+      "description": "Register your first circular or regulatory update to start tracking.",
+      "cta": "Register Circular"
+    },
+    "advisory": {
+      "title": "No advisory requests yet",
+      "description": "Submit your first compliance advisory request to get expert guidance.",
+      "cta": "Create Advisory Request"
+    },
+    "templates": {
+      "title": "No templates yet",
+      "description": "Create your first letter template to speed up correspondence.",
+      "cta": "Create Template"
+    },
+    "notifications": {
+      "title": "You're all caught up",
+      "description": "No new notifications at this time."
     }
   }
 }

@@ -106,6 +106,10 @@ export function PolicyDetailsContent({
   const [newStepAction, setNewStepAction] = useState('move-to-next')
   // P1: deadline for the new workflow step
   const [newStepDeadline, setNewStepDeadline] = useState<string | undefined>(undefined)
+  // W27.3-β: upload + add-step in-flight spinners
+  const [isAddingStep, setIsAddingStep] = useState(false)
+  const [isUploadingDoc, setIsUploadingDoc] = useState(false)
+  const [isUploadingEvidence, setIsUploadingEvidence] = useState(false)
 
   // Collapsible steps
   const [expandedStep, setExpandedStep] = useState<number | null>(null)
@@ -212,16 +216,21 @@ export function PolicyDetailsContent({
   // uploads survive a page refresh. Previous implementation called update() which
   // doesn't include attachments in the PATCH payload — silent server-side drop.
   async function handleDocAdd(files: FileList) {
-    for (const file of Array.from(files)) {
-      const dataUrl = await readFileAsDataUrl(file)
-      await addAttachment(fresh.id, {
-        name: file.name,
-        dataUrl,
-        size: file.size,
-        uploadedBy: actingUser,
-      })
+    setIsUploadingDoc(true)
+    try {
+      for (const file of Array.from(files)) {
+        const dataUrl = await readFileAsDataUrl(file)
+        await addAttachment(fresh.id, {
+          name: file.name,
+          dataUrl,
+          size: file.size,
+          uploadedBy: actingUser,
+        })
+      }
+      showToast(t('policies.documentUploaded'))
+    } finally {
+      setIsUploadingDoc(false)
     }
-    showToast(t('policies.documentUploaded'))
   }
 
   function handleDocRemove(attachmentId: string) {
@@ -255,19 +264,24 @@ export function PolicyDetailsContent({
   // PATCHes the top-level policy row — evidence is not included in that payload
   // and was silently dropped on the next refresh.
   async function handleEvidenceAdd(files: FileList) {
-    const cycleId = fresh.currentReviewCycleId ?? Date.now().toString()
-    const cycleLabel = fresh.currentReviewCycleLabel ?? t('policies.currentReview')
-    for (const file of Array.from(files)) {
-      const dataUrl = await readFileAsDataUrl(file)
-      await addEvidence(fresh.id, {
-        name: file.name,
-        dataUrl,
-        uploadedBy: actingUser,
-        reviewCycleId: cycleId,
-        reviewCycleLabel: cycleLabel,
-      })
+    setIsUploadingEvidence(true)
+    try {
+      const cycleId = fresh.currentReviewCycleId ?? Date.now().toString()
+      const cycleLabel = fresh.currentReviewCycleLabel ?? t('policies.currentReview')
+      for (const file of Array.from(files)) {
+        const dataUrl = await readFileAsDataUrl(file)
+        await addEvidence(fresh.id, {
+          name: file.name,
+          dataUrl,
+          uploadedBy: actingUser,
+          reviewCycleId: cycleId,
+          reviewCycleLabel: cycleLabel,
+        })
+      }
+      showToast(t('policies.evidenceUploaded'))
+    } finally {
+      setIsUploadingEvidence(false)
     }
-    showToast(t('policies.evidenceUploaded'))
   }
 
   function handleEvidenceRemove(evidenceId: string) {
@@ -298,20 +312,25 @@ export function PolicyDetailsContent({
   // A7 fix: use addWorkflowStep which calls POST /api/policies/{id}/workflow/steps
   // instead of local-only update(). The store handles optimistic insert + server
   // reconciliation + rollback on failure.
-  function handleAddStep() {
-    if (!newStepName.trim()) return
-    // P1: pass deadline to the store so it's included in the workflow step
-    addWorkflowStep(fresh.id, {
-      step: newStepName.trim(),
-      description: newStepDesc.trim() || undefined,
-      actionType: newStepAction,
-      deadline: newStepDeadline,
-    })
-    setNewStepName('')
-    setNewStepDesc('')
-    setNewStepAction('move-to-next')
-    setNewStepDeadline(undefined)
-    setShowAddStep(false)
+  async function handleAddStep() {
+    if (!newStepName.trim() || isAddingStep) return
+    setIsAddingStep(true)
+    try {
+      // P1: pass deadline to the store so it's included in the workflow step
+      await (addWorkflowStep as (id: string, payload: unknown) => Promise<void> | void)(fresh.id, {
+        step: newStepName.trim(),
+        description: newStepDesc.trim() || undefined,
+        actionType: newStepAction,
+        deadline: newStepDeadline,
+      })
+      setNewStepName('')
+      setNewStepDesc('')
+      setNewStepAction('move-to-next')
+      setNewStepDeadline(undefined)
+      setShowAddStep(false)
+    } finally {
+      setIsAddingStep(false)
+    }
   }
 
   // ── Drag handlers ────────────────────────────────────────────────────
@@ -692,10 +711,12 @@ export function PolicyDetailsContent({
               {/* Add document button */}
               <button
                 onClick={() => docFileRef.current?.click()}
-                className="flex items-center gap-2 text-xs font-bold text-emerald-600 hover:text-emerald-700 px-3 py-2 rounded-lg border border-dashed border-emerald-200 hover:border-emerald-400 transition-colors w-full justify-center mt-1"
+                disabled={isUploadingDoc}
+                aria-busy={isUploadingDoc || undefined}
+                className="flex items-center gap-2 text-xs font-bold text-emerald-600 hover:text-emerald-700 px-3 py-2 rounded-lg border border-dashed border-emerald-200 hover:border-emerald-400 transition-colors w-full justify-center mt-1 disabled:opacity-60"
               >
-                <Icon icon="lucide:plus" className="text-sm" />
-                {t('policies.uploadDocument')}
+                <Icon icon={isUploadingDoc ? 'lucide:loader-2' : 'lucide:plus'} className={`text-sm${isUploadingDoc ? ' animate-spin' : ''}`} />
+                {isUploadingDoc ? t('common.saving') : t('policies.uploadDocument')}
               </button>
             </section>
           </div>
@@ -787,11 +808,12 @@ export function PolicyDetailsContent({
                     <Button
                       variant="primary"
                       className="h-8 text-xs shadow-sm shadow-emerald-100"
-                      disabled={!newStepName.trim()}
-                      onClick={handleAddStep}
+                      disabled={!newStepName.trim() || isAddingStep}
+                      aria-busy={isAddingStep || undefined}
+                      onClick={() => void handleAddStep()}
                     >
-                      <Icon icon="lucide:plus" className="w-3.5 h-3.5" />
-                      {t('common.add')}
+                      <Icon icon={isAddingStep ? 'lucide:loader-2' : 'lucide:plus'} className={`w-3.5 h-3.5${isAddingStep ? ' animate-spin' : ''}`} />
+                      {isAddingStep ? t('common.saving') : t('common.add')}
                     </Button>
                   </div>
                 </div>
@@ -1215,10 +1237,12 @@ export function PolicyDetailsContent({
                   )}
                   <button
                     onClick={() => evidenceFileRef.current?.click()}
-                    className="flex items-center gap-1 text-xs font-bold text-emerald-600 hover:text-emerald-700 px-2 py-1 rounded-lg hover:bg-emerald-50 transition-colors"
+                    disabled={isUploadingEvidence}
+                    aria-busy={isUploadingEvidence || undefined}
+                    className="flex items-center gap-1 text-xs font-bold text-emerald-600 hover:text-emerald-700 px-2 py-1 rounded-lg hover:bg-emerald-50 transition-colors disabled:opacity-60"
                   >
-                    <Icon icon="lucide:plus" className="text-sm" />
-                    {t('policies.addEvidence')}
+                    <Icon icon={isUploadingEvidence ? 'lucide:loader-2' : 'lucide:plus'} className={`text-sm${isUploadingEvidence ? ' animate-spin' : ''}`} />
+                    {isUploadingEvidence ? t('common.saving') : t('policies.addEvidence')}
                   </button>
                 </div>
               </div>

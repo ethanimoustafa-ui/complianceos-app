@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { Icon } from '@iconify/react'
 import { Modal } from '@/components/ui/modal'
 import { DeleteConfirmationDialog } from '@/components/ui/delete-confirmation-dialog'
+import { NoDataEmptyState, NoResultsEmptyState } from '@/components/ui/empty-state'
 import { cn } from '@/lib/utils'
 import { useTranslation } from '@/i18n'
 import type { TranslationKey } from '@/i18n'
@@ -503,10 +504,26 @@ export default function AdvisoryPage() {
             })}
 
             {filteredAdvisory.length === 0 && (
-              <div className="glass-card rounded-2xl p-12 text-center">
-                <Icon icon="lucide:inbox" className="text-5xl text-slate-300 mx-auto mb-4" />
-                <p className="text-slate-500 font-bold">{t('advisory.noRequests')}</p>
-                <p className="text-sm text-slate-400 mt-1">{t('advisory.noRequestsDescription')}</p>
+              <div className="glass-card rounded-2xl overflow-hidden">
+                {(advisorySearchTerm || advisoryStatusFilter || advisoryPriorityFilter || advisoryBusinessUnitFilter || advisoryFrequencyFilter) ? (
+                  <NoResultsEmptyState
+                    onClearFilters={() => {
+                      setAdvisorySearchTerm('')
+                      setAdvisoryStatusFilter('')
+                      setAdvisoryPriorityFilter('')
+                      setAdvisoryBusinessUnitFilter('')
+                      setAdvisoryFrequencyFilter('')
+                    }}
+                    searchTerm={advisorySearchTerm || undefined}
+                  />
+                ) : (
+                  <NoDataEmptyState
+                    title={t('emptyStates.advisory.title')}
+                    description={t('emptyStates.advisory.description')}
+                    ctaLabel={t('emptyStates.advisory.cta')}
+                    onAdd={() => setIsNewAdvisoryOpen(true)}
+                  />
+                )}
               </div>
             )}
           </div>
@@ -751,7 +768,7 @@ export default function AdvisoryPage() {
               </h4>
               {/* A1: skeleton loading while thread fetches on first open */}
               {notesLoading ? (
-                <div className="space-y-3">
+                <div className="space-y-3" data-skeleton="true" role="status" aria-busy="true" aria-live="polite">
                   {Array.from({ length: 3 }).map((_, i) => (
                     <div key={i} className={`bg-slate-50 p-4 rounded-lg border-l-4 border-slate-200 ${isRTL ? 'text-right border-l-0 border-r-4' : ''}`}>
                       <div className={`flex justify-between items-start mb-2`}>

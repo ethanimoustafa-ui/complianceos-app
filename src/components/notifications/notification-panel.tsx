@@ -103,9 +103,10 @@ export function NotificationPanel({ isOpen, onClose }: NotificationPanelProps) {
         {/* Notification list */}
         <div className="flex-1 overflow-y-auto hide-scrollbar">
           {notifications.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-64 text-slate-400">
+            <div data-empty-state="true" className="flex flex-col items-center justify-center h-64 text-slate-400">
               <Icon icon="lucide:bell-off" className="text-4xl mb-3" />
-              <p className="text-sm font-medium">{t('sidebar.noNotifications')}</p>
+              <p className="text-sm font-medium">{t('emptyStates.notifications.title')}</p>
+              <p className="text-xs text-slate-300 mt-1 text-center px-4">{t('emptyStates.notifications.description')}</p>
             </div>
           ) : (
             <div className="divide-y divide-slate-100">

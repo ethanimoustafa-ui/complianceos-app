@@ -126,6 +126,9 @@ export const ObservationTable = memo(function ObservationTable({
     return (
       <NoDataEmptyState
         entityName="observations"
+        title={t('emptyStates.observations.title')}
+        description={t('emptyStates.observations.description')}
+        ctaLabel={t('emptyStates.observations.cta')}
         onAdd={onAddObservation}
       />
     )

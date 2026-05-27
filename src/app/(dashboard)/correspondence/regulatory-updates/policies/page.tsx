@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button'
 import { Modal } from '@/components/ui/modal'
 import { useTranslation } from '@/i18n'
 import { cn } from '@/lib/utils'
-import { NoResultsEmptyState } from '@/components/ui/empty-state'
+import { NoResultsEmptyState, NoDataEmptyState } from '@/components/ui/empty-state'
 import { usePolicyStore } from '@/stores/policy-store'
 import { CardSkeleton } from '@/components/ui/skeleton'
 import { RegDocCard } from '@/components/correspondence/regulatory-updates/RegDocCard'
@@ -288,13 +288,22 @@ export default function RegulatoryUpdatesPoliciesPage() {
         {showPoliciesSkeleton ? (
           <CardSkeleton count={4} className="grid-cols-1" />
         ) : filteredPolicies.length === 0 ? (
-          <NoResultsEmptyState
-            onClearFilters={() => {
-              setPolicySearchQuery('')
-              setPolicyCategoryFilter('all')
-              setPolicyStatusFilter('all')
-            }}
-          />
+          (policySearchQuery || policyCategoryFilter !== 'all' || policyStatusFilter !== 'all') ? (
+            <NoResultsEmptyState
+              onClearFilters={() => {
+                setPolicySearchQuery('')
+                setPolicyCategoryFilter('all')
+                setPolicyStatusFilter('all')
+              }}
+            />
+          ) : (
+            <NoDataEmptyState
+              title={t('emptyStates.policies.title')}
+              description={t('emptyStates.policies.description')}
+              ctaLabel={t('emptyStates.policies.cta')}
+              onAdd={() => setIsCreateModalOpen(true)}
+            />
+          )
         ) : (
           <>
             <div className="grid grid-cols-1 gap-4">

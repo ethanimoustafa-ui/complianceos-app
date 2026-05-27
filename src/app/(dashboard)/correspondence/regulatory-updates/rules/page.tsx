@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Modal } from '@/components/ui/modal'
 import { useTranslation } from '@/i18n'
 import { cn } from '@/lib/utils'
-import { NoResultsEmptyState } from '@/components/ui/empty-state'
+import { NoResultsEmptyState, NoDataEmptyState } from '@/components/ui/empty-state'
 import { useCircularStore } from '@/stores/circular-store'
 import { RegDocCard } from '@/components/correspondence/regulatory-updates/RegDocCard'
 import { RegDocFilterBar } from '@/components/correspondence/regulatory-updates/RegDocFilterBar'
@@ -279,13 +279,22 @@ function RegulatoryUpdatesRulesPageContent() {
             ))}
           </div>
         ) : filteredCirculars.length === 0 ? (
-          <NoResultsEmptyState
-            onClearFilters={() => {
-              setSearchQuery('')
-              setAuthorityFilter('all')
-              setDepartmentFilter('all')
-            }}
-          />
+          (searchQuery || authorityFilter !== 'all' || departmentFilter !== 'all') ? (
+            <NoResultsEmptyState
+              onClearFilters={() => {
+                setSearchQuery('')
+                setAuthorityFilter('all')
+                setDepartmentFilter('all')
+              }}
+            />
+          ) : (
+            <NoDataEmptyState
+              title={t('emptyStates.rules.title')}
+              description={t('emptyStates.rules.description')}
+              ctaLabel={t('emptyStates.rules.cta')}
+              onAdd={() => setIsAddModalOpen(true)}
+            />
+          )
         ) : (
           <>
             {/* Showing X–Y of Z range — always rendered when there is at least

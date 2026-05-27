@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, memo } from 'react'
 import { Icon } from '@iconify/react'
 import { Modal } from '@/components/ui/modal'
+import { Skeleton } from '@/components/ui/skeleton'
 import { Observation } from './observation-types'
 import { useObservationStore } from '@/stores/observation-store'
 import { useAuthStore } from '@/stores/auth-store'
@@ -331,6 +332,19 @@ export const ObservationDetailModal = memo(function ObservationDetailModal({
               ) : null}
             </div>
           </div>
+
+          {/* W27.3-α: skeleton while detail fetch is in-flight */}
+          {isHydrating && (
+            <div className="space-y-4 mb-6" data-skeleton="true" role="status" aria-busy="true" aria-live="polite">
+              <Skeleton className="h-3 w-1/3" />
+              <Skeleton className="h-4 w-full" />
+              <Skeleton className="h-4 w-5/6" />
+              <Skeleton className="h-4 w-2/3" />
+              <Skeleton className="h-3 w-1/4 mt-4" />
+              <Skeleton className="h-5 w-full" />
+              <Skeleton className="h-5 w-full" />
+            </div>
+          )}
 
           <div className="space-y-8">
             {/* Finding Overview */}

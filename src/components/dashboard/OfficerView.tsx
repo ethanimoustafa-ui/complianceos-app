@@ -95,6 +95,31 @@ export function OfficerView({ metrics }: OfficerViewProps) {
     return items.sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime())
   }, [myObservations, myAudits, myPolicies])
 
+  // Status label resolver — maps raw DB enum strings to i18n-translated labels.
+  // Covers observation, audit, and policy status values used in the task queue.
+  const resolveStatusLabel = (status: string): string => {
+    const map: Record<string, string> = {
+      // observation statuses
+      open:               t('observations.statusOptions.open'),
+      in_progress:        t('observations.statusOptions.inProgress'),
+      pending_review:     t('observations.statusOptions.pendingReview'),
+      resolved:           t('observations.statusOptions.pendingReview'),
+      closed:             t('observations.statusOptions.closed'),
+      // audit statuses
+      pending:            t('common.pending'),
+      overdue:            t('regulatoryUpdates.overdueActions'),
+      completed:          t('common.completed'),
+      // policy statuses
+      'under-review':     t('policies.statusUnderReview'),
+      'pending-approval': t('letters.pendingApproval'),
+      approved:           t('policies.statusApproved'),
+      draft:              t('common.draft'),
+      expired:            t('policies.statusExpired'),
+      'requires-review':  t('policies.statusRequiresReview'),
+    }
+    return map[status] ?? status.replace(/_/g, ' ').replace(/-/g, ' ')
+  }
+
   // Items needing my action (SAMA approval steps)
   const actionItems = useMemo(() => {
     const items: Array<{ id: string; title: string; type: string; route: string }> = []
@@ -354,7 +379,7 @@ export function OfficerView({ metrics }: OfficerViewProps) {
                     </div>
                     <div className="flex items-center gap-3">
                       <span className="text-[10px] text-slate-400">{formatTimelineDate(item.dueDate, isRTL)}</span>
-                      <Badge variant={getStatusVariant(item.status)} size="sm">{item.status}</Badge>
+                      <Badge variant={getStatusVariant(item.status)} size="sm">{resolveStatusLabel(item.status)}</Badge>
                       <Icon icon="lucide:chevron-right" className="text-slate-300 text-sm" />
                     </div>
                   </button>

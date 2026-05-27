@@ -405,14 +405,13 @@ export function TemplateEditForm({
       {/* Tab 2: Default Content */}
       {activeTab === 'content' && (
         <div className="space-y-6">
-          <div className="p-4 bg-blue-50 border border-blue-100 rounded-xl">
+          <div className="p-4 bg-blue-50 border border-blue-100 rounded-xl" dir={isRTL ? 'rtl' : 'ltr'}>
             <p className="text-xs font-bold text-blue-900 mb-1">
-              <Icon icon="lucide:info" className="inline-block mr-1" />
-              Smart placeholders
+              <Icon icon="lucide:info" className={`inline-block ${isRTL ? 'ml-1' : 'mr-1'}`} />
+              {t('letters.smartPlaceholders.heading' as Parameters<typeof t>[0])}
             </p>
             <p className="text-[11px] text-blue-700">
-              Insert <code className="px-1 py-0.5 bg-white text-blue-900 rounded text-[10px]">{'{{token}}'}</code>{' '}
-              tokens (e.g. <code className="px-1 py-0.5 bg-white text-blue-900 rounded text-[10px]">{'{{candidate_name}}'}</code>) into the subject or body. Each token surfaces below — pick its type (date or document reference) so composers see the right input.
+              {t('letters.smartPlaceholders.body' as Parameters<typeof t>[0])}
             </p>
           </div>
 

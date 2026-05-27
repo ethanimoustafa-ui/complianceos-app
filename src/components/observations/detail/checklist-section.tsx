@@ -46,21 +46,29 @@ export const ChecklistSection = memo(function ChecklistSection({
   const [newItemText, setNewItemText] = useState('')
   const [editingItemId, setEditingItemId] = useState<string | null>(null)
   const [editingText, setEditingText] = useState('')
+  // W27.3-β: spinner while async onAdd completes
+  const [isAdding, setIsAdding] = useState(false)
 
   const completedTasks = items.filter((item) => item.completed).length
   const totalTasks = items.length
   const progressPercent = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0
 
-  const handleAdd = () => {
-    if (!newItemText.trim()) return
-    onAdd(newItemText.trim())
+  const handleAdd = async () => {
+    if (!newItemText.trim() || isAdding) return
+    const text = newItemText.trim()
     setNewItemText('')
+    setIsAdding(true)
+    try {
+      await (onAdd as (text: string) => Promise<void> | void)(text)
+    } finally {
+      setIsAdding(false)
+    }
   }
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') {
       e.preventDefault()
-      handleAdd()
+      void handleAdd()
     }
   }
 
@@ -111,14 +119,16 @@ export const ChecklistSection = memo(function ChecklistSection({
           value={newItemText}
           onChange={(e) => setNewItemText(e.target.value)}
           onKeyDown={handleKeyDown}
+          disabled={isAdding}
           className={`flex-1 px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent ${isRTL ? 'text-right' : ''}`}
         />
         <button
-          onClick={handleAdd}
-          disabled={!newItemText.trim()}
+          onClick={() => void handleAdd()}
+          disabled={!newItemText.trim() || isAdding}
+          aria-busy={isAdding || undefined}
           className="p-2.5 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
         >
-          <Icon icon="lucide:plus" className="text-lg" />
+          <Icon icon={isAdding ? 'lucide:loader-2' : 'lucide:plus'} className={`text-lg${isAdding ? ' animate-spin' : ''}`} />
         </button>
       </div>
 

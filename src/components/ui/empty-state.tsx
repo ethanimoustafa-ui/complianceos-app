@@ -3,6 +3,7 @@
 import { ReactNode } from 'react'
 import { Icon } from '@iconify/react'
 import { Button } from './button'
+import { useTranslation } from '@/i18n'
 
 type EmptyStateVariant = 'default' | 'search' | 'filter' | 'error' | 'success'
 
@@ -77,7 +78,7 @@ export function EmptyState({
   const displayIcon = icon || config.icon
 
   return (
-    <div className={`flex flex-col items-center justify-center py-16 px-4 ${className}`}>
+    <div data-empty-state="true" className={`flex flex-col items-center justify-center py-16 px-4 ${className}`}>
       {/* Icon */}
       <div
         className={`w-16 h-16 rounded-full ${config.bgColor} flex items-center justify-center mb-6`}
@@ -124,19 +125,20 @@ export function NoResultsEmptyState({
   onClearFilters?: () => void
   searchTerm?: string
 }) {
+  const { t } = useTranslation()
   return (
     <EmptyState
       variant="search"
-      title="No results found"
+      title={t('emptyStates.noResults')}
       description={
         searchTerm
-          ? `No items match "${searchTerm}". Try adjusting your search or filters.`
-          : 'No items match your current filters. Try adjusting or clearing them.'
+          ? t('emptyStates.noResultsSearch', { searchTerm })
+          : t('emptyStates.noResultsDesc')
       }
       secondaryAction={
         onClearFilters
           ? {
-              label: 'Clear filters',
+              label: t('emptyStates.clearFilters'),
               onClick: onClearFilters,
             }
           : undefined
@@ -148,19 +150,31 @@ export function NoResultsEmptyState({
 export function NoDataEmptyState({
   entityName = 'items',
   onAdd,
+  title,
+  description,
+  ctaLabel,
 }: {
   entityName?: string
   onAdd?: () => void
+  /** Override title (should be i18n-translated by caller) */
+  title?: string
+  /** Override description (should be i18n-translated by caller) */
+  description?: string
+  /** Override CTA label (should be i18n-translated by caller) */
+  ctaLabel?: string
 }) {
+  const resolvedTitle = title ?? `No ${entityName} yet`
+  const resolvedDescription = description ?? `Get started by adding your first ${entityName.slice(0, -1) || 'item'}.`
+  const resolvedCtaLabel = ctaLabel ?? `Add ${entityName.slice(0, -1) || 'item'}`
   return (
     <EmptyState
       variant="default"
-      title={`No ${entityName} yet`}
-      description={`Get started by adding your first ${entityName.slice(0, -1) || 'item'}.`}
+      title={resolvedTitle}
+      description={resolvedDescription}
       action={
         onAdd
           ? {
-              label: `Add ${entityName.slice(0, -1) || 'item'}`,
+              label: resolvedCtaLabel,
               onClick: onAdd,
               icon: 'lucide:plus',
             }
