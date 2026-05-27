@@ -194,7 +194,12 @@ export const DepartmentField = memo(function DepartmentField({
         onChange={(id) => {
           const dept = allDepartments.find((d) => d.id === id)
           onChange(dept ? dept.name : '')
-          onBlur?.()
+          // W29.2-O2: do NOT call onBlur here. Selecting an item is a change
+          // event, not a blur. Firing onBlur synchronously after onChange races
+          // setFormData — handleBlur's validateForm closure reads the stale
+          // empty value and re-sets `errors.department = 'required'` even after
+          // the parent's onChange just cleared it. Submit-time validation
+          // already marks all fields touched + re-validates.
         }}
         items={allDepartments.map((d) => ({ id: d.id, label: d.name, labelAr: d.nameAr, isDefault: d.isDefault }))}
         placeholder={t('observations.form.selectDepartment')}
