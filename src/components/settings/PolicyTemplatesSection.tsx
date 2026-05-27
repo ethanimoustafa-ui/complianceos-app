@@ -36,8 +36,10 @@ export function PolicyTemplatesSection() {
   const TIER_LABELS: Record<PolicyApprovalTier, string> = {
     board: t('policies.tierBoard'),
     management: t('policies.tierManagement'),
+    managerial: t('policies.tierManagerial'),
     sharia: t('policies.tierSharia'),
     agm: t('policies.tierAgm'),
+    audit_committee: t('policies.tierAuditCommittee'),
   }
 
   const FREQ_LABELS: Record<AuditFrequency, string> = {

@@ -97,10 +97,14 @@ const CATEGORY_ICONS: Record<string, string> = {
 }
 
 const TIER_COLORS: Record<PolicyApprovalTier, { bg: string; text: string }> = {
-  board:      { bg: 'bg-violet-100',  text: 'text-violet-700'  },
-  management: { bg: 'bg-blue-100',    text: 'text-blue-700'    },
-  sharia:     { bg: 'bg-emerald-100', text: 'text-emerald-700' },
-  agm:        { bg: 'bg-amber-100',   text: 'text-amber-700'   },
+  board:           { bg: 'bg-violet-100',  text: 'text-violet-700'  },
+  management:      { bg: 'bg-blue-100',    text: 'text-blue-700'    },
+  // P2 (W28.1): migration 074 renamed `management` → `managerial` and added
+  // `audit_committee`. Both were missing here so the chip leaked raw keys.
+  managerial:      { bg: 'bg-blue-100',    text: 'text-blue-700'    },
+  sharia:          { bg: 'bg-emerald-100', text: 'text-emerald-700' },
+  agm:             { bg: 'bg-amber-100',   text: 'text-amber-700'   },
+  audit_committee: { bg: 'bg-rose-100',    text: 'text-rose-700'    },
 }
 
 function getReviewUrgency(nextReviewDate: string, status: PolicyStatus): 'expired' | 'warning' | 'normal' {

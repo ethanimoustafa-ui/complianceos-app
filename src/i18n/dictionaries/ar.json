@@ -1131,8 +1131,10 @@
     "statusRequiresReview": "يتطلب مراجعة",
     "tierBoard": "مجلس الإدارة",
     "tierManagement": "الإدارة",
+    "tierManagerial": "إداري",
     "tierSharia": "الشريعة",
     "tierAgm": "الجمعية العامة",
+    "tierAuditCommittee": "لجنة المراجعة",
     "field": {
       "name": "الاسم",
       "description": "الوصف",

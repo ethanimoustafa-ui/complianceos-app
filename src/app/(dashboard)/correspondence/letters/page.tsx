@@ -687,6 +687,16 @@ export default function LettersPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams, store.letters])
 
+  // L8: Auto-open Template Databank when ?view=templates is in the URL.
+  // Runs once on mount (and whenever searchParams changes) so a hard refresh
+  // preserves the templates view state.
+  useEffect(() => {
+    if (searchParams.get('view') === 'templates') {
+      setIsTemplateManagementOpen(true)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   const handleBackToDashboard = () => {
     setView('dashboard')
     store.setSelected(null)
@@ -982,6 +992,12 @@ export default function LettersPage() {
                     setTemplateSearch('')
                     setTemplateTypeFilter('All')
                     setTemplateStatusFilter('All')
+                    // L8: clear ?view=templates so refresh from list view doesn't
+                    // re-open the template databank. Preserve ?id= if present.
+                    const next = new URLSearchParams(searchParams.toString())
+                    next.delete('view')
+                    const qs = next.toString()
+                    router.replace(qs ? `${pathname}?${qs}` : pathname)
                   }}
                   className="w-10 h-10 bg-white border border-slate-200 rounded-lg flex items-center justify-center text-slate-500 hover:bg-slate-50 cursor-pointer"
                 >
@@ -1259,7 +1275,14 @@ export default function LettersPage() {
                 <h2 className="text-lg font-bold font-display text-slate-900">{t('letters.letterTemplates')}</h2>
                 <Gate perm="Manage Letter Templates">
                   <button
-                    onClick={() => setIsTemplateManagementOpen(true)}
+                    onClick={() => {
+                      setIsTemplateManagementOpen(true)
+                      // L8: encode templates view in URL so hard refresh restores it.
+                      // Preserve any existing ?id= param (combine search params).
+                      const next = new URLSearchParams(searchParams.toString())
+                      next.set('view', 'templates')
+                      router.replace(`${pathname}?${next.toString()}`)
+                    }}
                     className="text-xs font-bold text-emerald-600 hover:underline cursor-pointer"
                   >
                     {t('letters.manageTemplates')} {isRTL ? '\u2190' : '\u2192'}
@@ -2027,13 +2050,16 @@ export default function LettersPage() {
                             items={teamMembers
                               .filter((m) => m.status === 'active')
                               .map((m) => ({
-                                id: m.name,
+                                // L6 (W28.1): use UUID as id so PATCH sends a valid UUID
+                                // (assigned_to column is uuid FK → profiles). Display name
+                                // is the label; resolved back to name on read from teamMembers.
+                                id: m.id,
                                 label: `${m.name} — ${m.department}`,
                               }))}
                             value={editAssignedTo}
-                            onChange={(id) => {
-                              setEditAssignedTo(id)
-                              saveField({ assignedTo: id })
+                            onChange={(memberId) => {
+                              setEditAssignedTo(memberId)
+                              saveField({ assignedTo: memberId || undefined })
                               setEditingMeta(null)
                             }}
                             placeholder={t('common.select')}
@@ -2047,7 +2073,11 @@ export default function LettersPage() {
                           className="text-xs font-bold text-emerald-600 cursor-pointer hover:text-emerald-700 transition-colors group/name flex items-center gap-1"
                           title="Click to edit"
                         >
-                          {selectedLetter?.assignedTo || <span className="text-slate-300 font-normal italic">{t('letters.unassigned')}</span>}
+                          {selectedLetter?.assignedTo
+                            // L6: assignedTo stores a UUID; resolve to display name via teamMembers.
+                            // Fall back to the raw value (name-string legacy rows) if no UUID match.
+                            ? (teamMembers.find((m) => m.id === selectedLetter.assignedTo)?.name ?? selectedLetter.assignedTo)
+                            : <span className="text-slate-300 font-normal italic">{t('letters.unassigned')}</span>}
                           <Icon icon="lucide:pencil" className="text-[9px] text-slate-300 group-hover/name:text-emerald-400" />
                         </span>
                       )}

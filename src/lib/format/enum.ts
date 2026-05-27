@@ -159,18 +159,24 @@ export function formatPolicyStatus(
   return lookup(t, value, POLICY_STATUS_KEYS)
 }
 
-// Policy approval tier: `board` | `management` | `sharia` | `agm` (extensible).
+// Policy approval tier: `board` | `management` | `managerial` | `sharia` | `agm` | `audit_committee` (extensible).
 //
 // Wave-19.7 — this static map is now a fallback only. The canonical render
 // path goes through `formatEnumValue('policy.approval_tier', value, locale)`
 // which reads from the user-editable `enum_value_definitions` table. The map
 // below remains so any render site that hasn't been migrated yet keeps
 // working with the legacy English labels.
+//
+// P2 (W28.1): added `managerial` and `audit_committee` — migration 074 renamed
+// `management` → `managerial` and added `audit_committee`, but this static
+// fallback map wasn't updated, causing the list-view chip to leak the raw key.
 const POLICY_APPROVAL_TIER_KEYS: Partial<Record<string, TranslationKey>> = {
   'board': 'policies.tierBoard',
   'management': 'policies.tierManagement',
+  'managerial': 'policies.tierManagerial',
   'sharia': 'policies.tierSharia',
   'agm': 'policies.tierAgm',
+  'audit_committee': 'policies.tierAuditCommittee',
 }
 
 export function formatPolicyApprovalTier(

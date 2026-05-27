@@ -1131,8 +1131,10 @@
     "statusRequiresReview": "Requires Review",
     "tierBoard": "Board",
     "tierManagement": "Management",
+    "tierManagerial": "Managerial",
     "tierSharia": "Sharia",
     "tierAgm": "AGM",
+    "tierAuditCommittee": "Audit Committee",
     "field": {
       "name": "Name",
       "description": "Description",
