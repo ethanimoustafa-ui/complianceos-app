@@ -114,6 +114,46 @@ export async function POST(req: NextRequest) {
     // immediately surfaces as `expired`.
     await recomputePolicyStatus(supabase, created.id)
 
+    // W29.1-P1: copy the per-tier workflow step templates into this policy's
+    // workflow_steps. First step becomes 'current', the rest 'pending'. Only
+    // runs for the 5 named tiers seeded in migration 080; legacy tier_1/2/3
+    // policies fall through with no steps (matches pre-W29 behaviour).
+    {
+      const { data: tplRows } = await supabase
+        .from('policy_workflow_step_templates')
+        .select('step, sort_order, action_type, description')
+        .eq('tier', input.approval_tier)
+        .order('sort_order', { ascending: true })
+      const templates = (tplRows ?? []) as Array<{
+        step: string
+        sort_order: number
+        action_type: string | null
+        description: string | null
+      }>
+      if (templates.length > 0) {
+        const stepRows = templates.map((t) => ({
+          policy_id: created.id,
+          step: t.step,
+          sort_order: t.sort_order,
+          action_type: t.action_type,
+          description: t.description,
+          status: t.sort_order === 1 ? 'current' : 'pending',
+          updated_at: new Date().toISOString(),
+        }))
+        const { error: stepErr } = await supabase
+          .from('policy_workflow_steps')
+          .insert(stepRows)
+        if (stepErr) {
+          // eslint-disable-next-line no-console
+          console.error('[api/policies] seed workflow steps failed', {
+            stepErr,
+            policy_id: created.id,
+            tier: input.approval_tier,
+          })
+        }
+      }
+    }
+
     await Promise.all([
       writeAudit({
         actor_id: user.id,
