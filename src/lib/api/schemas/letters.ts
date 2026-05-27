@@ -155,9 +155,13 @@ export const UpdateLetterSchema = z
     type: z.string().min(1).max(100).optional(),
     sub_category: PlainText(200).nullable().optional(),
     sama_department: PlainText(200).nullable().optional(),
-    subject: PlainTextMin(2_000).optional(),
+    // L3-NIT-A: PATCH allows empty body/subject (partial update — draft editor
+    // sends the current value which may be empty on a blank draft). PlainTextMin
+    // was rejecting empty strings with 400. Use PlainText (no min(1)) here;
+    // the submit-for-approval path enforces non-empty via CreateLetterSchema.
+    subject: PlainText(2_000).optional(),
     subject_ar: PlainText(2_000).nullable().optional(),
-    body: PlainTextMin(50_000).optional(),
+    body: PlainText(50_000).optional(),
     body_ar: PlainText(50_000).nullable().optional(),
     priority: z.enum(['standard', 'urgent']).optional(),
     assigned_to: Uuid.nullable().optional(),

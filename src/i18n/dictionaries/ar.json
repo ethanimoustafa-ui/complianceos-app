@@ -507,6 +507,7 @@
     "letterStepRejected": "تم رفض الخطوة {{step}}: {{reason}}",
     "letterApprovedBy": "تمت الموافقة بواسطة {{name}}",
     "letterRejectedBy": "تم الرفض بواسطة {{name}}: {{comment}}",
+    "savedAt": "تم الحفظ في {{time}}",
     "bodyConflictReload": "تم تعديل الخطاب من مكان آخر. أعد التحميل لرؤية آخر التغييرات.",
     "letterFieldsUpdated": "تم تحديث الخطاب — {{fields}}",
     "subjectUpdated": "تم تحديث الموضوع",

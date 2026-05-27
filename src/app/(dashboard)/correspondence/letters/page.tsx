@@ -1552,7 +1552,12 @@ export default function LettersPage() {
                 {isDraft && bodySavedAt && (
                   <div className="mb-2 flex items-center gap-1.5 text-[11px] text-emerald-600 font-medium" data-pdf-hide>
                     <Icon icon="lucide:check-circle" className="text-[13px]" />
-                    {`Saved at ${bodySavedAt.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}`}
+                    {t('letters.savedAt', {
+                      time: bodySavedAt.toLocaleTimeString(
+                        isRTL ? 'ar-SA' : 'en-US',
+                        { hour: '2-digit', minute: '2-digit' },
+                      ),
+                    })}
                   </div>
                 )}
                 <div
