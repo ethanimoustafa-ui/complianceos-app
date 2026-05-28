@@ -1,6 +1,6 @@
 'use client'
 
-import { type CSSProperties, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { type CSSProperties, type ReactNode, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Icon } from '@iconify/react'
 import { cn } from '@/lib/utils'
@@ -21,7 +21,7 @@ interface EditableSelectProps {
   // When provided, exposes inline +Add / Edit / Delete affordances.
   onAdd?: (label: string, labelAr?: string) => string | void | Promise<string | void>
   onEdit?: (id: string, label: string, labelAr?: string) => void
-  onDelete?: (id: string) => void
+  onDelete?: (id: string) => void | Promise<void>
   // Per-row reset-to-default affordance. Used by Bucket-D label-override
   // surfaces (`mode="labels-only"`) where the canonical key never changes
   // but the label can be customized, then reset.
@@ -48,6 +48,10 @@ interface EditableSelectProps {
   // Used for inline-edit cells where clicking the trigger text switches to
   // this component — the user expects the dropdown to be open already.
   autoOpen?: boolean
+  // P4 (W30): optional footer content rendered below the list and the Add
+  // Entry button. Used for inline "Save as template" affordance in the
+  // Policy/Audit create modal template pickers.
+  footerSlot?: ReactNode
 }
 
 /**
@@ -93,6 +97,7 @@ export function EditableSelect({
   mode = 'default',
   locked = false,
   autoOpen = false,
+  footerSlot,
 }: EditableSelectProps) {
   const labelsOnly = mode === 'labels-only'
   // `locked` is the strongest gate — it suppresses every CRUD affordance
@@ -110,6 +115,10 @@ export function EditableSelect({
   const [draftLabelAr, setDraftLabelAr] = useState('')
   // B4: loading spinner while async onAdd/onEdit resolves.
   const [submitBusy, setSubmitBusy] = useState(false)
+  // Misc-1 (W30): per-row spinner while async onDelete resolves. The row is
+  // only removed after the server confirms (D1) — the store's delete awaits
+  // the DELETE before mutating local state, so we just gate the UI on it.
+  const [deletingId, setDeletingId] = useState<string | null>(null)
   const rootRef = useRef<HTMLDivElement>(null)
   // A2 z-index portal: position state for the portal-rendered dropdown.
   // The dropdown is rendered into document.body so it escapes any
@@ -128,17 +137,25 @@ export function EditableSelect({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // A2: recalculate portal dropdown position whenever the dropdown opens or
-  // the trigger rect changes. Uses `useLayoutEffect` so the position is
-  // applied before the browser paints, avoiding a 1-frame jump.
+  // A2 / P3 (W30): recalculate portal dropdown position whenever the dropdown
+  // opens or the trigger rect changes. Uses `useLayoutEffect` so the position
+  // is applied before the browser paints, avoiding a 1-frame jump.
+  // P3: flip upward when insufficient space below the trigger so the dropdown
+  // never gets clipped by the modal/viewport bottom edge.
+  const DROPDOWN_MAX_HEIGHT = 332 // max-h-[320px] list + ~12px padding
   useLayoutEffect(() => {
     if (!open || !rootRef.current) return
     const rect = rootRef.current.getBoundingClientRect()
     const scrollY = window.scrollY || document.documentElement.scrollTop
     const scrollX = window.scrollX || document.documentElement.scrollLeft
+    const viewportHeight = window.innerHeight
+    const spaceBelow = viewportHeight - rect.bottom
+    const flipUp = spaceBelow < DROPDOWN_MAX_HEIGHT && rect.top > DROPDOWN_MAX_HEIGHT
     setDropdownStyle({
       position: 'absolute',
-      top: rect.bottom + scrollY + 4,
+      ...(flipUp
+        ? { bottom: viewportHeight - rect.top + scrollY + 4, top: 'auto' }
+        : { top: rect.bottom + scrollY + 4, bottom: 'auto' }),
       left: rect.left + scrollX,
       width: Math.max(rect.width, 224), // min-w-[14rem] = 224px
       zIndex: 9999,
@@ -199,10 +216,15 @@ export function EditableSelect({
     setDraftLabelAr('')
   }
 
-  const handleDelete = (id: string) => {
-    if (!effectiveOnDelete) return
-    effectiveOnDelete(id)
-    if (value === id) onChange('')
+  const handleDelete = async (id: string) => {
+    if (!effectiveOnDelete || deletingId) return
+    setDeletingId(id)
+    try {
+      await effectiveOnDelete(id)
+      if (value === id) onChange('')
+    } finally {
+      setDeletingId(null)
+    }
   }
 
   const padY = size === 'sm' ? 'py-1.5' : 'py-2'
@@ -259,7 +281,7 @@ export function EditableSelect({
                       <span className={cn('truncate', isSelected ? 'text-emerald-700 font-bold' : 'text-slate-700')}>
                         {label}
                       </span>
-                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <div className={cn('flex items-center gap-1 transition-opacity', deletingId === item.id ? 'opacity-100' : 'opacity-0 group-hover:opacity-100')}>
                         {effectiveOnEdit && (
                           <button
                             type="button"
@@ -276,14 +298,19 @@ export function EditableSelect({
                         {effectiveOnDelete && !item.isDefault && (
                           <button
                             type="button"
-                            className="p-1 text-slate-400 hover:text-rose-600"
+                            disabled={deletingId === item.id}
+                            aria-busy={deletingId === item.id || undefined}
+                            className="p-1 text-slate-400 hover:text-rose-600 disabled:opacity-60 disabled:cursor-not-allowed"
                             title={t('editableSelect.delete')}
                             onClick={(e) => {
                               e.stopPropagation()
-                              handleDelete(item.id)
+                              void handleDelete(item.id)
                             }}
                           >
-                            <Icon icon="lucide:trash-2" className="text-[11px]" />
+                            <Icon
+                              icon={deletingId === item.id ? 'lucide:loader-2' : 'lucide:trash-2'}
+                              className={cn('text-[11px]', deletingId === item.id && 'animate-spin')}
+                            />
                           </button>
                         )}
                         {effectiveOnReset && (!isReset || isReset(item.id)) && (
@@ -314,6 +341,11 @@ export function EditableSelect({
                     <Icon icon="lucide:plus" className="text-sm" />
                     {t('editableSelect.addNew')}
                   </button>
+                </div>
+              )}
+              {footerSlot && (
+                <div className="border-t border-slate-100">
+                  {footerSlot}
                 </div>
               )}
             </>

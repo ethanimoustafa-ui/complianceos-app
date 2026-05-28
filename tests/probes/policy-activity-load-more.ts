@@ -136,10 +136,12 @@ async function main(): Promise<void> {
   results.push(checkTrue('activity_log page 1 is sorted newest-first', sortedOk))
 
   // 5. GET activity page 2
+  // Response envelope: { data: { items: [...], page, pageSize, total, totalPages } }
   console.log('\n[5] GET /api/policies/{id}/activity?page=2')
-  const page2Res = await http<ActivityRow[]>(`/api/policies/${policyId}/activity?page=2`)
+  const page2Res = await http<{ items: ActivityRow[]; total: number }>(`/api/policies/${policyId}/activity?page=2&pageSize=10`)
   results.push(check('GET /activity?page=2 → 200', 200, page2Res.status))
-  const page2 = Array.isArray(page2Res.body.data) ? page2Res.body.data : []
+  const page2Data = page2Res.body.data as { items?: ActivityRow[]; total?: number } | undefined
+  const page2 = page2Data?.items ?? []
   results.push(checkTrue(
     `page 2 has items (got ${page2.length})`,
     page2.length > 0,

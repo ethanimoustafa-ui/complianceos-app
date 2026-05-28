@@ -82,9 +82,12 @@ export async function POST(req: NextRequest, { params }: Params) {
         }
       | null = null
     if (input.step_id) {
+      // P5 (W30): also write `date` when completing a step so the
+      // "Approved by <name> · <date>" caption persists after the refetch.
+      const today = new Date().toISOString().split('T')[0]
       const { data: completedStep, error: stepErr } = await supabase
         .from('policy_workflow_steps')
-        .update({ status: 'completed', user_name: actor, note: input.note ?? null })
+        .update({ status: 'completed', user_name: actor, date: today, note: input.note ?? null })
         .eq('id', input.step_id)
         .eq('policy_id', policyId)
         .select('id, sort_order')

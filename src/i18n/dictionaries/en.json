@@ -1263,6 +1263,7 @@
     "managerReceived": "Received",
     "managerRejected": "Manager Rejected",
     "managerReceivedToast": "Manager acknowledgement logged",
+    "emailSentToast": "Email notification opened",
     "managerNotifiedToast": "Manager {{name}} has been notified",
     "unarchivePolicy": "Unarchive Policy",
     "unarchivedToast": "Policy restored successfully",

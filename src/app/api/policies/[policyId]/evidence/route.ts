@@ -68,6 +68,21 @@ export async function POST(req: NextRequest, { params }: Params) {
     const resolvedCycleLabel =
       policyRow?.current_review_cycle_label ?? input.review_cycle_label
 
+    // P10 (W30): if the policy has no open review cycle yet, pin it now so that
+    // concurrent and subsequent uploads use the same cycle_id. Without this,
+    // each upload carries a different client-supplied cycle_id and races to
+    // create distinct review_cycle rows.
+    if (!policyRow?.current_review_cycle_id) {
+      await supabase
+        .from('policies')
+        .update({
+          current_review_cycle_id: resolvedCycleId,
+          current_review_cycle_label: resolvedCycleLabel,
+        })
+        .eq('id', uuid)
+        .is('deleted_at', null)
+    }
+
     const { data, error } = await supabase
       .from('policy_evidence')
       .insert({

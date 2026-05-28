@@ -74,6 +74,17 @@ const TIER_WORKFLOWS: Record<string, Array<{ step: string; description: string; 
   ],
 }
 
+// P7 (W30): helper to read a File as a base64 data URL so it can be passed
+// to the attachment store which expects a dataUrl.
+function readFileAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(reader.result as string)
+    reader.onerror = reject
+    reader.readAsDataURL(file)
+  })
+}
+
 // Shared upload zone — same UX as the inline component.
 function UploadZone({
   file, fileRef, label, required, t,
@@ -132,7 +143,7 @@ type Props = {
 }
 
 export function RegisterPolicyModal({ isOpen, onClose, onCreated, t, isRTL }: Props) {
-  const { create } = usePolicyStore()
+  const { create, addAttachment } = usePolicyStore()
   const { user: currentUser } = useAuthStore()
   const [isCreating, setIsCreating] = useState(false)
   const teamMembers = useTeamStore((s) => s.members)
@@ -314,6 +325,25 @@ export function RegisterPolicyModal({ isOpen, onClose, onCreated, t, isRTL }: Pr
         activityLog,
       })
       if (selectedTemplateId) incrementPolicyTemplateUsage(selectedTemplateId)
+
+      // P7 (W30): if the user attached a document at create time, POST it to
+      // the attachments route now that we have the canonical policy UUID. The
+      // `attachmentUrl` field in the create payload only carries the filename
+      // as a visual hint — it does NOT persist to the policy_attachments table.
+      if (formDocFile) {
+        try {
+          const dataUrl = await readFileAsDataUrl(formDocFile)
+          await addAttachment(newPolicy.id, {
+            name: formDocFile.name,
+            dataUrl,
+            size: formDocFile.size,
+            uploadedBy: currentUser?.name ?? owner.name,
+          })
+        } catch {
+          // Non-fatal — the policy is created; surface error via toast if needed.
+        }
+      }
+
       onCreated(t('policies.policyCreated'), newPolicy.id)
       reset()
       onClose()
@@ -337,7 +367,7 @@ export function RegisterPolicyModal({ isOpen, onClose, onCreated, t, isRTL }: Pr
       <div className="space-y-6">
         <p className="text-sm text-slate-500 -mt-2">{t('policies.createPolicySubtitle')}</p>
 
-        {/* Template picker — locked because templates are managed in Settings. */}
+        {/* Template picker — locked + inline "Save as template" footer (P4/M2 W30). */}
         <div>
           <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('settings.selectTemplate')}</label>
           <EditableSelect
@@ -350,6 +380,51 @@ export function RegisterPolicyModal({ isOpen, onClose, onCreated, t, isRTL }: Pr
             ]}
             placeholder={t('settings.noTemplate')}
             isRTL={isRTL}
+            footerSlot={
+              showSavePolicyTemplateForm ? (
+                <div className="flex items-center gap-2 px-3 py-2" onClick={(e) => e.stopPropagation()}>
+                  <input
+                    type="text"
+                    autoFocus
+                    className="flex-1 h-7 rounded border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                    placeholder={t('regulatoryUpdates.templateNamePlaceholder' as any)}
+                    value={policyTemplateNameInput}
+                    onChange={(e) => setPolicyTemplateNameInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      e.stopPropagation()
+                      if (e.key === 'Enter') void handleSavePolicyTemplate()
+                      if (e.key === 'Escape') setShowSavePolicyTemplateForm(false)
+                    }}
+                  />
+                  <button
+                    type="button"
+                    className="p-1 text-emerald-600 hover:text-emerald-700 disabled:opacity-40"
+                    disabled={isSavingPolicyTemplate || !policyTemplateNameInput.trim()}
+                    onClick={(e) => { e.stopPropagation(); void handleSavePolicyTemplate() }}
+                  >
+                    {isSavingPolicyTemplate
+                      ? <Icon icon="lucide:loader-2" className="animate-spin text-xs" />
+                      : <Icon icon="lucide:check" className="text-xs" />}
+                  </button>
+                  <button
+                    type="button"
+                    className="p-1 text-slate-400 hover:text-slate-600"
+                    onClick={(e) => { e.stopPropagation(); setShowSavePolicyTemplateForm(false); setPolicyTemplateNameInput('') }}
+                  >
+                    <Icon icon="lucide:x" className="text-xs" />
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  className="w-full flex items-center gap-1.5 px-3 py-2 text-xs text-slate-500 hover:text-emerald-700 hover:bg-emerald-50 cursor-pointer"
+                  onClick={(e) => { e.stopPropagation(); setShowSavePolicyTemplateForm(true) }}
+                >
+                  <Icon icon="lucide:save" className="text-[11px]" />
+                  {t('regulatoryUpdates.saveAsTemplate' as any)}
+                </button>
+              )
+            }
           />
         </div>
 
@@ -461,56 +536,13 @@ export function RegisterPolicyModal({ isOpen, onClose, onCreated, t, isRTL }: Pr
           </div>
         </div>
 
+        {/* P4/M2 (W30): standalone "Save as template" button removed — functionality
+            moved into the template dropdown's footerSlot above. */}
         <div className="flex flex-col gap-3 pt-4 border-t border-slate-100">
           {!formValid && (
             <p className="text-xs text-rose-600 self-end">
               {t('regulatoryUpdates.missingRequired')}: {missingFields.join(', ')}
             </p>
-          )}
-          {/* M2: Save current form as entity template */}
-          {showSavePolicyTemplateForm ? (
-            <div className="flex items-center gap-2 self-stretch">
-              <input
-                type="text"
-                autoFocus
-                className="flex-1 h-9 rounded-lg border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
-                placeholder={t('regulatoryUpdates.templateNamePlaceholder' as any)}
-                value={policyTemplateNameInput}
-                onChange={(e) => setPolicyTemplateNameInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') void handleSavePolicyTemplate()
-                  if (e.key === 'Escape') setShowSavePolicyTemplateForm(false)
-                }}
-              />
-              <Button
-                variant="secondary"
-                className="h-9 px-3 text-xs"
-                onClick={() => void handleSavePolicyTemplate()}
-                disabled={isSavingPolicyTemplate || !policyTemplateNameInput.trim()}
-              >
-                {isSavingPolicyTemplate ? (
-                  <Icon icon="lucide:loader-2" className="animate-spin text-sm" />
-                ) : (
-                  t('regulatoryUpdates.saveTemplateConfirm' as any)
-                )}
-              </Button>
-              <button
-                type="button"
-                onClick={() => { setShowSavePolicyTemplateForm(false); setPolicyTemplateNameInput('') }}
-                className="text-slate-400 hover:text-slate-600"
-              >
-                <Icon icon="lucide:x" className="text-sm" />
-              </button>
-            </div>
-          ) : (
-            <button
-              type="button"
-              onClick={() => setShowSavePolicyTemplateForm(true)}
-              className="self-start text-xs text-slate-500 hover:text-emerald-700 flex items-center gap-1.5 transition-colors"
-            >
-              <Icon icon="lucide:save" className="text-[13px]" />
-              {t('regulatoryUpdates.saveAsTemplate' as any)}
-            </button>
           )}
           <div className="flex justify-end gap-3">
             <Button variant="ghost" onClick={handleClose}>{t('common.cancel')}</Button>

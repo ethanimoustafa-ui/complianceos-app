@@ -34,7 +34,24 @@ export async function GET(req: NextRequest, { params }: Params) {
       .eq('policy_id', policyId)
       .order('timestamp', { ascending: false })
       .range(from, to)
-    if (error) throw error
+
+    // P11 (W30): PostgREST returns PGRST116 ("range not satisfiable") when the
+    // requested range is entirely beyond the available rows. Also handle
+    // message-based detection as the code varies across PostgREST versions.
+    // Treat this as an empty page — still return 200 with zero items so the
+    // client's Load More handler can see `hasMore: false` and stop paginating.
+    if (error) {
+      const code = (error as { code?: string }).code
+      const message = (error as { message?: string }).message ?? ''
+      const isOutOfRange =
+        code === 'PGRST116' ||
+        message.includes('range not satisfiable') ||
+        message.includes('Requested range not satisfiable')
+      if (isOutOfRange) {
+        return ok(paginate([], page, pageSize, count ?? 0), { cache: 'no-store' })
+      }
+      throw error
+    }
 
     return ok(paginate(data ?? [], page, pageSize, count ?? 0), {
       cache: 'no-store',

@@ -147,6 +147,10 @@ export function PolicyDetailsContent({
   // the detail GET hasn't resolved yet. Show skeletons in description/detail sections.
   const isDetailPrefetch = !fresh.description && fresh.workflowTimeline.length === 0 && !fresh.activityLog
 
+  // P1 (W30): archived policies are strictly view-only — hide every mutation
+  // affordance (upload zone, edit button, workflow actions, etc.).
+  const isArchived = !!fresh.archivedAt
+
   // W18-cleanup — every enum chip below routes through `src/lib/format/enum.ts`.
   // The per-component label maps that used to live here were removed in favour
   // of the shared formatter so EN/AR copy lives in the dictionaries once.
@@ -424,6 +428,7 @@ export function PolicyDetailsContent({
       user: actingUser,
     }
     update(fresh.id, { workflowTimeline: newTl, activityLog: [...(fresh.activityLog ?? []), actEntry] })
+    showToast(t('policies.emailSentToast'))
   }
 
   function handleRequestApproval() {
@@ -712,6 +717,12 @@ export function PolicyDetailsContent({
               <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-2 border-b border-slate-100 pb-2">
                 {t('policies.uploadDocument')}
               </h3>
+              {/* P9 (W30): skeleton while detail GET is in flight */}
+              {isDetailPrefetch ? (
+                <div className="space-y-2 mb-2">
+                  <Skeleton className="h-10 w-full rounded-xl" />
+                </div>
+              ) : null}
               <input
                 ref={docFileRef}
                 type="file"
@@ -757,16 +768,18 @@ export function PolicyDetailsContent({
                 </div>
               ))}
 
-              {/* Add document button */}
-              <button
-                onClick={() => docFileRef.current?.click()}
-                disabled={isUploadingDoc}
-                aria-busy={isUploadingDoc || undefined}
-                className="flex items-center gap-2 text-xs font-bold text-emerald-600 hover:text-emerald-700 px-3 py-2 rounded-lg border border-dashed border-emerald-200 hover:border-emerald-400 transition-colors w-full justify-center mt-1 disabled:opacity-60"
-              >
-                <Icon icon={isUploadingDoc ? 'lucide:loader-2' : 'lucide:plus'} className={`text-sm${isUploadingDoc ? ' animate-spin' : ''}`} />
-                {isUploadingDoc ? t('common.saving') : t('policies.uploadDocument')}
-              </button>
+              {/* Add document button — hidden for archived policies */}
+              {!isArchived && (
+                <button
+                  onClick={() => docFileRef.current?.click()}
+                  disabled={isUploadingDoc}
+                  aria-busy={isUploadingDoc || undefined}
+                  className="flex items-center gap-2 text-xs font-bold text-emerald-600 hover:text-emerald-700 px-3 py-2 rounded-lg border border-dashed border-emerald-200 hover:border-emerald-400 transition-colors w-full justify-center mt-1 disabled:opacity-60"
+                >
+                  <Icon icon={isUploadingDoc ? 'lucide:loader-2' : 'lucide:plus'} className={`text-sm${isUploadingDoc ? ' animate-spin' : ''}`} />
+                  {isUploadingDoc ? t('common.saving') : t('policies.uploadDocument')}
+                </button>
+              )}
             </section>
           </div>
         )}
@@ -779,13 +792,16 @@ export function PolicyDetailsContent({
                 <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest">
                   {t('policies.approvalWorkflow')}
                 </h3>
-                <button
-                  onClick={() => setShowAddStep((v) => !v)}
-                  className="flex items-center gap-1.5 text-xs font-bold text-emerald-600 hover:text-emerald-700 px-2.5 py-1.5 rounded-lg hover:bg-emerald-50 transition-colors cursor-pointer"
-                >
-                  <Icon icon={showAddStep ? 'lucide:x' : 'lucide:plus'} className="text-sm" />
-                  {showAddStep ? t('common.cancel') : t('policies.addWorkflowStep')}
-                </button>
+                {/* Add Workflow Step — hidden for archived policies */}
+                {!isArchived && (
+                  <button
+                    onClick={() => setShowAddStep((v) => !v)}
+                    className="flex items-center gap-1.5 text-xs font-bold text-emerald-600 hover:text-emerald-700 px-2.5 py-1.5 rounded-lg hover:bg-emerald-50 transition-colors cursor-pointer"
+                  >
+                    <Icon icon={showAddStep ? 'lucide:x' : 'lucide:plus'} className="text-sm" />
+                    {showAddStep ? t('common.cancel') : t('policies.addWorkflowStep')}
+                  </button>
+                )}
               </div>
 
               {/* Add step form */}
@@ -1121,7 +1137,15 @@ export function PolicyDetailsContent({
               )}
             </section>
 
-            {/* Policy Actions */}
+            {/* Policy Actions — hidden entirely for archived policies (P1 W30) */}
+            {isArchived ? (
+              <section className="pt-4 border-t border-slate-100">
+                <div className="flex items-center gap-2 px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg">
+                  <Icon icon="lucide:archive" className="text-slate-400 text-sm" />
+                  <span className="text-xs text-slate-500">{t('policies.archivePolicy')}</span>
+                </div>
+              </section>
+            ) : (
             <section className={cn('pt-4 border-t border-slate-100 space-y-2', dragIdx !== null && 'opacity-30 pointer-events-none')}>
               <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-3">
                 {t('policies.policyActions')}
@@ -1274,6 +1298,7 @@ export function PolicyDetailsContent({
                 </Button>
               )}
             </section>
+            )}
 
             {/* Evidence section */}
             <section className="pt-4 border-t border-slate-100">
@@ -1302,15 +1327,18 @@ export function PolicyDetailsContent({
                       </div>
                     </div>
                   )}
-                  <button
-                    onClick={() => evidenceFileRef.current?.click()}
-                    disabled={isUploadingEvidence}
-                    aria-busy={isUploadingEvidence || undefined}
-                    className="flex items-center gap-1 text-xs font-bold text-emerald-600 hover:text-emerald-700 px-2 py-1 rounded-lg hover:bg-emerald-50 transition-colors disabled:opacity-60"
-                  >
-                    <Icon icon={isUploadingEvidence ? 'lucide:loader-2' : 'lucide:plus'} className={`text-sm${isUploadingEvidence ? ' animate-spin' : ''}`} />
-                    {isUploadingEvidence ? t('common.saving') : t('policies.addEvidence')}
-                  </button>
+                  {/* Add Evidence — hidden for archived policies */}
+                  {!isArchived && (
+                    <button
+                      onClick={() => evidenceFileRef.current?.click()}
+                      disabled={isUploadingEvidence}
+                      aria-busy={isUploadingEvidence || undefined}
+                      className="flex items-center gap-1 text-xs font-bold text-emerald-600 hover:text-emerald-700 px-2 py-1 rounded-lg hover:bg-emerald-50 transition-colors disabled:opacity-60"
+                    >
+                      <Icon icon={isUploadingEvidence ? 'lucide:loader-2' : 'lucide:plus'} className={`text-sm${isUploadingEvidence ? ' animate-spin' : ''}`} />
+                      {isUploadingEvidence ? t('common.saving') : t('policies.addEvidence')}
+                    </button>
+                  )}
                 </div>
               </div>
               <input
@@ -1375,10 +1403,19 @@ export function PolicyDetailsContent({
                     <div className={`space-y-3 relative before:absolute before:start-2 before:top-2 before:bottom-2 before:w-0.5 before:bg-slate-100`}>
                       {visibleEntries.map((entry) => (
                         <div key={entry.id} className="relative ps-8">
+                          {/* P11 (W30): color-code activity dot by action type */}
                           <div className={cn(
                             'absolute start-0 top-1 w-4 h-4 rounded-full border-2',
-                            entry.type === 'workflow_approved' ? 'bg-emerald-100 border-emerald-500' :
-                            entry.type === 'document_removed' || entry.type === 'evidence_removed' || entry.type === 'step_reverted' || entry.type === 'step_denied' ? 'bg-rose-100 border-rose-400' :
+                            entry.type === 'workflow_approved' || entry.type === 'approval_step_committed' || entry.type === 'manager_approved'
+                              ? 'bg-emerald-100 border-emerald-500' :
+                            entry.type === 'document_removed' || entry.type === 'evidence_removed' || entry.type === 'step_reverted' || entry.type === 'step_denied' || entry.type === 'manager_rejected'
+                              ? 'bg-rose-100 border-rose-400' :
+                            entry.type === 'submitted_for_review' || entry.type === 'step_advanced' || entry.type === 'review_initiated'
+                              ? 'bg-blue-100 border-blue-400' :
+                            entry.type === 'edited' || entry.type === 'leader_changed' || entry.type === 'leader_assigned'
+                              ? 'bg-amber-100 border-amber-400' :
+                            entry.type === 'created'
+                              ? 'bg-violet-100 border-violet-400' :
                             'bg-slate-100 border-slate-400'
                           )} />
                           {/* Fix C — show only current language text */}
@@ -1508,16 +1545,19 @@ export function PolicyDetailsContent({
 
         {/* Actions */}
         <div className="space-y-2 pt-4 border-t border-slate-200">
-          <Button
-            variant="primary"
-            className="w-full"
-            onClick={onEditOpen}
-            disabled={!canApprovePolicy}
-            title={canApprovePolicy ? '' : t('rbac.deniedTooltip')}
-          >
-            <Icon icon="lucide:edit" className="w-4 h-4" />
-            {t('policies.editPolicy')}
-          </Button>
+          {/* P1 (W30): hide Edit Policy button for archived policies */}
+          {!isArchived && (
+            <Button
+              variant="primary"
+              className="w-full"
+              onClick={onEditOpen}
+              disabled={!canApprovePolicy}
+              title={canApprovePolicy ? '' : t('rbac.deniedTooltip')}
+            >
+              <Icon icon="lucide:edit" className="w-4 h-4" />
+              {t('policies.editPolicy')}
+            </Button>
+          )}
           {/* P6 (W29): use archivedAt (not status) to determine archive/unarchive state. */}
           {!fresh.archivedAt && (
             <Button variant="outline" className="w-full border-amber-200 text-amber-700 hover:bg-amber-50" onClick={onArchive}>

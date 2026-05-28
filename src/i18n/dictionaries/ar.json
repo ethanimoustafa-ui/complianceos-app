@@ -1263,6 +1263,7 @@
     "managerReceived": "تم الاستلام",
     "managerRejected": "رفض المدير",
     "managerReceivedToast": "تم تسجيل إقرار المدير",
+    "emailSentToast": "تم فتح إشعار البريد الإلكتروني",
     "managerNotifiedToast": "تم إشعار المدير {{name}}",
     "unarchivePolicy": "استعادة السياسة",
     "unarchivedToast": "تمت استعادة السياسة بنجاح",

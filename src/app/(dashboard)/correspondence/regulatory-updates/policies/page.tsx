@@ -63,6 +63,17 @@ export default function RegulatoryUpdatesPoliciesPage() {
   const policiesLastFetched = usePolicyStore((s) => s.lastFetched)
   const showPoliciesSkeleton =
     policiesLoading && policies.length === 0 && policiesLastFetched === null
+
+  // P2 (W30): skeleton on filter-chip switch.
+  // Track whether a filter-triggered refetch is in flight so the list shows
+  // skeleton rows instead of flashing the stale dataset between fetch start
+  // and completion.
+  const [isFilterRefetching, setIsFilterRefetching] = useState(false)
+  const showFilterSkeleton = isFilterRefetching && policiesLoading
+  // Clear the filter-refetching flag once the store settles (isLoading → false).
+  useEffect(() => {
+    if (!policiesLoading) setIsFilterRefetching(false)
+  }, [policiesLoading])
   const { user: currentUser } = useAuthStore()
 
   // Pre-warm the dependent stores so the modals (templates, categories,
@@ -276,7 +287,7 @@ export default function RegulatoryUpdatesPoliciesPage() {
           {(['active', 'archived', 'all'] as const).map((f) => (
             <button
               key={f}
-              onClick={() => { setArchiveFilter(f); fetchAllPolicies(true) }}
+              onClick={() => { setArchiveFilter(f); setIsFilterRefetching(true); fetchAllPolicies(true) }}
               className={cn(
                 'px-3 py-1 rounded-lg text-xs font-bold transition-colors border',
                 archiveFilter === f
@@ -315,7 +326,7 @@ export default function RegulatoryUpdatesPoliciesPage() {
         />
 
         {/* Policy Cards */}
-        {showPoliciesSkeleton ? (
+        {showPoliciesSkeleton || showFilterSkeleton ? (
           <CardSkeleton count={4} className="grid-cols-1" />
         ) : filteredPolicies.length === 0 ? (
           (policySearchQuery || policyCategoryFilter !== 'all' || policyStatusFilter !== 'all' || archiveFilter !== 'active') ? (

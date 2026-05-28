@@ -68,6 +68,16 @@ function checkTrue(label: string, actual: boolean, detail?: string): boolean {
 
 interface PolicyRow { id: string; archived_at?: string | null }
 
+function extractItems(data: unknown): PolicyRow[] {
+  if (!data || typeof data !== 'object') return []
+  // Paginated envelope: { items: [...], page, total, ... }
+  const d = data as Record<string, unknown>
+  if (Array.isArray(d.items)) return d.items as PolicyRow[]
+  // Legacy flat array
+  if (Array.isArray(data)) return data as PolicyRow[]
+  return []
+}
+
 async function main(): Promise<void> {
   console.log(`policy-archive-filter probe at ${BASE}\n`)
   const results: boolean[] = []
@@ -120,7 +130,7 @@ async function main(): Promise<void> {
   console.log('\n[3] GET ?archive_filter=active')
   const activeRes = await http<PolicyRow[]>(`/api/policies?archive_filter=active`)
   results.push(check('GET ?archive_filter=active → 200', 200, activeRes.status))
-  const activeRows = Array.isArray(activeRes.body.data) ? activeRes.body.data : []
+  const activeRows = extractItems(activeRes.body.data)
   results.push(checkTrue('B in active list', activeRows.some((r) => r.id === idB)))
   results.push(checkTrue('A NOT in active list (archived)', !activeRows.some((r) => r.id === idA)))
 
@@ -128,7 +138,7 @@ async function main(): Promise<void> {
   console.log('\n[4] GET ?archive_filter=archived')
   const archivedRes = await http<PolicyRow[]>(`/api/policies?archive_filter=archived`)
   results.push(check('GET ?archive_filter=archived → 200', 200, archivedRes.status))
-  const archivedRows = Array.isArray(archivedRes.body.data) ? archivedRes.body.data : []
+  const archivedRows = extractItems(archivedRes.body.data)
   results.push(checkTrue('A in archived list', archivedRows.some((r) => r.id === idA)))
   results.push(checkTrue('B NOT in archived list', !archivedRows.some((r) => r.id === idB)))
 
@@ -136,7 +146,7 @@ async function main(): Promise<void> {
   console.log('\n[5] GET ?archive_filter=all')
   const allRes = await http<PolicyRow[]>(`/api/policies?archive_filter=all`)
   results.push(check('GET ?archive_filter=all → 200', 200, allRes.status))
-  const allRows = Array.isArray(allRes.body.data) ? allRes.body.data : []
+  const allRows = extractItems(allRes.body.data)
   results.push(checkTrue('A in all list', allRows.some((r) => r.id === idA)))
   results.push(checkTrue('B in all list', allRows.some((r) => r.id === idB)))
 
@@ -151,7 +161,7 @@ async function main(): Promise<void> {
   // 7. GET ?archive_filter=active — A is back
   console.log('\n[7] GET ?archive_filter=active after unarchive')
   const activeRes2 = await http<PolicyRow[]>(`/api/policies?archive_filter=active`)
-  const activeRows2 = Array.isArray(activeRes2.body.data) ? activeRes2.body.data : []
+  const activeRows2 = extractItems(activeRes2.body.data)
   results.push(checkTrue('A back in active list after unarchive', activeRows2.some((r) => r.id === idA)))
 
   // 8. GET detail of A — archived_at is null
