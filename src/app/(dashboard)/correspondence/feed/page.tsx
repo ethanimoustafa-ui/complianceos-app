@@ -92,6 +92,10 @@ export default function CorrespondenceFeedPage() {
   const isCircularsLoading = circularStore.isLoading && circularStore.circulars.length === 0
   const isTeamLoading = teamStore.isLoading && teamStore.members.length === 0
 
+  // W29.3-R1: framework list needed to resolve letter authority codes/names so
+  // we never surface a raw UUID in the Upcoming Submission chip.
+  const frameworks = useFrameworkConfigStore((s) => s.frameworks)
+
   // Correspondence type store — seeded with the legacy literal union, but
   // user-added types persist and round-trip via the widened Correspondence.type.
   const correspondenceTypes = useCorrespondenceTypeStore((s) => s.types)
@@ -297,14 +301,23 @@ export default function CorrespondenceFeedPage() {
         dueDate: c.dueDate, source: 'registry'
       }))
 
-    // Letters (responseDeadline) — kept legacy `source: 'sama-letter'` for routing back-compat
+    // Letters (responseDeadline) — kept legacy `source: 'sama-letter'` for routing back-compat.
+    // W29.3-R1: resolve authority via resolveAuthorityCode so orphaned FK UUIDs
+    // (no matching framework entry) are suppressed to undefined rather than
+    // surfaced as a raw UUID in the chip. UUID regex matches the raw DB id shape.
+    const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
     letterStore.letters
       .filter(l => l.responseDeadline && new Date(l.responseDeadline) > now && l.status !== 'response-received')
-      .forEach(l => items.push({
-        id: l.id, name: l.subject, subtitle: l.type,
-        dueDate: l.responseDeadline!, source: 'sama-letter',
-        authority: l.authority,
-      }))
+      .forEach(l => {
+        const resolved = resolveAuthorityCode(l.authority, frameworks)
+        // If the resolved value is still a raw UUID (no framework matched), suppress it.
+        const safeAuthority = resolved && !UUID_RE.test(resolved) ? resolved : undefined
+        items.push({
+          id: l.id, name: l.subject, subtitle: l.type,
+          dueDate: l.responseDeadline!, source: 'sama-letter',
+          authority: safeAuthority,
+        })
+      })
 
     // Observations (dueDate)
     observationStore.observations
@@ -315,7 +328,7 @@ export default function CorrespondenceFeedPage() {
       }))
 
     return items.sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime()).slice(0, 3)
-  }, [circularStore.circulars, letterStore.letters, observationStore.observations])
+  }, [circularStore.circulars, letterStore.letters, observationStore.observations, frameworks])
 
   // Next policy review
   const nextPolicyReview = useMemo(() => {
@@ -911,7 +924,7 @@ export default function CorrespondenceFeedPage() {
                               <p className="text-xs text-slate-500 mt-0.5">{item.subtitle}</p>
                             </div>
                             <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full shrink-0 ${sourceChip[item.source]}`}>
-                              {item.source === 'registry' ? 'Registry' : item.source === 'sama-letter' ? (item.authority || 'Letter') : 'Obs'}
+                              {item.source === 'registry' ? 'Registry' : item.source === 'sama-letter' ? (item.authority || '—') : 'Obs'}
                             </span>
                           </div>
                           <div className={`flex items-center justify-between mt-3 pt-3 border-t border-slate-100`}>
