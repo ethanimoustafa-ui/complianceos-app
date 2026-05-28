@@ -293,27 +293,34 @@ export default function CorrespondenceFeedPage() {
     const now = new Date()
     const items: UpcomingItem[] = []
 
+    // W29.4-R1: defensive UUID-leak guard for both the chip (item.authority)
+    // and the subtitle line. Orphaned FK rows (e.g. letters.type pointing at
+    // a deleted enum_value, circulars.authority pointing at a deleted
+    // framework) would otherwise leak the raw UUID into the user-visible chip
+    // or subtitle. The actual leak Hani saw on the "test" letter was on
+    // `letters.type`, not `letters.authority` — W29.3 fixed the wrong field.
+    const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+    const sanitize = (value: string | null | undefined): string => {
+      if (!value) return '—'
+      return UUID_RE.test(value) ? '—' : value
+    }
+
     // Circulars (dueDate)
     circularStore.circulars
       .filter(c => c.status !== 'completed' && c.dueDate && new Date(c.dueDate) > now)
       .forEach(c => items.push({
-        id: c.id, name: c.title, subtitle: c.authority,
+        id: c.id, name: c.title, subtitle: sanitize(c.authority),
         dueDate: c.dueDate, source: 'registry'
       }))
 
     // Letters (responseDeadline) — kept legacy `source: 'sama-letter'` for routing back-compat.
-    // W29.3-R1: resolve authority via resolveAuthorityCode so orphaned FK UUIDs
-    // (no matching framework entry) are suppressed to undefined rather than
-    // surfaced as a raw UUID in the chip. UUID regex matches the raw DB id shape.
-    const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
     letterStore.letters
       .filter(l => l.responseDeadline && new Date(l.responseDeadline) > now && l.status !== 'response-received')
       .forEach(l => {
         const resolved = resolveAuthorityCode(l.authority, frameworks)
-        // If the resolved value is still a raw UUID (no framework matched), suppress it.
         const safeAuthority = resolved && !UUID_RE.test(resolved) ? resolved : undefined
         items.push({
-          id: l.id, name: l.subject, subtitle: l.type,
+          id: l.id, name: l.subject, subtitle: sanitize(l.type),
           dueDate: l.responseDeadline!, source: 'sama-letter',
           authority: safeAuthority,
         })
@@ -323,7 +330,7 @@ export default function CorrespondenceFeedPage() {
     observationStore.observations
       .filter(o => !['resolved', 'closed'].includes(o.status) && new Date(o.dueDate) > now)
       .forEach(o => items.push({
-        id: o.id, name: o.title, subtitle: o.source,
+        id: o.id, name: o.title, subtitle: sanitize(o.source),
         dueDate: o.dueDate, source: 'observation'
       }))
 
