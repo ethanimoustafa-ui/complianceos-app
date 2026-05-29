@@ -10,10 +10,12 @@
 import type { NextRequest } from 'next/server'
 import { z } from 'zod'
 import { requireUser } from '@/lib/api/auth'
+import { hasServiceRole, getAdminClient } from '@/lib/api/admin'
 import { handle } from '@/lib/api/errors'
 import { ok } from '@/lib/api/response'
 import { parseJson } from '@/lib/api/validate'
 import { TEMPLATE_KEYS } from '@/lib/pdf/render'
+import { runPdfGenerateJob, type PdfJobPayload } from '@/lib/pdf/run-job'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -59,6 +61,28 @@ export async function POST(req: NextRequest) {
       .single<{ id: string }>()
 
     if (error || !job) throw error ?? new Error('failed to enqueue pdf job')
+
+    // W34-2 — on Vercel the cron worker (/api/cron/jobs-run, every minute)
+    // renders the job. On localhost that cron never fires, so the job sat
+    // `queued` and the client's pollJob timed out after 60s. When NOT running
+    // on Vercel (local dev / `next start`), process the job inline now so it is
+    // `done` by the time the client polls. Requires the service-role key (same
+    // as the cron worker); if absent we leave it queued (no regression).
+    if (!process.env.VERCEL && hasServiceRole()) {
+      try {
+        await runPdfGenerateJob(job.id, payload as PdfJobPayload)
+      } catch (e) {
+        // Mark the job failed so pollJob returns a clean terminal error in a
+        // couple of seconds instead of hanging until the 60s timeout.
+        const message = e instanceof Error ? e.message : 'pdf render failed'
+        await getAdminClient()
+          .from('jobs')
+          .update({ status: 'failed', error: message })
+          .eq('id', job.id)
+        // eslint-disable-next-line no-console
+        console.error(`[pdf/generate] inline render failed for job ${job.id}:`, e)
+      }
+    }
 
     return ok({ jobId: job.id }, { status: 202 })
   } catch (e) {

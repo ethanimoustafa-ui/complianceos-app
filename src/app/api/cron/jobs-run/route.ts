@@ -15,9 +15,7 @@
 import type { NextRequest } from 'next/server'
 import { NextResponse } from 'next/server'
 import { getAdminClient, hasServiceRole } from '@/lib/api/admin'
-import { renderPdf, isTemplateKey } from '@/lib/pdf/render'
-import type { Locale } from '@/lib/pdf/base'
-import type { TemplateOptions } from '@/lib/pdf/types'
+import { runPdfGenerateJob, type PdfJobPayload } from '@/lib/pdf/run-job'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -130,57 +128,9 @@ async function run(req: NextRequest) {
 async function dispatch(job: JobRow): Promise<void> {
   switch (job.kind) {
     case 'pdf.generate':
-      return runPdfGenerate(job)
+      // Shared with the /api/pdf/generate dev-inline path (src/lib/pdf/run-job).
+      return runPdfGenerateJob(job.id, job.payload as unknown as PdfJobPayload)
     default:
       throw new Error(`Unknown job kind: ${job.kind}`)
   }
-}
-
-interface PdfJobPayload {
-  template: string
-  data: unknown
-  locale?: Locale
-  options?: TemplateOptions
-  requested_by?: string
-}
-
-async function runPdfGenerate(job: JobRow): Promise<void> {
-  const payload = job.payload as unknown as PdfJobPayload
-  if (!payload?.template || !isTemplateKey(payload.template)) {
-    throw new Error(`pdf.generate: invalid template '${payload?.template}'`)
-  }
-
-  const { buffer, filename } = await renderPdf({
-    template: payload.template,
-    data: payload.data,
-    locale: payload.locale ?? 'en',
-    options: payload.options,
-  })
-
-  const admin = getAdminClient()
-  const storagePath = `${job.id}.pdf`
-  const upload = await admin.storage
-    .from('pdf-renders')
-    .upload(storagePath, buffer, {
-      contentType: 'application/pdf',
-      upsert: true,
-    })
-  if (upload.error) throw upload.error
-
-  // Merge result_meta into payload (preserve original payload).
-  const updatedPayload = {
-    ...payload,
-    result_meta: { storage_path: storagePath, filename, template: payload.template },
-  }
-
-  const { error: updateErr } = await admin
-    .from('jobs')
-    .update({
-      status: 'done',
-      completed_at: new Date().toISOString(),
-      payload: updatedPayload,
-      error: null,
-    })
-    .eq('id', job.id)
-  if (updateErr) throw updateErr
 }

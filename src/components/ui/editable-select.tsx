@@ -131,8 +131,11 @@ export function EditableSelect({
   // Caller may override the placeholder; otherwise use the localized default.
   const effectivePlaceholder = placeholder ?? t('editableSelect.selectPlaceholder')
 
-  // L4: auto-open on first render when requested (inline-edit pattern).
-  useEffect(() => {
+  // L4 / W34-1: auto-open on first render when requested (inline-edit pattern).
+  // useLayoutEffect (not useEffect) so `open` flips to true synchronously after
+  // mount — before paint — eliminating the one-frame window where the trigger
+  // is mounted but the listbox is still closed.
+  useLayoutEffect(() => {
     if (autoOpen) setOpen(true)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -164,7 +167,16 @@ export function EditableSelect({
 
   useEffect(() => {
     if (!open) return
+    // W34-1: the interaction that OPENS this dropdown often originates outside
+    // rootRef (an inline-edit trigger in the parent that swaps itself for this
+    // component with autoOpen). That opening gesture's `mousedown` can reach
+    // this just-registered handler and immediately close the listbox — the
+    // "needs two clicks" bug. Ignore outside mousedowns for a short grace window
+    // after open so the opening gesture can't self-close; genuine outside clicks
+    // (well after open) still dismiss it.
+    const openedAt = Date.now()
     const handler = (e: MouseEvent) => {
+      if (Date.now() - openedAt < 250) return
       const target = e.target as Node
       // Close if the click is outside BOTH the trigger root AND the portal panel.
       const insideTrigger = rootRef.current?.contains(target) ?? false
