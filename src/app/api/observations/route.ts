@@ -7,6 +7,7 @@
 
 import type { NextRequest } from 'next/server'
 import { requirePerm, requireUser } from '@/lib/api/auth'
+import { getAdminClient, hasServiceRole } from '@/lib/api/admin'
 import { handle } from '@/lib/api/errors'
 import { ok, paginate } from '@/lib/api/response'
 import { parseJson, parseQuery } from '@/lib/api/validate'
@@ -105,26 +106,42 @@ export async function POST(req: NextRequest) {
       framework_ids: input.framework_ids ?? [],
     }
 
+    // W33-1 — reference-generation hardening.
+    //
+    // The reference UNIQUE index is global, but the observations SELECT RLS
+    // policy filters `deleted_at IS NULL`. Reading the max reference with the
+    // user's RLS client therefore misses SOFT-DELETED rows, so the computed
+    // sequence collides with a deleted row's reference (23505) and — because
+    // every retry recomputed the SAME max — all 8 attempts failed → 500.
+    // Fix: (1) read the max with the service-role client (when available) so
+    // soft-deleted references are visible (mirrors services/advisory.ts), and
+    // (2) parse the numeric max across ALL references (ignoring malformed tails
+    // like 'D00001') and ADVANCE the sequence on each retry instead of
+    // recomputing it. Insert still goes through the user's RLS client.
+    const refReadClient = hasServiceRole() ? getAdminClient() : supabase
+    const { data: existingRefs, error: refReadErr } = await refReadClient
+      .from('observations')
+      .select('reference')
+      .ilike('reference', `${obsPrefix}%`)
+    if (refReadErr) throw refReadErr
+    let maxSeq = 0
+    for (const row of (existingRefs ?? []) as { reference: string | null }[]) {
+      const tail = (row.reference ?? '').slice(obsPrefix.length)
+      if (/^\d+$/.test(tail)) {
+        const n = Number(tail)
+        if (Number.isFinite(n) && n > maxSeq) maxSeq = n
+      }
+    }
+
     let data: { id: string; reference: string } | null = null
     let lastInsertError: unknown = null
     for (let attempt = 0; attempt < 8; attempt++) {
       if (attempt > 0) {
         await new Promise((r) => setTimeout(r, 10 + Math.floor(Math.random() * 50)))
       }
-      // Read the current max to compute next seq.
-      const { data: maxRow } = await supabase
-        .from('observations')
-        .select('reference')
-        .ilike('reference', `${obsPrefix}%`)
-        .order('reference', { ascending: false })
-        .limit(1)
-        .maybeSingle<{ reference: string }>()
-      let obsSeq = 1
-      if (maxRow?.reference) {
-        const tail = maxRow.reference.slice(obsPrefix.length)
-        const n = Number(tail)
-        if (Number.isFinite(n) && n >= 1) obsSeq = n + 1
-      }
+      // Advance the sequence every attempt so a collision (concurrent peer or a
+      // gap from a deleted row) is skipped rather than retried identically.
+      const obsSeq = maxSeq + 1 + attempt
       const obsRef = `${obsPrefix}${String(obsSeq).padStart(5, '0')}`
       const { data: inserted, error: insertErr } = await supabase
         .from('observations')
