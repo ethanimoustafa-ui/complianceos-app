@@ -487,8 +487,12 @@ export function PolicyDetailsContent({
         activityLog: [...(fresh.activityLog ?? []), actEntry],
       })
       // P1 (W29): persist step completion to server. Fire-and-forget (toast on error).
+      // W31 (P6.2): always 'approve' — this path completes the current step and
+      // advances. The server derives final-vs-intermediate from the remaining
+      // pending steps. ('submit-for-review' is reserved for the request-review
+      // flow below, which must NOT advance the cursor.)
       void advanceWorkflowStep(fresh.id, {
-        action: allDone ? 'approve' : 'submit-for-review',
+        action: 'approve',
         stepId: currentStep?.id,
         note,
         userName: actingUser,
@@ -598,19 +602,42 @@ export function PolicyDetailsContent({
       update(fresh.id, { workflowTimeline: newTl, activityLog: [...(fresh.activityLog ?? []), actEntry] })
 
     } else if (notePromptFor === 'initiate') {
-      const reset = tl.map(s =>
-        s.status === 'current' ? { ...s, status: 'completed' as const, date: today } : s
+      // W31 (P6.3): start the FIRST existing step — never append a transient
+      // "Review Initiated" row (it had no DB row and vanished on refetch,
+      // glitching the timeline). Mirror the server: reset every step to pending
+      // (clear prior date/user/note/stepState), then put step 1 into 'current'
+      // with the step_state derived from its action type.
+      const cleared = tl.map(s => ({
+        ...s,
+        status: 'pending' as const,
+        stepState: undefined,
+        date: '',
+        user: '',
+        note: undefined,
+      }))
+      const firstAutoState =
+        cleared.length > 0
+          ? (cleared[0].actionType === 'request-approval' || cleared[0].actionType === 'send-for-review'
+              ? 'pending-approval' as const
+              : cleared[0].actionType === 'send-email' ? 'awaiting-response' as const
+              : cleared[0].actionType === 'notify-manager' ? 'awaiting-manager' as const
+              : undefined)
+          : undefined
+      const newTl = cleared.map((s, i) =>
+        i === 0
+          ? { ...s, status: 'current' as const, ...(firstAutoState ? { stepState: firstAutoState } : {}) }
+          : s
       )
       const actEntry: PolicyActivityEntry = {
         id: Date.now().toString(), timestamp: new Date().toISOString(), date: today,
-        type: 'step_advanced',
+        type: 'review_initiated',
         textEn: 'Review cycle initiated',
         textAr: 'تم بدء دورة المراجعة',
         user: actingUser, note,
       }
       update(fresh.id, {
-        status: 'draft',
-        workflowTimeline: [...reset, { step: 'Review Initiated', date: today, user: actingUser, status: 'current', note }],
+        status: newTl.length > 0 ? 'under-review' : 'draft',
+        workflowTimeline: newTl,
         activityLog: [...(fresh.activityLog ?? []), actEntry],
       })
       // P1 (W29): persist initiate-review to server.
@@ -622,12 +649,15 @@ export function PolicyDetailsContent({
       if (lastCompleted === -1) { closePrompt(); return }
       const realIdx = tl.length - 1 - lastCompleted
       const revertedStepId = tl[realIdx]?.id
+      // W31 (P6.1): mirror the server undo exactly — demote the current step to
+      // pending and revert the last-completed step to current, clearing its
+      // date/user/note/stepState (the server NULLs them). Prevents a flicker
+      // between this optimistic state and the post-undo fetchById reconcile.
       const newTl = tl.map((s, i) => {
-        if (i === realIdx) return { ...s, status: 'current' as const, date: '', note, stepState: undefined }
+        if (i === realIdx) return { ...s, status: 'current' as const, date: '', user: '', note: undefined, stepState: undefined }
         if (s.status === 'current') return { ...s, status: 'pending' as const, stepState: undefined }
         return s
       })
-      const anyCompleted = newTl.some(s => s.status === 'completed')
       const actEntry: PolicyActivityEntry = {
         id: Date.now().toString(), timestamp: new Date().toISOString(), date: today,
         type: 'step_reverted',
@@ -636,7 +666,9 @@ export function PolicyDetailsContent({
         user: actingUser, note,
       }
       update(fresh.id, {
-        status: anyCompleted ? 'under-review' : 'draft',
+        // W31 (P6.1): undo always leaves a 'current' step → stay under-review
+        // (matches the server; avoids landing on the gated draft action).
+        status: 'under-review',
         workflowTimeline: newTl,
         activityLog: [...(fresh.activityLog ?? []), actEntry],
       })
@@ -1408,7 +1440,7 @@ export function PolicyDetailsContent({
                             'absolute start-0 top-1 w-4 h-4 rounded-full border-2',
                             entry.type === 'workflow_approved' || entry.type === 'approval_step_committed' || entry.type === 'manager_approved'
                               ? 'bg-emerald-100 border-emerald-500' :
-                            entry.type === 'document_removed' || entry.type === 'evidence_removed' || entry.type === 'step_reverted' || entry.type === 'step_denied' || entry.type === 'manager_rejected'
+                            entry.type === 'document_removed' || entry.type === 'evidence_removed' || entry.type === 'step_reverted' || entry.type === 'workflow_undone' || entry.type === 'step_denied' || entry.type === 'manager_rejected'
                               ? 'bg-rose-100 border-rose-400' :
                             entry.type === 'submitted_for_review' || entry.type === 'step_advanced' || entry.type === 'review_initiated'
                               ? 'bg-blue-100 border-blue-400' :
@@ -1505,11 +1537,11 @@ export function PolicyDetailsContent({
       {/* ── Right panel ───────────────────────────────────────────────── */}
       <div className={`w-full md:w-72 bg-slate-50 -mx-6 -mb-4 md:mx-0 md:mb-0 p-6 md:rounded-xl space-y-6`}>
         {/* Policy Leader (person responsible for follow-up) — Wave-19.3 */}
-        <PolicyLeaderSection policy={fresh} t={t} />
+        <PolicyLeaderSection policy={fresh} t={t} readOnly={isArchived} />
 
 
         {/* Policy Owner (Business Owner — department responsible for compliance) */}
-        <PolicyBusinessOwnerSection policy={fresh} t={t} />
+        <PolicyBusinessOwnerSection policy={fresh} t={t} readOnly={isArchived} />
 
 
         {/* Approval tier */}
@@ -1584,7 +1616,7 @@ export function PolicyDetailsContent({
   )
 }
 
-function PolicyBusinessOwnerSection({ policy, t }: { policy: Policy; t: (key: any, params?: Record<string, string>) => string }) {
+function PolicyBusinessOwnerSection({ policy, t, readOnly = false }: { policy: Policy; t: (key: any, params?: Record<string, string>) => string; readOnly?: boolean }) {
   const { departments, addDepartment, updateDepartment, removeDepartment } = useDepartmentStore()
   const { update } = usePolicyStore()
   const dept = departments.find((d) => d.id === policy.businessOwnerDepartmentId)
@@ -1594,6 +1626,10 @@ function PolicyBusinessOwnerSection({ policy, t }: { policy: Policy; t: (key: an
         {t('policies.policyOwner')}{' '}
         <span className="text-slate-300 font-normal normal-case text-[10px]">— {t('policies.businessOwnerHint')}</span>
       </h3>
+      {/* P1 cosmetic (W31): archived → plain text, not a clickable dropdown button. */}
+      {readOnly ? (
+        <p className="text-sm font-bold text-slate-700">{dept?.name ?? '—'}</p>
+      ) : (
       <EditableSelect
         value={policy.businessOwnerDepartmentId ?? null}
         onChange={(id) => update(policy.id, { businessOwnerDepartmentId: id || undefined })}
@@ -1603,6 +1639,7 @@ function PolicyBusinessOwnerSection({ policy, t }: { policy: Policy; t: (key: an
         onEdit={(id, label, labelAr) => updateDepartment(id, { name: label, nameAr: labelAr ?? label })}
         onDelete={(id) => removeDepartment(id)}
       />
+      )}
       {dept && (
         <p className="text-[10px] text-slate-400 mt-2">
           {t('policies.businessOwnerExplain')}
@@ -1627,9 +1664,11 @@ function PolicyBusinessOwnerSection({ policy, t }: { policy: Policy; t: (key: an
 function PolicyLeaderSection({
   policy,
   t,
+  readOnly = false,
 }: {
   policy: Policy
   t: (key: any, params?: Record<string, string>) => string
+  readOnly?: boolean
 }) {
   const members = useTeamStore((s) => s.members)
   const fetchTeam = useTeamStore((s) => s.fetchAll)
@@ -1667,17 +1706,21 @@ function PolicyLeaderSection({
           </p>
         </div>
       </div>
-      <EditableSelect
-        value={selectedId}
-        onChange={(id) => {
-          const m = members.find((mm) => mm.id === id)
-          if (!m) return
-          updateLeader(policy.id, m.id, m.name, m.department ?? null)
-        }}
-        items={members.map((m) => ({ id: m.id, label: m.name }))}
-        placeholder={t('policies.policyLeader')}
-        mode="labels-only"
-      />
+      {/* P1 cosmetic (W31): archived → the name above is the read-only display;
+          drop the clickable picker so there's no misleading edit affordance. */}
+      {!readOnly && (
+        <EditableSelect
+          value={selectedId}
+          onChange={(id) => {
+            const m = members.find((mm) => mm.id === id)
+            if (!m) return
+            updateLeader(policy.id, m.id, m.name, m.department ?? null)
+          }}
+          items={members.map((m) => ({ id: m.id, label: m.name }))}
+          placeholder={t('policies.policyLeader')}
+          mode="labels-only"
+        />
+      )}
     </div>
   )
 }

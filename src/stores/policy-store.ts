@@ -1285,16 +1285,31 @@ export const usePolicyStore = create<PolicyStoreState>()((set, get) => ({
       reviewCycleId,
       reviewCycleLabel,
     }
-    const applyToState = (policy: Policy | undefined, evs: PolicyEvidence[]) => {
+    // P7-residual-a (W31): if the policy has no open review cycle yet, the first
+    // upload must also pin currentReviewCycleId locally — the server (P10) pins
+    // it to this same cycle, but the client never learned about it, so the
+    // "Current Review" filter (e.reviewCycleId === currentReviewCycleId) hid the
+    // very first evidence row. Pinning here makes it render immediately.
+    const pinCycle = !previous.currentReviewCycleId
+    const applyToState = (
+      policy: Policy | undefined,
+      evs: PolicyEvidence[],
+      cycle: { id: string | null; label: string | null } | undefined,
+    ) => {
       if (!policy) return
-      const next: Policy = { ...policy, evidence: evs }
+      const next: Policy = {
+        ...policy,
+        evidence: evs,
+        ...(cycle ? { currentReviewCycleId: cycle.id ?? undefined, currentReviewCycleLabel: cycle.label ?? undefined } : {}),
+      }
       set((s) => ({
         policies: s.policies.map((p) => (p.id === policyId ? next : p)),
         byId: { ...s.byId, [policyId]: next },
         selectedPolicy: s.selectedPolicy?.id === policyId ? next : s.selectedPolicy,
       }))
     }
-    applyToState(previous, [optimistic, ...(previous.evidence ?? [])])
+    const cyclePatch = pinCycle ? { id: reviewCycleId, label: reviewCycleLabel } : undefined
+    applyToState(previous, [optimistic, ...(previous.evidence ?? [])], cyclePatch)
     try {
       const apiId = previous.uuid ?? policyId
       const row = await api.post<PolicyEvidenceApiRow>(
@@ -1311,10 +1326,15 @@ export const usePolicyStore = create<PolicyStoreState>()((set, get) => ({
       applyToState(
         current,
         (current.evidence ?? []).map((e) => (e.id === tempId ? real : e)),
+        pinCycle ? { id: real.reviewCycleId, label: real.reviewCycleLabel } : undefined,
       )
     } catch (e) {
-      // Roll back on failure
-      applyToState(get().byId[policyId] ?? previous, (previous.evidence ?? []))
+      // Roll back on failure — also restore the prior (unpinned) cycle.
+      applyToState(
+        get().byId[policyId] ?? previous,
+        previous.evidence ?? [],
+        pinCycle ? { id: previous.currentReviewCycleId ?? null, label: previous.currentReviewCycleLabel ?? null } : undefined,
+      )
       pushToast(revertMessage(e), 'error')
       // eslint-disable-next-line no-console
       console.error('[addEvidence] failed —', e)
