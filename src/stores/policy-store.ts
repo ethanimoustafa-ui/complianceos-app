@@ -147,6 +147,8 @@ interface PolicyVersionApiRow {
   author: string | null
   text_en: string
   text_ar: string
+  // GAP-19 / W18 — structured per-field diff (migration 054); null on older rows.
+  field_changes?: { field: string; from: string; to: string }[] | null
 }
 
 interface PolicyWorkflowStepApiRow {
@@ -211,6 +213,11 @@ function mapPolicyVersionRow(row: PolicyVersionApiRow): PolicyVersionEntry {
     // Wave-19.4 / Item-3 — dual-store. Reader picks per-locale at render time.
     textEn: row.text_en ?? '',
     textAr: row.text_ar ?? '',
+    // W32-4 — carry the structured diff so the Version-History expanded panel
+    // can render Field / From / To (was dropped → panel showed only metadata).
+    fieldChanges: Array.isArray(row.field_changes)
+      ? row.field_changes.map((c) => ({ field: c.field, from: c.from ?? '', to: c.to ?? '' }))
+      : [],
   }
 }
 

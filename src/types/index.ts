@@ -776,7 +776,7 @@ export type PolicyApprovalTier = 'board' | 'management' | 'managerial' | 'sharia
 // Wave-19.4 / Item-3 — dual-store: `textEn` + `textAr` replace the
 // single-language `changes` string (migration 057). The reader picks the
 // locale-matching column at render time.
-export interface PolicyVersionEntry { version: string; date: string; author: string; textEn: string; textAr: string }
+export interface PolicyVersionEntry { version: string; date: string; author: string; textEn: string; textAr: string; fieldChanges?: VersionFieldChange[] }
 export interface PolicyWorkflowStep {
   // P1-fix: server-issued UUID; undefined for optimistic-only rows added
   // before the POST /workflow/steps response arrives.

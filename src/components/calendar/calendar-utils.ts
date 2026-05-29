@@ -128,6 +128,17 @@ export function getHijriMonthsFull(t: (key: TranslationKey) => string): string[]
 
 export const DAYS_SAUDI = ['Sat', 'Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri']
 
+// W32-2: localized day-of-week column headers (Saudi week order, Sat-first).
+// The static DAYS_SAUDI above stays English; use this for any locale-aware UI.
+export function getDaysSaudi(t: (key: TranslationKey) => string): string[] {
+  return [
+    t('calendar.daysShort.sat' as TranslationKey), t('calendar.daysShort.sun' as TranslationKey),
+    t('calendar.daysShort.mon' as TranslationKey), t('calendar.daysShort.tue' as TranslationKey),
+    t('calendar.daysShort.wed' as TranslationKey), t('calendar.daysShort.thu' as TranslationKey),
+    t('calendar.daysShort.fri' as TranslationKey),
+  ]
+}
+
 export const SOURCE_COLORS: Record<CalendarSourceType, { bg: string; border: string; badge: string; text: string; dot: string }> = {
   audit:          { bg: 'bg-emerald-50', border: 'border-emerald-300', badge: 'bg-emerald-500', text: 'text-emerald-600', dot: 'bg-emerald-500' },
   observation:    { bg: 'bg-rose-50',    border: 'border-rose-300',    badge: 'bg-rose-500',    text: 'text-rose-600',    dot: 'bg-rose-500' },

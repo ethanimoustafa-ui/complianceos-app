@@ -60,7 +60,9 @@
     "filterAll": "الكل",
     "filterActive": "نشط",
     "filterArchived": "مؤرشف",
-    "archived": "مؤرشف"
+    "archived": "مؤرشف",
+    "notAvailable": "غير متاح",
+    "unknown": "غير معروف"
   },
   "navigation": {
     "dashboard": "لوحة التحكم",
@@ -378,7 +380,17 @@
     "startTime": "وقت البداية",
     "endTime": "وقت النهاية",
     "addNotesPlaceholder": "أضف ملاحظات...",
-    "markAsComplete": "تحديد كمكتمل"
+    "markAsComplete": "تحديد كمكتمل",
+    "deleteEventTitle": "حذف الحدث؟",
+    "daysShort": {
+      "sat": "السبت",
+      "sun": "الأحد",
+      "mon": "الإثنين",
+      "tue": "الثلاثاء",
+      "wed": "الأربعاء",
+      "thu": "الخميس",
+      "fri": "الجمعة"
+    }
   },
   "letters": {
     "title": "الخطابات",
@@ -583,7 +595,20 @@
     "smartPlaceholders": {
       "heading": "العناصر النائبة الذكية",
       "body": "أدرج رموز {{token}} (مثل {{candidate_name}}) في الموضوع أو النص. يظهر كل رمز أدناه — حدد نوعه (تاريخ أو مرجع وثيقة) حتى يرى المُعِدّون الحقل المناسب."
-    }
+    },
+    "responseSection": "الرد",
+    "sendFailed": "فشل وضع علامة على الخطاب كمُرسَل",
+    "reject": "رفض",
+    "noResponseNote": "لم يتم تسجيل ملاحظة رد.",
+    "noActivityYet": "لا يوجد نشاط بعد.",
+    "rejectLetter": "رفض الخطاب",
+    "rejectReasonRequired": "السبب مطلوب. سيتم تسجيله في سجل النشاط.",
+    "rejectReasonPlaceholder": "اذكر سبب الرفض…",
+    "rejectSuccess": "تم رفض الخطاب.",
+    "confirmReject": "تأكيد الرفض",
+    "responseNoteOptional": "يمكنك إضافة ملاحظة حول الرد المُستلَم (اختياري).",
+    "responseNotePlaceholder": "مثال: أقرّت ساما عبر البريد الإلكتروني في 28 مايو 2026",
+    "responseReceivedSuccess": "تم وضع علامة على الرد كمُستلَم."
   },
   "observations": {
     "observation": "الملاحظة",
@@ -1293,7 +1318,8 @@
     "stepDPOReview": "مراجعة مسؤول حماية البيانات",
     "stepManagementReview": "مراجعة الإدارة",
     "stepRiskReview": "مراجعة المخاطر",
-    "stepReviewInitiated": "بدء المراجعة"
+    "stepReviewInitiated": "بدء المراجعة",
+    "attachments": "المرفقات"
   },
   "audits": {
     "owner": "المسؤول",
@@ -1313,7 +1339,8 @@
     "activity": {
       "fieldsUpdated": "تم تحديث التدقيق — {{fields}}"
     },
-    "versionHistory": "سجل الإصدارات"
+    "versionHistory": "سجل الإصدارات",
+    "comments": "التعليقات"
   },
   "riskRegister": {
     "critical": "حرج",
@@ -1636,7 +1663,9 @@
     "hrEmail": "بريد الموارد البشرية",
     "alwaysUseEmail": "استخدم هذا البريد دائمًا للموارد البشرية",
     "sendHrReminder": "إرسال تذكير الموارد البشرية",
-    "noEmployeesNeedAttention": "جميع الموظفين على المسار الصحيح!"
+    "noEmployeesNeedAttention": "جميع الموظفين على المسار الصحيح!",
+    "noCoursesTitle": "لا توجد دورات بعد",
+    "noCoursesDescription": "ابدأ بإضافة دورة تدريبية."
   },
   "settings": {
     "enumValues": {

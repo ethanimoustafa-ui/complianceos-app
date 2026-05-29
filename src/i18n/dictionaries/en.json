@@ -60,7 +60,9 @@
     "filterAll": "All",
     "filterActive": "Active",
     "filterArchived": "Archived",
-    "archived": "Archived"
+    "archived": "Archived",
+    "notAvailable": "N/A",
+    "unknown": "Unknown"
   },
   "navigation": {
     "dashboard": "Dashboard",
@@ -378,7 +380,17 @@
     "startTime": "Start Time",
     "endTime": "End Time",
     "addNotesPlaceholder": "Add notes...",
-    "markAsComplete": "Mark as Complete"
+    "markAsComplete": "Mark as Complete",
+    "deleteEventTitle": "Delete event?",
+    "daysShort": {
+      "sat": "Sat",
+      "sun": "Sun",
+      "mon": "Mon",
+      "tue": "Tue",
+      "wed": "Wed",
+      "thu": "Thu",
+      "fri": "Fri"
+    }
   },
   "letters": {
     "title": "Letters",
@@ -583,7 +595,20 @@
     "smartPlaceholders": {
       "heading": "Smart placeholders",
       "body": "Insert {{token}} tokens (e.g. {{candidate_name}}) into the subject or body. Each token surfaces below — pick its type (date or document reference) so composers see the right input."
-    }
+    },
+    "responseSection": "Response",
+    "sendFailed": "Failed to mark letter as sent",
+    "reject": "Reject",
+    "noResponseNote": "No response note recorded.",
+    "noActivityYet": "No activity yet.",
+    "rejectLetter": "Reject Letter",
+    "rejectReasonRequired": "A reason is required. This will be recorded in the activity log.",
+    "rejectReasonPlaceholder": "State the reason for rejection…",
+    "rejectSuccess": "Letter rejected.",
+    "confirmReject": "Confirm Reject",
+    "responseNoteOptional": "Optionally add a note about the response received.",
+    "responseNotePlaceholder": "e.g. Acknowledged by SAMA via email on 28 May 2026",
+    "responseReceivedSuccess": "Response marked as received."
   },
   "observations": {
     "observation": "observation",
@@ -1293,7 +1318,8 @@
     "stepDPOReview": "DPO Review",
     "stepManagementReview": "Management Review",
     "stepRiskReview": "Risk Review",
-    "stepReviewInitiated": "Review Initiated"
+    "stepReviewInitiated": "Review Initiated",
+    "attachments": "Attachments"
   },
   "audits": {
     "owner": "Owner",
@@ -1313,7 +1339,8 @@
     "activity": {
       "fieldsUpdated": "Audit updated — {{fields}}"
     },
-    "versionHistory": "Version History"
+    "versionHistory": "Version History",
+    "comments": "Comments"
   },
   "riskRegister": {
     "critical": "Critical",
@@ -1636,7 +1663,9 @@
     "hrEmail": "HR Email",
     "alwaysUseEmail": "Always use this email for HR",
     "sendHrReminder": "Send HR Reminder",
-    "noEmployeesNeedAttention": "All employees are on track!"
+    "noEmployeesNeedAttention": "All employees are on track!",
+    "noCoursesTitle": "No courses yet",
+    "noCoursesDescription": "Get started by adding a training course."
   },
   "settings": {
     "enumValues": {

@@ -1,9 +1,10 @@
 'use client'
 
 import { cn } from '@/lib/utils'
+import { useTranslation } from '@/i18n'
 import type { CalendarSourceType, UnifiedCalendarItem } from '@/types'
 import type { CalendarType } from './calendar-types'
-import { formatDateKey, toHijri, isSaudiWeekend, SAUDI_HOLIDAYS, DAYS_SAUDI, SOURCE_COLORS } from './calendar-utils'
+import { formatDateKey, toHijri, isSaudiWeekend, SAUDI_HOLIDAYS, getDaysSaudi, SOURCE_COLORS } from './calendar-utils'
 
 interface MonthViewProps {
   currentDate: Date
@@ -15,6 +16,8 @@ interface MonthViewProps {
 }
 
 export function MonthView({ currentDate, itemsByDate, selectedDayKey, selectedSourceTypes, calendarType, onSelectDay }: MonthViewProps) {
+  const { t } = useTranslation()
+  const daysSaudi = getDaysSaudi(t)
   const year = currentDate.getFullYear()
   const month = currentDate.getMonth()
   const firstDay = new Date(year, month, 1)
@@ -28,9 +31,9 @@ export function MonthView({ currentDate, itemsByDate, selectedDayKey, selectedSo
 
   return (
     <div className="grid grid-cols-7 gap-px bg-slate-200 border border-slate-200 rounded-xl overflow-hidden shadow-sm m-6">
-      {DAYS_SAUDI.map((d, i) => (
+      {daysSaudi.map((d, i) => (
         <div
-          key={d}
+          key={i}
           className={cn(
             "bg-slate-50 py-3 text-center text-[10px] font-black uppercase tracking-widest",
             (i === 0 || i === 6) ? "text-emerald-600 bg-emerald-50/50" : "text-slate-400"

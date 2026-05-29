@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { formatBytes } from '@/lib/format'
 import { dicebearAvatar } from '@/lib/avatar'
+import { renderFieldLabel } from '@/lib/timeline-message'
 import { usePolicyStore } from '@/stores/policy-store'
 import { useAuthStore } from '@/stores/auth-store'
 import { useNotificationStore } from '@/stores/notification-store'
@@ -212,7 +213,14 @@ export function PolicyDetailsContent({
     }
     // Current cycle
     if (fresh.currentReviewCycleId) {
-      const raw = fresh.currentReviewCycleLabel ?? t('policies.currentReview')
+      // W32-1: "Current Review" is a localized concept. The stored cycle label
+      // persists the EN/AR default string captured at upload time, so it would
+      // render in the uploader's language regardless of the viewer's locale.
+      // Localize when the stored label is the default sentinel (or empty);
+      // preserve any genuinely custom cycle name.
+      const stored = fresh.currentReviewCycleLabel
+      const isDefaultLabel = !stored || stored === 'Current Review' || stored === 'المراجعة الحالية'
+      const raw = isDefaultLabel ? t('policies.currentReview') : stored
       cycles.set(fresh.currentReviewCycleId, formatCycleLabel(raw, fresh.currentReviewCycleDate))
     }
     // Fallback: any cycles found only in evidence entries
@@ -220,7 +228,8 @@ export function PolicyDetailsContent({
       if (!cycles.has(e.reviewCycleId)) cycles.set(e.reviewCycleId, formatCycleLabel(e.reviewCycleLabel))
     }
     return cycles
-  }, [fresh.evidence, fresh.currentReviewCycleId, fresh.currentReviewCycleLabel, fresh.reviewCycleHistory])
+    // isRTL in deps so the localized label recomputes on a live locale switch.
+  }, [fresh.evidence, fresh.currentReviewCycleId, fresh.currentReviewCycleLabel, fresh.currentReviewCycleDate, fresh.reviewCycleHistory, isRTL])
 
   const displayedEvidence = (fresh.evidence ?? []).filter(e =>
     evidenceFilter === 'current'
@@ -1513,17 +1522,32 @@ export function PolicyDetailsContent({
                     </button>
                     {expandedVersion === idx && (
                       <div className="bg-amber-50 rounded-xl p-3 mt-1">
-                        <div className="grid grid-cols-3 gap-1 text-[10px] font-black text-slate-500 uppercase tracking-wider border-b border-amber-100 pb-1">
-                          <span>{t('policies.version')}</span>
-                          <span>{t('policies.lastReview')}</span>
-                          <span>{t('policies.by')}</span>
-                        </div>
-                        <div className="grid grid-cols-3 gap-1 text-[10px] mt-1.5">
-                          <span className="font-bold text-slate-700">{entry.version}</span>
-                          <span className="text-slate-600">{entry.date}</span>
-                          <span className="text-slate-600">{entry.author}</span>
-                        </div>
-                        <p className="text-[10px] text-slate-500 mt-2">{isRTL ? entry.textAr : entry.textEn}</p>
+                        {/* W32-4: restore the W19.4 Field / From / To diff (the
+                            panel had regressed to a version/date/by metadata
+                            table that didn't say what actually changed). Falls
+                            back to the summary for legacy/no-diff rows. */}
+                        {entry.fieldChanges && entry.fieldChanges.length > 0 ? (
+                          <div className="space-y-1.5">
+                            <div className="grid grid-cols-3 gap-1 text-[10px] font-black text-slate-500 uppercase tracking-wider border-b border-amber-100 pb-1">
+                              <span>{t('regulatoryUpdates.fieldChanged')}</span>
+                              <span>{t('regulatoryUpdates.changedFrom')}</span>
+                              <span>{t('regulatoryUpdates.changedTo')}</span>
+                            </div>
+                            {entry.fieldChanges.map((diff, i) => (
+                              <div key={`${diff.field}-${i}`} className="grid grid-cols-3 gap-1 text-[10px]">
+                                <span className="font-bold text-slate-600">{renderFieldLabel(diff.field, t)}</span>
+                                <span className="text-rose-600 line-through truncate" title={diff.from}>{diff.from || '—'}</span>
+                                <span className="text-emerald-600 truncate" title={diff.to}>{diff.to || '—'}</span>
+                              </div>
+                            ))}
+                            <p className="text-[10px] text-slate-400 mt-2 pt-1.5 border-t border-amber-100">{entry.date} • {entry.author}</p>
+                          </div>
+                        ) : (
+                          <>
+                            <p className="text-[10px] text-slate-500">{isRTL ? entry.textAr : entry.textEn}</p>
+                            <p className="text-[10px] text-slate-400 mt-2">{entry.date} • {entry.author}</p>
+                          </>
+                        )}
                       </div>
                     )}
                   </div>
