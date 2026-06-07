@@ -43,7 +43,7 @@ export function CreateLetterForm({
   selectedType: LetterType
   onTypeChange: (type: LetterType) => void
   onClose: () => void
-  onSuccess: () => void
+  onSuccess: (mode: 'draft' | 'submitted') => void
   template?: LetterTemplate
 }) {
   const { t, isRTL } = useTranslation()
@@ -257,7 +257,7 @@ export function CreateLetterForm({
       if (effectiveTemplateId) await templateStore.incrementUsage(effectiveTemplateId)
       // W25-A1: only call onSuccess on the happy path — avoids the dual-toast
       // (optimistic-success + API-error) that occurred when both branches ran.
-      onSuccess()
+      onSuccess('draft')
     } catch (err) {
       console.error('Failed to save letter draft', err)
       // onSuccess is NOT called on error — the form stays open so the user can
@@ -274,7 +274,7 @@ export function CreateLetterForm({
       store.submitForApproval(newLetter.id)
       if (effectiveTemplateId) await templateStore.incrementUsage(effectiveTemplateId)
       // W25-A1: only call onSuccess on the happy path.
-      onSuccess()
+      onSuccess('submitted')
     } catch (err) {
       console.error('Failed to submit letter for approval', err)
     } finally {
@@ -488,7 +488,7 @@ export function CreateLetterForm({
         {/* English Side */}
         <div>
           <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-2">
-            {t('letters.subjectEnglish')}
+            {t('letters.subjectEnglish')} <span className="text-rose-500">*</span>
           </label>
           <div className="mb-4">
             <LetterSubjectEditor
@@ -575,7 +575,7 @@ export function CreateLetterForm({
         <div className={`flex gap-3`}>
           <button
             onClick={handleSaveDraft}
-            disabled={isSavingDraft || isSubmitting}
+            disabled={isSavingDraft || isSubmitting || !subjectEn.trim()}
             aria-busy={isSavingDraft || undefined}
             className="px-6 py-3 bg-slate-100 text-slate-600 rounded-xl text-sm font-bold hover:bg-slate-200 transition-colors cursor-pointer disabled:opacity-50 inline-flex items-center gap-2"
           >
@@ -584,7 +584,7 @@ export function CreateLetterForm({
           </button>
           <button
             onClick={handleSubmit}
-            disabled={isSubmitting || isSavingDraft}
+            disabled={isSubmitting || isSavingDraft || !subjectEn.trim()}
             aria-busy={isSubmitting || undefined}
             className={`px-8 py-3 bg-emerald-600 text-white rounded-xl text-sm font-bold hover:bg-emerald-700 transition-colors shadow-lg shadow-emerald-100 disabled:opacity-50 flex items-center gap-2 cursor-pointer`}
           >

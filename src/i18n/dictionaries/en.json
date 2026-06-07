@@ -463,6 +463,8 @@
     "sendForApproval": "Send for Approval",
     "processing": "Processing...",
     "letterSubmittedForApproval": "Letter submitted for internal compliance approval.",
+    "draftSaved": "Draft saved.",
+    "letterNotFound": "Letter not found or access denied.",
     "chooseTemplate": "Choose Template",
     "noTemplateBlank": "None (start blank)",
     "noTemplatesForType": "No templates available for this letter type yet.",

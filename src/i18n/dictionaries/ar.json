@@ -463,6 +463,8 @@
     "sendForApproval": "إرسال للموافقة",
     "processing": "جاري المعالجة...",
     "letterSubmittedForApproval": "تم إرسال الخطاب للموافقة الداخلية للامتثال.",
+    "draftSaved": "تم حفظ المسودة.",
+    "letterNotFound": "تعذّر العثور على الخطاب أو لا تملك صلاحية الوصول.",
     "chooseTemplate": "اختر قالب",
     "noTemplateBlank": "بدون (ابدأ من الصفر)",
     "noTemplatesForType": "لا توجد قوالب متاحة لهذا النوع من الخطابات بعد.",

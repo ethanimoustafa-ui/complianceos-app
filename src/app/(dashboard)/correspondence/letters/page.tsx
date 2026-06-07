@@ -685,6 +685,10 @@ export default function LettersPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams, router, pathname, store])
 
+  // AC61 (W34-QA): tracks the last ?id= already flagged as not-found so the toast
+  // fires once per bad id (not on every store.letters reconciliation).
+  const deepLinkNotFoundRef = useRef<string | null>(null)
+
   // Deep-link: auto-switch to detail view when ?id= is present.
   // On hard refresh, store.letters is empty until fetchAll resolves; we wait
   // for the list to contain the target letter before opening it.
@@ -694,9 +698,18 @@ export default function LettersPage() {
     const id = searchParams.get('id')
     if (!id || view === 'detail') return
     const letter = store.letters.find(l => l.id === id)
-    if (letter) handleViewLetter(letter)
+    if (letter) { handleViewLetter(letter); return }
+    // AC61 (W34-QA): once the first list fetch has resolved and the id still
+    // matches nothing (unknown / hard-deleted / RLS-hidden), don't sit on the
+    // awaiting-skeleton forever — surface a toast and strip ?id so the view
+    // degrades to the list (isAwaitingDeepLink becomes false).
+    if (lettersLastFetched === null) return
+    if (deepLinkNotFoundRef.current === id) return
+    deepLinkNotFoundRef.current = id
+    showToast(t('letters.letterNotFound'))
+    router.replace(pathname)
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchParams, store.letters])
+  }, [searchParams, store.letters, lettersLastFetched])
 
   // L8: Auto-open Template Databank when ?view=templates is in the URL.
   // Runs once on mount (and whenever searchParams changes) so a hard refresh
@@ -2394,10 +2407,13 @@ export default function LettersPage() {
           selectedType={selectedLetterType}
           onTypeChange={setSelectedLetterType}
           onClose={() => { setIsCreateModalOpen(false); setCreateFromTemplate(null) }}
-          onSuccess={() => {
+          onSuccess={(mode) => {
             setIsCreateModalOpen(false)
             setCreateFromTemplate(null)
-            showToast(t('letters.letterSubmittedForApproval'))
+            // AC29 (W34-QA): the draft-save path and the submit-for-approval path
+            // share this callback — branch the toast so a draft doesn't claim it
+            // was "submitted for approval".
+            showToast(mode === 'draft' ? t('letters.draftSaved') : t('letters.letterSubmittedForApproval'))
           }}
           template={createFromTemplate ?? undefined}
         />
