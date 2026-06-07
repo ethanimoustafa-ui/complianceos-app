@@ -109,9 +109,13 @@ export default function RegistryPage() {
       const lastCompletedStep = c.workflowSteps?.filter(s => s.status === 'completed').slice(-1)[0]
       const rawPhase = currentStep?.phase ?? (lastCompletedStep ? Math.min((lastCompletedStep.phase as number) + 1, 2) : 0)
       const currentPhase = rawPhase as 0 | 1 | 2
-      const completedSteps = (c.workflowSteps ?? []).filter(s => s.status === 'completed').length
-      const totalSteps = c.workflowSteps?.length ?? 1
-      const dynamicProgress = Math.round((completedSteps / totalSteps) * 100)
+      // Use the server-maintained progress (circulars.progress, kept in sync by the
+      // shared 50/50 formula in progress-formula.ts). The registry list does NOT
+      // hydrate workflowSteps — they're detail-only (fetchById) — so recomputing
+      // completedSteps/totalSteps here divided 0/0 = NaN for every list row (empty
+      // array → totalSteps 0, and `0 ?? 1` keeps 0). The stored value is correct in
+      // both the list and detail views.
+      const progress = Number.isFinite(c.progress) ? Math.round(c.progress) : 0
       return {
         id: c.id,
         reference: c.reference,
@@ -120,7 +124,7 @@ export default function RegistryPage() {
         category: c.authority,
         status: c.status,
         dueDate: c.dueDate,
-        progress: dynamicProgress,
+        progress,
         phaseLabel: phaseNames[currentPhase] ?? t('regulatoryUpdates.phaseCAP' as TranslationKey),
         phaseNumber: currentPhase,
       }
