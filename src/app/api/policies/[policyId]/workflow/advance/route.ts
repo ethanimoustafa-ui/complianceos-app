@@ -52,8 +52,13 @@ function deriveStepState(actionType: string | null): string | null {
     case 'request-approval':
     case 'send-for-review':
       return 'pending-approval'
+    // P2 (W34): a send-email step must start with NO step_state so the "Send
+    // Email" action renders. Auto-setting 'awaiting-response' here (and on the
+    // client) skipped the send and jumped straight to "Received Response",
+    // auto-completing the mail step. handleSendEmail sets 'awaiting-response'
+    // only after the user actually sends.
     case 'send-email':
-      return 'awaiting-response'
+      return null
     case 'notify-manager':
       return 'awaiting-manager'
     default:

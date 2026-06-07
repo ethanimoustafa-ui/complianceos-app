@@ -173,7 +173,24 @@ export function EditPolicyModal({ isOpen, onClose, policy, onSaved, t, isRTL }: 
     const owner = OWNERS[formOwnerIdx] ?? policy.owner
     const today = new Date().toISOString().split('T')[0]
     const newVersion = formVersion || policy.version
-    const editNextReview = computeNextReview(formReviewSchedule)
+
+    // P8 (W34): only recompute next_review_date when the review schedule
+    // actually changed. computeNextReview is date-relative (anchored to "today"),
+    // so recomputing it on every save made a no-op edit look like a real
+    // next_review_date change — which created a spurious version-history row both
+    // client-side and server-side on every Save (even with no edits).
+    const normSchedule = (
+      s: { cadence?: string; dayOfMonth?: number; adhocDate?: string } | null | undefined,
+    ) => JSON.stringify({ cadence: s?.cadence, dayOfMonth: s?.dayOfMonth ?? null, adhocDate: s?.adhocDate ?? null })
+    const storedSchedule = policy.reviewSchedule ?? { cadence: 'yearly', dayOfMonth: 1 }
+    const scheduleChanged = normSchedule(formReviewSchedule) !== normSchedule(storedSchedule)
+    const editNextReview = scheduleChanged ? computeNextReview(formReviewSchedule) : policy.nextReviewDate
+
+    const sortedEq = (a: string[], b: string[]) =>
+      JSON.stringify([...a].sort()) === JSON.stringify([...b].sort())
+    const departmentsChanged = !sortedEq(formAffectedDepartments, policy.affectedDepartments ?? [])
+    const ownerDeptChanged =
+      (formBusinessOwnerDepartmentId || undefined) !== (policy.businessOwnerDepartmentId ?? undefined)
 
     // Build human-readable change summary for version history + activity log.
     const changes: string[] = []
@@ -183,9 +200,19 @@ export function EditPolicyModal({ isOpen, onClose, policy, onSaved, t, isRTL }: 
     if (newVersion !== policy.version) changes.push(`Version: ${policy.version} → ${newVersion}`)
     if (formTier !== policy.approvalTier) changes.push(`Approval tier: ${policy.approvalTier} → ${formTier}`)
     if (owner.name !== policy.owner.name) changes.push(`Owner: ${policy.owner.name} → ${owner.name}`)
-    if (editNextReview !== policy.nextReviewDate) changes.push(`Next review: ${policy.nextReviewDate} → ${editNextReview}`)
+    if (scheduleChanged && editNextReview !== policy.nextReviewDate) changes.push(`Next review: ${policy.nextReviewDate} → ${editNextReview}`)
+    if (departmentsChanged) changes.push('Affected departments updated')
+    if (ownerDeptChanged) changes.push('Business owner department updated')
     if (formDocFile) changes.push(`Document replaced: "${formDocFile.name}"`)
-    const changesText = changes.length > 0 ? changes.join('; ') : 'Minor update'
+
+    // P8: nothing actually changed → close without appending a version-history
+    // entry (and without re-anchoring next_review_date).
+    if (changes.length === 0) {
+      onClose()
+      return
+    }
+
+    const changesText = changes.join('; ')
 
     // Wave-19.4 / Item-3 — dual-store. Client-side composed text is the same
     // for both locales (the user just typed it); the server-side PATCH path
@@ -217,9 +244,15 @@ export function EditPolicyModal({ isOpen, onClose, policy, onSaved, t, isRTL }: 
       owner,
       affectedDepartments: formAffectedDepartments,
       businessOwnerDepartmentId: formBusinessOwnerDepartmentId || undefined,
-      nextReviewDate: editNextReview,
-      reviewCycleDays: cadenceToReviewCycleDays(formReviewSchedule.cadence),
-      reviewSchedule: formReviewSchedule,
+      // Only push schedule-derived fields when the schedule actually changed, so
+      // a no-op save never re-anchors next_review_date (server version gate).
+      ...(scheduleChanged
+        ? {
+            nextReviewDate: editNextReview,
+            reviewCycleDays: cadenceToReviewCycleDays(formReviewSchedule.cadence),
+            reviewSchedule: formReviewSchedule,
+          }
+        : {}),
       ...(formDocFile ? { attachmentUrl: formDocFile.name } : {}),
       versionHistory: [...policy.versionHistory, versionEntry],
       activityLog: [...(policy.activityLog ?? []), activityEntry],

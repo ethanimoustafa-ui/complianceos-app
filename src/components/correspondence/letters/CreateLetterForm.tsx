@@ -94,6 +94,10 @@ export function CreateLetterForm({
   // the user can pick a different template from this select to (re-)apply.
   const allTemplates = templateStore.templates
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>(template?.id ?? '')
+  // L1: the template the letter is actually being created from — either the
+  // in-modal "Choose Template" select or the initial prop. Threaded into the
+  // create payload (template_id) so the server increments usage_count.
+  const effectiveTemplateId = selectedTemplateId || template?.id || undefined
 
   // Apply template defaults — shared by both the initial-template prop path
   // and the in-modal template-select path.
@@ -229,6 +233,8 @@ export function CreateLetterForm({
       recipientCityAr:      template?.defaultRecipientCityAr || recipientDefaults.ar.city,
       approvalChain: [] as import('@/types').LetterApprovalStep[],
       timeline: [buildTimelineEvent(t('letters.letterCreatedDraft'))],
+      // L1: server increments the template usage_count when template_id is present.
+      templateId: effectiveTemplateId,
       attachments: draftAttachments,
       relatedObservations: [] as string[],
       // Carry the placeholder defs + values forward so the draft editor
@@ -248,7 +254,7 @@ export function CreateLetterForm({
     setIsSavingDraft(true)
     try {
       await store.create(letterBaseData())
-      if (template?.id) templateStore.incrementUsage(template.id)
+      if (effectiveTemplateId) await templateStore.incrementUsage(effectiveTemplateId)
       // W25-A1: only call onSuccess on the happy path — avoids the dual-toast
       // (optimistic-success + API-error) that occurred when both branches ran.
       onSuccess()
@@ -266,7 +272,7 @@ export function CreateLetterForm({
     try {
       const newLetter = await store.create(letterBaseData())
       store.submitForApproval(newLetter.id)
-      if (template?.id) templateStore.incrementUsage(template.id)
+      if (effectiveTemplateId) await templateStore.incrementUsage(effectiveTemplateId)
       // W25-A1: only call onSuccess on the happy path.
       onSuccess()
     } catch (err) {

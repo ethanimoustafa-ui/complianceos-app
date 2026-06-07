@@ -423,12 +423,15 @@ export const ObservationDetailModal = memo(function ObservationDetailModal({
             </button>
           )}
 
-          <DeadlineCountdown
-            submissionDueDate={observation.remediationSubmissionDueDate}
-            completionDueDate={observation.dueDate}
-            planStatus={observation.remediationPlan?.status}
-            isRTL={isRTL}
-          />
+          {/* O1: completed (closed/archived) observations have no live deadline. */}
+          {!isClosed && (
+            <DeadlineCountdown
+              submissionDueDate={observation.remediationSubmissionDueDate}
+              completionDueDate={observation.dueDate}
+              planStatus={observation.remediationPlan?.status}
+              isRTL={isRTL}
+            />
+          )}
 
           {displayAssignees.length > 0 ? (
             <AssignedTeam assignees={displayAssignees} isRTL={isRTL} />

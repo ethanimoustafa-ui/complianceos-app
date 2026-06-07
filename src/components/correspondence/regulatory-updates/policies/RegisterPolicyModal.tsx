@@ -20,7 +20,6 @@ import { ReviewSchedulePicker } from '@/components/ui/ReviewSchedulePicker'
 import { computeNextReview, cadenceToReviewCycleDays } from '@/lib/review-schedule'
 import { usePolicyStore } from '@/stores/policy-store'
 import { usePolicyTemplateStore } from '@/stores/policy-template-store'
-import { useEntityTemplateStore } from '@/stores/entity-template-store'
 import { usePolicyCategoryStore } from '@/stores/policy-category-store'
 import { useTeamStore } from '@/stores/team-store'
 import { useDepartmentStore } from '@/stores/department-store'
@@ -158,30 +157,41 @@ export function RegisterPolicyModal({ isOpen, onClose, onCreated, t, isRTL }: Pr
   const {
     templates: policyTemplates,
     incrementUsage: incrementPolicyTemplateUsage,
+    create: createPolicyTemplate,
+    fetchAll: fetchAllPolicyTemplates,
   } = usePolicyTemplateStore()
 
-  // M2: entity-template store for saving current form as a reusable template.
-  const { fetchByType: fetchEntityTemplates, saveTemplate: saveEntityTemplate } = useEntityTemplateStore()
+  // P1 (W34): "Save as template" persists to the SAME store the template
+  // dropdown and Settings → Policy Templates read from (the policy_templates
+  // table). The previous code wrote to the unrelated entity_templates table, so
+  // the POST returned 201 but the new template never appeared anywhere.
   const [showSavePolicyTemplateForm, setShowSavePolicyTemplateForm] = useState(false)
   const [policyTemplateNameInput, setPolicyTemplateNameInput] = useState('')
   const [isSavingPolicyTemplate, setIsSavingPolicyTemplate] = useState(false)
   useEffect(() => {
-    if (isOpen) void fetchEntityTemplates('policy')
-  }, [isOpen, fetchEntityTemplates])
+    if (isOpen) void fetchAllPolicyTemplates()
+  }, [isOpen, fetchAllPolicyTemplates])
 
-  async function handleSavePolicyTemplate() {
+  function handleSavePolicyTemplate() {
     if (!policyTemplateNameInput.trim()) return
     setIsSavingPolicyTemplate(true)
     try {
-      await saveEntityTemplate('policy', policyTemplateNameInput.trim(), undefined, {
-        name: formName,
-        category: formCategory,
-        approvalTier: formTier,
-        description: formDescription,
-        version: formVersion,
+      // Synchronous optimistic insert + background POST /api/policy-templates,
+      // so the new template appears immediately in the dropdown and in Settings.
+      createPolicyTemplate({
+        name: policyTemplateNameInput.trim(),
+        category: (formCategory || 'compliance') as PolicyCategory,
+        approvalTier: (formTier || 'management') as PolicyApprovalTier,
+        defaultDescription: formDescription,
+        defaultWorkflowSteps: [],
+        versionPattern: 'v{major}.{minor}',
+        status: 'active',
       })
       setPolicyTemplateNameInput('')
       setShowSavePolicyTemplateForm(false)
+    } catch (e) {
+      // create() throws if the user lacks the 'Manage Policy Templates' permission.
+      console.error('Failed to save policy template', e)
     } finally {
       setIsSavingPolicyTemplate(false)
     }
@@ -501,21 +511,55 @@ export function RegisterPolicyModal({ isOpen, onClose, onCreated, t, isRTL }: Pr
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('regulatoryUpdates.affectedDepartments' as any)}</label>
-              <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2 max-h-40 overflow-y-auto">
-                {departments.map((dept) => (
-                  <label key={dept.id} className="flex items-center gap-3 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      className="rounded text-emerald-600 focus:ring-emerald-500"
-                      checked={formAffectedDepartments.includes(dept.id)}
-                      onChange={() => setFormAffectedDepartments((prev) =>
-                        prev.includes(dept.id) ? prev.filter((d) => d !== dept.id) : [...prev, dept.id]
-                      )}
-                    />
-                    <span className="text-sm">{isRTL ? dept.nameAr : dept.name}</span>
-                  </label>
-                ))}
+              {/* P4 (W34): chip + removable-pill multi-select matching the Rules
+                  "Register Circular" modal. Stores dept.id (policy convention), so
+                  it round-trips with EditPolicyModal's id-based hydration. */}
+              <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl">
+                <div className="flex flex-wrap gap-1.5">
+                  {departments.map((dept) => {
+                    const selected = formAffectedDepartments.includes(dept.id)
+                    return (
+                      <button
+                        type="button"
+                        key={dept.id}
+                        onClick={() => setFormAffectedDepartments((prev) =>
+                          prev.includes(dept.id) ? prev.filter((d) => d !== dept.id) : [...prev, dept.id]
+                        )}
+                        className={
+                          selected
+                            ? 'px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-600 text-white border border-emerald-600 cursor-pointer transition-colors'
+                            : 'px-2.5 py-1 rounded-full text-xs font-medium bg-white text-slate-600 border border-slate-200 hover:border-emerald-300 hover:text-emerald-700 cursor-pointer transition-colors'
+                        }
+                      >
+                        {isRTL ? dept.nameAr : dept.name}
+                      </button>
+                    )
+                  })}
+                </div>
               </div>
+              {formAffectedDepartments.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 mt-2">
+                  {formAffectedDepartments.map((id) => {
+                    const dept = departments.find((d) => d.id === id)
+                    if (!dept) return null
+                    return (
+                      <span
+                        key={id}
+                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-100"
+                      >
+                        {isRTL ? dept.nameAr : dept.name}
+                        <button
+                          type="button"
+                          onClick={() => setFormAffectedDepartments((prev) => prev.filter((d) => d !== id))}
+                          className="text-emerald-600 hover:text-rose-600 cursor-pointer"
+                        >
+                          <Icon icon="lucide:x" className="text-[10px]" />
+                        </button>
+                      </span>
+                    )
+                  })}
+                </div>
+              )}
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('policies.description')} *</label>

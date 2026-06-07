@@ -477,6 +477,9 @@ interface PolicyStoreState {
     string,
     { offset: number; hasMore: boolean; loadingMore: boolean }
   >
+  // P6 (W34): per-policy detail-GET in-flight flag, keyed by the display id.
+  // Drives the description / policy-document skeletons in PolicyDetailsContent.
+  detailLoading: Record<string, boolean>
 
   // Wave-19.3 / Task-B — Policy Leader change. Optimistically updates
   // owner/ownerId, PATCHes with If-Match; the server emits the activity-log
@@ -562,6 +565,7 @@ export const usePolicyStore = create<PolicyStoreState>()((set, get) => ({
   byId: {},
   selectedPolicy: null,
   policyActivityPagination: {},
+  detailLoading: {},
   pagination: INITIAL_PAGINATION,
   filters: {},
   isLoading: false,
@@ -618,6 +622,9 @@ export const usePolicyStore = create<PolicyStoreState>()((set, get) => ({
     // passed directly (deep-link case) still works.
     const cached = get().byId[id] ?? get().policies.find((p) => p.id === id) ?? null
     const apiId = cached?.uuid ?? id
+    // P6 (W34): mark this policy's detail GET as in-flight so the description /
+    // policy-document skeletons render until the detail-only columns hydrate.
+    set((s) => ({ detailLoading: { ...s.detailLoading, [id]: true } }))
     void (async () => {
       try {
         const row = await api.get<PolicyApiRow>(`/policies/${apiId}`)
@@ -629,9 +636,24 @@ export const usePolicyStore = create<PolicyStoreState>()((set, get) => ({
             ? s.policies.map((p) => (p.id === id ? policy : p))
             : [policy, ...s.policies],
           selectedPolicy: s.selectedPolicy?.id === id ? policy : s.selectedPolicy,
+          detailLoading: { ...s.detailLoading, [id]: false },
+          // P9 (W34): seed activity pagination from the detail GET's first page
+          // length + server has-more flag (mirrors circular-store.fetchById).
+          // Without this the "Load more" button never appears for policies with
+          // >10 activity-log entries.
+          policyActivityPagination: {
+            ...s.policyActivityPagination,
+            [id]: {
+              offset: policy.activityLog?.length ?? 0,
+              hasMore: !!row.activity_log_has_more,
+              loadingMore: false,
+            },
+          },
         }))
       } catch {
-        // 404 / network errors are silent here — the legacy method just returns null/cached.
+        // 404 / network errors are silent here — clear the loading flag so the
+        // skeleton does not stick.
+        set((s) => ({ detailLoading: { ...s.detailLoading, [id]: false } }))
       }
     })()
     return cached

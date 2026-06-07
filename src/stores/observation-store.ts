@@ -630,6 +630,32 @@ export const useObservationStore = create<ObservationState>()((set, get) => ({
             }
           }
 
+          // O2: persist create-time documents to observation_documents via the
+          // evidence endpoint so they survive a reload. POST /observations only
+          // stores scalar fields; documents need a separate write (mirrors
+          // addDocument's storage_path convention).
+          if (data.documents && data.documents.length > 0) {
+            const refForApi = real.reference || row.id
+            const persisted: NonNullable<typeof data.documents> = []
+            for (const docu of data.documents) {
+              try {
+                const srow = await api.post<{ id: string; name: string; type: 'pdf' | 'image' | 'doc' }>(
+                  `/observations/${refForApi}/evidence`,
+                  {
+                    name: docu.name,
+                    type: docu.type,
+                    storage_path: `observations/${refForApi}/${docu.name}`,
+                  },
+                )
+                persisted.push({ ...docu, id: srow.id })
+              } catch {
+                // Non-fatal: keep the client-side row even if persistence fails.
+                persisted.push(docu)
+              }
+            }
+            real.documents = persisted
+          }
+
           // Server confirmed — NOW insert the real row at the top of the list.
           set((s) => ({
             observations: [real, ...s.observations],

@@ -83,6 +83,12 @@ export async function insertWithRefCode<T>(opts: {
   table: string
   refCodeColumn?: string
   slugSource: string
+  /**
+   * Fixed slug override. When provided, the ref_code uses this constant prefix
+   * instead of deriving the first 3 letters from `slugSource` — e.g. Policies
+   * pass `'POL'` → `POL-2026-0001` rather than `INF-2026-0001`.
+   */
+  slug?: string
   insertPayload: Record<string, unknown>
   selectColumns?: string
   maxAttempts?: number
@@ -93,13 +99,14 @@ export async function insertWithRefCode<T>(opts: {
     table,
     refCodeColumn = 'ref_code',
     slugSource,
+    slug: slugOverride,
     insertPayload,
     selectColumns = '*',
     maxAttempts = 8,
     now = new Date(),
   } = opts
 
-  const slug = refCodeSlug(slugSource)
+  const slug = slugOverride ?? refCodeSlug(slugSource)
   const year = now.getUTCFullYear()
 
   let inserted: T | null = null

@@ -83,10 +83,13 @@ export async function POST(req: NextRequest) {
     // generic helper handles slug derivation, sequence increment, and retries
     // on UNIQUE-violation (Postgres 23505) for concurrent POST safety —
     // mirrors the `nextCircularReference` retry-loop on circulars.
+    // P5: policy ref_codes use a fixed `POL` prefix (POL-2026-0001), not the
+    // first 3 letters of the policy name.
     const data = await insertWithRefCode<Record<string, unknown> & { id: string }>({
       supabase,
       table: 'policies',
       slugSource: input.name,
+      slug: 'POL',
       selectColumns: POLICY_LIST_COLUMNS,
       insertPayload: {
         name: input.name,

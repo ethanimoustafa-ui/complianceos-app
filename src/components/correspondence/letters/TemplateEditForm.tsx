@@ -115,6 +115,17 @@ export function TemplateEditForm({
   }, [])
 
   const [isUploadingSig, setIsUploadingSig] = useState(false)
+  // L3: shown when a signature upload/sign fails OR a stored URL fails to load,
+  // so we never leave a broken <img> or an un-saveable data: URL preview.
+  const [sigError, setSigError] = useState<string | null>(null)
+  // L3: local (data-URL) preview of the just-uploaded file. A freshly-minted
+  // Supabase signed URL is briefly un-fetchable (storage clock-skew / object
+  // propagation), so loading it immediately renders a BROKEN image — the exact
+  // "broken signature on upload" symptom. We persist the durable signed URL in
+  // `defaultSignatureImageUrl` (the value saved + validated as https), but PREVIEW
+  // the local file, which renders instantly. Empty when editing an existing
+  // template (then the preview falls back to the stored URL, which is old + valid).
+  const [signaturePreviewSrc, setSignaturePreviewSrc] = useState<string>('')
 
   // L5: Upload to Supabase storage → get a 1-year signed URL so the
   // default_signature_image_url column stores an https:// URL (the Zod
@@ -123,6 +134,8 @@ export function TemplateEditForm({
     const file = e.target.files?.[0]
     if (!file) return
     e.target.value = ''
+    setSigError(null)
+    setSignaturePreviewSrc('')
     setIsUploadingSig(true)
     try {
       const safeName = file.name.replace(/[^A-Za-z0-9._-]/g, '_')
@@ -140,13 +153,29 @@ export function TemplateEditForm({
         .from(SIGNATURE_BUCKET)
         .createSignedUrl(storagePath, 60 * 60 * 24 * 365)
       if (signError || !signedData?.signedUrl) throw signError ?? new Error('No signed URL')
+      // Build the local data-URL preview BEFORE touching state, then set the
+      // preview and the saved URL together (one batched render). A just-minted
+      // signed URL is briefly un-servable, so if the <img> pointed at it for even
+      // one render its onError would fire and imperatively hide it for good.
+      // Previewing the local file avoids that; the signed URL is only ever the
+      // persisted value (valid by the time the letter is viewed later).
+      const previewDataUrl = await new Promise<string>((resolve, reject) => {
+        const r = new FileReader()
+        r.onload = () => resolve(r.result as string)
+        r.onerror = () => reject(new Error('preview read failed'))
+        r.readAsDataURL(file)
+      })
+      setSignaturePreviewSrc(previewDataUrl)
       setDefaultSignatureImageUrl(signedData.signedUrl)
     } catch (err) {
       console.error('[TemplateEditForm] signature upload failed:', err)
-      // Graceful fallback: show the image locally via data URL for preview only
-      const reader = new FileReader()
-      reader.onload = () => setDefaultSignatureImageUrl(reader.result as string)
-      reader.readAsDataURL(file)
+      // L3 (code-only): do NOT fall back to a base64 data: URL. The HttpUrl
+      // validator rejects data: URIs on save, so the preview looked fine but the
+      // signature silently never persisted — and the letter then rendered a
+      // broken image. Surface a clear error and keep the field empty instead, so
+      // the user knows to retry rather than shipping a letter with no signature.
+      setDefaultSignatureImageUrl('')
+      setSigError(t('letters.signatureUploadFailed' as Parameters<typeof t>[0]))
     } finally {
       setIsUploadingSig(false)
     }
@@ -571,9 +600,15 @@ export function TemplateEditForm({
               <div className="flex items-center gap-4">
                 <div className="border border-slate-200 rounded-xl p-3 bg-slate-50">
                   <img
-                    src={defaultSignatureImageUrl}
+                    src={signaturePreviewSrc || defaultSignatureImageUrl}
                     alt="signature preview"
                     className="h-16 max-w-[180px] object-contain"
+                    onError={(ev) => {
+                      // L3: never render the browser's broken-image icon — hide it
+                      // and surface a load error so the user can re-upload.
+                      ev.currentTarget.style.display = 'none'
+                      setSigError(t('letters.signatureLoadFailed' as Parameters<typeof t>[0]))
+                    }}
                   />
                 </div>
                 <div className="flex flex-col gap-2">
@@ -587,7 +622,7 @@ export function TemplateEditForm({
                   </button>
                   <button
                     type="button"
-                    onClick={() => setDefaultSignatureImageUrl('')}
+                    onClick={() => { setDefaultSignatureImageUrl(''); setSignaturePreviewSrc(''); setSigError(null) }}
                     className="px-4 py-2 bg-rose-50 text-rose-600 rounded-lg text-xs font-bold hover:bg-rose-100 transition-colors cursor-pointer flex items-center gap-2"
                   >
                     <Icon icon="lucide:x" />
@@ -605,6 +640,12 @@ export function TemplateEditForm({
                 <span className="text-xs font-bold">{t('letters.uploadSignatureImage')}</span>
                 <span className="text-[10px]">{t('letters.signatureImageHint')}</span>
               </button>
+            )}
+            {sigError && (
+              <p className="mt-2 text-xs font-bold text-rose-600 flex items-center gap-1">
+                <Icon icon="lucide:alert-circle" className="text-sm" />
+                {sigError}
+              </p>
             )}
           </div>
         </div>

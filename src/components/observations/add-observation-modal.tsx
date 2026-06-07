@@ -8,6 +8,7 @@ import { FileUpload, UploadedFile } from '@/components/ui/file-upload'
 import { ObservationSource, ObservationSeverity } from './observation-types'
 import { useTeamStore } from '@/stores/team-store'
 import { useDepartmentStore } from '@/stores/department-store'
+import { useAuthStore } from '@/stores/auth-store'
 import { useTranslation } from '@/i18n'
 import type { TeamMember, RegulatoryBodyId } from '@/types'
 import { FrameworkTagSelector } from '@/components/ui/framework-tag-selector'
@@ -55,7 +56,10 @@ interface FormErrors {
 export const AddObservationModal = memo(function AddObservationModal({ isOpen, onClose, onSave }: AddObservationModalProps) {
   const { t, isRTL } = useTranslation()
   const { members } = useTeamStore()
-  const activeMembers = members.filter(m => m.status === 'active')
+  // O5: the creating user is auto-added as lead assignee by the store, so they
+  // must not be a selectable option in the assignee picker.
+  const currentUserId = useAuthStore((s) => s.user?.id)
+  const activeMembers = members.filter(m => m.status === 'active' && m.id !== currentUserId)
   // O4: track in-flight submit to show spinner on Create button
   const [isSubmitting, setIsSubmitting] = useState(false)
 

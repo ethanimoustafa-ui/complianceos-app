@@ -88,10 +88,8 @@ export default function LettersPage() {
   const [confirmDeleteLetterId, setConfirmDeleteLetterId] = useState<string | null>(null)
   const [submitBusy, setSubmitBusy] = useState(false)
   const [approveBusy, setApproveBusy] = useState(false)
-  // W29-L6: reject-with-reason modal state
-  const [rejectModalLetterId, setRejectModalLetterId] = useState<string | null>(null)
-  const [rejectReason, setRejectReason] = useState('')
-  const [rejectBusy, setRejectBusy] = useState(false)
+  // L4: spinner state for the Print/Download PDF button (slow job-queue pipeline).
+  const [pdfBusy, setPdfBusy] = useState(false)
   const [sendBusy, setSendBusy] = useState(false)
   const [responseBusy, setResponseBusy] = useState(false)
   // W29-L2: "Mark Response Received" — reveals optional note modal before firing.
@@ -725,6 +723,9 @@ export default function LettersPage() {
   const handleDownloadPdf = useCallback(async () => {
     if (!selectedLetter) return
 
+    // L4: show a spinner on the button while the (slow) PDF job-queue pipeline runs.
+    setPdfBusy(true)
+    try {
     // Phase 7: server-side rendered via @react-pdf/renderer.
     // The legacy html2canvas+jsPDF path captured a screenshot of the live DOM;
     // the new pipeline renders from a structured payload via the `sama-letter`
@@ -801,6 +802,9 @@ export default function LettersPage() {
           URL.revokeObjectURL(zipUrl)
         })
       }
+    }
+    } finally {
+      setPdfBusy(false)
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedLetter, language, currentUser, showToast])
@@ -1569,9 +1573,14 @@ export default function LettersPage() {
               </div>
               <div className={`flex gap-3`}>
                 {/* Print PDF — always available in detail view */}
-                <button onClick={handleDownloadPdf} className={`px-4 py-2 bg-white border border-slate-200 rounded-lg text-sm font-bold text-slate-700 flex items-center gap-2 hover:bg-slate-50 transition-colors cursor-pointer`}>
-                  <Icon icon="lucide:printer" />
-                  {t('letters.printPdf')}
+                <button
+                  onClick={handleDownloadPdf}
+                  disabled={pdfBusy}
+                  aria-busy={pdfBusy || undefined}
+                  className={`px-4 py-2 bg-white border border-slate-200 rounded-lg text-sm font-bold text-slate-700 flex items-center gap-2 hover:bg-slate-50 transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed`}
+                >
+                  <Icon icon={pdfBusy ? 'lucide:loader-2' : 'lucide:printer'} className={pdfBusy ? 'animate-spin' : ''} />
+                  {pdfBusy ? t('letters.generatingPdf' as Parameters<typeof t>[0]) : t('letters.printPdf')}
                 </button>
                 {/* Status-specific primary actions */}
                 {selectedLetter?.status === 'draft' && (
@@ -1589,41 +1598,30 @@ export default function LettersPage() {
                     {t('letters.submitForApproval')}
                   </button>
                 )}
-                {/* W28-BUG-B2 — Admin direct-approve when no chain configured. */}
-                {/* W29-L6 — Reject-with-reason button alongside Approve. */}
+                {/* W28-BUG-B2 — Admin direct-approve when no chain configured.
+                    L2: the terminal Reject button + modal were removed. Rejection now
+                    goes through the per-step Reject in the Approval Chain card
+                    (ApprovalStepActions → /reject-step), which returns the letter to
+                    'draft' so the author can refine and resubmit instead of killing it. */}
                 {selectedLetter?.status === 'pending-approval' && (
-                  <>
-                    <button
-                      onClick={() => {
-                        if (!selectedLetter) return
-                        setRejectReason('')
-                        setRejectModalLetterId(selectedLetter.id)
-                      }}
-                      disabled={approveBusy || rejectBusy}
-                      className={`px-4 py-2 bg-rose-50 text-rose-700 border border-rose-200 rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-rose-100 transition-colors cursor-pointer disabled:opacity-60`}
-                    >
-                      <Icon icon="lucide:x-circle" />
-                      {t('letters.reject' as Parameters<typeof t>[0]) || 'Reject'}
-                    </button>
-                    <button
-                      onClick={async () => {
-                        if (!selectedLetter) return
-                        setApproveBusy(true)
-                        try {
-                          await store.approve(selectedLetter.id)
-                          showToast(t('letters.approveSuccess'))
-                        } finally {
-                          setApproveBusy(false)
-                        }
-                      }}
-                      disabled={approveBusy || rejectBusy}
-                      aria-busy={approveBusy || undefined}
-                      className={`px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-emerald-700 transition-colors shadow-lg shadow-emerald-100 cursor-pointer disabled:opacity-60`}
-                    >
-                      <Icon icon={approveBusy ? 'lucide:loader-2' : 'lucide:check-circle'} className={approveBusy ? 'animate-spin' : ''} />
-                      {t('letters.approve')}
-                    </button>
-                  </>
+                  <button
+                    onClick={async () => {
+                      if (!selectedLetter) return
+                      setApproveBusy(true)
+                      try {
+                        await store.approve(selectedLetter.id)
+                        showToast(t('letters.approveSuccess'))
+                      } finally {
+                        setApproveBusy(false)
+                      }
+                    }}
+                    disabled={approveBusy}
+                    aria-busy={approveBusy || undefined}
+                    className={`px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-emerald-700 transition-colors shadow-lg shadow-emerald-100 cursor-pointer disabled:opacity-60`}
+                  >
+                    <Icon icon={approveBusy ? 'lucide:loader-2' : 'lucide:check-circle'} className={approveBusy ? 'animate-spin' : ''} />
+                    {t('letters.approve')}
+                  </button>
                 )}
                 {selectedLetter?.status === 'approved' && (
                   <button
@@ -1839,7 +1837,8 @@ export default function LettersPage() {
                               />
                               {selectedLetter?.signatureImageUrl && (
                                 <img src={selectedLetter.signatureImageUrl} alt="signature preview"
-                                  className="mt-3 h-10 max-w-[140px] object-contain opacity-60" />
+                                  className="mt-3 h-10 max-w-[140px] object-contain opacity-60"
+                                  onError={(ev) => { ev.currentTarget.style.display = 'none' }} />
                               )}
                             </>
                           ) : (
@@ -1851,6 +1850,7 @@ export default function LettersPage() {
                                   src={selectedLetter.signatureImageUrl}
                                   alt="signature"
                                   className="mt-3 h-12 max-w-[160px] object-contain"
+                                  onError={(ev) => { ev.currentTarget.style.display = 'none' }}
                                 />
                               )}
                             </>
@@ -1984,7 +1984,8 @@ export default function LettersPage() {
                               />
                               {selectedLetter?.signatureImageUrl && (
                                 <img src={selectedLetter.signatureImageUrl} alt="signature preview"
-                                  className="mt-3 h-10 max-w-[140px] object-contain opacity-60" />
+                                  className="mt-3 h-10 max-w-[140px] object-contain opacity-60"
+                                  onError={(ev) => { ev.currentTarget.style.display = 'none' }} />
                               )}
                             </>
                           ) : (
@@ -1998,6 +1999,7 @@ export default function LettersPage() {
                                   src={selectedLetter.signatureImageUrl}
                                   alt="signature"
                                   className="mt-3 h-12 max-w-[160px] object-contain"
+                                  onError={(ev) => { ev.currentTarget.style.display = 'none' }}
                                 />
                               )}
                             </>
@@ -2643,62 +2645,8 @@ export default function LettersPage() {
         )
       })()}
 
-      {/* W29-L6: Reject with required reason modal */}
-      <Modal
-        isOpen={rejectModalLetterId !== null}
-        onClose={() => { if (!rejectBusy) { setRejectModalLetterId(null); setRejectReason('') } }}
-        size="sm"
-      >
-        <div className="p-8">
-          <div className="flex items-center justify-center mb-5">
-            <div className="w-14 h-14 bg-rose-50 rounded-full flex items-center justify-center">
-              <Icon icon="lucide:x-circle" className="text-2xl text-rose-600" />
-            </div>
-          </div>
-          <h2 className="text-xl font-bold text-slate-900 text-center mb-1">
-            {t('letters.rejectLetter' as Parameters<typeof t>[0]) || 'Reject Letter'}
-          </h2>
-          <p className="text-sm text-slate-500 text-center mb-4">
-            {t('letters.rejectReasonRequired' as Parameters<typeof t>[0]) || 'A reason is required. This will be recorded in the activity log.'}
-          </p>
-          <textarea
-            value={rejectReason}
-            onChange={(e) => setRejectReason(e.target.value)}
-            placeholder={t('letters.rejectReasonPlaceholder' as Parameters<typeof t>[0]) || 'State the reason for rejection…'}
-            rows={4}
-            className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-rose-500 outline-none resize-none mb-4"
-          />
-          <div className="flex gap-3">
-            <button
-              onClick={() => { setRejectModalLetterId(null); setRejectReason('') }}
-              disabled={rejectBusy}
-              className="flex-1 px-4 py-2.5 bg-slate-100 text-slate-600 rounded-xl text-sm font-bold hover:bg-slate-200 transition-colors cursor-pointer disabled:opacity-50"
-            >
-              {t('common.cancel')}
-            </button>
-            <button
-              onClick={async () => {
-                if (!rejectModalLetterId || !rejectReason.trim()) return
-                setRejectBusy(true)
-                try {
-                  await store.reject(rejectModalLetterId, rejectReason.trim())
-                  setRejectModalLetterId(null)
-                  setRejectReason('')
-                  showToast(t('letters.rejectSuccess' as Parameters<typeof t>[0]) || 'Letter rejected.')
-                } finally {
-                  setRejectBusy(false)
-                }
-              }}
-              disabled={rejectBusy || !rejectReason.trim()}
-              aria-busy={rejectBusy || undefined}
-              className="flex-1 px-4 py-2.5 bg-rose-600 text-white rounded-xl text-sm font-bold hover:bg-rose-700 transition-colors cursor-pointer disabled:opacity-60 inline-flex items-center justify-center gap-2"
-            >
-              {rejectBusy && <Icon icon="lucide:loader-2" className="animate-spin" />}
-              {t('letters.confirmReject' as Parameters<typeof t>[0]) || 'Confirm Reject'}
-            </button>
-          </div>
-        </div>
-      </Modal>
+      {/* L2: terminal "Reject with reason" modal removed — rejection is handled
+          per-step in the Approval Chain card (returns the letter to draft to refine). */}
 
       {/* W29-L2: Mark Response Received — optional note modal */}
       <Modal

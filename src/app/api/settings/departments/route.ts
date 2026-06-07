@@ -2,7 +2,7 @@
 
 import type { NextRequest } from 'next/server'
 import { requirePerm, requireUser } from '@/lib/api/auth'
-import { handle, NotFound } from '@/lib/api/errors'
+import { handle, NotFound, Conflict } from '@/lib/api/errors'
 import { ok } from '@/lib/api/response'
 import { parseJson } from '@/lib/api/validate'
 import { cacheTags, revalidate } from '@/lib/api/cache'
@@ -41,7 +41,15 @@ export async function POST(req: NextRequest) {
       .insert(input)
       .select(DEPARTMENT_COLUMNS)
       .single()
-    if (error || !data) throw error ?? NotFound('Insert returned no row')
+    if (error) {
+      // M1: a unique-key violation (re-adding a name whose slug collides with an
+      // existing LIVE department) is a client 409, not an unhandled 500.
+      if ((error as { code?: string }).code === '23505') {
+        throw Conflict('A department with this name already exists')
+      }
+      throw error
+    }
+    if (!data) throw NotFound('Insert returned no row')
 
     const created = data as { id: string }
     await writeAudit({

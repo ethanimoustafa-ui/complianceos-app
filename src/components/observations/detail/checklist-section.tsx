@@ -51,6 +51,38 @@ export const ChecklistSection = memo(function ChecklistSection({
   const [editingText, setEditingText] = useState('')
   // W27.3-β: spinner while async onAdd completes
   const [isAdding, setIsAdding] = useState(false)
+  // O4: per-item in-flight state so the spinner shows on the specific item
+  // being toggled / removed, not globally.
+  const [togglingIds, setTogglingIds] = useState<Set<string>>(new Set())
+  const [removingIds, setRemovingIds] = useState<Set<string>>(new Set())
+
+  const handleToggle = async (itemId: string, currentState: boolean) => {
+    if (togglingIds.has(itemId)) return
+    setTogglingIds((s) => new Set(s).add(itemId))
+    try {
+      await (onToggle as (id: string, s: boolean) => Promise<void> | void)(itemId, currentState)
+    } finally {
+      setTogglingIds((s) => {
+        const n = new Set(s)
+        n.delete(itemId)
+        return n
+      })
+    }
+  }
+
+  const handleRemove = async (itemId: string) => {
+    if (removingIds.has(itemId)) return
+    setRemovingIds((s) => new Set(s).add(itemId))
+    try {
+      await (onRemove as (id: string) => Promise<void> | void)(itemId)
+    } finally {
+      setRemovingIds((s) => {
+        const n = new Set(s)
+        n.delete(itemId)
+        return n
+      })
+    }
+  }
 
   const completedTasks = items.filter((item) => item.completed).length
   const totalTasks = items.length
@@ -180,10 +212,17 @@ export const ChecklistSection = memo(function ChecklistSection({
                 <>
                   <button
                     type="button"
-                    onClick={readOnly ? undefined : () => onToggle(item.id, item.completed)}
-                    className={`flex items-center gap-3 flex-1 ${readOnly ? 'cursor-default' : 'cursor-pointer'} ${isRTL ? 'text-right' : 'text-left'}`}
+                    onClick={readOnly ? undefined : () => void handleToggle(item.id, item.completed)}
+                    disabled={togglingIds.has(item.id)}
+                    aria-busy={togglingIds.has(item.id) || undefined}
+                    className={`flex items-center gap-3 flex-1 ${readOnly ? 'cursor-default' : 'cursor-pointer'} disabled:cursor-not-allowed ${isRTL ? 'text-right' : 'text-left'}`}
                   >
-                    {item.completed ? (
+                    {togglingIds.has(item.id) ? (
+                      <Icon
+                        icon="lucide:loader-2"
+                        className="text-emerald-500 text-xl shrink-0 animate-spin"
+                      />
+                    ) : item.completed ? (
                       <Icon
                         icon="lucide:check-circle-2"
                         className="text-emerald-500 text-xl shrink-0"
@@ -216,11 +255,16 @@ export const ChecklistSection = memo(function ChecklistSection({
                   ) : null}
                   {!readOnly && (
                     <button
-                      onClick={() => onRemove(item.id)}
-                      className="p-1 text-slate-300 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-all cursor-pointer"
+                      onClick={() => void handleRemove(item.id)}
+                      disabled={removingIds.has(item.id)}
+                      aria-busy={removingIds.has(item.id) || undefined}
+                      className="p-1 text-slate-300 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-all cursor-pointer disabled:cursor-not-allowed disabled:opacity-100"
                       title={t((removeTooltipKey || 'observations.detail.removeItem') as Parameters<typeof t>[0])}
                     >
-                      <Icon icon="lucide:x" className="text-lg" />
+                      <Icon
+                        icon={removingIds.has(item.id) ? 'lucide:loader-2' : 'lucide:x'}
+                        className={`text-lg${removingIds.has(item.id) ? ' animate-spin' : ''}`}
+                      />
                     </button>
                   )}
                 </>

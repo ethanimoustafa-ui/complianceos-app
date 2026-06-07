@@ -178,6 +178,8 @@ export default function CorrespondenceFeedPage() {
   const [sendBusy, setSendBusy] = useState(false)
   const [saveDraftBusy, setSaveDraftBusy] = useState(false)
   const [archiveBusy, setArchiveBusy] = useState(false)
+  // F1 (feed send): per-row "mark as sent" in-flight id (draft → sent).
+  const [markSentBusy, setMarkSentBusy] = useState<string | null>(null)
   // H2: soft-delete busy + confirm state.
   const [deleteBusy, setDeleteBusy] = useState(false)
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null)
@@ -397,6 +399,20 @@ export default function CorrespondenceFeedPage() {
       }
     }
     setIsLetterDetailOpen(false)
+  }
+
+  // F1 (feed send): flip a draft correspondence to 'sent' via the existing
+  // PATCH (optimistic update + audit). Only offered on draft, non-archived rows.
+  const handleMarkSent = async (letterId: string) => {
+    setMarkSentBusy(letterId)
+    try {
+      await correspondenceStore.update(letterId, { status: 'sent' })
+      showToast(t('correspondence.correspondenceSent'))
+    } catch {
+      // optimisticMutation already reverted the row and surfaced an error toast.
+    } finally {
+      setMarkSentBusy(null)
+    }
   }
 
   // H2: hard-delete with audit trail (DELETE /api/correspondence/[id] calls
@@ -720,6 +736,8 @@ export default function CorrespondenceFeedPage() {
                               letter={letter}
                               onView={() => handleViewLetter(letter)}
                               onArchive={() => handleArchive(letter.id)}
+                              onSend={() => handleMarkSent(letter.id)}
+                              isSending={markSentBusy === letter.id}
                               onDelete={() => {
                                 if (deleteConfirmId === letter.id) {
                                   void handleDelete(letter.id)
@@ -1436,6 +1454,8 @@ export default function CorrespondenceFeedPage() {
                       letter={letter}
                       onView={() => { setIsFeedAllOpen(false); handleViewLetter(letter) }}
                       onArchive={() => handleArchive(letter.id)}
+                      onSend={() => handleMarkSent(letter.id)}
+                      isSending={markSentBusy === letter.id}
                       onDelete={() => {
                         if (deleteConfirmId === letter.id) {
                           void handleDelete(letter.id)
@@ -1599,6 +1619,8 @@ function CommunicationLogItem({
   onView,
   onArchive,
   onDelete,
+  onSend,
+  isSending,
   isConfirmingDelete,
   t,
   isRTL
@@ -1608,6 +1630,9 @@ function CommunicationLogItem({
   onArchive: () => void
   // F1: per-row soft-delete callback (optional — omit to hide the button).
   onDelete?: () => void
+  // F1 (feed send): mark a draft correspondence as sent (optional — omit to hide).
+  onSend?: () => void
+  isSending?: boolean
   // F1: when true the delete button shows a "Confirm?" pill so the user
   // gets visual feedback on first click and only needs ONE further click.
   isConfirmingDelete?: boolean
@@ -1660,6 +1685,18 @@ function CommunicationLogItem({
           >
             {t('common.view')}
           </button>
+          {/* F1 (feed send): only draft, non-archived rows can be sent. */}
+          {onSend && !isSent && !letter.archived && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onSend() }}
+              disabled={isSending}
+              aria-busy={isSending || undefined}
+              className="text-[9px] font-bold text-blue-600 hover:text-blue-700 cursor-pointer shrink-0 inline-flex items-center gap-1 disabled:opacity-60"
+            >
+              {isSending && <Icon icon="lucide:loader-2" className="animate-spin" />}
+              {t('correspondence.send')}
+            </button>
+          )}
           <button
             onClick={onArchive}
             className="text-[9px] font-bold text-slate-500 hover:text-slate-700 cursor-pointer shrink-0"

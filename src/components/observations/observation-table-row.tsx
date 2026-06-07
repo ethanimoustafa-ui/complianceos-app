@@ -60,7 +60,8 @@ export const ObservationTableRow = memo(function ObservationTableRow({
   const isClosed = observation.status === 'closed'
 
   const MENU_WIDTH = 172
-  const MENU_HEIGHT = 92
+  // O6: closed rows show a single Delete item (Edit is hidden), so the menu is shorter.
+  const MENU_HEIGHT = isClosed ? 52 : 92
 
   // Position the action menu next to the cursor. In LTR, the menu's left edge sits
   // just right of the cursor; in RTL, the menu's right edge sits just left of the cursor.
@@ -116,16 +117,23 @@ export const ObservationTableRow = memo(function ObservationTableRow({
         </span>
       </td>
       <td className={`py-4 text-xs font-medium text-slate-600`}>
-        <div className={`flex items-center gap-1`}>
-          <Icon icon="lucide:flag" className="text-rose-400 text-[10px]" />
-          <span>{formatDate(observation.dueDate, isRTL)}</span>
-        </div>
-        {observation.remediationSubmissionDueDate ? (
-          <div className={`flex items-center gap-1 mt-0.5 text-[10px] text-slate-400`}>
-            <Icon icon="lucide:file-clock" className="text-amber-400 text-[10px]" />
-            <span>{formatDate(observation.remediationSubmissionDueDate, isRTL)}</span>
-          </div>
-        ) : null}
+        {/* O1: completed (closed) observations no longer show a deadline. */}
+        {isClosed ? (
+          <span className="text-slate-300">—</span>
+        ) : (
+          <>
+            <div className={`flex items-center gap-1`}>
+              <Icon icon="lucide:flag" className="text-rose-400 text-[10px]" />
+              <span>{formatDate(observation.dueDate, isRTL)}</span>
+            </div>
+            {observation.remediationSubmissionDueDate ? (
+              <div className={`flex items-center gap-1 mt-0.5 text-[10px] text-slate-400`}>
+                <Icon icon="lucide:file-clock" className="text-amber-400 text-[10px]" />
+                <span>{formatDate(observation.remediationSubmissionDueDate, isRTL)}</span>
+              </div>
+            ) : null}
+          </>
+        )}
       </td>
       <td className="py-4">
         <div className={`flex items-center gap-2 justify-center`}>
@@ -143,19 +151,13 @@ export const ObservationTableRow = memo(function ObservationTableRow({
         </div>
       </td>
       <td className={`py-4 ${isRTL ? 'pl-4 text-left' : 'pr-4 text-right'}`}>
-        {isClosed ? (
-          // O4: align check icon with the Actions column — use inline-flex
+        {!canEdit ? (
+          // O6: closed rows still get the emerald "verified" check when the user
+          // can't act; non-actionable open rows show the muted check.
           <span className="inline-flex justify-end w-full">
             <Icon
               icon="lucide:check-circle-2"
-              className="text-emerald-500 text-xl"
-            />
-          </span>
-        ) : !canEdit ? (
-          <span className="inline-flex justify-end w-full">
-            <Icon
-              icon="lucide:check-circle-2"
-              className="text-slate-300 text-xl"
+              className={isClosed ? 'text-emerald-500 text-xl' : 'text-slate-300 text-xl'}
             />
           </span>
         ) : (
@@ -195,32 +197,36 @@ export const ObservationTableRow = memo(function ObservationTableRow({
                         padding: '4px 0',
                       }}
                     >
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          onMenuToggle(null)
-                          onEdit?.(observation)
-                        }}
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: 8,
-                          width: '100%',
-                          padding: '8px 16px',
-                          fontSize: 14,
-                          color: '#334155',
-                          background: 'transparent',
-                          border: 0,
-                          cursor: 'pointer',
-                          textAlign: isRTL ? 'right' : 'left',
-                          justifyContent: isRTL ? 'flex-end' : 'flex-start',
-                        }}
-                        onMouseEnter={(e) => (e.currentTarget.style.background = '#f8fafc')}
-                        onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
-                      >
-                        <Icon icon="lucide:pencil" style={{ color: '#94a3b8' }} />
-                        <span>{t('observations.actions.edit')}</span>
-                      </button>
+                      {/* O6: Edit is hidden for completed (closed) observations —
+                          verified findings stay immutable; only Delete is offered. */}
+                      {!isClosed && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            onMenuToggle(null)
+                            onEdit?.(observation)
+                          }}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 8,
+                            width: '100%',
+                            padding: '8px 16px',
+                            fontSize: 14,
+                            color: '#334155',
+                            background: 'transparent',
+                            border: 0,
+                            cursor: 'pointer',
+                            textAlign: isRTL ? 'right' : 'left',
+                            justifyContent: isRTL ? 'flex-end' : 'flex-start',
+                          }}
+                          onMouseEnter={(e) => (e.currentTarget.style.background = '#f8fafc')}
+                          onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                        >
+                          <Icon icon="lucide:pencil" style={{ color: '#94a3b8' }} />
+                          <span>{t('observations.actions.edit')}</span>
+                        </button>
+                      )}
                       <button
                         onClick={(e) => {
                           e.stopPropagation()

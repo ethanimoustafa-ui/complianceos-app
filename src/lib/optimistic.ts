@@ -104,8 +104,10 @@ export interface OptimisticMutationOptions<T> {
   /**
    * Optional success step: reconcile server-authoritative fields into the
    * already-optimistic state (swap temp ids, stamp progress/status/version).
+   * May be async — the lifecycle awaits it so the mutation promise does not
+   * resolve until the reconcile (e.g. inserting the real row) has completed.
    */
-  reconcile?: (result: T) => void
+  reconcile?: (result: T) => void | Promise<void>
   /**
    * Revert the optimistic change. Restore the affected entity from the
    * caller's snapshot and recompute rollups from the CURRENT store state.
@@ -141,8 +143,9 @@ export async function optimisticMutation<T>(
   try {
     // 2. Background request.
     const result = await request()
-    // 3. Reconcile server-authoritative fields.
-    reconcile?.(result)
+    // 3. Reconcile server-authoritative fields. Awaited so an async reconcile
+    //    (e.g. inserting the confirmed row) finishes before the promise resolves.
+    await reconcile?.(result)
     return result
   } catch (e) {
     // 4. Revert + friendly toast. Log the real error for developers.

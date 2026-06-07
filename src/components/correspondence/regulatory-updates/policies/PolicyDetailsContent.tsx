@@ -140,13 +140,19 @@ export function PolicyDetailsContent({
   const { policies: allPolicies, update, addWorkflowStep, addAttachment, removeAttachment, addEvidence, advanceWorkflowStep, loadMorePolicyActivity, policyActivityPagination } = usePolicyStore()
   const { user: authUser } = useAuthStore()
   const { addNotification } = useNotificationStore()
+  // P6 (W34): real per-policy detail-GET in-flight flag (set by fetchById).
+  const detailLoading = usePolicyStore((s) => s.detailLoading[policy.id] ?? false)
   const fresh = allPolicies.find(p => p.id === policy.id) ?? policy
   const actingUser = authUser?.name ?? fresh.owner.name
   const today = new Date().toISOString().split('T')[0]
 
-  // P3 (W29): detect pre-fetch state — description empty + no workflow steps means
-  // the detail GET hasn't resolved yet. Show skeletons in description/detail sections.
-  const isDetailPrefetch = !fresh.description && fresh.workflowTimeline.length === 0 && !fresh.activityLog
+  // P6 (W34): detect pre-fetch state — drive the description / policy-document
+  // skeletons off the REAL detail-GET in-flight flag (detailLoading) AND empty
+  // detail fields. The previous heuristic negated fresh.activityLog, which is
+  // always an empty array (mapRow forces it), so the flag was permanently false
+  // and the skeletons never rendered. Gating on detailLoading also means a
+  // genuinely-empty policy never gets stuck showing skeletons after the GET.
+  const isDetailPrefetch = detailLoading && !fresh.description && fresh.workflowTimeline.length === 0
 
   // P1 (W30): archived policies are strictly view-only — hide every mutation
   // affordance (upload zone, edit button, workflow actions, etc.).
@@ -466,10 +472,14 @@ export function PolicyDetailsContent({
       const newTl = tl.map((s, i) => {
         if (i === ci) return { ...s, status: 'completed' as const, date: today, user: actingUser, note, stepState: undefined }
         if (i === ci + 1 && s.status === 'pending') {
+          // P2 (W34): do NOT auto-enter 'awaiting-response' for a send-email step
+          // when it becomes current — that hid the "Send Email" action and jumped
+          // straight to "Received Response", auto-completing the mail step. Leave
+          // stepState undefined so the Send Email button renders; clicking it
+          // (handleSendEmail) then sets 'awaiting-response'.
           const autoState =
             s.actionType === 'request-approval' || s.actionType === 'send-for-review'
               ? 'pending-approval' as const
-              : s.actionType === 'send-email' ? 'awaiting-response' as const
               : s.actionType === 'notify-manager' ? 'awaiting-manager' as const
               : undefined
           return { ...s, status: 'current' as const, ...(autoState ? { stepState: autoState } : {}) }
@@ -624,11 +634,12 @@ export function PolicyDetailsContent({
         user: '',
         note: undefined,
       }))
+      // P2 (W34): a send-email first step starts with NO stepState so the
+      // "Send Email" action shows (instead of auto-jumping to "Received Response").
       const firstAutoState =
         cleared.length > 0
           ? (cleared[0].actionType === 'request-approval' || cleared[0].actionType === 'send-for-review'
               ? 'pending-approval' as const
-              : cleared[0].actionType === 'send-email' ? 'awaiting-response' as const
               : cleared[0].actionType === 'notify-manager' ? 'awaiting-manager' as const
               : undefined)
           : undefined
@@ -1314,21 +1325,34 @@ export function PolicyDetailsContent({
                 )
               })()}
 
-              {/* P1-d (W29): when ALL steps are completed, show "Reinitiate Review". */}
-              {fresh.workflowTimeline.length > 0 && fresh.workflowTimeline.every(s => s.status === 'completed') && (
-                <Button variant="outline" className="w-full text-emerald-600 border-emerald-200 hover:bg-emerald-50" onClick={() => setNotePromptFor('initiate')}>
-                  <Icon icon="lucide:refresh-cw" className="w-4 h-4" />
-                  {t('policies.initiateReview')}
-                </Button>
-              )}
-
-              {/* Overdue / requires-review: initiate review */}
-              {(fresh.status === 'expired' || fresh.status === 'overdue' || fresh.status === 'requires-review') && (
-                <Button variant="outline" className="w-full text-amber-600 border-amber-200 hover:bg-amber-50" onClick={() => setNotePromptFor('initiate')}>
-                  <Icon icon="lucide:refresh-cw" className="w-4 h-4" />
-                  {t('policies.initiateReview')}
-                </Button>
-              )}
+              {/* P3 (W34): render a SINGLE "Initiate Review" button. Previously
+                  two separate buttons (emerald "all steps completed" + amber
+                  "overdue/requires-review") could both render at once for a
+                  completed-but-due policy, because checkAndUpdateStatuses flips
+                  approved → requires-review after mount without clearing the
+                  completed timeline (that post-paint flip was the "orange appears
+                  after a delay" symptom). Collapse to one — amber when due,
+                  emerald otherwise. Both paths route to the same handler. */}
+              {(() => {
+                const allStepsCompleted = fresh.workflowTimeline.length > 0 && fresh.workflowTimeline.every(s => s.status === 'completed')
+                const needsReview = fresh.status === 'expired' || fresh.status === 'overdue' || fresh.status === 'requires-review'
+                if (!allStepsCompleted && !needsReview) return null
+                return (
+                  <Button
+                    variant="outline"
+                    className={cn(
+                      'w-full',
+                      needsReview
+                        ? 'text-amber-600 border-amber-200 hover:bg-amber-50'
+                        : 'text-emerald-600 border-emerald-200 hover:bg-emerald-50',
+                    )}
+                    onClick={() => setNotePromptFor('initiate')}
+                  >
+                    <Icon icon="lucide:refresh-cw" className="w-4 h-4" />
+                    {t('policies.initiateReview')}
+                  </Button>
+                )
+              })()}
 
               {/* P1-e (W29): Undo always available when at least one step completed. */}
               {fresh.workflowTimeline.some(s => s.status === 'completed') && (
@@ -1348,7 +1372,11 @@ export function PolicyDetailsContent({
                   {t('policies.evidenceSection')}
                 </h3>
                 <div className="flex items-center gap-2">
-                  {evidenceCycles.size > 0 && (
+                  {/* P7 (W34): show the cycle filter whenever there is evidence to
+                      filter or a current review cycle exists — not only when a
+                      review cycle was initiated (which previously gated the
+                      dropdown to old/broken policies with a duplicate review stage). */}
+                  {(evidenceCycles.size > 0 || (fresh.evidence?.length ?? 0) > 0 || !!fresh.currentReviewCycleId) && (
                     <div className="flex items-center gap-1">
                       <Icon icon="lucide:filter" className="text-slate-400 text-xs shrink-0" />
                       <div className="min-w-[140px]">
