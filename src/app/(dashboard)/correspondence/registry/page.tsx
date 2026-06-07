@@ -104,11 +104,14 @@ export default function RegistryPage() {
       2: t('regulatoryUpdates.phaseRemediation' as TranslationKey),
     }
     const circRows: RegistryRow[] = circulars.map((c) => {
-      const currentStep = c.workflowSteps?.find(s => s.status === 'current')
-      // Fallback: if no 'current' step, use the phase after the last completed step
-      const lastCompletedStep = c.workflowSteps?.filter(s => s.status === 'completed').slice(-1)[0]
-      const rawPhase = currentStep?.phase ?? (lastCompletedStep ? Math.min((lastCompletedStep.phase as number) + 1, 2) : 0)
-      const currentPhase = rawPhase as 0 | 1 | 2
+      // Phase comes from the server-stamped current_phase (the phase of the
+      // 'current' workflow step — see /api/circulars GET, which side-queries
+      // circular_workflow_steps). The registry uses fetchAll, which does NOT
+      // hydrate workflowSteps (detail-only), so the old step-derived phase read
+      // an empty array and pinned every row to phase 0 ("CAP"). currentPhase is
+      // null when there's no current step (a fully-completed circular) → treat
+      // that as the final phase.
+      const currentPhase = (c.currentPhase ?? (c.status === 'completed' ? 2 : 0)) as 0 | 1 | 2
       // Use the server-maintained progress (circulars.progress, kept in sync by the
       // shared 50/50 formula in progress-formula.ts). The registry list does NOT
       // hydrate workflowSteps — they're detail-only (fetchById) — so recomputing
