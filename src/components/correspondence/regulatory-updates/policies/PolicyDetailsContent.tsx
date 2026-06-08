@@ -1318,6 +1318,20 @@ export function PolicyDetailsContent({
                     </Button>
                   )
                 }
+                // QA fix: DB-seeded 'approve' steps ("Manager Approval",
+                // "Sharia Approval", "Audit Committee Approval") become current with
+                // step_state=null. Show a "Submit for Approval" action first; clicking
+                // it persists 'pending-approval' (handleRequestApproval -> setStepState),
+                // then Approve/Deny render. Without this case they fell through to the
+                // default "Move to Next Stage" and skipped the approval flow entirely.
+                if (actionType === 'approve') {
+                  return (
+                    <Button variant="outline" className="w-full" onClick={() => handleRequestApproval()} disabled={workflowProcessing}>
+                      {workflowProcessing ? <Icon icon="lucide:loader-2" className="w-4 h-4 animate-spin" /> : <Icon icon="lucide:check-square" className="w-4 h-4" />}
+                      {t('policies.submitForApproval')}
+                    </Button>
+                  )
+                }
                 if (actionType === 'request-approval' || actionType === 'send-for-review') {
                   return (
                     <Button variant="outline" className="w-full" onClick={() => handleRequestApproval()} disabled={workflowProcessing}>

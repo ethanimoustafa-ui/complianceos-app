@@ -1285,6 +1285,7 @@
     "actionSendEmail": "Send Email Notification",
     "actionNotifyManager": "Notify Manager",
     "actionRequestApproval": "Request Approval",
+    "submitForApproval": "Submit for Approval",
     "documentUploaded": "Document updated successfully",
     "evidenceUploaded": "Evidence uploaded successfully",
     "policyUpdated": "Policy updated successfully!",
