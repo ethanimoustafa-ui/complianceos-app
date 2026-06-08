@@ -12,6 +12,7 @@ import { useTranslation } from '@/i18n'
 import { canTransferLeadership, canReviewRemediation, canUploadDocument, canRequestClosure, canReviewClosure } from '@/lib/permissions'
 import { TransferLeadershipModal } from './transfer-leadership-modal'
 import { FileUploadModal, getFileType } from './file-upload-modal'
+import { RemediationPlanModal } from './remediation-plan-modal'
 
 import {
   ChecklistSection,
@@ -71,7 +72,7 @@ export const ObservationDetailModal = memo(function ObservationDetailModal({
   const {
     addComment, editComment, deleteComment,
     addChecklistItem, editChecklistItem, toggleChecklistItem, removeChecklistItem,
-    transferLeadership, reviewRemediationPlan, addDocument, requestClosure, reviewClosure,
+    transferLeadership, submitRemediationPlan, reviewRemediationPlan, addDocument, requestClosure, reviewClosure, reopen,
     fetchById, selectedObservation: storeObservation,
     archive: archiveObservation,
   } = store
@@ -111,6 +112,7 @@ export const ObservationDetailModal = memo(function ObservationDetailModal({
   // Modal states
   const [showTransferModal, setShowTransferModal] = useState(false)
   const [showUploadModal, setShowUploadModal] = useState(false)
+  const [showRemediationPlanModal, setShowRemediationPlanModal] = useState(false)
   // O7: archive busy state for "Mark as Remediated" button spinner.
   const [isArchiving, setIsArchiving] = useState(false)
 
@@ -210,6 +212,8 @@ export const ObservationDetailModal = memo(function ObservationDetailModal({
     }
     setLocalComments((prev) => [...prev, newComment])
     await addComment(observation.id, content, user)
+    // Refresh from server so the synced useEffect picks up the confirmed comment
+    void fetchById(observation.id)
   }
 
   const handleEditComment = async (commentId: string, newText: string) => {
@@ -243,16 +247,35 @@ export const ObservationDetailModal = memo(function ObservationDetailModal({
     await reviewRemediationPlan(observation.id, approved, user, notes)
   }
 
+  const handleAddRemediationPlan = async (plan: { title: string; description: string; dueDate: string }) => {
+    if (!observation || !user) return
+    await submitRemediationPlan(observation.id, {
+      title: plan.title,
+      description: plan.description,
+      dueDate: plan.dueDate,
+    }, user, observation.leaderId)
+    void fetchById(observation.id)
+  }
+
   // Closure request
   const handleRequestClosure = async (notes?: string) => {
     if (!observation || !user) return
+    await fetchById(observation.id)
     await requestClosure(observation.id, user, notes)
   }
 
-  // Closure review
+  // Closure review — refresh byId first so reviewClosure sends a fresh If-Match token
   const handleReviewClosure = async (approved: boolean, notes?: string) => {
     if (!observation || !user) return
+    await fetchById(observation.id)
     await reviewClosure(observation.id, approved, user, notes)
+  }
+
+  // Reopen a closed observation (US-08)
+  const handleReopen = async () => {
+    if (!observation) return
+    await fetchById(observation.id)
+    await reopen(observation.id)
   }
 
   // O7: Mark as Remediated — archive the observation (status→closed, archived_at→NOW())
@@ -448,6 +471,7 @@ export const ObservationDetailModal = memo(function ObservationDetailModal({
             plan={observation.remediationPlan}
             canReview={canReviewRemediation(user, observation)}
             onReview={handleReviewRemediationPlan}
+            onAddPlan={() => setShowRemediationPlanModal(true)}
             documents={localRemediationDocs}
             isRTL={isRTL}
             isLoaded={detailLoaded}
@@ -461,6 +485,7 @@ export const ObservationDetailModal = memo(function ObservationDetailModal({
             canReviewClosure={canReviewClosure(user, observation)}
             onRequestClosure={handleRequestClosure}
             onReviewClosure={handleReviewClosure}
+            onReopen={handleReopen}
             isRTL={isRTL}
           />
 
@@ -494,6 +519,14 @@ export const ObservationDetailModal = memo(function ObservationDetailModal({
         isOpen={showUploadModal}
         onClose={() => setShowUploadModal(false)}
         onConfirm={handleFileUpload}
+      />
+
+      {/* Add Remediation Plan Modal */}
+      <RemediationPlanModal
+        isOpen={showRemediationPlanModal}
+        onClose={() => setShowRemediationPlanModal(false)}
+        onSubmit={handleAddRemediationPlan}
+        observationDueDate={observation?.dueDate}
       />
     </Modal>
   )

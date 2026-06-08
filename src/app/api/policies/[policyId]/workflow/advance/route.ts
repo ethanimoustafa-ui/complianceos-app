@@ -215,6 +215,18 @@ export async function POST(req: NextRequest, { params }: Params) {
       //    the client used to append a transient "Review Initiated" step that
       //    vanished on refetch (P6.3).
       case 'initiate-review': {
+        // BUG-R4-03 Fix 2: helper to derive cycle days from a named review schedule
+        // when review_cycle_days is 0 or null on the policy row.
+        function cadenceToDays(schedule: string | null | undefined): number {
+          if (!schedule) return 365
+          const s = schedule.toLowerCase()
+          if (s.includes('month')) return 30
+          if (s.includes('quarter')) return 90
+          if (s.includes('semi') || s.includes('bi-annual') || s.includes('biannual')) return 182
+          if (s.includes('year') || s.includes('annual')) return 365
+          return 365
+        }
+
         const { error: resetErr } = await supabase
           .from('policy_workflow_steps')
           .update({ status: 'pending', step_state: null, date: null, user_name: null, note: null })
@@ -237,6 +249,59 @@ export async function POST(req: NextRequest, { params }: Params) {
           if (startErr) throw startErr
           promotedStep = first
         }
+        // BUG-P-R2-06: stamp last_review_date = today when a review is initiated
+        // so the "Last Review" field in the detail panel shows the current date.
+        // BUG-P-R3-07: also advance next_review_date by review_cycle_days so the
+        // "Next Review" field updates after each review cycle is initiated.
+        // BUG-R4-03 Fix 2: also fetch review_schedule for cadence fallback.
+        const { data: policyRow } = await supabase
+          .from('policies')
+          .select('review_cycle_days, review_schedule, current_review_cycle_id, current_review_cycle_label, current_review_cycle_date')
+          .eq('id', policyId)
+          .is('deleted_at', null)
+          .maybeSingle<{
+            review_cycle_days: number | null
+            review_schedule: string | null
+            current_review_cycle_id: string | null
+            current_review_cycle_label: string | null
+            current_review_cycle_date: string | null
+          }>()
+
+        // BUG-R4-02 Gap A: archive the old review cycle into policy_review_cycles
+        // before rotating to a new one, so it remains accessible in the evidence dropdown.
+        const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+        if (policyRow?.current_review_cycle_id && UUID_RE.test(policyRow.current_review_cycle_id)) {
+          await supabase.from('policy_review_cycles').upsert({
+            id: policyRow.current_review_cycle_id,
+            policy_id: policyId,
+            label: policyRow.current_review_cycle_label ?? 'Review',
+            initiated_at: policyRow.current_review_cycle_date ?? today,
+          }, { onConflict: 'id', ignoreDuplicates: true })
+        }
+
+        // BUG-R4-03 Fix 2: use cadence fallback when review_cycle_days is 0/null.
+        const cycleDays = (policyRow?.review_cycle_days && policyRow.review_cycle_days > 0)
+          ? policyRow.review_cycle_days
+          : cadenceToDays(policyRow?.review_schedule)
+        const nextReviewDate = new Date()
+        nextReviewDate.setDate(nextReviewDate.getDate() + cycleDays)
+        const nextReviewDateStr = nextReviewDate.toISOString().split('T')[0]
+        const newCycleId = crypto.randomUUID()
+        const newCycleLabel = `Review ${new Date().toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}`
+        const { error: lrErr } = await supabase
+          .from('policies')
+          .update({
+            last_review_date: today,
+            next_review_date: nextReviewDateStr,
+            current_review_cycle_id: newCycleId,
+            current_review_cycle_label: newCycleLabel,
+            current_review_cycle_date: new Date().toISOString(),
+          })
+          .eq('id', policyId)
+          .is('deleted_at', null)
+        // BUG-R4-03 Fix 1: make this stamp fatal — if the date can't be updated,
+        // the review initiation should not silently succeed with a stale date.
+        if (lrErr) throw lrErr
         nextStatus = 'under-review'
         activityType = 'review_initiated'
         textEn = 'Policy review initiated'

@@ -343,7 +343,10 @@ function mapRow(row: PolicyApiRow, previous?: Policy): Policy {
     currentReviewCycleId: row.current_review_cycle_id ?? previous?.currentReviewCycleId,
     currentReviewCycleLabel: row.current_review_cycle_label ?? previous?.currentReviewCycleLabel,
     currentReviewCycleDate: row.current_review_cycle_date ?? previous?.currentReviewCycleDate,
-    reviewCycleHistory: previous?.reviewCycleHistory,
+    reviewCycleHistory: Array.isArray((row as unknown as { review_cycles?: unknown[] }).review_cycles)
+      ? ((row as unknown as { review_cycles: Array<{ id: string; label: string; initiated_at: string }> }).review_cycles)
+          .map(c => ({ id: c.id, label: c.label, initiatedAt: c.initiated_at }))
+      : (previous?.reviewCycleHistory ?? []),
     reviewSchedule:
       (row.review_schedule as ReviewSchedule | undefined) ?? previous?.reviewSchedule,
     frameworkIds: (row.framework_ids ?? previous?.frameworkIds ?? []) as RegulatoryBodyId[],
@@ -445,7 +448,7 @@ interface PolicyStoreState {
    *  is always the canonical server-issued ref_code (D1 timing pattern). */
   create: (data: Omit<Policy, 'id' | 'createdAt' | 'updatedAt'>) => Promise<Policy>
   update: (id: string, data: Partial<Policy>) => void
-  delete: (id: string) => void
+  delete: (id: string) => Promise<boolean>
   setSelected: (policy: Policy | null) => void
   setFilters: (filters: PolicyFilters) => void
   clearFilters: () => void
@@ -481,6 +484,10 @@ interface PolicyStoreState {
   // Drives the description / policy-document skeletons in PolicyDetailsContent.
   detailLoading: Record<string, boolean>
 
+  // BUG-R4-01: per-policy workflow action in-flight flag. Prevents duplicate
+  // rapid clicks on workflow action buttons (Submit, Approve, Initiate, Undo…).
+  workflowProcessing: Record<string, boolean>
+
   // Wave-19.3 / Task-B — Policy Leader change. Optimistically updates
   // owner/ownerId, PATCHes with If-Match; the server emits the activity-log
   // row (`leader_changed` / `leader_assigned`) so the Activity tab re-renders
@@ -494,14 +501,16 @@ interface PolicyStoreState {
 
   // A6 fix — upload a document attachment via POST /api/policies/{id}/attachments.
   // Optimistic local insert; rolls back + surfaces a toast on failure.
+  // BUG-P-R2-02: pass silent=true during the Create Policy modal flow to skip
+  // the activity-log entry (only post-creation uploads should be logged).
   addAttachment: (
     policyId: string,
     file: { name: string; dataUrl: string; size: number; uploadedBy: string },
+    silent?: boolean,
   ) => Promise<void>
 
-  // A6 companion — remove an attachment from local state immediately; no
-  // dedicated DELETE route needed (matching circular pattern).
-  removeAttachment: (policyId: string, attachmentId: string) => void
+  // BUG-P-US07 fix: now async — calls DELETE /api/policies/{id}/attachments/{attachmentId}
+  removeAttachment: (policyId: string, attachmentId: string) => Promise<void>
 
   // P2 fix — POST /api/policies/{id}/evidence to persist evidence.
   // Optimistic local insert; rolls back + surfaces a toast on failure.
@@ -516,6 +525,10 @@ interface PolicyStoreState {
     },
   ) => Promise<void>
 
+  // BUG-P-US08 fix: calls DELETE /api/policies/{id}/evidence/{evidenceId}
+  // Optimistic remove; rolls back on failure.
+  removeEvidence: (policyId: string, evidenceId: string) => Promise<void>
+
   // A7 fix — POST /api/policies/{id}/workflow/steps to persist the new step.
   // Optimistic local insert; rolls back on failure.
   addWorkflowStep: (
@@ -526,7 +539,7 @@ interface PolicyStoreState {
       actionType?: string
       deadline?: string
     },
-  ) => void
+  ) => Promise<void>
 
   // P1 (W29): POST /api/policies/{id}/workflow/advance to persist step completion.
   // Mirrors advanceStep in circular-store. Optimistic local update; server confirms
@@ -550,6 +563,8 @@ interface PolicyStoreState {
   archiveFilter: 'active' | 'archived' | 'all'
   setArchiveFilter: (f: 'active' | 'archived' | 'all') => void
 
+  deleteWorkflowStep: (policyId: string, stepIdx: number) => Promise<void>
+  reorderWorkflowSteps: (policyId: string, newTimeline: import('@/types').PolicyWorkflowStep[]) => Promise<void>
   clearError: () => void
 }
 
@@ -566,6 +581,7 @@ export const usePolicyStore = create<PolicyStoreState>()((set, get) => ({
   selectedPolicy: null,
   policyActivityPagination: {},
   detailLoading: {},
+  workflowProcessing: {},
   pagination: INITIAL_PAGINATION,
   filters: {},
   isLoading: false,
@@ -750,33 +766,35 @@ export const usePolicyStore = create<PolicyStoreState>()((set, get) => ({
     })()
   },
 
-  delete: (id) => {
+  delete: async (id) => {
     // P3-D1: wait for server confirmation before removing from local state.
     // Avoids ghost entries disappearing before the DELETE actually completes.
+    // W34: awaitable + returns boolean so the Delete modal can show an in-flight
+    // spinner and only close + toast once the server confirms the deletion.
     const previous = get().byId[id]
-    if (!previous) return
+    if (!previous) return false
     set({ isMutating: true, error: null })
 
-    void (async () => {
-      try {
-        // W18 / SEC-1: optimistic-concurrency guard on delete too.
-        // Wave-19.3 / P18-BUG-1 — route takes the canonical UUID.
-        const apiId = previous.uuid ?? id
-        await api.delete(`/policies/${apiId}`, ifMatchHeader(previous.updatedAt))
-        set((s) => {
-          const { [id]: _drop, ...rest } = s.byId
-          return {
-            policies: s.policies.filter((p) => p.id !== id),
-            byId: rest,
-            selectedPolicy: s.selectedPolicy?.id === id ? null : s.selectedPolicy,
-            isMutating: false,
-          }
-        })
-      } catch (e) {
-        set({ error: errorMessage(e, 'Failed to delete policy'), isMutating: false })
-        pushToast(revertMessage(e), 'error')
-      }
-    })()
+    try {
+      // W18 / SEC-1: optimistic-concurrency guard on delete too.
+      // Wave-19.3 / P18-BUG-1 — route takes the canonical UUID.
+      const apiId = previous.uuid ?? id
+      await api.delete(`/policies/${apiId}`, ifMatchHeader(previous.updatedAt))
+      set((s) => {
+        const { [id]: _drop, ...rest } = s.byId
+        return {
+          policies: s.policies.filter((p) => p.id !== id),
+          byId: rest,
+          selectedPolicy: s.selectedPolicy?.id === id ? null : s.selectedPolicy,
+          isMutating: false,
+        }
+      })
+      return true
+    } catch (e) {
+      set({ error: errorMessage(e, 'Failed to delete policy'), isMutating: false })
+      pushToast(revertMessage(e), 'error')
+      return false
+    }
   },
 
   setSelected: (policy) => set({ selectedPolicy: policy }),
@@ -841,7 +859,7 @@ export const usePolicyStore = create<PolicyStoreState>()((set, get) => ({
     const policy = get().byId[id]
     if (!policy) return
     const today = new Date().toISOString().split('T')[0]
-    const cycleId = Date.now().toString()
+    const cycleId = crypto.randomUUID()
     const cycleLabel = `Review ${new Date().toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}`
     const oldEntry = policy.currentReviewCycleId
       ? [{ id: policy.currentReviewCycleId, label: policy.currentReviewCycleLabel ?? 'Review', initiatedAt: today }]
@@ -858,6 +876,8 @@ export const usePolicyStore = create<PolicyStoreState>()((set, get) => ({
     const nextReviewDate = policy.reviewSchedule
       ? computeNextReview(policy.reviewSchedule, new Date())
       : policy.nextReviewDate
+    // BUG-P-R2-06: set lastReviewDate to today so "Last Review" field shows
+    // the current date immediately after initiating a review.
     get().update(id, {
       status: 'draft' as PolicyStatus,
       workflowTimeline: [...resetTimeline, newStep],
@@ -866,6 +886,7 @@ export const usePolicyStore = create<PolicyStoreState>()((set, get) => ({
       currentReviewCycleDate: new Date().toISOString(),
       reviewCycleHistory: [...(policy.reviewCycleHistory ?? []), ...oldEntry],
       nextReviewDate,
+      lastReviewDate: today,
     })
   },
 
@@ -1157,9 +1178,10 @@ export const usePolicyStore = create<PolicyStoreState>()((set, get) => ({
   },
 
   // A7 fix — POST /api/policies/{id}/workflow/steps.
-  // Optimistic local insert into workflowTimeline; fires the server POST
-  // in the background; rolls back and surfaces a toast on failure.
-  addWorkflowStep: (policyId, { step, description, actionType, deadline }) => {
+  // Returns a Promise so callers can await server confirmation before
+  // resetting the form (prevents the "step gone after reload" symptom
+  // where the form reset fired before the insert completed).
+  addWorkflowStep: async (policyId, { step, description, actionType, deadline }) => {
     const previous = get().byId[policyId]
     if (!previous) return
     const isApproved = previous.status === 'approved'
@@ -1195,56 +1217,57 @@ export const usePolicyStore = create<PolicyStoreState>()((set, get) => ({
       isMutating: true,
       error: null,
     }))
-    void (async () => {
-      try {
-        const apiId = previous.uuid ?? policyId
-        const row = await api.post<PolicyWorkflowStepApiRow>(
-          `/policies/${apiId}/workflow/steps`,
-          {
-            step,
-            description: description ?? null,
-            action_type: actionType ?? null,
-            deadline: deadline ?? null,
-          },
+    try {
+      const apiId = previous.uuid ?? policyId
+      const row = await api.post<PolicyWorkflowStepApiRow>(
+        `/policies/${apiId}/workflow/steps`,
+        {
+          step,
+          ...(description != null ? { description } : {}),
+          ...(actionType != null ? { action_type: actionType } : {}),
+          ...(deadline != null ? { deadline } : {}),
+        },
+      )
+      // Map the server response back — the server assigns id/sort_order.
+      const serverStep = mapPolicyWorkflowStepRow(row)
+      // Reconcile: replace the last-added step (tail) with the server-issued one.
+      set((s) => {
+        const policy = s.byId[policyId] ?? optimistic
+        const timeline = [...(policy.workflowTimeline ?? [])]
+        // Find and replace the optimistic step (the tail pending step).
+        const idx = timeline.findLastIndex(
+          (st) => st.step === step && st.status !== 'completed' && !st.date,
         )
-        // Map the server response back — the server assigns id/sort_order.
-        const serverStep = mapPolicyWorkflowStepRow(row)
-        // Reconcile: replace the last-added step (tail) with the server-issued one.
-        set((s) => {
-          const policy = s.byId[policyId] ?? optimistic
-          const timeline = [...(policy.workflowTimeline ?? [])]
-          // Find and replace the optimistic step (the tail pending step).
-          const idx = timeline.findLastIndex(
-            (st) => st.step === step && st.status !== 'completed' && !st.date,
-          )
-          if (idx >= 0) timeline[idx] = serverStep
-          const reconciled: Policy = { ...policy, workflowTimeline: timeline }
-          return {
-            policies: s.policies.map((p) => (p.id === policyId ? reconciled : p)),
-            byId: { ...s.byId, [policyId]: reconciled },
-            selectedPolicy: s.selectedPolicy?.id === policyId ? reconciled : s.selectedPolicy,
-            isMutating: false,
-          }
-        })
-        // Refresh the detail so the Activity tab picks up the new row.
-        get().fetchById(policyId)
-      } catch (e) {
-        // Roll back the optimistic insert + surface a keyed toast.
-        set((s) => ({
-          policies: s.policies.map((p) => (p.id === policyId ? previous : p)),
-          byId: { ...s.byId, [policyId]: previous },
-          selectedPolicy: s.selectedPolicy?.id === policyId ? previous : s.selectedPolicy,
-          error: errorMessage(e, 'Failed to add workflow step'),
+        if (idx >= 0) timeline[idx] = serverStep
+        const reconciled: Policy = { ...policy, workflowTimeline: timeline }
+        return {
+          policies: s.policies.map((p) => (p.id === policyId ? reconciled : p)),
+          byId: { ...s.byId, [policyId]: reconciled },
+          selectedPolicy: s.selectedPolicy?.id === policyId ? reconciled : s.selectedPolicy,
           isMutating: false,
-        }))
-        pushToast(revertMessage(e), 'error')
-      }
-    })()
+        }
+      })
+      // Refresh the detail so the Activity tab picks up the new row.
+      get().fetchById(policyId)
+    } catch (e) {
+      // Roll back the optimistic insert + surface a keyed toast.
+      set((s) => ({
+        policies: s.policies.map((p) => (p.id === policyId ? previous : p)),
+        byId: { ...s.byId, [policyId]: previous },
+        selectedPolicy: s.selectedPolicy?.id === policyId ? previous : s.selectedPolicy,
+        error: errorMessage(e, 'Failed to add workflow step'),
+        isMutating: false,
+      }))
+      pushToast(revertMessage(e), 'error')
+      throw e
+    }
   },
 
   // A6: optimistic attachment upload — POST /api/policies/{id}/attachments.
   // Uses the same dataUrl-as-storage_path pattern as circular attachments.
-  addAttachment: async (policyId, { name, dataUrl, size, uploadedBy }) => {
+  // BUG-P-R2-02: silent=true suppresses the activity-log entry (used during
+  // the Create Policy modal flow where the upload is part of initial creation).
+  addAttachment: async (policyId, { name, dataUrl, size, uploadedBy }, silent = false) => {
     const previous = get().byId[policyId]
     if (!previous) return
     const tempId = `temp-${Date.now()}-${Math.random().toString(36).slice(2)}`
@@ -1268,8 +1291,11 @@ export const usePolicyStore = create<PolicyStoreState>()((set, get) => ({
     applyToState(previous, [optimistic, ...(previous.attachments ?? [])])
     try {
       const apiId = previous.uuid ?? policyId
+      const attachPath = silent
+        ? `/policies/${apiId}/attachments?silent=true`
+        : `/policies/${apiId}/attachments`
       const row = await api.post<PolicyAttachmentApiRow>(
-        `/policies/${apiId}/attachments`,
+        attachPath,
         { name, storage_path: dataUrl, size },
       )
       const real = mapPolicyAttachmentRow(row)
@@ -1285,9 +1311,10 @@ export const usePolicyStore = create<PolicyStoreState>()((set, get) => ({
     }
   },
 
-  removeAttachment: (policyId, attachmentId) => {
+  removeAttachment: async (policyId, attachmentId) => {
     const policy = get().byId[policyId]
     if (!policy) return
+    // Optimistic remove
     const next: Policy = {
       ...policy,
       attachments: (policy.attachments ?? []).filter((a) => a.id !== attachmentId),
@@ -1297,6 +1324,18 @@ export const usePolicyStore = create<PolicyStoreState>()((set, get) => ({
       byId: { ...s.byId, [policyId]: next },
       selectedPolicy: s.selectedPolicy?.id === policyId ? next : s.selectedPolicy,
     }))
+    // Persist deletion to server
+    try {
+      const apiId = policy.uuid ?? policyId
+      await api.delete(`/policies/${apiId}/attachments/${attachmentId}`)
+    } catch {
+      // Rollback on failure
+      set((s) => ({
+        policies: s.policies.map((p) => (p.id === policyId ? policy : p)),
+        byId: { ...s.byId, [policyId]: policy },
+        selectedPolicy: s.selectedPolicy?.id === policyId ? policy : s.selectedPolicy,
+      }))
+    }
   },
 
   // P2 fix — POST /api/policies/{id}/evidence.
@@ -1371,6 +1410,35 @@ export const usePolicyStore = create<PolicyStoreState>()((set, get) => ({
     }
   },
 
+  removeEvidence: async (policyId, evidenceId) => {
+    const policy = get().byId[policyId]
+    if (!policy) return
+    // Optimistic remove
+    const next: Policy = {
+      ...policy,
+      evidence: (policy.evidence ?? []).filter((e) => e.id !== evidenceId),
+    }
+    set((s) => ({
+      policies: s.policies.map((p) => (p.id === policyId ? next : p)),
+      byId: { ...s.byId, [policyId]: next },
+      selectedPolicy: s.selectedPolicy?.id === policyId ? next : s.selectedPolicy,
+    }))
+    // Persist deletion to server
+    try {
+      const apiId = policy.uuid ?? policyId
+      await api.delete(`/policies/${apiId}/evidence/${evidenceId}`)
+    } catch (e) {
+      // Rollback on failure
+      set((s) => ({
+        policies: s.policies.map((p) => (p.id === policyId ? policy : p)),
+        byId: { ...s.byId, [policyId]: policy },
+        selectedPolicy: s.selectedPolicy?.id === policyId ? policy : s.selectedPolicy,
+      }))
+      pushToast(revertMessage(e), 'error')
+      throw e
+    }
+  },
+
   // P6 (W29): archive / unarchive a policy by PATCHing archived_at.
   // Optimistic archivedAt update; roll back on failure.
   archivePolicy: async (policyId, actorName) => {
@@ -1437,6 +1505,8 @@ export const usePolicyStore = create<PolicyStoreState>()((set, get) => ({
   advanceWorkflowStep: async (policyId, { action, stepId, note, userName }) => {
     const policy = get().byId[policyId]
     if (!policy) return
+    // BUG-R4-01: set in-flight flag so all workflow buttons disable while request runs.
+    set((s) => ({ workflowProcessing: { ...s.workflowProcessing, [policyId]: true } }))
     const apiId = policy.uuid ?? policyId
     try {
       await api.post<PolicyApiRow>(`/policies/${apiId}/workflow/advance`, {
@@ -1450,6 +1520,76 @@ export const usePolicyStore = create<PolicyStoreState>()((set, get) => ({
     } catch (e) {
       // eslint-disable-next-line no-console
       console.error('[advanceWorkflowStep] server persist failed —', action, e)
+      pushToast(revertMessage(e), 'error')
+    } finally {
+      // BUG-R4-01: always clear in-flight flag regardless of success/failure.
+      set((s) => ({ workflowProcessing: { ...s.workflowProcessing, [policyId]: false } }))
+    }
+  },
+
+  deleteWorkflowStep: async (policyId: string, stepIdx: number) => {
+    const policy = get().byId[policyId]
+    if (!policy) return
+    const step = policy.workflowTimeline[stepIdx]
+    // Optimistic remove + restatus
+    const filtered = policy.workflowTimeline.filter((_, i) => i !== stepIdx)
+    const cleared = filtered.map(s => s.status === 'completed' ? s : { ...s, stepState: undefined })
+    const newTl: typeof filtered = []
+    let foundCurrent = false
+    for (const s of cleared) {
+      if (s.status === 'completed') { newTl.push(s); continue }
+      if (!foundCurrent) { foundCurrent = true; newTl.push({ ...s, status: 'current' as const }) }
+      else newTl.push({ ...s, status: 'pending' as const })
+    }
+    set(cur => ({
+      policies: cur.policies.map(p => p.id === policyId ? { ...p, workflowTimeline: newTl } : p),
+      byId: { ...cur.byId, [policyId]: { ...cur.byId[policyId]!, workflowTimeline: newTl } },
+    }))
+    if (!step?.id) return // optimistic-only row, no server call needed
+    const apiId = policy.uuid ?? policyId
+    try {
+      await api.delete(`/policies/${apiId}/workflow/steps/${step.id}`)
+    } catch (e) {
+      // Revert on failure
+      set(cur => ({
+        policies: cur.policies.map(p => p.id === policyId ? { ...p, workflowTimeline: policy.workflowTimeline } : p),
+        byId: { ...cur.byId, [policyId]: { ...cur.byId[policyId]!, workflowTimeline: policy.workflowTimeline } },
+      }))
+      pushToast(revertMessage(e), 'error')
+    }
+  },
+
+  reorderWorkflowSteps: async (policyId: string, newTimeline: import('@/types').PolicyWorkflowStep[]) => {
+    const policy = get().byId[policyId]
+    if (!policy) return
+    // Optimistic update — set immediately so the UI reflects the new order/statuses
+    set(cur => ({
+      policies: cur.policies.map(p => p.id === policyId ? { ...p, workflowTimeline: newTimeline } : p),
+      byId: { ...cur.byId, [policyId]: { ...cur.byId[policyId]!, workflowTimeline: newTimeline } },
+    }))
+    const apiId = policy.uuid ?? policyId
+    try {
+      // PATCH each non-completed step with absolute sort_order AND the recomputed status
+      // so that a subsequent fetchById brings back the correct order and "current" dot position.
+      await Promise.all(
+        newTimeline
+          .filter(s => s.id && s.status !== 'completed')
+          .map((s) => {
+            const absoluteIdx = newTimeline.indexOf(s)
+            return api.patch(`/policies/${apiId}/workflow/steps/${s.id}`, {
+              sort_order: absoluteIdx,
+              status: s.status,
+            })
+          })
+      )
+      // Reconcile from DB so any concurrent fetchById won't race against stale sort_orders.
+      get().fetchById(policyId)
+    } catch (e) {
+      // Revert to previous order on any failure
+      set(cur => ({
+        policies: cur.policies.map(p => p.id === policyId ? { ...p, workflowTimeline: policy.workflowTimeline } : p),
+        byId: { ...cur.byId, [policyId]: { ...cur.byId[policyId]!, workflowTimeline: policy.workflowTimeline } },
+      }))
       pushToast(revertMessage(e), 'error')
     }
   },

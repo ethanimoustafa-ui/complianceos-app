@@ -356,20 +356,24 @@ function CircularCardContent({ circular, t }: { circular: Circular; t: RegDocCar
 function PolicyCardContent({ policy, t }: { policy: Policy; t: RegDocCardProps['t']; isRTL: boolean }) {
   const { isRTL: rtl } = useTranslation()
   const departments = useDepartmentStore(s => s.departments)
+  const frameworks = useFrameworkConfigStore(s => s.frameworks)
   const statusStyle = POLICY_STATUS_COLORS[policy.status]
   const categoryIcon = CATEGORY_ICONS[policy.category] ?? 'lucide:tag'
   const tierStyle = TIER_COLORS[policy.approvalTier] ?? TIER_COLORS.management
   const urgency = getReviewUrgency(policy.nextReviewDate, policy.status)
 
-  const getDeptLabel = (deptName: string) => {
-    const dept = departments.find(d => d.name === deptName || d.id === deptName)
+  const getDeptLabel = (deptIdOrName: string) => {
+    const dept = departments.find(d => d.name === deptIdOrName || d.id === deptIdOrName)
     if (dept) return rtl ? dept.nameAr : dept.name
-    return deptName
+    return deptIdOrName
   }
 
   // W18-cleanup: tier + status labels resolved by shared formatters. The
   // per-card tier map and status ternary were retired so EN/AR copy lives in
   // the dictionaries once.
+
+  const affectedDepts = policy.affectedDepartments ?? []
+  const fwIds = policy.frameworkIds ?? []
 
   return (
     <div className={cn('flex items-center gap-6 flex-1', )}>
@@ -402,6 +406,40 @@ function PolicyCardContent({ policy, t }: { policy: Policy; t: RegDocCardProps['
           <span className="w-1 h-1 bg-slate-300 rounded-full"></span>
           <span className="px-2 py-0.5 bg-emerald-50 text-emerald-600 text-[10px] font-bold rounded-full">{policy.version}</span>
         </div>
+        {/* US-02: description preview — BUG-P-R2-04: clamp to 2 lines so a
+            long description does not expand the card height beyond other rows. */}
+        {policy.description && (
+          <p className="text-[11px] text-slate-500 line-clamp-2 overflow-hidden">{policy.description}</p>
+        )}
+        {/* US-02: framework chips */}
+        {fwIds.length > 0 && (
+          <div className="flex items-center gap-1.5 flex-wrap">
+            {fwIds.slice(0, 4).map((fid) => {
+              const fw = frameworks.find(f => f.id === fid)
+              return (
+                <span key={fid} className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-100">
+                  {fw?.name ?? fid.toUpperCase()}
+                </span>
+              )
+            })}
+            {fwIds.length > 4 && (
+              <span className="text-[10px] font-bold text-slate-400">+{fwIds.length - 4}</span>
+            )}
+          </div>
+        )}
+        {/* US-02: affected-department chips (max 3 + overflow) */}
+        {affectedDepts.length > 0 && (
+          <div className="flex items-center gap-1.5 flex-wrap">
+            {affectedDepts.slice(0, 3).map((d) => (
+              <span key={d} className="inline-flex items-center px-2 py-0.5 bg-slate-100 text-slate-600 rounded-full text-[10px] font-bold">
+                {getDeptLabel(d)}
+              </span>
+            ))}
+            {affectedDepts.length > 3 && (
+              <span className="text-[10px] font-bold text-slate-400">+{affectedDepts.length - 3} more</span>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Owner + next review */}

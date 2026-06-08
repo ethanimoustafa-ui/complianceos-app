@@ -343,12 +343,14 @@ export function RegisterPolicyModal({ isOpen, onClose, onCreated, t, isRTL }: Pr
       if (formDocFile) {
         try {
           const dataUrl = await readFileAsDataUrl(formDocFile)
+          // BUG-P-R2-02: pass silent=true so the attachment upload during
+          // initial policy creation does NOT write an activity-log entry.
           await addAttachment(newPolicy.id, {
             name: formDocFile.name,
             dataUrl,
             size: formDocFile.size,
             uploadedBy: currentUser?.name ?? owner.name,
-          })
+          }, true)
         } catch {
           // Non-fatal — the policy is created; surface error via toast if needed.
         }
@@ -574,7 +576,6 @@ export function RegisterPolicyModal({ isOpen, onClose, onCreated, t, isRTL }: Pr
               file={formDocFile}
               fileRef={formDocFileRef}
               label={t('policies.uploadDocument')}
-              required
               t={t}
             />
           </div>
@@ -597,6 +598,7 @@ export function RegisterPolicyModal({ isOpen, onClose, onCreated, t, isRTL }: Pr
               disabled={!formValid || isCreating}
               aria-busy={isCreating || undefined}
             >
+              <Icon icon={isCreating ? 'lucide:loader-2' : 'lucide:plus'} className={`w-4 h-4${isCreating ? ' animate-spin' : ''}`} />
               {isCreating ? t('common.saving') : t('policies.createPolicy')}
             </Button>
           </div>

@@ -16,7 +16,7 @@ import { NotFound } from '../errors'
 // read the persisted flag (O(1)) instead of recomputing it from
 // `next_review_date` per render.
 export const POLICY_LIST_COLUMNS =
-  'id, ref_code, name, status, category, version, approval_tier, owner_id, owner_name, owner_department, business_owner_department_id, last_review_date, next_review_date, overdue_count, is_expired, framework_ids, affected_departments, archived_at, created_at, updated_at'
+  'id, ref_code, name, description, status, category, version, approval_tier, owner_id, owner_name, owner_department, business_owner_department_id, last_review_date, next_review_date, overdue_count, is_expired, framework_ids, affected_departments, archived_at, created_at, updated_at'
 
 export const POLICY_DETAIL_COLUMNS =
   'id, ref_code, name, description, status, category, version, approval_tier, owner_id, owner_name, owner_department, business_owner_department_id, last_review_date, next_review_date, review_cycle_days, approved_date, overdue_count, last_overdue_date, current_review_cycle_id, current_review_cycle_label, current_review_cycle_date, review_schedule, is_expired, framework_ids, affected_departments, archived_at, created_at, updated_at'

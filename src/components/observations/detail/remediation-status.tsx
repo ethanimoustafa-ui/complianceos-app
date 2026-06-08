@@ -21,6 +21,8 @@ export interface RemediationStatusProps {
   isRTL: boolean
   /** Render skeleton when the detail GET hasn't resolved yet. */
   isLoaded?: boolean
+  /** BUG-O07: callback to open the Add Remediation Plan modal */
+  onAddPlan?: () => void
 }
 
 export const RemediationStatus = memo(function RemediationStatus({
@@ -29,6 +31,7 @@ export const RemediationStatus = memo(function RemediationStatus({
   onReview,
   documents,
   isLoaded = true,
+  onAddPlan,
 }: RemediationStatusProps) {
   const { t } = useTranslation()
   const [reviewing, setReviewing] = useState<'approve' | 'reject' | null>(null)
@@ -153,7 +156,18 @@ export const RemediationStatus = memo(function RemediationStatus({
           ))}
         </div>
       ) : (
-        <p className="text-xs text-slate-400 italic text-center">{t('observations.detail.noPlanDocuments')}</p>
+        <div className="space-y-3">
+          <p className="text-xs text-slate-400 italic text-center">{t('observations.detail.noPlanDocuments')}</p>
+          {onAddPlan && (
+            <button
+              onClick={onAddPlan}
+              className="w-full flex items-center justify-center gap-2 px-4 py-3 border-2 border-dashed border-slate-200 text-slate-500 text-xs font-bold rounded-lg hover:border-emerald-400 hover:text-emerald-600 transition-colors"
+            >
+              <Icon icon="lucide:plus-circle" className="text-sm" />
+              {t('observations.detail.addRemediationPlan')}
+            </button>
+          )}
+        </div>
       )}
     </div>
   )

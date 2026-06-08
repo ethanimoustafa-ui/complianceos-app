@@ -283,6 +283,8 @@ interface ObservationState {
   reviewRemediationPlan: (observationId: string, approved: boolean, reviewer: User, notes?: string) => Promise<void>
   requestClosure: (observationId: string, requester: User, notes?: string) => Promise<void>
   reviewClosure: (observationId: string, approved: boolean, reviewer: User, notes?: string) => Promise<void>
+  /** BUG-O09: reopen a closed/resolved observation */
+  reopen: (id: string) => Promise<void>
 
   addDocument: (
     observationId: string,
@@ -474,6 +476,8 @@ export const useObservationStore = create<ObservationState>()((set, get) => ({
               avatar: authorName,
             } as unknown as Comment['author'],
             createdAt: u.created_at,
+            isEdited: u.is_edited ?? false,
+            editedAt: u.edited_at ?? undefined,
           }
         })
         // Also map into observation.updates so legacy paths keep working.
@@ -514,6 +518,7 @@ export const useObservationStore = create<ObservationState>()((set, get) => ({
           reviewedAt: latest.reviewed_at ?? undefined,
           reviewedBy: latest.reviewed_by ?? undefined,
           reviewNotes: latest.review_notes ?? undefined,
+          updatedAt: (latest as { updated_at?: string | null }).updated_at ?? undefined,
           createdAt: latest.created_at,
           documents: previous?.remediationPlan?.documents ?? [],
         }
@@ -926,6 +931,64 @@ export const useObservationStore = create<ObservationState>()((set, get) => ({
       })
     } catch (e) {
       set({ error: errorMessage(e, 'Failed to archive observation') })
+      throw e
+    }
+  },
+
+  // ---- reopen -----------------------------------------------------------
+  reopen: async (id) => {
+    requirePermission('Manage Audit Findings', { storeName: 'observation', actionName: 'reopen', id })
+    const snapshot = get().byId[id]
+    const now = new Date().toISOString()
+    try {
+      await optimisticMutation<ObservationApiRow>({
+        context: 'observation.reopen',
+        errorMessage: revertMessage,
+        apply: () => {
+          if (snapshot) {
+            const localPatch = {
+              ...snapshot,
+              status: 'open' as Observation['status'],
+              archivedAt: null,
+              updatedAt: now,
+            }
+            set((s) => ({
+              observations: s.observations.map((o) => (o.id === id ? localPatch : o)),
+              byId: { ...s.byId, [id]: localPatch },
+              isMutating: true,
+              error: null,
+            }))
+          } else {
+            set({ isMutating: true, error: null })
+          }
+        },
+        request: () => api.post<ObservationApiRow>(`/observations/${id}/reopen`, undefined, ifMatchHeader(snapshot?.updatedAt)),
+        reconcile: (row) => {
+          const next = mapRow(row, get().byId[id])
+          set((s) => ({
+            observations: s.observations.map((o) => (o.id === id ? next : o)),
+            byId: { ...s.byId, [id]: next },
+            selectedObservation:
+              s.selectedObservation?.id === id
+                ? ({ ...s.selectedObservation, ...next } as ObservationWithComments)
+                : s.selectedObservation,
+            isMutating: false,
+          }))
+        },
+        revert: () => {
+          if (snapshot) {
+            set((s) => ({
+              observations: s.observations.map((o) => (o.id === id ? snapshot : o)),
+              byId: { ...s.byId, [id]: snapshot },
+              isMutating: false,
+            }))
+          } else {
+            set({ isMutating: false })
+          }
+        },
+      })
+    } catch (e) {
+      set({ error: errorMessage(e, 'Failed to reopen observation') })
       throw e
     }
   },
@@ -1878,9 +1941,10 @@ export const useObservationStore = create<ObservationState>()((set, get) => ({
       userAvatar: reviewer.avatar,
       actionType: approved ? 'remediation_approved' : 'remediation_rejected',
     }
-    // §2.12 — thread the parent's `updatedAt` (the plan row has no
-    // `updated_at` column; server falls back to the parent token).
-    const parentUpdatedAt = prevByIdRow?.updatedAt
+    // §2.12 — thread the plan row's own `updatedAt` for the If-Match guard.
+    // Fall back to the parent observation's updatedAt if the plan doesn't
+    // carry its own token yet (e.g. freshly created temp plan).
+    const planUpdatedAt = plan.updatedAt ?? prevByIdRow?.updatedAt
     try {
       await optimisticMutation<{
         id: string
@@ -1936,7 +2000,7 @@ export const useObservationStore = create<ObservationState>()((set, get) => ({
           return api.patch(
             `/observations/${observationId}/remediation/${plan.id}`,
             { approved, ...(notes !== undefined ? { notes } : {}) },
-            ifMatchHeader(parentUpdatedAt),
+            ifMatchHeader(planUpdatedAt),
           )
         },
         reconcile: (row) => {

@@ -48,6 +48,11 @@ export async function POST(req: NextRequest, { params }: Params) {
     assertUuid(policyId)
     const { supabase, user, profile } = await requirePerm('edit')
     const uuid = await assertPolicyExists(supabase, policyId)
+    // BUG-P-R2-02: ?silent=true skips the activity-log entry for uploads that
+    // happen inline during the Create Policy modal (initial creation flow).
+    // Only post-creation uploads (from the Edit/Overview tab) should be logged.
+    const url = new URL(req.url)
+    const silent = url.searchParams.get('silent') === 'true'
     const input = await parseJson(req, CreatePolicyAttachmentSchema)
 
     // SEC-10: reduce the user-supplied name to a safe basename
@@ -80,14 +85,16 @@ export async function POST(req: NextRequest, { params }: Params) {
         metadata: { policy_id: uuid, name: safeName },
         supabase,
       }),
-      writePolicyActivity({
-        supabase,
-        policy_id: uuid,
-        type: 'attachment_added',
-        text_en: `Attachment "${safeName}" added`,
-        text_ar: `تمت إضافة المرفق "${safeName}"`,
-        user_name: actor,
-      }),
+      silent
+        ? Promise.resolve()
+        : writePolicyActivity({
+            supabase,
+            policy_id: uuid,
+            type: 'attachment_added',
+            text_en: `Attachment "${safeName}" added`,
+            text_ar: `تمت إضافة المرفق "${safeName}"`,
+            user_name: actor,
+          }),
     ])
 
     revalidateAll([

@@ -27,6 +27,8 @@ interface ObservationFiltersProps {
   // O7: archive toggle
   archiveFilter?: 'active' | 'archived'
   onArchiveFilterChange?: (filter: 'active' | 'archived') => void
+  // O13: clear all filters
+  onClearFilters?: () => void
 }
 
 export function ObservationFilters({
@@ -44,8 +46,17 @@ export function ObservationFilters({
   onSubmissionDueDateChange,
   archiveFilter = 'active',
   onArchiveFilterChange,
+  onClearFilters,
 }: ObservationFiltersProps) {
   const { t, isRTL, language } = useTranslation()
+
+  const hasActiveFilters =
+    searchQuery !== '' ||
+    sourceFilter !== 'all' ||
+    severityFilter !== 'all' ||
+    statusFilter !== 'all' ||
+    (dueDateFilter !== undefined && dueDateFilter !== '') ||
+    (submissionDueDateFilter !== undefined && submissionDueDateFilter !== '')
 
   // W24-6c: read source options from the configurable enum store so that
   // admin-added sources appear here automatically.
@@ -176,6 +187,16 @@ export function ObservationFilters({
               </button>
             ) : null}
           </div>
+        ) : null}
+        {/* O13: Clear filters button */}
+        {onClearFilters && hasActiveFilters ? (
+          <button
+            onClick={onClearFilters}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold bg-rose-50 text-rose-600 border border-rose-200 hover:bg-rose-100 transition-colors"
+          >
+            <Icon icon="lucide:filter-x" className="text-sm" />
+            {t('observations.clearFilters' as import('@/i18n').TranslationKey)}
+          </button>
         ) : null}
         {/* O7: Archived filter chip */}
         {onArchiveFilterChange ? (

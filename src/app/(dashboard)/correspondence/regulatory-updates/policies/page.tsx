@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
-import { useSearchParams } from 'next/navigation'
+import { useSearchParams, useRouter } from 'next/navigation'
 import { useAuthStore } from '@/stores/auth-store'
 import Link from 'next/link'
 import { Icon } from '@iconify/react'
@@ -86,13 +86,16 @@ export default function RegulatoryUpdatesPoliciesPage() {
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const searchParams = useSearchParams()
+  const router = useRouter()
   const [deepLinkTab, setDeepLinkTab] = useState<'overview' | 'workflow' | 'activity' | undefined>(undefined)
 
-  // Bug A: Deep-link from URL params (?policyId=...&tab=workflow)
+  // BUG-P04 fix: Deep-link from URL params (?policyId=...&tab=workflow)
+  // Re-run whenever policies or searchParams change so the modal opens even
+  // if policies finish loading after the component mounts.
   useEffect(() => {
     const policyId = searchParams.get('policyId')
     const tab = searchParams.get('tab')
-    if (policyId) {
+    if (policyId && policies.length > 0) {
       const match = policies.find((p) => p.id === policyId)
       if (match) {
         setSelected(match)
@@ -101,7 +104,7 @@ export default function RegulatoryUpdatesPoliciesPage() {
         }
       }
     }
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [searchParams, policies]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const [policySearchQuery, setPolicySearchQuery] = useState('')
   const [policyCategoryFilter, setPolicyCategoryFilter] = useState<PolicyCategory | 'all'>('all')
@@ -354,7 +357,7 @@ export default function RegulatoryUpdatesPoliciesPage() {
                   key={p.id}
                   variant="policy"
                   policy={p}
-                  onClick={() => setSelected(p)}
+                  onClick={() => { setSelected(p); router.replace(`?policyId=${p.id}`) }}
                   isNew={newlyCreatedIds.includes(p.id)}
                   t={t}
                   isRTL={isRTL}
@@ -393,7 +396,7 @@ export default function RegulatoryUpdatesPoliciesPage() {
       {/* Policy Details Modal */}
       <Modal
         isOpen={selectedPolicy !== null}
-        onClose={() => setSelected(null)}
+        onClose={() => { setSelected(null); router.replace('?') }}
         title={selectedPolicy?.name ?? t('policies.policyDetails')}
         size="xl"
       >
@@ -401,7 +404,7 @@ export default function RegulatoryUpdatesPoliciesPage() {
           <PolicyDetailsContent
             policy={selectedPolicy}
             initialTab={deepLinkTab}
-            onClose={() => { setSelected(null); setDeepLinkTab(undefined) }}
+            onClose={() => { setSelected(null); setDeepLinkTab(undefined); router.replace('?') }}
             onSubmitForReview={() => showToast(t('policies.submitForReviewToast'))}
             onApprove={() => showToast(t('policies.approveToast'))}
             onInitiateReview={() => showToast(t('policies.initiateReviewToast'))}

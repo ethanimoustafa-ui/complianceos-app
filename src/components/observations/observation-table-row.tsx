@@ -105,6 +105,28 @@ export const ObservationTableRow = memo(function ObservationTableRow({
         {observation.subTitle ? (
           <p className={`text-[10px] text-slate-400 mt-0.5 ${isRTL ? 'text-right' : ''}`}>{observation.subTitle}</p>
         ) : null}
+        <div className="flex items-center gap-2 mt-1 flex-wrap">
+          {observation.department && (
+            <span className="px-1.5 py-0.5 bg-slate-100 text-slate-500 text-[10px] font-bold rounded uppercase tracking-wide">
+              {observation.department}
+            </span>
+          )}
+          {(() => {
+            const leader = observation.assignees?.find(
+              (a) => a.role === 'leader' || (observation.leaderId && a.id === observation.leaderId)
+            )
+            if (!leader) return null
+            const initials = leader.name.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase()
+            return (
+              <span
+                title={leader.name}
+                className="w-4 h-4 rounded-full bg-emerald-100 text-emerald-700 text-[8px] font-black flex items-center justify-center flex-shrink-0"
+              >
+                {initials}
+              </span>
+            )
+          })()}
+        </div>
       </td>
       <td className="py-4 text-center">
         <span

@@ -621,6 +621,7 @@
     "title": "Observations Tracker",
     "subtitle": "Audit & Remediation Management",
     "addObservation": "Add Observation",
+    "clearFilters": "Clear filters",
     "source": "Source",
     "severity": "Severity",
     "dueDate": "Due Date",
@@ -859,7 +860,8 @@
       "noVersionHistory": "No version history yet",
       "fieldChanged": "Field Changed",
       "changedFrom": "From",
-      "changedTo": "To"
+      "changedTo": "To",
+      "addRemediationPlan": "Add Remediation Plan"
     }
   },
   "regulatoryUpdates": {
@@ -1298,6 +1300,7 @@
     "unarchivePolicy": "Unarchive Policy",
     "unarchivedToast": "Policy restored successfully",
     "currentReview": "Current Review",
+    "currentCycleTag": "current",
     "noActivityYet": "No activity yet.",
     "stepDraftCreated": "Draft Created",
     "stepITReview": "IT Review",
@@ -1324,7 +1327,8 @@
     "stepManagementReview": "Management Review",
     "stepRiskReview": "Risk Review",
     "stepReviewInitiated": "Review Initiated",
-    "attachments": "Attachments"
+    "attachments": "Attachments",
+    "editPolicySubtitle": "Edit policy details"
   },
   "audits": {
     "owner": "Owner",

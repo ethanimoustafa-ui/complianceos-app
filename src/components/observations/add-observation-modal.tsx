@@ -115,10 +115,6 @@ export const AddObservationModal = memo(function AddObservationModal({ isOpen, o
       newErrors.title = t('observations.validation.titleMinLength')
     }
 
-    if (!formData.subTitle.trim()) {
-      newErrors.subTitle = t('observations.validation.subTitleRequired')
-    }
-
     // O3: reference is auto-generated server-side — no client validation needed.
 
     if (!formData.description.trim()) {
@@ -270,7 +266,7 @@ export const AddObservationModal = memo(function AddObservationModal({ isOpen, o
 
               <div className="col-span-2">
                 <label className={`text-xs font-black uppercase text-slate-500 tracking-widest mb-2 block`}>
-                  {t('observations.form.subFindingTitle')} <span className="text-rose-500">*</span>
+                  {t('observations.form.subFindingTitle')}
                 </label>
                 <input
                   type="text"
@@ -430,7 +426,7 @@ export const AddObservationModal = memo(function AddObservationModal({ isOpen, o
           <Button variant="ghost" onClick={onClose} disabled={isSubmitting}>
             {t('common.cancel')}
           </Button>
-          <Button variant="primary" onClick={handleSubmit} disabled={isSubmitting}>
+          <Button variant="primary" onClick={handleSubmit} disabled={isSubmitting || !formData.title.trim() || formData.title.trim().length < 3 || !formData.description.trim() || !formData.department || !formData.dueDate}>
             {isSubmitting ? (
               <>
                 <Icon icon="lucide:loader-2" className="animate-spin" />

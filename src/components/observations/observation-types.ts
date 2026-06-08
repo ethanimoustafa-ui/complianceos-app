@@ -25,6 +25,7 @@ export interface RemediationPlan {
   reviewedAt?: string
   reviewedBy?: string
   reviewNotes?: string
+  updatedAt?: string
   documents?: {
     id: string
     name: string

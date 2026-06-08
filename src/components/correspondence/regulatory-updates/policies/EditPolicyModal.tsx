@@ -266,7 +266,7 @@ export function EditPolicyModal({ isOpen, onClose, policy, onSaved, t, isRTL }: 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title={t('policies.editPolicy')} size="xl">
       <div className="space-y-6">
-        <p className="text-sm text-slate-500 -mt-2">{t('policies.createPolicySubtitle')}</p>
+        <p className="text-sm text-slate-500 -mt-2">{t('policies.editPolicySubtitle')}</p>
 
         <div className="grid grid-cols-2 gap-6">
           {/* Left column */}

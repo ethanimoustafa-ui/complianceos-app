@@ -44,7 +44,7 @@ export async function POST(req: NextRequest, { params }: Params) {
 
     let updateQ = supabase
       .from('observations')
-      .update({ status: 'open' })
+      .update({ status: 'open', archived_at: null })
       .eq('id', observationId)
       .is('deleted_at', null)
     if (ifMatch != null) updateQ = updateQ.eq('updated_at', ifMatch)

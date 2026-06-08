@@ -20,6 +20,7 @@ import { ObservationDetailModal } from '@/components/observations/observation-de
 import { AddObservationModal } from '@/components/observations/add-observation-modal'
 import type { ObservationFormData } from '@/components/observations/add-observation-modal'
 import { EditObservationModal } from '@/components/observations/edit-observation-modal'
+import { DeleteConfirmationDialog } from '@/components/ui/delete-confirmation-dialog'
 import { api } from '@/lib/api-client'
 import type {
   Observation,
@@ -234,14 +235,24 @@ export default function ObservationsPage() {
     }
   }
 
-  // O6: delete fires immediately — no confirm dialog (Hani W29 spec).
-  // D1 timing: the store removes the row only after the server responds.
-  const handleDeleteClick = async (observationId: string) => {
+  // US-10: delete requires confirmation dialog (type DELETE)
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; title: string } | null>(null)
+
+  const handleDeleteClick = (observationId: string) => {
+    const obs = observations.find((o) => o.id === observationId)
+    if (!obs) return
+    setDeleteTarget({ id: observationId, title: obs.title })
+  }
+
+  const handleDeleteConfirm = async () => {
+    if (!deleteTarget) return
     try {
-      await deleteObservation(observationId)
+      await deleteObservation(deleteTarget.id)
       pushToast(t('observations.deleteSuccess' as import('@/i18n').TranslationKey), 'success')
     } catch (error) {
       console.error('Failed to delete observation:', error)
+    } finally {
+      setDeleteTarget(null)
     }
   }
 
@@ -394,6 +405,7 @@ export default function ObservationsPage() {
             onSubmissionDueDateChange={setSubmissionDueDateFilter}
             archiveFilter={archiveFilter}
             onArchiveFilterChange={setArchiveFilter}
+            onClearFilters={handleClearFilters}
           />
 
           {showSkeleton ? (
@@ -447,7 +459,16 @@ export default function ObservationsPage() {
         onSave={handleEditSave}
       />
 
-      {/* O6: delete confirmation dialog removed — delete fires directly with a toast. */}
+      <DeleteConfirmationDialog
+        isOpen={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={handleDeleteConfirm}
+        itemName={deleteTarget?.title}
+        itemType="observation"
+        description={deleteTarget ? `This will permanently delete the observation '${deleteTarget.title}' and all its comments, documents, remediation plans, and activity. This cannot be undone.` : undefined}
+        requireConfirmation
+        confirmationWord="DELETE"
+      />
     </>
   )
 }

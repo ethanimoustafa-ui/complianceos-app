@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils'
 import { formatBytes } from '@/lib/format'
 import { dicebearAvatar } from '@/lib/avatar'
 import { renderFieldLabel } from '@/lib/timeline-message'
+import { api } from '@/lib/api-client'
 import { usePolicyStore } from '@/stores/policy-store'
 import { useAuthStore } from '@/stores/auth-store'
 import { useNotificationStore } from '@/stores/notification-store'
@@ -137,11 +138,14 @@ export function PolicyDetailsContent({
   const [notePromptFor, setNotePromptFor] = useState<NotePromptFor>(null)
   const [noteText, setNoteText] = useState('')
 
-  const { policies: allPolicies, update, addWorkflowStep, addAttachment, removeAttachment, addEvidence, advanceWorkflowStep, loadMorePolicyActivity, policyActivityPagination } = usePolicyStore()
+  const { policies: allPolicies, update, addWorkflowStep, addAttachment, removeAttachment, addEvidence, removeEvidence, advanceWorkflowStep, loadMorePolicyActivity, policyActivityPagination } = usePolicyStore()
   const { user: authUser } = useAuthStore()
   const { addNotification } = useNotificationStore()
   // P6 (W34): real per-policy detail-GET in-flight flag (set by fetchById).
   const detailLoading = usePolicyStore((s) => s.detailLoading[policy.id] ?? false)
+  // BUG-R4-01: per-policy workflow action in-flight flag — disables all workflow
+  // action buttons while advanceWorkflowStep is running to prevent double-submits.
+  const workflowProcessing = usePolicyStore((s) => s.workflowProcessing[policy.id] ?? false)
   const fresh = allPolicies.find(p => p.id === policy.id) ?? policy
   const actingUser = authUser?.name ?? fresh.owner.name
   const today = new Date().toISOString().split('T')[0]
@@ -193,7 +197,7 @@ export function PolicyDetailsContent({
   /** Format a review cycle label in the current locale.
    *  Tries currentReviewCycleDate first, then parses "Review Month Year" strings. */
   function formatCycleLabel(label: string, isoDate?: string): string {
-    const fmt = (d: Date) => `${t('policies.reviewWord')} ${d.toLocaleDateString(isRTL ? 'ar-SA' : 'en-US', { month: 'long', year: 'numeric' })}`
+    const fmt = (d: Date) => `${t('policies.reviewWord')} ${d.toLocaleDateString(isRTL ? 'ar-SA' : 'en-US', { month: 'long', day: 'numeric', year: 'numeric' })}`
     if (isoDate) return fmt(new Date(isoDate))
     // Parse stored English labels like "Review March 2026"
     const m = label.match(/^Review\s+(.+)$/i)
@@ -215,7 +219,7 @@ export function PolicyDetailsContent({
     const cycles = new Map<string, string>()
     // History cycles first (oldest → newest)
     for (const h of fresh.reviewCycleHistory ?? []) {
-      if (!cycles.has(h.id)) cycles.set(h.id, formatCycleLabel(h.label))
+      if (!cycles.has(h.id)) cycles.set(h.id, formatCycleLabel(h.label, h.initiatedAt))
     }
     // Current cycle
     if (fresh.currentReviewCycleId) {
@@ -231,7 +235,7 @@ export function PolicyDetailsContent({
     }
     // Fallback: any cycles found only in evidence entries
     for (const e of fresh.evidence ?? []) {
-      if (!cycles.has(e.reviewCycleId)) cycles.set(e.reviewCycleId, formatCycleLabel(e.reviewCycleLabel))
+      if (!cycles.has(e.reviewCycleId)) cycles.set(e.reviewCycleId, formatCycleLabel(e.reviewCycleLabel, e.uploadedAt))
     }
     return cycles
     // isRTL in deps so the localized label recomputes on a live locale switch.
@@ -298,7 +302,7 @@ export function PolicyDetailsContent({
   async function handleEvidenceAdd(files: FileList) {
     setIsUploadingEvidence(true)
     try {
-      const cycleId = fresh.currentReviewCycleId ?? Date.now().toString()
+      const cycleId = fresh.currentReviewCycleId ?? crypto.randomUUID()
       const cycleLabel = fresh.currentReviewCycleLabel ?? t('policies.currentReview')
       for (const file of Array.from(files)) {
         const dataUrl = await readFileAsDataUrl(file)
@@ -316,21 +320,10 @@ export function PolicyDetailsContent({
     }
   }
 
-  function handleEvidenceRemove(evidenceId: string) {
-    const removed = fresh.evidence?.find(e => e.id === evidenceId)
-    const actEntry: PolicyActivityEntry = {
-      id: Date.now().toString(),
-      timestamp: new Date().toISOString(),
-      date: today,
-      type: 'evidence_removed',
-      textEn: `Evidence "${removed?.name}" removed`,
-      textAr: `تم إزالة الدليل "${removed?.name}"`,
-      user: actingUser,
-    }
-    update(fresh.id, {
-      evidence: (fresh.evidence ?? []).filter(e => e.id !== evidenceId),
-      activityLog: [...(fresh.activityLog ?? []), actEntry],
-    })
+  async function handleEvidenceRemove(evidenceId: string) {
+    // BUG-P-US08 fix: call removeEvidence which hits DELETE /api/policies/{uuid}/evidence/{id}
+    // The server writes the evidence_removed activity log entry.
+    await removeEvidence(fresh.id, evidenceId)
   }
 
   function handleEvidenceDownload(ev: PolicyEvidence) {
@@ -349,7 +342,7 @@ export function PolicyDetailsContent({
     setIsAddingStep(true)
     try {
       // P1: pass deadline to the store so it's included in the workflow step
-      await (addWorkflowStep as (id: string, payload: unknown) => Promise<void> | void)(fresh.id, {
+      await addWorkflowStep(fresh.id, {
         step: newStepName.trim(),
         description: newStepDesc.trim() || undefined,
         actionType: newStepAction,
@@ -403,10 +396,13 @@ export function PolicyDetailsContent({
     )
     const newTl = restatusTimeline(cleared)
     const newStatus = deriveStatusFromTimeline(newTl, fresh.status)
-    update(fresh.id, {
-      workflowTimeline: newTl,
-      ...(newStatus !== fresh.status ? { status: newStatus } : {}),
-    })
+    // Only persist the policy-level status change via the policy PATCH.
+    // workflowTimeline is managed entirely by reorderWorkflowSteps so it
+    // can't race against the step sort_order PATCHes.
+    if (newStatus !== fresh.status) {
+      update(fresh.id, { status: newStatus })
+    }
+    void usePolicyStore.getState().reorderWorkflowSteps(fresh.id, newTl)
     handleDragEnd()
   }
 
@@ -655,10 +651,37 @@ export function PolicyDetailsContent({
         textAr: 'تم بدء دورة المراجعة',
         user: actingUser, note,
       }
+      const cycleId = crypto.randomUUID()
+      const cycleLabel = `Review ${new Date().toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}`
+      const oldCycleEntry = fresh.currentReviewCycleId
+        ? [{ id: fresh.currentReviewCycleId, label: fresh.currentReviewCycleLabel ?? 'Review', initiatedAt: today }]
+        : []
+      // BUG-R4-03 Fix 3: mirror the route's cadence fallback so the optimistic
+      // update uses the same date even when reviewCycleDays is 0/null.
+      function cadenceToDaysLocal(schedule: string | null | undefined): number {
+        if (!schedule) return 365
+        const s = schedule.toLowerCase()
+        if (s.includes('month')) return 30
+        if (s.includes('quarter')) return 90
+        if (s.includes('semi') || s.includes('bi-annual') || s.includes('biannual')) return 182
+        if (s.includes('year') || s.includes('annual')) return 365
+        return 365
+      }
+      const effectiveDays = (fresh.reviewCycleDays && fresh.reviewCycleDays > 0)
+        ? fresh.reviewCycleDays
+        : cadenceToDaysLocal(fresh.reviewSchedule?.cadence ?? (fresh.reviewSchedule as unknown as string))
+      const advancedNextReview = new Date(new Date().getTime() + effectiveDays * 86400000)
+        .toISOString().split('T')[0]
       update(fresh.id, {
         status: newTl.length > 0 ? 'under-review' : 'draft',
         workflowTimeline: newTl,
         activityLog: [...(fresh.activityLog ?? []), actEntry],
+        currentReviewCycleId: cycleId,
+        currentReviewCycleLabel: cycleLabel,
+        currentReviewCycleDate: new Date().toISOString(),
+        reviewCycleHistory: [...(fresh.reviewCycleHistory ?? []), ...oldCycleEntry],
+        lastReviewDate: today,
+        nextReviewDate: advancedNextReview,
       })
       // P1 (W29): persist initiate-review to server.
       void advanceWorkflowStep(fresh.id, { action: 'initiate-review', note, userName: actingUser })
@@ -710,9 +733,16 @@ export function PolicyDetailsContent({
       <div className="flex-1 min-w-0">
         {/* Status + tier badge row */}
         <div className={`flex items-center gap-2 mb-4 flex-wrap`}>
-          <span className={cn('px-3 py-1 rounded-full text-xs font-bold', STATUS_COLORS[fresh.status] ?? 'bg-slate-100 text-slate-600')}>
-            {formatPolicyStatus(t, fresh.status)}
-          </span>
+          {/* BUG-P-R3-09C: archivedAt is authoritative — show Archived chip before status */}
+          {fresh.archivedAt ? (
+            <span className="px-3 py-1 rounded-full text-xs font-bold bg-slate-200 text-slate-600">
+              {t('common.archived')}
+            </span>
+          ) : (
+            <span className={cn('px-3 py-1 rounded-full text-xs font-bold', STATUS_COLORS[fresh.status] ?? 'bg-slate-100 text-slate-600')}>
+              {formatPolicyStatus(t, fresh.status)}
+            </span>
+          )}
           <span className={cn('px-3 py-1 rounded-full text-xs font-bold', tierStyle.bg, tierStyle.text)}>
             {tierLabel}
           </span>
@@ -956,15 +986,15 @@ export function PolicyDetailsContent({
                   return (
                     <div
                       key={idx}
-                      draggable={!isCompleted}
-                      onDragStart={() => !isCompleted && handleDragStart(idx)}
+                      draggable={!isCompleted && !isArchived}
+                      onDragStart={() => !isCompleted && !isArchived && handleDragStart(idx)}
                       onDragOver={(e) => handleDragOver(e, idx)}
                       onDragEnd={handleDragEnd}
                       onDrop={() => handleDrop(idx)}
                       className={cn(
                         'rounded-xl border transition-all',
                         isCompleted ? 'bg-emerald-50/50 border-emerald-100' :
-                        step.status === 'current' ? 'bg-amber-50/50 border-amber-100' :
+                        (!isArchived && step.status === 'current') ? 'bg-amber-50/50 border-amber-100' :
                         'bg-white border-slate-100',
                         isDragOver && 'border-emerald-400 ring-1 ring-emerald-300',
                         isDragging && 'opacity-40',
@@ -979,14 +1009,14 @@ export function PolicyDetailsContent({
                         <div className={cn(
                           'w-5 h-5 rounded-full flex items-center justify-center shrink-0 absolute start-[-1px]',
                           isCompleted ? 'bg-emerald-500' :
-                          step.status === 'current' ? 'border-2 border-amber-400 bg-amber-50' :
+                          (!isArchived && step.status === 'current') ? 'border-2 border-amber-400 bg-amber-50' :
                           'border-2 border-slate-200 bg-white'
                         )}>
                           {isCompleted && <Icon icon="lucide:check" className="text-white text-xs" />}
                         </div>
 
-                        {/* Drag handle */}
-                        {!isCompleted && (
+                        {/* Drag handle — hidden for archived policies (BUG-P-R2-07-B) */}
+                        {!isCompleted && !isArchived && (
                           <Icon
                             icon="lucide:grip-vertical"
                             className="text-slate-300 text-sm shrink-0 cursor-grab"
@@ -1030,7 +1060,8 @@ export function PolicyDetailsContent({
                             ) : (
                               <>
                                 <p className="text-sm font-bold text-slate-700">{STEP_NAME_MAP[step.step] ?? step.step}</p>
-                                {!isCompleted && (
+                                {/* BUG-P-R2-07-B: hide rename for archived policies */}
+                                {!isCompleted && !isArchived && (
                                   <button
                                     type="button"
                                     onClick={(e) => {
@@ -1049,13 +1080,14 @@ export function PolicyDetailsContent({
                             {step.actionType && ACTION_TYPE_META[step.actionType] && (
                               <Icon icon={ACTION_TYPE_META[step.actionType].icon} className={cn('text-xs', ACTION_TYPE_META[step.actionType].color)} />
                             )}
-                            {step.status === 'current' && step.stepState === 'pending-approval' && (
+                            {/* BUG-P-R2-07-B: hide interactive step-state chips on archived policies */}
+                            {!isArchived && step.status === 'current' && step.stepState === 'pending-approval' && (
                               <span className="text-[9px] font-bold px-1.5 py-0.5 bg-amber-100 text-amber-700 rounded-full">{t('policies.awaitingApproval')}</span>
                             )}
-                            {step.status === 'current' && step.stepState === 'awaiting-response' && (
+                            {!isArchived && step.status === 'current' && step.stepState === 'awaiting-response' && (
                               <span className="text-[9px] font-bold px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded-full">{t('policies.awaitingResponse')}</span>
                             )}
-                            {step.status === 'current' && step.stepState === 'awaiting-manager' && (
+                            {!isArchived && step.status === 'current' && step.stepState === 'awaiting-manager' && (
                               <span className="text-[9px] font-bold px-1.5 py-0.5 bg-violet-100 text-violet-700 rounded-full">{t('policies.awaitingManagerResponse')}</span>
                             )}
                           </div>
@@ -1067,8 +1099,8 @@ export function PolicyDetailsContent({
                           )}
                         </div>
 
-                        {/* Phase deadline picker (skip when completed) */}
-                        {!isCompleted && (
+                        {/* Phase deadline picker (skip when completed or archived) */}
+                        {!isCompleted && !isArchived && (
                           <div onClick={(e) => e.stopPropagation()} className="shrink-0">
                             <InlineDeadlinePicker
                               value={step.deadline}
@@ -1096,9 +1128,9 @@ export function PolicyDetailsContent({
                         {/* Status badge */}
                         <span className={cn('text-[10px] font-bold uppercase shrink-0',
                           isCompleted ? 'text-emerald-600' :
-                          step.status === 'current' ? 'text-amber-600' : 'text-slate-300'
+                          (!isArchived && step.status === 'current') ? 'text-amber-600' : 'text-slate-300'
                         )}>
-                          {formatPolicyWorkflowStepStatus(t, step.status)}
+                          {isArchived && step.status === 'current' ? formatPolicyWorkflowStepStatus(t, 'pending') : formatPolicyWorkflowStepStatus(t, step.status)}
                         </span>
 
                         <Icon
@@ -1136,16 +1168,7 @@ export function PolicyDetailsContent({
                     onDragLeave={() => setDragOverBin(false)}
                     onDrop={() => {
                       if (dragIdx !== null) {
-                        const filtered = fresh.workflowTimeline.filter((_, i) => i !== dragIdx)
-                        const cleared = filtered.map(s =>
-                          s.status === 'completed' ? s : { ...s, stepState: undefined }
-                        )
-                        const newTl = restatusTimeline(cleared)
-                        const newStatus = deriveStatusFromTimeline(newTl, fresh.status)
-                        update(fresh.id, {
-                          workflowTimeline: newTl,
-                          ...(newStatus !== fresh.status ? { status: newStatus } : {}),
-                        })
+                        void usePolicyStore.getState().deleteWorkflowStep(fresh.id, dragIdx)
                         handleDragEnd()
                       }
                     }}
@@ -1207,10 +1230,11 @@ export function PolicyDetailsContent({
                   variant="outline"
                   className="w-full"
                   onClick={() => setNotePromptFor('submit')}
-                  disabled={!canApprovePolicy}
+                  disabled={!canApprovePolicy || workflowProcessing}
                   title={canApprovePolicy ? '' : t('rbac.deniedTooltip')}
                 >
-                  <Icon icon="lucide:send" className="w-4 h-4" />
+                  {workflowProcessing && <Icon icon="lucide:loader-2" className="w-4 h-4 animate-spin" />}
+                  {!workflowProcessing && <Icon icon="lucide:send" className="w-4 h-4" />}
                   {t('policies.submitForReview')}
                 </Button>
               )}
@@ -1232,20 +1256,20 @@ export function PolicyDetailsContent({
                           variant="primary"
                           className="flex-1 text-xs h-9"
                           onClick={() => setNotePromptFor('approve-step')}
-                          disabled={!canApprovePolicy}
+                          disabled={!canApprovePolicy || workflowProcessing}
                           title={canApprovePolicy ? '' : t('rbac.deniedTooltip')}
                         >
-                          <Icon icon="lucide:check-circle" className="w-3.5 h-3.5" />
+                          {workflowProcessing ? <Icon icon="lucide:loader-2" className="w-3.5 h-3.5 animate-spin" /> : <Icon icon="lucide:check-circle" className="w-3.5 h-3.5" />}
                           {t('policies.approveStep')}
                         </Button>
                         <Button
                           variant="outline"
                           className="flex-1 text-xs h-9 text-rose-600 border-rose-200 hover:bg-rose-50"
                           onClick={() => setNotePromptFor('deny-step')}
-                          disabled={!canApprovePolicy}
+                          disabled={!canApprovePolicy || workflowProcessing}
                           title={canApprovePolicy ? '' : t('rbac.deniedTooltip')}
                         >
-                          <Icon icon="lucide:x-circle" className="w-3.5 h-3.5" />
+                          {workflowProcessing ? <Icon icon="lucide:loader-2" className="w-3.5 h-3.5 animate-spin" /> : <Icon icon="lucide:x-circle" className="w-3.5 h-3.5" />}
                           {t('policies.denyStep')}
                         </Button>
                       </div>
@@ -1255,8 +1279,8 @@ export function PolicyDetailsContent({
 
                 if (currentStep.stepState === 'awaiting-response') {
                   return (
-                    <Button variant="outline" className="w-full" onClick={() => setNotePromptFor('log-response')}>
-                      <Icon icon="lucide:mail-check" className="w-4 h-4" />
+                    <Button variant="outline" className="w-full" onClick={() => setNotePromptFor('log-response')} disabled={workflowProcessing}>
+                      {workflowProcessing ? <Icon icon="lucide:loader-2" className="w-4 h-4 animate-spin" /> : <Icon icon="lucide:mail-check" className="w-4 h-4" />}
                       {t('policies.receivedResponse')}
                     </Button>
                   )
@@ -1270,19 +1294,19 @@ export function PolicyDetailsContent({
                         <span className="text-xs font-bold text-violet-700">{t('policies.awaitingManagerResponse')}</span>
                       </div>
                       <Button variant="primary" className="w-full text-xs h-9"
-                        onClick={() => setNotePromptFor('manager-approved')}>
-                        <Icon icon="lucide:check-circle" className="w-3.5 h-3.5" />
+                        onClick={() => setNotePromptFor('manager-approved')} disabled={workflowProcessing}>
+                        {workflowProcessing ? <Icon icon="lucide:loader-2" className="w-3.5 h-3.5 animate-spin" /> : <Icon icon="lucide:check-circle" className="w-3.5 h-3.5" />}
                         {t('policies.managerApprovedProceed')}
                       </Button>
                       <div className="flex gap-2">
                         <Button variant="outline" className="flex-1 text-xs h-9"
-                          onClick={() => handleManagerReceived()}>
-                          <Icon icon="lucide:mail-check" className="w-3.5 h-3.5" />
+                          onClick={() => handleManagerReceived()} disabled={workflowProcessing}>
+                          {workflowProcessing ? <Icon icon="lucide:loader-2" className="w-3.5 h-3.5 animate-spin" /> : <Icon icon="lucide:mail-check" className="w-3.5 h-3.5" />}
                           {t('policies.managerReceived')}
                         </Button>
                         <Button variant="outline" className="flex-1 text-xs h-9 text-rose-600 border-rose-200 hover:bg-rose-50"
-                          onClick={() => setNotePromptFor('manager-rejected')}>
-                          <Icon icon="lucide:x-circle" className="w-3.5 h-3.5" />
+                          onClick={() => setNotePromptFor('manager-rejected')} disabled={workflowProcessing}>
+                          {workflowProcessing ? <Icon icon="lucide:loader-2" className="w-3.5 h-3.5 animate-spin" /> : <Icon icon="lucide:x-circle" className="w-3.5 h-3.5" />}
                           {t('policies.managerRejected')}
                         </Button>
                       </div>
@@ -1294,32 +1318,32 @@ export function PolicyDetailsContent({
 
                 if (actionType === 'send-email') {
                   return (
-                    <Button variant="outline" className="w-full" onClick={() => handleSendEmail(currentStep)}>
-                      <Icon icon="lucide:mail" className="w-4 h-4" />
+                    <Button variant="outline" className="w-full" onClick={() => handleSendEmail(currentStep)} disabled={workflowProcessing}>
+                      {workflowProcessing ? <Icon icon="lucide:loader-2" className="w-4 h-4 animate-spin" /> : <Icon icon="lucide:mail" className="w-4 h-4" />}
                       {t('policies.actionSendEmail')}
                     </Button>
                   )
                 }
                 if (actionType === 'notify-manager') {
                   return (
-                    <Button variant="outline" className="w-full" onClick={() => setNotePromptFor('notify-manager-prompt')}>
-                      <Icon icon="lucide:user-check" className="w-4 h-4" />
+                    <Button variant="outline" className="w-full" onClick={() => setNotePromptFor('notify-manager-prompt')} disabled={workflowProcessing}>
+                      {workflowProcessing ? <Icon icon="lucide:loader-2" className="w-4 h-4 animate-spin" /> : <Icon icon="lucide:user-check" className="w-4 h-4" />}
                       {t('policies.actionNotifyManager')}
                     </Button>
                   )
                 }
                 if (actionType === 'request-approval' || actionType === 'send-for-review') {
                   return (
-                    <Button variant="outline" className="w-full" onClick={() => handleRequestApproval()}>
-                      <Icon icon={actionType === 'send-for-review' ? 'lucide:send' : 'lucide:check-square'} className="w-4 h-4" />
+                    <Button variant="outline" className="w-full" onClick={() => handleRequestApproval()} disabled={workflowProcessing}>
+                      {workflowProcessing ? <Icon icon="lucide:loader-2" className="w-4 h-4 animate-spin" /> : <Icon icon={actionType === 'send-for-review' ? 'lucide:send' : 'lucide:check-square'} className="w-4 h-4" />}
                       {actionType === 'send-for-review' ? t('policies.actionSendForReview') : t('policies.actionRequestApproval')}
                     </Button>
                   )
                 }
                 // Default: move-to-next
                 return (
-                  <Button variant="outline" className="w-full" onClick={() => setNotePromptFor('advance')}>
-                    <Icon icon="lucide:arrow-right" className="w-4 h-4" />
+                  <Button variant="outline" className="w-full" onClick={() => setNotePromptFor('advance')} disabled={workflowProcessing}>
+                    {workflowProcessing ? <Icon icon="lucide:loader-2" className="w-4 h-4 animate-spin" /> : <Icon icon="lucide:arrow-right" className="w-4 h-4" />}
                     {t('policies.actionMoveToNext')}
                   </Button>
                 )
@@ -1347,8 +1371,9 @@ export function PolicyDetailsContent({
                         : 'text-emerald-600 border-emerald-200 hover:bg-emerald-50',
                     )}
                     onClick={() => setNotePromptFor('initiate')}
+                    disabled={workflowProcessing}
                   >
-                    <Icon icon="lucide:refresh-cw" className="w-4 h-4" />
+                    {workflowProcessing ? <Icon icon="lucide:loader-2" className="w-4 h-4 animate-spin" /> : <Icon icon="lucide:refresh-cw" className="w-4 h-4" />}
                     {t('policies.initiateReview')}
                   </Button>
                 )
@@ -1357,8 +1382,8 @@ export function PolicyDetailsContent({
               {/* P1-e (W29): Undo always available when at least one step completed. */}
               {fresh.workflowTimeline.some(s => s.status === 'completed') && (
                 <Button variant="outline" className="w-full text-rose-600 border-rose-200 hover:bg-rose-50"
-                  onClick={() => setNotePromptFor('undo')}>
-                  <Icon icon="lucide:undo-2" className="w-4 h-4" />
+                  onClick={() => setNotePromptFor('undo')} disabled={workflowProcessing}>
+                  {workflowProcessing ? <Icon icon="lucide:loader-2" className="w-4 h-4 animate-spin" /> : <Icon icon="lucide:undo-2" className="w-4 h-4" />}
                   {t('policies.undoLastStep')}
                 </Button>
               )}
@@ -1385,7 +1410,14 @@ export function PolicyDetailsContent({
                           value={evidenceFilter}
                           onChange={(id) => setEvidenceFilter(id)}
                           items={[
-                            { id: 'current', label: (fresh.currentReviewCycleId ? evidenceCycles.get(fresh.currentReviewCycleId) : t('policies.currentReview')) ?? t('policies.currentReview') },
+                            { id: 'current', label: ((): string => {
+                              // Disambiguate same-month cycles: the current cycle is
+                              // tagged "(current)" so it never reads identically to an
+                              // archived cycle that fell in the same month.
+                              const sentinel = t('policies.currentReview')
+                              const base = (fresh.currentReviewCycleId ? evidenceCycles.get(fresh.currentReviewCycleId) : undefined) ?? sentinel
+                              return base === sentinel ? base : `${base} (${t('policies.currentCycleTag')})`
+                            })() },
                             ...Array.from(evidenceCycles.entries())
                               .filter(([id]) => id !== fresh.currentReviewCycleId)
                               .map(([id, label]) => ({ id, label })),
@@ -1561,7 +1593,7 @@ export function PolicyDetailsContent({
                               <span>{t('regulatoryUpdates.changedFrom')}</span>
                               <span>{t('regulatoryUpdates.changedTo')}</span>
                             </div>
-                            {entry.fieldChanges.map((diff, i) => (
+                            {entry.fieldChanges.filter((diff) => !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(diff.to ?? '') && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(diff.from ?? '')).map((diff, i) => (
                               <div key={`${diff.field}-${i}`} className="grid grid-cols-3 gap-1 text-[10px]">
                                 <span className="font-bold text-slate-600">{renderFieldLabel(diff.field, t)}</span>
                                 <span className="text-rose-600 line-through truncate" title={diff.from}>{diff.from || '—'}</span>
@@ -1610,14 +1642,20 @@ export function PolicyDetailsContent({
           <div className="space-y-2">
             <div className="p-3 bg-white rounded-xl border border-slate-100">
               <p className="text-[10px] font-bold text-slate-400 uppercase">{t('policies.lastReview')}</p>
-              <p className="text-sm font-bold text-slate-700">{fresh.lastReviewDate || '—'}</p>
+              {/* BUG-P-R3-07: use raw date string for consistency with Next Review */}
+              <p className="text-sm font-bold text-slate-700">
+                {fresh.lastReviewDate || '—'}
+              </p>
             </div>
+            {/* BUG-P-R3-09A: hide Next Review for archived policies */}
+            {!fresh.archivedAt && (
             <div className="p-3 bg-white rounded-xl border border-slate-100">
               <p className="text-[10px] font-bold text-slate-400 uppercase">{t('policies.nextReview')}</p>
               <p className={cn('text-sm font-bold', fresh.status === 'overdue' ? 'text-rose-600' : 'text-slate-700')}>
                 {fresh.nextReviewDate || '—'}
               </p>
             </div>
+            )}
             {fresh.approvedDate && (
               <div className="p-3 bg-white rounded-xl border border-slate-100">
                 <p className="text-[10px] font-bold text-slate-400 uppercase">{t('policies.approvedDate')}</p>

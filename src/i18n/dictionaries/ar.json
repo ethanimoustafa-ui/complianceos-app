@@ -621,6 +621,7 @@
     "title": "متتبع الملاحظات",
     "subtitle": "إدارة التدقيق والمعالجة",
     "addObservation": "إضافة ملاحظة",
+    "clearFilters": "مسح الفلاتر",
     "source": "المصدر",
     "severity": "الخطورة",
     "dueDate": "تاريخ الاستحقاق",
@@ -859,7 +860,8 @@
       "noVersionHistory": "لا يوجد سجل إصدارات بعد",
       "fieldChanged": "الحقل المُعدَّل",
       "changedFrom": "من",
-      "changedTo": "إلى"
+      "changedTo": "إلى",
+      "addRemediationPlan": "إضافة خطة المعالجة"
     }
   },
   "regulatoryUpdates": {
@@ -1298,6 +1300,7 @@
     "unarchivePolicy": "استعادة السياسة",
     "unarchivedToast": "تمت استعادة السياسة بنجاح",
     "currentReview": "المراجعة الحالية",
+    "currentCycleTag": "الحالية",
     "noActivityYet": "لا يوجد نشاط بعد.",
     "stepDraftCreated": "تم إنشاء المسودة",
     "stepITReview": "مراجعة تقنية المعلومات",
@@ -1324,7 +1327,8 @@
     "stepManagementReview": "مراجعة الإدارة",
     "stepRiskReview": "مراجعة المخاطر",
     "stepReviewInitiated": "بدء المراجعة",
-    "attachments": "المرفقات"
+    "attachments": "المرفقات",
+    "editPolicySubtitle": "تعديل تفاصيل السياسة"
   },
   "audits": {
     "owner": "المسؤول",

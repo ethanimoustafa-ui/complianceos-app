@@ -234,25 +234,16 @@ export async function DELETE(req: NextRequest, { params }: Params) {
       assertNotStale(ifMatch, current?.updated_at)
     }
 
-    // Soft-delete via deleted_at — mirrors Policy. Migration 043 set up the
-    // ON DELETE CASCADE on every child FK, so a hard-delete also works; the
-    // soft path keeps the row visible to the audit trail for longer.
-    const updatePayload: Record<string, unknown> = { deleted_at: new Date().toISOString() }
-    let delQuery = supabase
+    // Hard-delete — migration 043 confirmed all child tables have ON DELETE CASCADE
+    // (observation_documents, observation_updates, observation_timeline, etc.)
+    const deleteQ = supabase
       .from('observations')
-      .update(updatePayload)
+      .delete()
       .eq('id', observationId)
-      .is('deleted_at', null)
-    if (ifMatch != null) delQuery = delQuery.eq('updated_at', ifMatch)
-    const { data: deleted, error } = await delQuery
-      .select('id')
-      .maybeSingle()
+    const { error } = ifMatch != null
+      ? await deleteQ.eq('updated_at', ifMatch)
+      : await deleteQ
     if (error) throw error
-    if (!deleted && ifMatch != null) {
-      throw PreconditionFailed(
-        'This record was changed by someone else — reload to see the latest.',
-      )
-    }
 
     await writeAudit({
       actor_id: user.id,

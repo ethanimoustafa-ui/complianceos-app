@@ -1,11 +1,11 @@
-// /api/policies/[policyId] — item GET / PATCH / soft-DELETE.
+// /api/policies/[policyId] — item GET / PATCH / hard-DELETE.
 //
 // Wave-18: full hardening (PORTING-TEMPLATE §2):
 //   - GET: cache:'no-store', nested children, ETag from updated_at, is_expired
 //   - PATCH: readIfMatch → before-snapshot → assertNotStale → conditional
 //            UPDATE scoped to updated_at (the W17.2 atomic pattern) → 412
 //            on 0 rows; per-field diff → policy_versions row + activity log
-//   - DELETE: optional If-Match guard before soft-delete
+//   - DELETE: optional If-Match guard before hard-delete (migration 041)
 
 import type { NextRequest } from 'next/server'
 import { requirePerm, requireUser } from '@/lib/api/auth'
@@ -171,11 +171,18 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 
     // Structured `[{field,from,to}]` — `field` is an i18n key resolved at
     // render time; from/to are raw data values.
-    const fieldChanges: PolicyFieldChange[] = changedKeys.map((k) => ({
-      field: FIELD_LABEL_KEYS[k] ?? k,
-      from: displayValue(before?.[k]),
-      to: displayValue(after[k]),
-    }))
+    // BUG-P-R2-05: skip raw FK columns (any key ending in `_id`) from the
+    // structured diff. They expose raw UUIDs in Version History ("FROM: 00000000-
+    // 0002-4000-…") which is confusing. The human-readable companion column
+    // (e.g. owner_name for owner_id) is already included in changedKeys when it
+    // changes, so the diff stays complete without the raw UUID row.
+    const fieldChanges: PolicyFieldChange[] = changedKeys
+      .filter((k) => !k.endsWith('_id'))
+      .map((k) => ({
+        field: FIELD_LABEL_KEYS[k] ?? k,
+        from: displayValue(before?.[k]),
+        to: displayValue(after[k]),
+      }))
 
     const actor = profile.name ?? profile.email ?? user.id
     const changedFieldLabels = Array.from(
@@ -253,15 +260,16 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         : Promise.resolve(),
     ])
 
-    // GAP-19 / W18 — append a `policy_versions` row ONLY when fields actually
-    // changed. `field_changes` is the structured diff so the Version-History
-    // tab can render Field/From/To.
-    //
-    // Wave-19.4 / Item-3 + Wave-19.5 — dual-store `text_en` + `text_ar`. The
-    // same `fieldsUpdatedBody` that feeds the generic activity row above is
-    // persisted here verbatim so both rows stay in lockstep (both languages,
-    // one render, one dictionary lookup per locale).
-    if (fieldsUpdatedBody) {
+    // GAP-19 / W18 — append a `policy_versions` row ONLY when the `version`
+    // field itself changed (user explicitly bumped the version number, e.g.
+    // v1.0 → v2.0). Automated status/workflow changes that touch other fields
+    // (status, owner, etc.) must NOT pollute Version History — they are already
+    // captured in the Activity timeline.
+    // BUG-P-R2-03: guard on `version` field change specifically, not just any
+    // field change. The previous `if (fieldsUpdatedBody)` wrote a version row
+    // for every PATCH including status flips driven by workflow/backend logic.
+    const versionFieldChanged = changedKeys.includes('version')
+    if (versionFieldChanged && fieldsUpdatedBody) {
       const versionLabel = (after.version as string | null) ?? 'v?'
       await insertPolicyVersion(
         supabase,
@@ -306,18 +314,11 @@ export async function DELETE(req: NextRequest, { params }: Params) {
         .from('policies')
         .select('updated_at')
         .eq('id', policyId)
-        .is('deleted_at', null)
         .maybeSingle<{ updated_at: string }>()
       assertNotStale(ifMatch, current?.updated_at)
     }
 
-    const { error } = await supabase
-      .from('policies')
-      .update({ deleted_at: new Date().toISOString() })
-      .eq('id', policyId)
-      .is('deleted_at', null)
-    if (error) throw error
-
+    // Audit BEFORE physical delete so the trail survives (HANDOFF §5 gotcha #7).
     await writeAudit({
       actor_id: user.id,
       actor_name: profile.name ?? profile.email ?? user.id,
@@ -326,6 +327,13 @@ export async function DELETE(req: NextRequest, { params }: Params) {
       entity_id: policyId,
       supabase,
     })
+
+    // Hard-delete — migration 041 confirmed all 6 child tables have ON DELETE CASCADE.
+    const { error } = await supabase
+      .from('policies')
+      .delete()
+      .eq('id', policyId)
+    if (error) throw error
 
     revalidateAll([cacheTags.policies(), cacheTags.policies(policyId)])
     revalidate(cacheTags.compliance())
@@ -337,5 +345,4 @@ export async function DELETE(req: NextRequest, { params }: Params) {
 
 // Wave-19.1 / Q2 — the GET response now ships the persisted `is_expired`
 // column from `policies` verbatim. The old read-time `isPolicyExpired`
-// helper override (which carved out `status='approved'` and contradicted
-// the StatCard's purpose) is no longer applied here.
+// helper override (which carved out `statu

@@ -203,6 +203,7 @@ export interface RemediationPlan {
   reviewedAt?: string
   reviewedBy?: string
   reviewNotes?: string
+  updatedAt?: string
   documents?: ObservationDocument[]
   createdAt: string
 }
@@ -411,6 +412,8 @@ export interface Comment {
   author: User
   createdAt: string
   updatedAt?: string
+  isEdited?: boolean
+  editedAt?: string
 }
 
 // Timeline entry type (for activity logs)
