@@ -60,6 +60,7 @@ export async function POST(req: NextRequest, { params }: Params) {
         type: input.type,
         storage_path: input.storage_path,
         uploaded_by: user.id,
+        is_remediation: input.is_remediation ?? false,
       })
       .select(OBSERVATION_DOCUMENT_COLUMNS)
       .single()

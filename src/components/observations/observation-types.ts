@@ -101,6 +101,7 @@ export interface Observation {
     id: string
     name: string
     type: 'pdf' | 'image' | 'doc'
+    isRemediation?: boolean
   }[]
   timeline?: {
     id: string

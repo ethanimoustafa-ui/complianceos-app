@@ -157,6 +157,8 @@ export const RegisterObservationDocumentSchema = z
     name: PlainTextMin(500),
     type: DocType,
     storage_path: z.string().min(1).max(15_000_000),
+    // BUG 3: persisted remediation-plan classification (defaults false).
+    is_remediation: z.boolean().optional(),
   })
   .strict()
 export type RegisterObservationDocumentInput = z.infer<typeof RegisterObservationDocumentSchema>

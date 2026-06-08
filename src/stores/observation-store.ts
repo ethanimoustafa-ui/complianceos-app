@@ -398,7 +398,7 @@ export const useObservationStore = create<ObservationState>()((set, get) => ({
     try {
       const row = await api.get<ObservationApiRow & {
         checklist?: Array<{ id: string; text: string; completed: boolean; sort_order?: number }>
-        documents?: Array<{ id: string; name: string; type: string }>
+        documents?: Array<{ id: string; name: string; type: string; is_remediation?: boolean }>
         updates?: Array<{
           id: string
           author_id: string
@@ -453,6 +453,7 @@ export const useObservationStore = create<ObservationState>()((set, get) => ({
           type: (d.type === 'pdf' || d.type === 'image' || d.type === 'doc'
             ? d.type
             : 'doc') as 'pdf' | 'image' | 'doc',
+          isRemediation: Boolean(d.is_remediation),
         }))
       }
       if (row.updates) {
@@ -520,7 +521,17 @@ export const useObservationStore = create<ObservationState>()((set, get) => ({
           reviewNotes: latest.review_notes ?? undefined,
           updatedAt: (latest as { updated_at?: string | null }).updated_at ?? undefined,
           createdAt: latest.created_at,
-          documents: previous?.remediationPlan?.documents ?? [],
+          // BUG 3: derive plan docs from the server-flagged documents so they
+          // survive a full refresh (not from the ephemeral previous-state array).
+          documents: (row.documents ?? [])
+            .filter((d) => d.is_remediation)
+            .map((d) => ({
+              id: d.id,
+              name: d.name,
+              type: (d.type === 'pdf' || d.type === 'image' || d.type === 'doc'
+                ? d.type
+                : 'doc') as 'pdf' | 'image' | 'doc',
+            })),
         }
       }
       if (row.closure_request) {
@@ -2098,9 +2109,10 @@ export const useObservationStore = create<ObservationState>()((set, get) => ({
           })
         },
         request: async () => {
-          // /close transitions status to 'closed' on the server; the legacy UI
-          // flow expected status='resolved' (pending review). The status is
-          // re-set locally in apply() so the modal renders Pending Review.
+          // BUG 4: /close now transitions the server status to 'resolved'
+          // (Pending Review) — matching the optimistic apply() above — so the
+          // closure-request state survives a page refresh. The move to 'closed'
+          // happens only on closure-review approval (reviewClosure).
           await api.post(
             `/observations/${observationId}/close`,
             { notes },
@@ -2261,6 +2273,7 @@ export const useObservationStore = create<ObservationState>()((set, get) => ({
               name: doc.name,
               type: doc.type,
               storage_path: doc.storage_path ?? `observations/${observationId}/${doc.name}`,
+              is_remediation: Boolean(addToRemediationPlan),
             },
           ),
         reconcile: (row) => {

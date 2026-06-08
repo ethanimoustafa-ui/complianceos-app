@@ -9,7 +9,7 @@ import { useObservationStore } from '@/stores/observation-store'
 import { useAuthStore } from '@/stores/auth-store'
 import { useTeamStore } from '@/stores/team-store'
 import { useTranslation } from '@/i18n'
-import { canTransferLeadership, canReviewRemediation, canUploadDocument, canRequestClosure, canReviewClosure } from '@/lib/permissions'
+import { canTransferLeadership, canReviewRemediation, canSubmitRemediation, canUploadDocument, canRequestClosure, canReviewClosure, isObservationLeader } from '@/lib/permissions'
 import { TransferLeadershipModal } from './transfer-leadership-modal'
 import { FileUploadModal, getFileType } from './file-upload-modal'
 import { RemediationPlanModal } from './remediation-plan-modal'
@@ -142,7 +142,15 @@ export const ObservationDetailModal = memo(function ObservationDetailModal({
       // O6c: only reset remediationDocs when the source actually has remediation plan data.
       // Avoid clearing localRemediationDocs when store updates don't include nested plan data
       // (e.g., after a leadership transfer where remediationPlan is not re-fetched).
-      if (source.remediationPlan?.documents !== undefined) {
+      // BUG 3: prefer the server-persisted is_remediation flag on doc rows so
+      // remediation docs survive a full refresh; fall back to plan.documents for
+      // in-session optimistic adds.
+      const flaggedRemediationDocs = (source.documents || [])
+        .filter((d) => (d as { isRemediation?: boolean }).isRemediation)
+        .map((d) => ({ id: d.id, name: d.name, type: d.type }))
+      if (flaggedRemediationDocs.length > 0) {
+        setLocalRemediationDocs(flaggedRemediationDocs)
+      } else if (source.remediationPlan?.documents !== undefined) {
         setLocalRemediationDocs(source.remediationPlan.documents)
       } else if (!storeObservation) {
         // First sync from observation prop — reset is safe
@@ -462,7 +470,7 @@ export const ObservationDetailModal = memo(function ObservationDetailModal({
 
           <ObservationLeader
             leader={leader ? { id: leader.id || '', name: leader.name, avatar: leader.avatar } : null}
-            canTransfer={canTransferLeadership(user, observation)}
+            canTransfer={!isClosed && canTransferLeadership(user, observation)}
             onTransfer={() => setShowTransferModal(true)}
             isRTL={isRTL}
           />
@@ -472,6 +480,7 @@ export const ObservationDetailModal = memo(function ObservationDetailModal({
             canReview={canReviewRemediation(user, observation)}
             onReview={handleReviewRemediationPlan}
             onAddPlan={() => setShowRemediationPlanModal(true)}
+            canSubmitPlan={!isClosed && canSubmitRemediation(user, observation)}
             documents={localRemediationDocs}
             isRTL={isRTL}
             isLoaded={detailLoaded}
@@ -481,7 +490,7 @@ export const ObservationDetailModal = memo(function ObservationDetailModal({
             status={storeObservation?.status || observation.status}
             closureRequest={storeObservation?.closureRequest || observation.closureRequest}
             closureReview={storeObservation?.closureReview || observation.closureReview}
-            canRequestClosure={canRequestClosure(user, observation)}
+            canRequestClosure={canRequestClosure(user, observation) && !isObservationLeader(user, observation)}
             canReviewClosure={canReviewClosure(user, observation)}
             onRequestClosure={handleRequestClosure}
             onReviewClosure={handleReviewClosure}

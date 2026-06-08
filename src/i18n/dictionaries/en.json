@@ -1104,6 +1104,7 @@
       "observationCreated": "Observation created: {{title}}",
       "observationUpdated": "Observation updated — {{fields}}",
       "observationClosed": "Observation closed",
+      "observationClosureRequested": "Closure requested — pending review",
       "observationReopened": "Observation reopened",
       "observationLeaderAssigned": "Observation leader assigned: {{to}}",
       "observationLeaderChanged": "Observation leader changed from {{from}} to {{to}}",

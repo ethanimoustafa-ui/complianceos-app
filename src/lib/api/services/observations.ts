@@ -21,7 +21,7 @@ export const OBSERVATION_CHECKLIST_COLUMNS =
   'id, observation_id, text, completed, sort_order, updated_at'
 
 export const OBSERVATION_DOCUMENT_COLUMNS =
-  'id, observation_id, name, type, storage_path, uploaded_at, uploaded_by, updated_at'
+  'id, observation_id, name, type, storage_path, uploaded_at, uploaded_by, updated_at, is_remediation'
 
 // Wave-20 migration 059 — dual-store text_en + text_ar; `description` /
 // `description_ar` columns retired.
@@ -106,6 +106,7 @@ export interface ObservationDetail {
     uploaded_at: string
     uploaded_by: string | null
     updated_at: string
+    is_remediation: boolean
   }>
   updates: Array<{
     id: string

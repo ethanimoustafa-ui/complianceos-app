@@ -1104,6 +1104,7 @@
       "observationCreated": "تم إنشاء ملاحظة: {{title}}",
       "observationUpdated": "تم تحديث الملاحظة — {{fields}}",
       "observationClosed": "تم إغلاق الملاحظة",
+      "observationClosureRequested": "تم طلب الإغلاق — في انتظار المراجعة",
       "observationReopened": "تمت إعادة فتح الملاحظة",
       "observationLeaderAssigned": "تم تعيين قائد الملاحظة: {{to}}",
       "observationLeaderChanged": "تم تغيير قائد الملاحظة من {{from}} إلى {{to}}",

@@ -37,8 +37,8 @@ export async function POST(req: NextRequest, { params }: Params) {
     if (readErr) throw readErr
     if (!current) throw NotFound(`Observation ${observationIdParam} not found`)
     const observationId = current.id
-    if (current.status === 'closed') {
-      return ok({ id: observationId, status: 'closed' })
+    if (current.status === 'closed' || current.status === 'resolved') {
+      return ok({ id: observationId, status: current.status })
     }
 
     // Wave-20.cleanup / W17.2 — optimistic-concurrency guard, atomic on the
@@ -59,9 +59,14 @@ export async function POST(req: NextRequest, { params }: Params) {
       )
     if (reqRes.error) throw reqRes.error
 
+    // BUG 4 fix: "Request Closure" transitions to 'resolved' (Pending Review),
+    // NOT 'closed'. The closure_requests row is persisted above; the move to
+    // 'closed' happens only when a reviewer APPROVES the closure (reviewClosure).
+    // Writing 'closed' here meant the server status never matched the store's
+    // optimistic 'resolved', so "Pending Review" was unreconstructable on refresh.
     let updateQ = supabase
       .from('observations')
-      .update({ status: 'closed', progress: 100 })
+      .update({ status: 'resolved', progress: 100 })
       .eq('id', observationId)
       .is('deleted_at', null)
     if (ifMatch != null) updateQ = updateQ.eq('updated_at', ifMatch)
@@ -92,11 +97,11 @@ export async function POST(req: NextRequest, { params }: Params) {
       insertObservationTimeline({
         supabase,
         observation_id: observationId,
-        action_type: 'closed',
+        action_type: 'closure_requested',
         user_id: user.id,
         user_name: actor,
         metadata: { notes: input.notes },
-        ...renderBilingual('regulatoryUpdates.timeline.observationClosed'),
+        ...renderBilingual('regulatoryUpdates.timeline.observationClosureRequested'),
       }),
     ])
 
