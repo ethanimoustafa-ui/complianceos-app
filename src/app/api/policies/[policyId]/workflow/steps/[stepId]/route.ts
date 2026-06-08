@@ -81,6 +81,12 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     }
 
     const isRename = input.step !== undefined && input.step !== prev.step
+    // ISSUE-1: a reorder PATCHes sort_order (+status) on every step, and a state
+    // transition PATCHes step_state. Neither is a user-meaningful "step updated"
+    // edit, so skip the activity-log entry for those to avoid timeline spam.
+    const isSilentChange = Object.keys(update).every(
+      (k) => k === 'sort_order' || k === 'status' || k === 'step_state',
+    )
 
     await Promise.all([
       writeAudit({
@@ -98,7 +104,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         },
         supabase,
       }),
-      writePolicyActivity({
+      ...(isSilentChange ? [] : [writePolicyActivity({
         supabase,
         policy_id: uuid,
         type: isRename ? 'step_renamed' : 'workflow_step_updated',
@@ -109,7 +115,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
           ? `تمت إعادة تسمية الخطوة من "${prev.step}" إلى "${input.step}"`
           : `تم تحديث الخطوة "${prev.step}"`,
         user_name: actor,
-      }),
+      })]),
       recomputePolicyStatus(supabase, uuid),
     ])
 

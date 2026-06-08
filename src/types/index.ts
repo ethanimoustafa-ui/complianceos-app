@@ -774,7 +774,7 @@ export type PolicyStatus = 'draft' | 'under-review' | 'approved' | 'expired' | '
 // operations, risk, hr, finance) live in usePolicyCategoryStore. Existing
 // policies keep matching; users can add custom categories.
 export type PolicyCategory = string
-export type PolicyApprovalTier = 'board' | 'management' | 'managerial' | 'sharia' | 'agm' | 'audit_committee'
+export type PolicyApprovalTier = 'board' | 'management' | 'managerial' | 'sharia' | 'agm' | 'audit_committee' | 'other' | (string & {})
 
 // Wave-19.4 / Item-3 — dual-store: `textEn` + `textAr` replace the
 // single-language `changes` string (migration 057). The reader picks the

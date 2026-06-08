@@ -64,6 +64,7 @@ const TIER_COLORS: Record<string, { bg: string; text: string }> = {
   sharia:          { bg: 'bg-emerald-100', text: 'text-emerald-700' },
   agm:             { bg: 'bg-amber-100',   text: 'text-amber-700'   },
   audit_committee: { bg: 'bg-cyan-100',    text: 'text-cyan-700'    },
+  other:           { bg: 'bg-slate-100',   text: 'text-slate-700'   },
 }
 
 const STATUS_COLORS: Record<PolicyStatus, string> = {
@@ -197,13 +198,20 @@ export function PolicyDetailsContent({
   /** Format a review cycle label in the current locale.
    *  Tries currentReviewCycleDate first, then parses "Review Month Year" strings. */
   function formatCycleLabel(label: string, isoDate?: string): string {
-    const fmt = (d: Date) => `${t('policies.reviewWord')} ${d.toLocaleDateString(isRTL ? 'ar-SA' : 'en-US', { month: 'long', day: 'numeric', year: 'numeric' })}`
-    if (isoDate) return fmt(new Date(isoDate))
+    const loc = isRTL ? 'ar-SA' : 'en-US'
+    const fmt = (d: Date, withTime: boolean) => {
+      const day = `${t('policies.reviewWord')} ${d.toLocaleDateString(loc, { month: 'long', day: 'numeric', year: 'numeric' })}`
+      return withTime ? `${day}, ${d.toLocaleTimeString(loc, { hour: 'numeric', minute: '2-digit' })}` : day
+    }
+    if (isoDate) {
+      const d = new Date(isoDate)
+      if (!isNaN(d.getTime())) return fmt(d, isoDate.includes(':'))
+    }
     // Parse stored English labels like "Review March 2026"
     const m = label.match(/^Review\s+(.+)$/i)
     if (m) {
       const parsed = new Date(m[1])
-      if (!isNaN(parsed.getTime())) return fmt(parsed)
+      if (!isNaN(parsed.getTime())) return fmt(parsed, false)
     }
     return label
   }
@@ -426,27 +434,19 @@ export function PolicyDetailsContent({
       `Dear Team,\n\nThis is a request regarding the policy "${fresh.name}" (${fresh.id}).\n\nStep: ${step.step}\n${step.description ? 'Description: ' + step.description + '\n' : ''}\nPlease review and respond.\n\nThank you.`
     )
     window.open(`mailto:?subject=${subject}&body=${body}`)
-    const newTl = fresh.workflowTimeline.map(s =>
-      s.status === 'current' ? { ...s, stepState: 'awaiting-response' as const } : s
-    )
-    const actEntry: PolicyActivityEntry = {
-      id: Date.now().toString(),
-      timestamp: new Date().toISOString(),
-      date: today,
-      type: 'step_advanced',
-      textEn: `Email sent for step "${step.step}"`,
-      textAr: `تم إرسال بريد إلكتروني للخطوة "${step.step}"`,
-      user: actingUser,
-    }
-    update(fresh.id, { workflowTimeline: newTl, activityLog: [...(fresh.activityLog ?? []), actEntry] })
+    // ISSUE-6: persist the awaiting-response state via the steps PATCH so it
+    // survives the server reconcile. The old update({workflowTimeline}) was
+    // dropped by the policy PATCH, so the step reverted to "Send Email".
+    void usePolicyStore.getState().setStepState(fresh.id, step.id, 'awaiting-response')
     showToast(t('policies.emailSentToast'))
   }
 
   function handleRequestApproval() {
-    const newTl = fresh.workflowTimeline.map(s =>
-      s.status === 'current' ? { ...s, stepState: 'pending-approval' as const } : s
-    )
-    update(fresh.id, { workflowTimeline: newTl })
+    // ISSUE-5: clicking "Request Approval"/"Send for Review" IS the submit-for-
+    // review action. Persist pending-approval so the Approve/Deny UI shows and
+    // survives a refetch (steps no longer auto-enter this state).
+    const currentStep = fresh.workflowTimeline.find(s => s.status === 'current')
+    void usePolicyStore.getState().setStepState(fresh.id, currentStep?.id, 'pending-approval')
   }
 
   // ── Note prompt ──────────────────────────────────────────────────────
@@ -473,12 +473,11 @@ export function PolicyDetailsContent({
           // straight to "Received Response", auto-completing the mail step. Leave
           // stepState undefined so the Send Email button renders; clicking it
           // (handleSendEmail) then sets 'awaiting-response'.
-          const autoState =
-            s.actionType === 'request-approval' || s.actionType === 'send-for-review'
-              ? 'pending-approval' as const
-              : s.actionType === 'notify-manager' ? 'awaiting-manager' as const
-              : undefined
-          return { ...s, status: 'current' as const, ...(autoState ? { stepState: autoState } : {}) }
+          // ISSUE-5/6/7: a step promoted to current starts with NO step_state, so
+          // its ACTION button (Send for Review / Request Approval / Send Email /
+          // Notify Manager) shows first; clicking it persists the awaiting/pending
+          // state (setStepState). Prevents auto-jump straight to Approve/Deny.
+          return { ...s, status: 'current' as const, stepState: undefined }
         }
         return s
       })
@@ -583,17 +582,9 @@ export function PolicyDetailsContent({
 
     } else if (notePromptFor === 'notify-manager-prompt') {
       const ci = tl.findIndex(s => s.status === 'current')
-      const newTl = tl.map((s, i) =>
-        i === ci ? { ...s, stepState: 'awaiting-manager' as const, note } : s
-      )
-      const actEntry: PolicyActivityEntry = {
-        id: Date.now().toString(), timestamp: new Date().toISOString(), date: today,
-        type: 'step_advanced',
-        textEn: `Manager notified for step "${tl[ci]?.step}"`,
-        textAr: `تم إشعار المدير للخطوة "${tl[ci]?.step}"`,
-        user: actingUser, note,
-      }
-      update(fresh.id, { workflowTimeline: newTl, activityLog: [...(fresh.activityLog ?? []), actEntry] })
+      // ISSUE-7: persist the awaiting-manager state so the "Awaiting Manager
+      // Response" UI shows and survives a refetch (was dropped by the policy PATCH).
+      void usePolicyStore.getState().setStepState(fresh.id, tl[ci]?.id, 'awaiting-manager')
       addNotification({
         title: 'Manager Review Required',
         message: `${actingUser} requested manager review for step "${tl[ci]?.step}" in policy "${fresh.name}"`,
@@ -632,16 +623,11 @@ export function PolicyDetailsContent({
       }))
       // P2 (W34): a send-email first step starts with NO stepState so the
       // "Send Email" action shows (instead of auto-jumping to "Received Response").
-      const firstAutoState =
-        cleared.length > 0
-          ? (cleared[0].actionType === 'request-approval' || cleared[0].actionType === 'send-for-review'
-              ? 'pending-approval' as const
-              : cleared[0].actionType === 'notify-manager' ? 'awaiting-manager' as const
-              : undefined)
-          : undefined
+      // ISSUE-5/6/7: the first step starts with NO step_state; its action button
+      // shows first and clicking it persists the awaiting/pending state.
       const newTl = cleared.map((s, i) =>
         i === 0
-          ? { ...s, status: 'current' as const, ...(firstAutoState ? { stepState: firstAutoState } : {}) }
+          ? { ...s, status: 'current' as const, stepState: undefined }
           : s
       )
       const actEntry: PolicyActivityEntry = {

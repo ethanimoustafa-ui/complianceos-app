@@ -19,6 +19,7 @@ import { EditableSelect } from '@/components/ui/editable-select'
 import { ReviewSchedulePicker } from '@/components/ui/ReviewSchedulePicker'
 import { computeNextReview, cadenceToReviewCycleDays } from '@/lib/review-schedule'
 import { usePolicyStore } from '@/stores/policy-store'
+import { AddTierModal, type AddTierStep } from './AddTierModal'
 import { usePolicyTemplateStore } from '@/stores/policy-template-store'
 import { usePolicyCategoryStore } from '@/stores/policy-category-store'
 import { useTeamStore } from '@/stores/team-store'
@@ -158,6 +159,8 @@ export function RegisterPolicyModal({ isOpen, onClose, onCreated, t, isRTL }: Pr
     templates: policyTemplates,
     incrementUsage: incrementPolicyTemplateUsage,
     create: createPolicyTemplate,
+    update: updatePolicyTemplate,
+    delete: deletePolicyTemplate,
     fetchAll: fetchAllPolicyTemplates,
   } = usePolicyTemplateStore()
 
@@ -166,6 +169,8 @@ export function RegisterPolicyModal({ isOpen, onClose, onCreated, t, isRTL }: Pr
   // table). The previous code wrote to the unrelated entity_templates table, so
   // the POST returned 201 but the new template never appeared anywhere.
   const [showSavePolicyTemplateForm, setShowSavePolicyTemplateForm] = useState(false)
+  // ISSUE-4: custom approval-tier add modal.
+  const [showAddTier, setShowAddTier] = useState(false)
   const [policyTemplateNameInput, setPolicyTemplateNameInput] = useState('')
   const [isSavingPolicyTemplate, setIsSavingPolicyTemplate] = useState(false)
   useEffect(() => {
@@ -197,9 +202,33 @@ export function RegisterPolicyModal({ isOpen, onClose, onCreated, t, isRTL }: Pr
     }
   }
 
+  // ISSUE-4: create a custom approval tier = enum_value_definitions row (the
+  // dropdown option) + a paired policy_template carrying the seed workflow steps.
+  // Reuses useEnumValuesStore.add (POST /settings/enum-values) and
+  // usePolicyTemplateStore.create (POST /policy-templates) — no migration.
+  async function handleAddCustomTier(key: string, nameEn: string, nameAr: string, steps: AddTierStep[]): Promise<void> {
+    try {
+      await addEnumTier('policy.approval_tier', key, nameEn, nameAr)
+      createPolicyTemplate({
+        name: nameEn,
+        nameAr,
+        category: (formCategory || 'compliance') as PolicyCategory,
+        approvalTier: key as PolicyApprovalTier,
+        defaultDescription: '',
+        defaultWorkflowSteps: steps,
+        versionPattern: 'v{major}.{minor}',
+        status: 'active',
+      })
+      setFormTier(key as PolicyApprovalTier)
+    } catch (e) {
+      console.error('Failed to add custom approval tier', e)
+    }
+  }
+
   // Wave-19.7 — approval-tier dropdown options driven by enum_value_definitions.
   const tierRows = useEnumValuesStore((s) => s.byDomain['policy.approval_tier'] ?? EMPTY_ENUM_VALUES)
   const fetchEnumValues = useEnumValuesStore((s) => s.fetch)
+  const addEnumTier = useEnumValuesStore((s) => s.add)
   useEffect(() => {
     if (isOpen) void fetchEnumValues('policy.approval_tier')
   }, [isOpen, fetchEnumValues])
@@ -287,14 +316,27 @@ export function RegisterPolicyModal({ isOpen, onClose, onCreated, t, isRTL }: Pr
     if (!owner) { setIsCreating(false); return }
     const today = new Date().toISOString().split('T')[0]
     const selectedTmpl = selectedTemplateId ? policyTemplates.find((tp) => tp.id === selectedTemplateId) : null
+    // ISSUE-4: a custom tier seeds its workflow from the policy_template whose
+    // approvalTier matches the chosen tier key (saved when the tier was added).
+    const tierTmpl = !selectedTmpl && formTier
+      ? policyTemplates.find((tp) => tp.approvalTier === formTier && tp.defaultWorkflowSteps?.length)
+      : null
+    // ISSUE-3: the "Other" tier seeds NO default steps — the user builds the
+    // workflow via the Workflow tab. An explicit or tier-keyed template wins.
     const tierSteps = (selectedTmpl?.defaultWorkflowSteps?.length ? selectedTmpl.defaultWorkflowSteps : null)
-      ?? TIER_WORKFLOWS[formTier as PolicyApprovalTier]
-      ?? TIER_WORKFLOWS.management
-    const workflowTimeline = [
-      { step: 'Draft Created', date: today, user: owner.name, status: 'completed' as const, actionType: 'move-to-next' },
-      { step: tierSteps[0].step, description: tierSteps[0].description, actionType: tierSteps[0].actionType, date: '', user: '', status: 'current' as const },
-      ...tierSteps.slice(1).map((s) => ({ step: s.step, description: s.description, actionType: s.actionType, date: '', user: '', status: 'pending' as const })),
-    ]
+      ?? (tierTmpl?.defaultWorkflowSteps?.length ? tierTmpl.defaultWorkflowSteps : null)
+      ?? (formTier === 'other' ? [] : (TIER_WORKFLOWS[formTier as PolicyApprovalTier] ?? TIER_WORKFLOWS.management))
+    const workflowTimeline = tierSteps.length === 0
+      ? [
+          // Empty-tier optimistic shape: only the completed "Draft Created" step
+          // (matches the server truth, workflow_steps = [], after the detail GET).
+          { step: 'Draft Created', date: today, user: owner.name, status: 'completed' as const, actionType: 'move-to-next' },
+        ]
+      : [
+          { step: 'Draft Created', date: today, user: owner.name, status: 'completed' as const, actionType: 'move-to-next' },
+          { step: tierSteps[0].step, description: tierSteps[0].description, actionType: tierSteps[0].actionType, date: '', user: '', status: 'current' as const },
+          ...tierSteps.slice(1).map((s) => ({ step: s.step, description: s.description, actionType: s.actionType, date: '', user: '', status: 'pending' as const })),
+        ]
     const cycleId = Date.now().toString()
     const cycleLabel = `Review ${new Date().toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}`
     const activityLog: PolicyActivityEntry[] = [{
@@ -383,14 +425,16 @@ export function RegisterPolicyModal({ isOpen, onClose, onCreated, t, isRTL }: Pr
         <div>
           <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('settings.selectTemplate')}</label>
           <EditableSelect
-            locked
             value={selectedTemplateId || null}
             onChange={(id) => handleTemplateSelect(id)}
             items={[
-              { id: '', label: t('settings.noTemplate') },
-              ...policyTemplates.map((tmpl) => ({ id: tmpl.id, label: tmpl.name })),
+              { id: '', label: t('settings.noTemplate'), isDefault: true },
+              ...policyTemplates.map((tmpl) => ({ id: tmpl.id, label: tmpl.name, labelAr: tmpl.nameAr })),
             ]}
             placeholder={t('settings.noTemplate')}
+            bilingual={false}
+            onEdit={(id, label) => { if (id) updatePolicyTemplate(id, { name: label }) }}
+            onDelete={(id) => { if (id) deletePolicyTemplate(id) }}
             isRTL={isRTL}
             footerSlot={
               showSavePolicyTemplateForm ? (
@@ -471,6 +515,16 @@ export function RegisterPolicyModal({ isOpen, onClose, onCreated, t, isRTL }: Pr
                 items={tierItems}
                 placeholder={t('policies.selectApprovalTier')}
                 isRTL={isRTL}
+                footerSlot={
+                  <button
+                    type="button"
+                    className="w-full flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-emerald-700 hover:bg-emerald-50 cursor-pointer"
+                    onClick={(e) => { e.stopPropagation(); setShowAddTier(true) }}
+                  >
+                    <Icon icon="lucide:plus" className="text-sm" />
+                    {t('policies.addApprovalTier')}
+                  </button>
+                }
               />
             </div>
             <Input
@@ -604,6 +658,14 @@ export function RegisterPolicyModal({ isOpen, onClose, onCreated, t, isRTL }: Pr
           </div>
         </div>
       </div>
+
+      <AddTierModal
+        isOpen={showAddTier}
+        onClose={() => setShowAddTier(false)}
+        onSave={handleAddCustomTier}
+        existingKeys={tierItems.map((ti) => ti.id)}
+        t={t}
+      />
     </Modal>
   )
 }

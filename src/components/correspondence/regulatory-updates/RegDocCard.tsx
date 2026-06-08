@@ -105,6 +105,7 @@ const TIER_COLORS: Record<PolicyApprovalTier, { bg: string; text: string }> = {
   sharia:          { bg: 'bg-emerald-100', text: 'text-emerald-700' },
   agm:             { bg: 'bg-amber-100',   text: 'text-amber-700'   },
   audit_committee: { bg: 'bg-rose-100',    text: 'text-rose-700'    },
+  other:           { bg: 'bg-slate-100',   text: 'text-slate-700'   },
 }
 
 function getReviewUrgency(nextReviewDate: string, status: PolicyStatus): 'expired' | 'warning' | 'normal' {

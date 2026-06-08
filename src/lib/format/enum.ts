@@ -177,6 +177,7 @@ const POLICY_APPROVAL_TIER_KEYS: Partial<Record<string, TranslationKey>> = {
   'sharia': 'policies.tierSharia',
   'agm': 'policies.tierAgm',
   'audit_committee': 'policies.tierAuditCommittee',
+  'other': 'policies.tierOther',
 }
 
 export function formatPolicyApprovalTier(

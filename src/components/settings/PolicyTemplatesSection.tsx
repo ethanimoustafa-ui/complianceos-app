@@ -40,6 +40,7 @@ export function PolicyTemplatesSection() {
     sharia: t('policies.tierSharia'),
     agm: t('policies.tierAgm'),
     audit_committee: t('policies.tierAuditCommittee'),
+    other: t('policies.tierOther'),
   }
 
   const FREQ_LABELS: Record<AuditFrequency, string> = {

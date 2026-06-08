@@ -47,23 +47,12 @@ type StepRow = {
 // When a step becomes 'current', its step_state is derived from its action_type
 // so the correct action affordance renders (mirrors the client autoState logic
 // in PolicyDetailsContent.handleConfirmAction). null → plain "move to next".
-function deriveStepState(actionType: string | null): string | null {
-  switch (actionType) {
-    case 'request-approval':
-    case 'send-for-review':
-      return 'pending-approval'
-    // P2 (W34): a send-email step must start with NO step_state so the "Send
-    // Email" action renders. Auto-setting 'awaiting-response' here (and on the
-    // client) skipped the send and jumped straight to "Received Response",
-    // auto-completing the mail step. handleSendEmail sets 'awaiting-response'
-    // only after the user actually sends.
-    case 'send-email':
-      return null
-    case 'notify-manager':
-      return 'awaiting-manager'
-    default:
-      return null
-  }
+function deriveStepState(_actionType: string | null): string | null {
+  // ISSUE-5/6/7 (W34.2): steps no longer auto-enter an awaiting/pending state when
+  // promoted to current. Each step shows its ACTION button first (submit-for-review
+  // / send-email / notify-manager); the awaiting/pending state is set + persisted
+  // only when the user clicks that action (PATCH the step's step_state).
+  return null
 }
 
 export async function POST(req: NextRequest, { params }: Params) {

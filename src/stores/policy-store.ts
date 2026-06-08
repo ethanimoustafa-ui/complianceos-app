@@ -565,6 +565,10 @@ interface PolicyStoreState {
 
   deleteWorkflowStep: (policyId: string, stepIdx: number) => Promise<void>
   reorderWorkflowSteps: (policyId: string, newTimeline: import('@/types').PolicyWorkflowStep[]) => Promise<void>
+  // ISSUE-5/6/7: persist a workflow step's step_state via PATCH /workflow/steps/{id}
+  // so transitions (awaiting-response / pending-approval / awaiting-manager) survive
+  // the server reconcile (the policy PATCH drops nested workflowTimeline changes).
+  setStepState: (policyId: string, stepId: string | undefined, stepState: 'pending-approval' | 'awaiting-response' | 'awaiting-manager' | undefined) => Promise<void>
   clearError: () => void
 }
 
@@ -1589,6 +1593,32 @@ export const usePolicyStore = create<PolicyStoreState>()((set, get) => ({
       set(cur => ({
         policies: cur.policies.map(p => p.id === policyId ? { ...p, workflowTimeline: policy.workflowTimeline } : p),
         byId: { ...cur.byId, [policyId]: { ...cur.byId[policyId]!, workflowTimeline: policy.workflowTimeline } },
+      }))
+      pushToast(revertMessage(e), 'error')
+    }
+  },
+
+  setStepState: async (policyId, stepId, stepState) => {
+    const policy = get().byId[policyId]
+    if (!policy) return
+    const prevTimeline = policy.workflowTimeline
+    // Optimistic: set step_state on the targeted step (by id, else the current one).
+    const newTl = prevTimeline.map((s) =>
+      (stepId ? s.id === stepId : s.status === 'current') ? { ...s, stepState } : s,
+    )
+    set((cur) => ({
+      policies: cur.policies.map((p) => (p.id === policyId ? { ...p, workflowTimeline: newTl } : p)),
+      byId: { ...cur.byId, [policyId]: { ...cur.byId[policyId]!, workflowTimeline: newTl } },
+    }))
+    if (!stepId) return // optimistic-only row (no server id yet); nothing to persist
+    const apiId = policy.uuid ?? policyId
+    try {
+      await api.patch(`/policies/${apiId}/workflow/steps/${stepId}`, { step_state: stepState ?? null })
+    } catch (e) {
+      // Revert on failure so the UI matches the server.
+      set((cur) => ({
+        policies: cur.policies.map((p) => (p.id === policyId ? { ...p, workflowTimeline: prevTimeline } : p)),
+        byId: { ...cur.byId, [policyId]: { ...cur.byId[policyId]!, workflowTimeline: prevTimeline } },
       }))
       pushToast(revertMessage(e), 'error')
     }
