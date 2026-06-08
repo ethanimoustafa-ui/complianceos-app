@@ -82,6 +82,13 @@ const ACTION_TYPE_META: Record<string, { icon: string; color: string }> = {
   'notify-manager':   { icon: 'lucide:user-check',      color: 'text-violet-400'  },
   'request-approval': { icon: 'lucide:check-square',    color: 'text-emerald-400' },
   'send-for-review':  { icon: 'lucide:send',            color: 'text-blue-400'    },
+  // QA fix (#2): DB-seeded action types (policy_workflow_step_templates) were
+  // missing here, so those steps rendered NO header icon. The earlier audit
+  // checked the client TIER_WORKFLOWS const instead of the DB seed.
+  'approve':          { icon: 'lucide:check-square',    color: 'text-emerald-400' },
+  'review_complete':  { icon: 'lucide:clipboard-check', color: 'text-blue-400'    },
+  'publish':          { icon: 'lucide:upload-cloud',    color: 'text-emerald-400' },
+  'vote_approve':     { icon: 'lucide:vote',            color: 'text-violet-400'  },
 }
 
 function readFileAsDataUrl(file: File): Promise<string> {
@@ -1324,11 +1331,12 @@ export function PolicyDetailsContent({
                 // it persists 'pending-approval' (handleRequestApproval -> setStepState),
                 // then Approve/Deny render. Without this case they fell through to the
                 // default "Move to Next Stage" and skipped the approval flow entirely.
-                if (actionType === 'approve') {
+                if (actionType === 'approve' || actionType === 'vote_approve') {
+                  const isVote = actionType === 'vote_approve'
                   return (
                     <Button variant="outline" className="w-full" onClick={() => handleRequestApproval()} disabled={workflowProcessing}>
-                      {workflowProcessing ? <Icon icon="lucide:loader-2" className="w-4 h-4 animate-spin" /> : <Icon icon="lucide:check-square" className="w-4 h-4" />}
-                      {t('policies.submitForApproval')}
+                      {workflowProcessing ? <Icon icon="lucide:loader-2" className="w-4 h-4 animate-spin" /> : <Icon icon={isVote ? 'lucide:vote' : 'lucide:check-square'} className="w-4 h-4" />}
+                      {isVote ? t('policies.submitToVote') : t('policies.submitForApproval')}
                     </Button>
                   )
                 }

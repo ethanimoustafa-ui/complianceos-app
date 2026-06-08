@@ -1286,6 +1286,7 @@
     "actionNotifyManager": "Notify Manager",
     "actionRequestApproval": "Request Approval",
     "submitForApproval": "Submit for Approval",
+    "submitToVote": "Submit to Vote",
     "documentUploaded": "Document updated successfully",
     "evidenceUploaded": "Evidence uploaded successfully",
     "policyUpdated": "Policy updated successfully!",
