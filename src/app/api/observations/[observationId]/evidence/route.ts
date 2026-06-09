@@ -12,6 +12,7 @@ import { RegisterObservationDocumentSchema } from '@/lib/api/schemas/observation
 import {
   OBSERVATION_DOCUMENT_COLUMNS,
   assertObservationExists,
+  assertObservationMembership,
   insertObservationTimeline,
   observationActorName,
 } from '@/lib/api/services/observations'
@@ -47,6 +48,8 @@ export async function POST(req: NextRequest, { params }: Params) {
     const { observationId: observationIdParam } = await params
     const { supabase, user, profile } = await requirePerm('observation:edit')
     const observationId = await assertObservationExists(supabase, observationIdParam)
+    // W39: only people added to the observation can act on it (org_admin oversees).
+    await assertObservationMembership(supabase, observationId, user.id, profile.role)
     const input = await parseJson(req, RegisterObservationDocumentSchema)
 
     // SEC-10 — path-traversal defence. Reduce the stored name to a basename.

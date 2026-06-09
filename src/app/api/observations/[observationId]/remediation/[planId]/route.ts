@@ -19,7 +19,7 @@
 import type { NextRequest } from 'next/server'
 import { z } from 'zod'
 import { requirePerm } from '@/lib/api/auth'
-import { handle, Forbidden, NotFound, Conflict } from '@/lib/api/errors'
+import { handle, NotFound, Conflict } from '@/lib/api/errors'
 import { ok } from '@/lib/api/response'
 import { assertNotStale, parseJson, readIfMatch } from '@/lib/api/validate'
 import { cacheTags, revalidateAll } from '@/lib/api/cache'
@@ -31,6 +31,7 @@ import {
 import {
   REMEDIATION_PLAN_COLUMNS,
   assertObservationExists,
+  assertObservationMembership,
   insertObservationTimeline,
   observationActorName,
 } from '@/lib/api/services/observations'
@@ -56,6 +57,14 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     const observationId = await assertObservationExists(supabase, observationIdParam)
     const input = await parseJson(req, PatchRemediationSchema)
 
+    // W39 (product rule): members may edit/submit the plan; the VERDICT
+    // (approve / reject) is reserved for the observation LEADER (org_admin
+    // oversees) — and the leader may verdict a plan they submitted themselves,
+    // superseding the earlier author-block.
+    await assertObservationMembership(supabase, observationId, user.id, profile.role, {
+      leaderOnly: 'approved' in input,
+    })
+
     // Read the current plan once: its status drives the allowed transitions and
     // its `updated_at` (migration 067) backs the optimistic-concurrency guard.
     const { data: currentPlan } = await supabase
@@ -79,11 +88,6 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     // mutating an already-approved plan's content without re-review.
     if (isReview && currentPlan.status !== 'submitted') {
       throw Conflict(`Cannot review a remediation plan in status '${currentPlan.status}'.`)
-    }
-    // W38: author-blocking — the submitter cannot approve/reject their own
-    // plan (spec: BO who authored the plan is NOT allowed to self-review).
-    if (isReview && currentPlan.submitted_by === user.id) {
-      throw Forbidden('You cannot review a remediation plan you submitted yourself.')
     }
     if (!isReview && currentPlan.status !== 'draft' && currentPlan.status !== 'rejected') {
       throw Conflict(`Cannot edit a remediation plan in status '${currentPlan.status}'.`)

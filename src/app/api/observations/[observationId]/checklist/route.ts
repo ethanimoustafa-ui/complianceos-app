@@ -11,6 +11,7 @@ import { CreateChecklistItemSchema } from '@/lib/api/schemas/observations'
 import {
   OBSERVATION_CHECKLIST_COLUMNS,
   assertObservationExists,
+  assertObservationMembership,
   insertObservationTimeline,
   observationActorName,
 } from '@/lib/api/services/observations'
@@ -45,6 +46,8 @@ export async function POST(req: NextRequest, { params }: Params) {
     const { observationId: observationIdParam } = await params
     const { supabase, user, profile } = await requirePerm('observation:edit')
     const observationId = await assertObservationExists(supabase, observationIdParam)
+    // W39: only people added to the observation can act on it (org_admin oversees).
+    await assertObservationMembership(supabase, observationId, user.id, profile.role)
     const input = await parseJson(req, CreateChecklistItemSchema)
 
     // GAP-12 — server-authoritative MAX+1 sort_order. The client may still

@@ -10,6 +10,7 @@ import { cacheTags, revalidateAll } from '@/lib/api/cache'
 import { writeAudit } from '@/lib/api/audit'
 import {
   assertObservationExists,
+  assertObservationMembership,
   insertObservationTimeline,
   observationActorName,
 } from '@/lib/api/services/observations'
@@ -26,6 +27,8 @@ export async function DELETE(req: NextRequest, { params }: Params) {
     assertUuid(attachmentId)
     const { supabase, user, profile } = await requirePerm('observation:edit')
     const observationId = await assertObservationExists(supabase, observationIdParam)
+    // W39: only people added to the observation can act on it (org_admin oversees).
+    await assertObservationMembership(supabase, observationId, user.id, profile.role)
     const ifMatch = readIfMatch(req)
 
     if (ifMatch != null) {

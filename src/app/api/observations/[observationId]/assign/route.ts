@@ -11,6 +11,7 @@ import { AssignObservationSchema } from '@/lib/api/schemas/observations'
 import {
   OBSERVATION_LIST_COLUMNS,
   assertObservationExists,
+  assertObservationMembership,
   insertObservationTimeline,
   observationActorName,
 } from '@/lib/api/services/observations'
@@ -26,6 +27,8 @@ export async function POST(req: NextRequest, { params }: Params) {
     const { observationId: observationIdParam } = await params
     const { supabase, user, profile } = await requirePerm('observation:edit')
     const observationId = await assertObservationExists(supabase, observationIdParam)
+    // W39: leadership / assignee changes are leader-only (org_admin oversees).
+    await assertObservationMembership(supabase, observationId, user.id, profile.role, { leaderOnly: true })
     const input = await parseJson(req, AssignObservationSchema)
 
     // Wave-20.cleanup / W17.2 — optimistic-concurrency guard. The PATCH on

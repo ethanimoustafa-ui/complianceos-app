@@ -756,11 +756,28 @@ export function PolicyDetailsContent({
                 </div>
               )}
 
-              {/* P3 (W29): skeleton while detail GET is in flight. */}
+              {/* P3 (W29) / W39: skeleton while the detail GET is in flight —
+                  shaped like the real timeline (vertical rail + step dot +
+                  label/caption bars) instead of flat anonymous bars. */}
               {isDetailPrefetch && (
-                <div className="space-y-2">
-                  {[1, 2, 3].map((i) => (
-                    <Skeleton key={i} className="h-12 w-full rounded-xl" />
+                <div
+                  className="space-y-2 relative before:absolute before:start-2 before:top-2 before:bottom-2 before:w-0.5 before:bg-slate-100"
+                  data-testid="policy-workflow-skeleton"
+                  role="status"
+                  aria-busy="true"
+                  aria-live="polite"
+                >
+                  {[1, 2, 3, 4].map((i) => (
+                    <div key={i} className="relative flex items-start gap-3">
+                      <Skeleton className="h-4 w-4 rounded-full shrink-0 mt-3.5 relative z-10" />
+                      <div className="flex-1 rounded-xl border border-slate-100 bg-white p-3 space-y-2">
+                        <div className="flex items-center justify-between gap-3">
+                          <Skeleton className="h-3.5 w-40 max-w-[50%]" />
+                          <Skeleton className="h-3 w-16" />
+                        </div>
+                        <Skeleton className="h-2.5 w-2/3" />
+                      </div>
+                    </div>
                   ))}
                 </div>
               )}

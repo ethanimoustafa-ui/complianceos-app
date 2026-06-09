@@ -14,6 +14,7 @@ import { writeAudit } from '@/lib/api/audit'
 import {
   OBSERVATION_CHECKLIST_COLUMNS,
   assertObservationExists,
+  assertObservationMembership,
   insertObservationTimeline,
   observationActorName,
 } from '@/lib/api/services/observations'
@@ -31,6 +32,8 @@ export async function PATCH(_req: NextRequest, { params }: Params) {
     const { observationId, planId, itemId } = await params
     const { supabase, user, profile } = await requirePerm('observation:edit')
     await assertObservationExists(supabase, observationId)
+    // W39: only people added to the observation can act on it (org_admin oversees).
+    await assertObservationMembership(supabase, observationId, user.id, profile.role)
 
     const { data: current, error: readErr } = await supabase
       .from('observation_checklist')

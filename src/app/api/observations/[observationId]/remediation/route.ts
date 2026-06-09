@@ -11,6 +11,7 @@ import { CreateRemediationPlanSchema } from '@/lib/api/schemas/observations'
 import {
   REMEDIATION_PLAN_COLUMNS,
   assertObservationExists,
+  assertObservationMembership,
   insertObservationTimeline,
   observationActorName,
 } from '@/lib/api/services/observations'
@@ -45,6 +46,8 @@ export async function POST(req: NextRequest, { params }: Params) {
     const { observationId: observationIdParam } = await params
     const { supabase, user, profile } = await requirePerm('observation:edit')
     const observationId = await assertObservationExists(supabase, observationIdParam)
+    // W39: only people added to the observation can act on it (org_admin oversees).
+    await assertObservationMembership(supabase, observationId, user.id, profile.role)
     const input = await parseJson(req, CreateRemediationPlanSchema)
 
     // Unified draft→submit flow. A 'draft' plan is still being built by the

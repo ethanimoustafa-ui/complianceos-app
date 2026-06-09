@@ -14,6 +14,7 @@ import { UpdateChecklistItemSchema } from '@/lib/api/schemas/observations'
 import {
   OBSERVATION_CHECKLIST_COLUMNS,
   assertObservationExists,
+  assertObservationMembership,
   insertObservationTimeline,
   observationActorName,
 } from '@/lib/api/services/observations'
@@ -30,6 +31,8 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     assertUuid(itemId)
     const { supabase, user, profile } = await requirePerm('observation:edit')
     const observationId = await assertObservationExists(supabase, observationIdParam)
+    // W39: only people added to the observation can act on it (org_admin oversees).
+    await assertObservationMembership(supabase, observationId, user.id, profile.role)
     const ifMatch = readIfMatch(req)
     const patch = await parseJson(req, UpdateChecklistItemSchema)
 
@@ -127,6 +130,8 @@ export async function DELETE(req: NextRequest, { params }: Params) {
     assertUuid(itemId)
     const { supabase, user, profile } = await requirePerm('observation:edit')
     const observationId = await assertObservationExists(supabase, observationIdParam)
+    // W39: only people added to the observation can act on it (org_admin oversees).
+    await assertObservationMembership(supabase, observationId, user.id, profile.role)
     const ifMatch = readIfMatch(req)
 
     if (ifMatch != null) {

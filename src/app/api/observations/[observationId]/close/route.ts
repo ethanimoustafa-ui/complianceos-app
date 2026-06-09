@@ -10,6 +10,7 @@ import { writeAudit } from '@/lib/api/audit'
 import { CloseObservationSchema } from '@/lib/api/schemas/observations'
 import {
   OBSERVATION_LIST_COLUMNS,
+  assertObservationMembership,
   insertObservationTimeline,
   observationActorName,
 } from '@/lib/api/services/observations'
@@ -37,6 +38,8 @@ export async function POST(req: NextRequest, { params }: Params) {
     if (readErr) throw readErr
     if (!current) throw NotFound(`Observation ${observationIdParam} not found`)
     const observationId = current.id
+    // W39: only people added to the observation can request closure.
+    await assertObservationMembership(supabase, observationId, user.id, profile.role)
     if (current.status === 'closed' || current.status === 'resolved') {
       return ok({ id: observationId, status: current.status })
     }

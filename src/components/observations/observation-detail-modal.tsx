@@ -370,6 +370,10 @@ export const ObservationDetailModal = memo(function ObservationDetailModal({
   // alone, because status alone could be 'closed' without archiving.
   const isClosed = Boolean(liveObs.archivedAt) || liveObs.status === 'closed'
 
+  // W39: membership mirror of the server gate — only people added to the
+  // observation (leader / assignees; admin oversees) get input affordances.
+  const isMember = canSubmitRemediation(user, liveObs)
+
   // Derived data
   const displayAssignees = liveObs.assignees?.length
     ? liveObs.assignees
@@ -432,18 +436,20 @@ export const ObservationDetailModal = memo(function ObservationDetailModal({
               </p>
             </section>
 
-            {/* Remediation Checklist — read-only when closed (O4) */}
+            {/* Remediation Checklist — read-only when closed (O4) or for
+                non-members (W39: the server rejects non-member writes). */}
             <ChecklistSection
               items={localChecklist}
-              onAdd={isClosed ? (() => {}) : handleAddChecklistItem}
-              onEdit={isClosed ? undefined : handleEditChecklistItem}
-              onRemove={isClosed ? (() => {}) : handleRemoveChecklistItem}
-              onToggle={isClosed ? (() => {}) : handleChecklistItemToggle}
+              onAdd={isClosed || !isMember ? (() => {}) : handleAddChecklistItem}
+              onEdit={isClosed || !isMember ? undefined : handleEditChecklistItem}
+              onRemove={isClosed || !isMember ? (() => {}) : handleRemoveChecklistItem}
+              onToggle={isClosed || !isMember ? (() => {}) : handleChecklistItemToggle}
               isRTL={isRTL}
-              readOnly={isClosed}
+              readOnly={isClosed || !isMember}
             />
 
-            {/* Updates & Discussion — read-only when closed (O4) */}
+            {/* Updates & Discussion — read-only when closed (O4) or for
+                non-members (W39). */}
             <CommentsSection
               comments={localComments}
               user={user}
@@ -452,7 +458,7 @@ export const ObservationDetailModal = memo(function ObservationDetailModal({
               onDelete={handleDeleteComment}
               isRTL={isRTL}
               isLoaded={detailLoaded}
-              readOnly={isClosed}
+              readOnly={isClosed || !isMember}
             />
 
             {/* O6: Version History section hidden per W28 spec.
@@ -490,13 +496,9 @@ export const ObservationDetailModal = memo(function ObservationDetailModal({
 
           <RemediationStatus
             plan={liveObs.remediationPlan}
-            // W38: the submitter never reviews their own plan (server enforces
-            // the same block — hide the buttons so the 403 can't be reached).
-            canReview={
-              !isClosed &&
-              canReviewRemediation(user, liveObs) &&
-              (!liveObs.remediationPlan?.submittedBy || liveObs.remediationPlan.submittedBy !== user?.id)
-            }
+            // W39 (product rule): the observation LEADER approves/rejects the
+            // plan submission — including one they submitted themselves.
+            canReview={!isClosed && canReviewRemediation(user, liveObs)}
             canSubmitPlan={!isClosed && canSubmitRemediation(user, liveObs)}
             onReview={handleReviewRemediationPlan}
             onCreatePlan={openCreatePlan}
@@ -514,12 +516,9 @@ export const ObservationDetailModal = memo(function ObservationDetailModal({
             closureRequest={liveObs.closureRequest}
             closureReview={liveObs.closureReview}
             canRequestClosure={!isClosed && canRequestClosure(user, liveObs)}
-            // W38: the closure requester cannot approve/reject their own
-            // request (server enforces the same block).
-            canReviewClosure={
-              canReviewClosure(user, liveObs) &&
-              (!liveObs.closureRequest?.requestedBy || liveObs.closureRequest.requestedBy !== user?.id)
-            }
+            // W39 (product rule): closure verdicts belong to the leader —
+            // including on their own request.
+            canReviewClosure={canReviewClosure(user, liveObs)}
             remediationApproved={liveObs.remediationPlan?.status === 'approved'}
             onRequestClosure={handleRequestClosure}
             onReviewClosure={handleReviewClosure}

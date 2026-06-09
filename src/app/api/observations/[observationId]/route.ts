@@ -20,6 +20,7 @@ import {
   OBSERVATION_DETAIL_COLUMNS,
   OBSERVATION_FIELD_LABEL_KEYS,
   assertObservationExists,
+  assertObservationMembership,
   getObservationDetail,
   insertObservationTimeline,
   insertObservationVersion,
@@ -63,6 +64,8 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     const { observationId: observationIdParam } = await params
     const { supabase, user, profile } = await requirePerm('observation:edit')
     const observationId = await assertObservationExists(supabase, observationIdParam)
+    // W39: editing the observation record is leader-only (org_admin oversees).
+    await assertObservationMembership(supabase, observationId, user.id, profile.role, { leaderOnly: true })
 
     // §2.12 — optimistic-concurrency token.
     const ifMatch = readIfMatch(req)

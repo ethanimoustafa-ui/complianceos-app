@@ -9,6 +9,7 @@ import { cacheTags, revalidate, revalidateAll } from '@/lib/api/cache'
 import { writeAudit } from '@/lib/api/audit'
 import {
   OBSERVATION_LIST_COLUMNS,
+  assertObservationMembership,
   insertObservationTimeline,
   observationActorName,
 } from '@/lib/api/services/observations'
@@ -33,6 +34,8 @@ export async function POST(req: NextRequest, { params }: Params) {
     if (readErr) throw readErr
     if (!current) throw NotFound(`Observation ${observationIdParam} not found`)
     const observationId = current.id
+    // W39: reopening a closed observation is leader-only (org_admin oversees).
+    await assertObservationMembership(supabase, observationId, user.id, profile.role, { leaderOnly: true })
     if (current.status !== 'closed' && current.status !== 'resolved') {
       throw Conflict(`Cannot reopen observation in status ${current.status}`)
     }

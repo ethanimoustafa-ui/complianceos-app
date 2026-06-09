@@ -18,7 +18,7 @@
 
 import type { NextRequest } from 'next/server'
 import { requirePerm } from '@/lib/api/auth'
-import { handle, NotFound, Conflict, Forbidden, PreconditionFailed } from '@/lib/api/errors'
+import { handle, NotFound, Conflict, PreconditionFailed } from '@/lib/api/errors'
 import { ok } from '@/lib/api/response'
 import { assertNotStale, parseJson, readIfMatch } from '@/lib/api/validate'
 import { cacheTags, revalidate, revalidateAll } from '@/lib/api/cache'
@@ -27,6 +27,7 @@ import { ReviewClosureSchema } from '@/lib/api/schemas/observations'
 import {
   OBSERVATION_LIST_COLUMNS,
   assertObservationExists,
+  assertObservationMembership,
   insertObservationTimeline,
   observationActorName,
 } from '@/lib/api/services/observations'
@@ -42,6 +43,10 @@ export async function POST(req: NextRequest, { params }: Params) {
     const { observationId: observationIdParam } = await params
     const { supabase, user, profile } = await requirePerm('observation:edit')
     const observationId = await assertObservationExists(supabase, observationIdParam)
+    // W39 (product rule): closure verdicts are leader-only (org_admin
+    // oversees) — and the leader may verdict their own request, superseding
+    // the earlier requester-block so the flow is drivable end-to-end.
+    await assertObservationMembership(supabase, observationId, user.id, profile.role, { leaderOnly: true })
     const input = await parseJson(req, ReviewClosureSchema)
 
     const { data: current, error: readErr } = await supabase
@@ -64,11 +69,6 @@ export async function POST(req: NextRequest, { params }: Params) {
       .maybeSingle<{ observation_id: string; requested_by: string | null }>()
     if (reqErr) throw reqErr
     if (!request) throw Conflict('No closure request is pending review.')
-
-    // Author-blocking: the requester cannot verdict their own closure request.
-    if (request.requested_by === user.id) {
-      throw Forbidden('You cannot review a closure request you submitted yourself.')
-    }
 
     const ifMatch = readIfMatch(req)
     assertNotStale(ifMatch, current.updated_at)

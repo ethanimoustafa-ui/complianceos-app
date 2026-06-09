@@ -246,11 +246,15 @@ export function isObservationLeader(user: User | null, obs: { leaderId?: string 
   return user?.id === obs.leaderId
 }
 
+// W39 (product rule): "only people added to the observation can do things to
+// the observation" — managing (review verdicts, transfer, edit, reopen) is
+// the LEADER's job; org_admin retains oversight. The old global
+// 'Manage Audit Findings' fallthrough let unrelated staff manage any
+// observation, which the server now rejects.
 export function canManageObservation(user: User | null, obs: { leaderId?: string }): boolean {
   if (!user) return false
   if (user.role === 'admin') return true
-  if (isObservationLeader(user, obs)) return true
-  return hasPermission(user, 'Manage Audit Findings')
+  return isObservationLeader(user, obs)
 }
 
 export function canTransferLeadership(user: User | null, obs: { leaderId?: string }): boolean {

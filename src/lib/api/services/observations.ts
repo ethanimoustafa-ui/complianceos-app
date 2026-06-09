@@ -3,7 +3,7 @@
 // `is_overdue`, server recompute, dual-store activity writer).
 
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { NotFound } from '../errors'
+import { Forbidden, NotFound } from '../errors'
 import { renderBilingual, renderI18nKey } from '@/lib/i18n/server'
 
 // --- selection lists ---------------------------------------------------------
@@ -73,6 +73,47 @@ export async function assertObservationExists(
   if (error) throw error
   if (!data) throw NotFound(`Observation ${observationIdOrReference} not found`)
   return data.id
+}
+
+// --- membership gate ----------------------------------------------------------
+//
+// W39 (user rule): "only people added to the observation can do things to the
+// observation". A member is the leader or a linked assignee
+// (observation_assignees.user_id); org_admin retains oversight. Review-type
+// actions (remediation verdicts, closure verdicts, reopen, transfer, edit)
+// are leader-only (+ org_admin). This is the trust-boundary mirror of the
+// client-side canSubmitRemediation / canManageObservation helpers.
+
+export async function assertObservationMembership(
+  supabase: SupabaseClient,
+  observationId: string,
+  userId: string,
+  role: string | null | undefined,
+  opts: { leaderOnly?: boolean } = {},
+): Promise<void> {
+  if (role === 'org_admin') return
+
+  const { data: obs, error } = await supabase
+    .from('observations')
+    .select('leader_id')
+    .eq('id', observationId)
+    .maybeSingle<{ leader_id: string | null }>()
+  if (error) throw error
+  if (obs?.leader_id === userId) return
+
+  if (opts.leaderOnly) {
+    throw Forbidden('Only the observation leader can perform this action.')
+  }
+
+  const { count, error: aErr } = await supabase
+    .from('observation_assignees')
+    .select('id', { count: 'exact', head: true })
+    .eq('observation_id', observationId)
+    .eq('user_id', userId)
+  if (aErr) throw aErr
+  if ((count ?? 0) > 0) return
+
+  throw Forbidden('Only people added to this observation can act on it.')
 }
 
 // --- composite detail --------------------------------------------------------
