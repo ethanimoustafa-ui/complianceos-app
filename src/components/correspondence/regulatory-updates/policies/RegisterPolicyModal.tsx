@@ -18,8 +18,9 @@ import { Modal } from '@/components/ui/modal'
 import { EditableSelect } from '@/components/ui/editable-select'
 import { ReviewSchedulePicker } from '@/components/ui/ReviewSchedulePicker'
 import { computeNextReview, cadenceToReviewCycleDays } from '@/lib/review-schedule'
+import { api } from '@/lib/api-client'
 import { usePolicyStore } from '@/stores/policy-store'
-import { AddTierModal, type AddTierStep } from './AddTierModal'
+import { AddTierModal, ACTION_TYPES, type AddTierStep, type EditTier } from './AddTierModal'
 import { usePolicyTemplateStore } from '@/stores/policy-template-store'
 import { usePolicyCategoryStore } from '@/stores/policy-category-store'
 import { useTeamStore } from '@/stores/team-store'
@@ -169,8 +170,9 @@ export function RegisterPolicyModal({ isOpen, onClose, onCreated, t, isRTL }: Pr
   // table). The previous code wrote to the unrelated entity_templates table, so
   // the POST returned 201 but the new template never appeared anywhere.
   const [showSavePolicyTemplateForm, setShowSavePolicyTemplateForm] = useState(false)
-  // ISSUE-4: custom approval-tier add modal.
+  // ISSUE-4: custom approval-tier add modal. W37: editTier set => edit mode.
   const [showAddTier, setShowAddTier] = useState(false)
+  const [editTier, setEditTier] = useState<EditTier | null>(null)
   const [policyTemplateNameInput, setPolicyTemplateNameInput] = useState('')
   const [isSavingPolicyTemplate, setIsSavingPolicyTemplate] = useState(false)
   useEffect(() => {
@@ -202,33 +204,124 @@ export function RegisterPolicyModal({ isOpen, onClose, onCreated, t, isRTL }: Pr
     }
   }
 
-  // ISSUE-4: create a custom approval tier = enum_value_definitions row (the
-  // dropdown option) + a paired policy_template carrying the seed workflow steps.
-  // Reuses useEnumValuesStore.add (POST /settings/enum-values) and
-  // usePolicyTemplateStore.create (POST /policy-templates) — no migration.
-  async function handleAddCustomTier(key: string, nameEn: string, nameAr: string, steps: AddTierStep[]): Promise<void> {
+  // W37: persist an ADDED or EDITED approval tier. A tier = an enum option
+  // (policy.approval_tier) + a paired policy_template carrying its default
+  // workflow steps. The policy CREATE route prefers that template, so this is
+  // how a tier's workflow (a custom one, OR a customized seeded one) takes
+  // effect. Reuses useEnumValuesStore (POST/PATCH /settings/enum-values) and the
+  // policy-templates store — no migration.
+  async function handleSaveTier(key: string, nameEn: string, nameAr: string, steps: AddTierStep[], isEdit: boolean): Promise<boolean> {
     try {
-      await addEnumTier('policy.approval_tier', key, nameEn, nameAr)
-      createPolicyTemplate({
-        name: nameEn,
-        nameAr,
-        category: (formCategory || 'compliance') as PolicyCategory,
-        approvalTier: key as PolicyApprovalTier,
-        defaultDescription: '',
-        defaultWorkflowSteps: steps,
-        versionPattern: 'v{major}.{minor}',
-        status: 'active',
-      })
-      setFormTier(key as PolicyApprovalTier)
+      if (isEdit) {
+        const row = tierRows.find((r) => r.key === key)
+        // Rename the enum option (the server blocks renaming the default tier).
+        if (row && !row.isDefault && (row.nameEn !== nameEn || row.nameAr !== nameAr)) {
+          await updateEnumTier(row.id, { nameEn, nameAr })
+        }
+      } else {
+        await addEnumTier('policy.approval_tier', key, nameEn, nameAr)
+      }
+      // Upsert the paired template holding the tier's workflow steps. A tier can
+      // have several templates with the same approval_tier (e.g. an empty one
+      // from "Save as template"); prefer updating the one that already HAS steps
+      // so the edit lands on the real tier-workflow source, not an empty dup.
+      const existing =
+        policyTemplates.find((tp) => tp.approvalTier === key && (tp.defaultWorkflowSteps?.length ?? 0) > 0) ??
+        policyTemplates.find((tp) => tp.approvalTier === key)
+      if (existing) {
+        await updatePolicyTemplate(existing.id, { name: nameEn, nameAr, defaultWorkflowSteps: steps })
+      } else {
+        createPolicyTemplate({
+          name: nameEn,
+          nameAr,
+          category: (formCategory || 'compliance') as PolicyCategory,
+          approvalTier: key as PolicyApprovalTier,
+          defaultDescription: '',
+          defaultWorkflowSteps: steps,
+          versionPattern: 'v{major}.{minor}',
+          status: 'active',
+        })
+      }
+      if (!isEdit) setFormTier(key as PolicyApprovalTier)
+      setEditTier(null)
+      return true
     } catch (e) {
-      console.error('Failed to add custom approval tier', e)
+      // Surface failure to the modal so it stays open (the enum/template stores
+      // already show a revert toast). Returning false prevents the modal from
+      // closing as if the save succeeded.
+      console.error('Failed to save approval tier', e)
+      return false
     }
+  }
+
+  // W37: delete a tier — remove its enum option (the server blocks the default
+  // tier and any tier still in use) plus its paired workflow template.
+  async function handleDeleteTier(key: string): Promise<void> {
+    const row = tierRows.find((r) => r.key === key)
+    if (!row || row.isDefault) return
+    try {
+      await removeEnumTier(row.id)
+      const tmpl = policyTemplates.find((tp) => tp.approvalTier === key)
+      if (tmpl) await deletePolicyTemplate(tmpl.id)
+      if (formTier === key) setFormTier('')
+      setEditTier(null)
+    } catch (e) {
+      // The enum/template stores surface a revert toast on failure; clear any
+      // stale edit state so a later Edit re-hydrates fresh.
+      console.error('Failed to delete approval tier', e)
+      setEditTier(null)
+    }
+  }
+
+  // W37: open the tier modal in EDIT mode, pre-filled with the tier's current
+  // name + steps. Custom tiers read steps from their paired template; seeded
+  // tiers read theirs from the per-tier seed (policy_workflow_step_templates).
+  async function openEditTier(key: string): Promise<void> {
+    const row = tierRows.find((r) => r.key === key)
+    if (!row) return
+    // Normalize legacy/seeded action types to the canonical set so the
+    // EditableSelect shows a real option (not "Select…") and the value can't be
+    // lost on save. (W37 "collapse the redundant ones".)
+    const NORMALIZE: Record<string, string> = {
+      publish: 'review_complete',
+      approve: 'request-approval',
+      vote_approve: 'request-approval',
+      'send-for-review': 'request-approval',
+    }
+    const safeAction = (a: string | null | undefined): string => {
+      if (!a) return 'move-to-next'
+      if (NORMALIZE[a]) return NORMALIZE[a]
+      return (ACTION_TYPES as readonly string[]).includes(a) ? a : 'move-to-next'
+    }
+    let steps: AddTierStep[] = []
+    const tmpl = policyTemplates.find((tp) => tp.approvalTier === key && (tp.defaultWorkflowSteps?.length ?? 0) > 0)
+    if (tmpl) {
+      steps = (tmpl.defaultWorkflowSteps as Array<{ step?: string; description?: string; actionType?: string }>).map((s) => ({
+        step: s.step ?? '',
+        description: s.description ?? '',
+        actionType: safeAction(s.actionType),
+      }))
+    } else {
+      try {
+        const rows = await api.get<Array<{ step: string; description: string | null; action_type: string | null }>>(
+          '/policy-workflow-step-templates',
+          { tier: key },
+        )
+        steps = rows.map((r) => ({ step: r.step, description: r.description ?? '', actionType: safeAction(r.action_type) }))
+      } catch {
+        steps = []
+      }
+    }
+    setEditTier({ key, nameEn: row.nameEn, nameAr: row.nameAr, steps })
+    setShowAddTier(true)
   }
 
   // Wave-19.7 — approval-tier dropdown options driven by enum_value_definitions.
   const tierRows = useEnumValuesStore((s) => s.byDomain['policy.approval_tier'] ?? EMPTY_ENUM_VALUES)
   const fetchEnumValues = useEnumValuesStore((s) => s.fetch)
   const addEnumTier = useEnumValuesStore((s) => s.add)
+  const updateEnumTier = useEnumValuesStore((s) => s.update)
+  const removeEnumTier = useEnumValuesStore((s) => s.remove)
   useEffect(() => {
     if (isOpen) void fetchEnumValues('policy.approval_tier')
   }, [isOpen, fetchEnumValues])
@@ -240,6 +333,8 @@ export function RegisterPolicyModal({ isOpen, onClose, onCreated, t, isRTL }: Pr
         .map((v) => ({
           id: v.key,
           label: isRTL ? v.nameAr : v.nameEn,
+          // isDefault hides the per-row trash (the canonical tier can't be deleted).
+          isDefault: v.isDefault,
         })),
     [tierRows, isRTL],
   )
@@ -429,12 +524,18 @@ export function RegisterPolicyModal({ isOpen, onClose, onCreated, t, isRTL }: Pr
             onChange={(id) => handleTemplateSelect(id)}
             items={[
               { id: '', label: t('settings.noTemplate'), isDefault: true },
-              ...policyTemplates.map((tmpl) => ({ id: tmpl.id, label: tmpl.name, labelAr: tmpl.nameAr })),
+              // W37: hide tier-WORKFLOW-source templates (the paired template a
+              // tier stores its steps in — name+key match a tier enum). They are
+              // tier definitions, not policy starting-templates; showing them let
+              // a user delete one here and silently break that tier's workflow.
+              ...policyTemplates
+                .filter((tmpl) => !tierRows.some((r) => r.key === tmpl.approvalTier && r.nameEn === tmpl.name))
+                .map((tmpl) => ({ id: tmpl.id, label: tmpl.name, labelAr: tmpl.nameAr })),
             ]}
             placeholder={t('settings.noTemplate')}
             bilingual={false}
-            onEdit={(id, label) => { if (id) updatePolicyTemplate(id, { name: label }) }}
-            onDelete={(id) => { if (id) deletePolicyTemplate(id) }}
+            onEdit={(id, label) => (id ? updatePolicyTemplate(id, { name: label }) : undefined)}
+            onDelete={(id) => (id ? deletePolicyTemplate(id) : undefined)}
             isRTL={isRTL}
             footerSlot={
               showSavePolicyTemplateForm ? (
@@ -508,23 +609,23 @@ export function RegisterPolicyModal({ isOpen, onClose, onCreated, t, isRTL }: Pr
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('policies.approvalTier')} *</label>
+              {/* W37: in-dropdown tier management (reverted per request). The
+                  footer "+ Add approval tier" and per-row pencil use the
+                  EditableSelect external-action props (onAddClick/onEditClick),
+                  which CLOSE the dropdown before opening the rich Add/Edit Tier
+                  modal — so the dropdown portal no longer hovers over it. Per-row
+                  trash (onDelete) deletes; hidden for the default tier. */}
               <EditableSelect
-                locked
                 value={formTier || null}
                 onChange={(id) => setFormTier(id as PolicyApprovalTier | '')}
                 items={tierItems}
                 placeholder={t('policies.selectApprovalTier')}
+                onAddClick={() => { setEditTier(null); setShowAddTier(true) }}
+                onEditClick={(key) => openEditTier(key)}
+                onDelete={(key) => handleDeleteTier(key)}
+                addLabel={t('policies.addApprovalTier')}
+                bilingual={false}
                 isRTL={isRTL}
-                footerSlot={
-                  <button
-                    type="button"
-                    className="w-full flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-emerald-700 hover:bg-emerald-50 cursor-pointer"
-                    onClick={(e) => { e.stopPropagation(); setShowAddTier(true) }}
-                  >
-                    <Icon icon="lucide:plus" className="text-sm" />
-                    {t('policies.addApprovalTier')}
-                  </button>
-                }
               />
             </div>
             <Input
@@ -659,13 +760,20 @@ export function RegisterPolicyModal({ isOpen, onClose, onCreated, t, isRTL }: Pr
         </div>
       </div>
 
-      <AddTierModal
-        isOpen={showAddTier}
-        onClose={() => setShowAddTier(false)}
-        onSave={handleAddCustomTier}
-        existingKeys={tierItems.map((ti) => ti.id)}
-        t={t}
-      />
+      {/* Conditionally mounted + keyed so each open seeds fresh state from props
+          (add vs edit-of-a-specific-tier) without a re-seeding effect. */}
+      {showAddTier && (
+        <AddTierModal
+          key={editTier ? `edit-${editTier.key}` : 'add'}
+          isOpen
+          onClose={() => { setShowAddTier(false); setEditTier(null) }}
+          onSave={handleSaveTier}
+          existingKeys={tierItems.map((ti) => ti.id)}
+          editTier={editTier}
+          isRTL={isRTL}
+          t={t}
+        />
+      )}
     </Modal>
   )
 }

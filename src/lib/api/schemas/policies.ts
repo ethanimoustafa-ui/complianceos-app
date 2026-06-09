@@ -164,14 +164,31 @@ export type CreatePolicyWorkflowStepInput = z.infer<typeof CreatePolicyWorkflowS
 
 export const AdvancePolicyWorkflowSchema = z
   .object({
-    /** action key — `submit-for-review`, `approve`, `undo`, `initiate-review`. */
-    action: z.enum(['submit-for-review', 'approve', 'undo', 'initiate-review']),
+    /** action key. `reject` clears the current step's step_state (so its action
+     *  button reappears) + logs a denial. `acknowledge` logs a manager
+     *  acknowledgement with no state change. `notify-manager` / `send-email` /
+     *  `request-approval` set the current step's awaiting/pending state, move the
+     *  policy to under-review (so a DRAFT policy's first action also STARTS the
+     *  review), and log it. */
+    action: z.enum([
+      'submit-for-review', 'approve', 'reject', 'acknowledge', 'undo', 'initiate-review',
+      'notify-manager', 'send-email', 'request-approval',
+    ]),
     step_id: Uuid.optional(),
     note: PlainText(5_000).optional(),
     user_name: PlainText(200).optional(),
   })
   .strict()
 export type AdvancePolicyWorkflowInput = z.infer<typeof AdvancePolicyWorkflowSchema>
+
+// W37 — reseed a policy's workflow steps to match an approval tier (used when
+// the user changes the tier on an existing policy and opts to reset the flow).
+export const ReseedPolicyWorkflowSchema = z
+  .object({
+    tier: z.string().min(1).max(100),
+  })
+  .strict()
+export type ReseedPolicyWorkflowInput = z.infer<typeof ReseedPolicyWorkflowSchema>
 
 export const SetPhaseDeadlineSchema = z
   .object({
@@ -264,7 +281,11 @@ export const CreatePolicyTemplateSchema = z.object({
   approval_tier: z.string().min(1).max(100),
   frequency: z.string().max(100).optional(),
   frequency_schedule: z.record(z.string(), z.unknown()).optional(),
-  default_description: PlainTextMin(10_000),
+  // W37: allow an EMPTY default description. A custom approval tier is saved as
+  // a paired policy_template carrying only its workflow steps (no description),
+  // so requiring min-1 here 400'd that POST and the tier's steps were lost — the
+  // policy then fell back to the generic workflow. PlainText allows ''.
+  default_description: PlainText(10_000),
   default_description_ar: PlainText(10_000).optional(),
   default_workflow_steps: z.array(z.record(z.string(), z.unknown())).default([]),
   version_pattern: z.string().max(100).default('v{major}.{minor}'),

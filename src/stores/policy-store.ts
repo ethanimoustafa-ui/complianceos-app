@@ -547,12 +547,18 @@ interface PolicyStoreState {
   advanceWorkflowStep: (
     policyId: string,
     opts: {
-      action: 'submit-for-review' | 'approve' | 'undo' | 'initiate-review'
+      action:
+        | 'submit-for-review' | 'approve' | 'reject' | 'acknowledge' | 'undo' | 'initiate-review'
+        | 'notify-manager' | 'send-email' | 'request-approval'
       stepId?: string
       note?: string
       userName?: string
     },
   ) => Promise<void>
+
+  // W37: reset a policy's workflow steps to match an approval tier (used after a
+  // tier change when the user opts to reseed). Server-driven + awaited refetch.
+  reseedWorkflowFromTier: (policyId: string, tier: string) => Promise<void>
 
   // P6 (W29): archive / unarchive a policy.
   // PATCHes archived_at; optimistic archivedAt update in store.
@@ -1509,6 +1515,12 @@ export const usePolicyStore = create<PolicyStoreState>()((set, get) => ({
   advanceWorkflowStep: async (policyId, { action, stepId, note, userName }) => {
     const policy = get().byId[policyId]
     if (!policy) return
+    // W37: every workflow action is now SERVER-DRIVEN with no optimistic local
+    // write. The POST persists + logs the transition; the AWAITED refetch below
+    // applies server truth while `workflowProcessing` keeps the spinner up — so
+    // there is no optimistic state to revert (the old "reverts then comes back"
+    // flicker). NOTE: reject no longer pre-clears step_state locally — on a POST
+    // failure that would have left a stale cleared state with no server change.
     // BUG-R4-01: set in-flight flag so all workflow buttons disable while request runs.
     set((s) => ({ workflowProcessing: { ...s.workflowProcessing, [policyId]: true } }))
     const apiId = policy.uuid ?? policyId
@@ -1519,14 +1531,68 @@ export const usePolicyStore = create<PolicyStoreState>()((set, get) => ({
         ...(note ? { note } : {}),
         ...(userName ? { user_name: userName } : {}),
       })
-      // Refresh detail so activity log picks up the server-emitted entry.
-      get().fetchById(policyId)
+      // W37: AWAIT the authoritative detail refetch (instead of fire-and-forget
+      // fetchById) so the in-flight `workflowProcessing` loading state covers it.
+      // Workflow actions are NOT optimistic — the UI shows a spinner, then jumps
+      // straight to server truth, eliminating the "reverts then comes back"
+      // flicker the old optimistic update() path produced.
+      try {
+        const row = await api.get<PolicyApiRow>(`/policies/${apiId}`)
+        const prev = get().byId[policyId]
+        const mapped = mapRow(row, prev)
+        set((s) => ({
+          byId: { ...s.byId, [policyId]: mapped },
+          policies: s.policies.map((p) => (p.id === policyId ? mapped : p)),
+          selectedPolicy: s.selectedPolicy?.id === policyId ? mapped : s.selectedPolicy,
+          policyActivityPagination: {
+            ...s.policyActivityPagination,
+            [policyId]: {
+              offset: mapped.activityLog?.length ?? 0,
+              hasMore: !!row.activity_log_has_more,
+              loadingMore: false,
+            },
+          },
+        }))
+      } catch (refetchErr) {
+        // The write (advance POST) SUCCEEDED — only the read-back failed. Surface
+        // it so the user knows the on-screen state may be stale (a detail re-open
+        // reconciles); don't leave it silent after a confirmed mutation.
+        // eslint-disable-next-line no-console
+        console.error('[advanceWorkflowStep] refetch after persist failed —', action, refetchErr)
+        pushToast({ key: 'regulatoryUpdates.optimisticRevert' }, 'error')
+      }
     } catch (e) {
       // eslint-disable-next-line no-console
       console.error('[advanceWorkflowStep] server persist failed —', action, e)
       pushToast(revertMessage(e), 'error')
     } finally {
       // BUG-R4-01: always clear in-flight flag regardless of success/failure.
+      set((s) => ({ workflowProcessing: { ...s.workflowProcessing, [policyId]: false } }))
+    }
+  },
+
+  reseedWorkflowFromTier: async (policyId, tier) => {
+    const policy = get().byId[policyId]
+    if (!policy) return
+    const apiId = policy.uuid ?? policyId
+    set((s) => ({ workflowProcessing: { ...s.workflowProcessing, [policyId]: true } }))
+    try {
+      await api.post(`/policies/${apiId}/workflow/reseed`, { tier })
+      // Awaited refetch so the loading state covers it and the timeline jumps to
+      // server truth (the freshly-seeded steps + reset status).
+      const row = await api.get<PolicyApiRow>(`/policies/${apiId}`)
+      const prev = get().byId[policyId]
+      const mapped = mapRow(row, prev)
+      set((s) => ({
+        byId: { ...s.byId, [policyId]: mapped },
+        policies: s.policies.map((p) => (p.id === policyId ? mapped : p)),
+        selectedPolicy: s.selectedPolicy?.id === policyId ? mapped : s.selectedPolicy,
+      }))
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.error('[reseedWorkflowFromTier] failed —', e)
+      pushToast(revertMessage(e), 'error')
+    } finally {
       set((s) => ({ workflowProcessing: { ...s.workflowProcessing, [policyId]: false } }))
     }
   },

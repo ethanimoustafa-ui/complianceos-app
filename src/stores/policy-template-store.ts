@@ -112,8 +112,11 @@ interface PolicyTemplateState {
    * version. On failure the optimistic row is removed and `error` is set.
    */
   create: (data: Omit<PolicyTemplate, 'id' | 'createdAt' | 'updatedAt' | 'usageCount'>) => PolicyTemplate
-  update: (id: string, data: Partial<PolicyTemplate>) => void
-  delete: (id: string) => void
+  // W37: update/delete are awaitable + resolve to a success boolean so the
+  // Settings modal can show an in-flight spinner and only close on confirmed
+  // success (a server failure now surfaces instead of silently rolling back).
+  update: (id: string, data: Partial<PolicyTemplate>) => Promise<boolean>
+  delete: (id: string) => Promise<boolean>
   incrementUsage: (id: string) => void
   clearError: () => void
 }
@@ -186,10 +189,10 @@ export const usePolicyTemplateStore = create<PolicyTemplateState>()((set, get) =
     return optimistic
   },
 
-  update: (id, data) => {
+  update: async (id, data) => {
     requirePermission('Manage Policy Templates', { storeName: 'policyTemplate', actionName: 'update', id })
     const previous = get().byId[id]
-    if (!previous) return
+    if (!previous) return false
     const optimistic: PolicyTemplate = {
       ...previous,
       ...data,
@@ -205,34 +208,34 @@ export const usePolicyTemplateStore = create<PolicyTemplateState>()((set, get) =
     // Temp-id rows (still pending create) skip the PATCH.
     if (id.startsWith('pt-temp-')) {
       set({ isMutating: false })
-      return
+      return true
     }
 
-    void (async () => {
-      try {
-        const row = await api.patch<PolicyTemplateApiRow>(`/policy-templates/${id}`, toUpdatePayload(data))
-        const updated = mapRow(row)
-        set((s) => ({
-          templates: s.templates.map((t) => (t.id === id ? updated : t)),
-          byId: { ...s.byId, [id]: updated },
-          isMutating: false,
-        }))
-      } catch (e) {
-        // Roll back to `previous` on failure.
-        set((s) => ({
-          templates: s.templates.map((t) => (t.id === id ? previous : t)),
-          byId: { ...s.byId, [id]: previous },
-          error: errorMessage(e, 'Failed to update policy template'),
-          isMutating: false,
-        }))
-      }
-    })()
+    try {
+      const row = await api.patch<PolicyTemplateApiRow>(`/policy-templates/${id}`, toUpdatePayload(data))
+      const updated = mapRow(row)
+      set((s) => ({
+        templates: s.templates.map((t) => (t.id === id ? updated : t)),
+        byId: { ...s.byId, [id]: updated },
+        isMutating: false,
+      }))
+      return true
+    } catch (e) {
+      // Roll back to `previous` on failure.
+      set((s) => ({
+        templates: s.templates.map((t) => (t.id === id ? previous : t)),
+        byId: { ...s.byId, [id]: previous },
+        error: errorMessage(e, 'Failed to update policy template'),
+        isMutating: false,
+      }))
+      return false
+    }
   },
 
-  delete: (id) => {
+  delete: async (id) => {
     requirePermission('Manage Policy Templates', { storeName: 'policyTemplate', actionName: 'delete', id })
     const previous = get().byId[id]
-    if (!previous) return
+    if (!previous) return false
     set((s) => {
       const { [id]: _drop, ...rest } = s.byId
       return {
@@ -245,24 +248,24 @@ export const usePolicyTemplateStore = create<PolicyTemplateState>()((set, get) =
 
     if (id.startsWith('pt-temp-')) {
       set({ isMutating: false })
-      return
+      return true
     }
 
-    void (async () => {
-      try {
-        await api.delete(`/policy-templates/${id}`)
-        set({ isMutating: false })
-      } catch (e) {
-        // Roll back: re-insert at the original position. Simplest is push to
-        // the head — UI sort logic will re-order.
-        set((s) => ({
-          templates: [previous, ...s.templates],
-          byId: { ...s.byId, [id]: previous },
-          error: errorMessage(e, 'Failed to delete policy template'),
-          isMutating: false,
-        }))
-      }
-    })()
+    try {
+      await api.delete(`/policy-templates/${id}`)
+      set({ isMutating: false })
+      return true
+    } catch (e) {
+      // Roll back: re-insert at the original position. Simplest is push to
+      // the head — UI sort logic will re-order.
+      set((s) => ({
+        templates: [previous, ...s.templates],
+        byId: { ...s.byId, [id]: previous },
+        error: errorMessage(e, 'Failed to delete policy template'),
+        isMutating: false,
+      }))
+      return false
+    }
   },
 
   // No dedicated /usage endpoint — increment locally so the UI counter ticks

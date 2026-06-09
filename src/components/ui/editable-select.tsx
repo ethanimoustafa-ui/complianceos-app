@@ -20,8 +20,10 @@ interface EditableSelectProps {
   placeholder?: string
   // When provided, exposes inline +Add / Edit / Delete affordances.
   onAdd?: (label: string, labelAr?: string) => string | void | Promise<string | void>
-  onEdit?: (id: string, label: string, labelAr?: string) => void
-  onDelete?: (id: string) => void | Promise<void>
+  // W37: allow any awaitable return (e.g. the policy-template store resolves a
+  // success boolean) so the inline edit/delete spinners await the real request.
+  onEdit?: (id: string, label: string, labelAr?: string) => void | Promise<unknown>
+  onDelete?: (id: string) => void | Promise<unknown>
   // Per-row reset-to-default affordance. Used by Bucket-D label-override
   // surfaces (`mode="labels-only"`) where the canonical key never changes
   // but the label can be customized, then reset.
@@ -29,6 +31,17 @@ interface EditableSelectProps {
   // Predicate to decide whether to render the reset button for a row
   // (e.g. only show it when the row currently has an override).
   isReset?: (id: string) => boolean
+  // W37: EXTERNAL add/edit triggers. When provided, the footer "+ Add" button
+  // and the per-row pencil open a caller-owned modal (and CLOSE this dropdown)
+  // instead of the built-in inline add/edit views. This fixes the case where an
+  // in-dropdown affordance must launch a richer modal (e.g. approval tiers with
+  // workflow steps) without leaving this z-9999 portal hovering over it.
+  onAddClick?: () => void
+  // May return a promise — while it resolves (e.g. fetching a tier's steps before
+  // opening the editor) the per-row pencil shows a loading spinner.
+  onEditClick?: (id: string) => void | Promise<unknown>
+  // Custom label for the footer add button (defaults to the generic "Add Entry").
+  addLabel?: string
   isRTL?: boolean
   className?: string
   disabled?: boolean
@@ -89,6 +102,9 @@ export function EditableSelect({
   onDelete,
   onReset,
   isReset,
+  onAddClick,
+  onEditClick,
+  addLabel,
   isRTL = false,
   className,
   disabled = false,
@@ -119,6 +135,12 @@ export function EditableSelect({
   // only removed after the server confirms (D1) — the store's delete awaits
   // the DELETE before mutating local state, so we just gate the UI on it.
   const [deletingId, setDeletingId] = useState<string | null>(null)
+  // W37: per-row spinner while an async external EDIT (onEditClick) resolves.
+  const [editClickingId, setEditClickingId] = useState<string | null>(null)
+  // W37: snapshot of the row being deleted, so its spinner row stays visible
+  // even when the store removes the item OPTIMISTICALLY (otherwise the trash
+  // spinner would never paint — the row unmounts in the same render).
+  const [deletingItem, setDeletingItem] = useState<EditableSelectItem | null>(null)
   const rootRef = useRef<HTMLDivElement>(null)
   // A2 z-index portal: position state for the portal-rendered dropdown.
   // The dropdown is rendered into document.body so it escapes any
@@ -231,11 +253,28 @@ export function EditableSelect({
   const handleDelete = async (id: string) => {
     if (!effectiveOnDelete || deletingId) return
     setDeletingId(id)
+    // Snapshot so the spinner row survives an optimistic removal mid-request.
+    setDeletingItem(items.find((i) => i.id === id) ?? null)
     try {
       await effectiveOnDelete(id)
       if (value === id) onChange('')
     } finally {
       setDeletingId(null)
+      setDeletingItem(null)
+    }
+  }
+
+  // W37: external EDIT trigger — keep the dropdown open with a per-row spinner
+  // while the (possibly async) handler resolves, then close.
+  const handleEditClick = async (id: string) => {
+    if (!onEditClick || editClickingId) return
+    setEditClickingId(id)
+    try {
+      await onEditClick(id)
+    } finally {
+      setEditClickingId(null)
+      setOpen(false)
+      setView('list')
     }
   }
 
@@ -275,17 +314,23 @@ export function EditableSelect({
                 {items.length === 0 && (
                   <div className="px-3 py-3 text-xs text-slate-400 italic">{t('editableSelect.noOptions')}</div>
                 )}
-                {items.map((item) => {
+                {(deletingItem && !items.some((i) => i.id === deletingItem.id)
+                  ? [...items, deletingItem]
+                  : items
+                ).map((item) => {
                   const isSelected = item.id === value
+                  const isRowBusy = deletingId === item.id || editClickingId === item.id
                   const label = isRTL && item.labelAr ? item.labelAr : item.label
                   return (
                     <div
                       key={item.id}
                       className={cn(
-                        'group flex items-center justify-between px-3 py-2 text-xs hover:bg-slate-50 cursor-pointer',
+                        'group flex items-center justify-between px-3 py-2 text-xs hover:bg-slate-50',
                         isSelected && 'bg-emerald-50',
+                        isRowBusy ? 'opacity-60 cursor-default' : 'cursor-pointer',
                       )}
                       onClick={() => {
+                        if (isRowBusy) return
                         onChange(item.id)
                         setOpen(false)
                       }}
@@ -293,18 +338,26 @@ export function EditableSelect({
                       <span className={cn('truncate', isSelected ? 'text-emerald-700 font-bold' : 'text-slate-700')}>
                         {label}
                       </span>
-                      <div className={cn('flex items-center gap-1 transition-opacity', deletingId === item.id ? 'opacity-100' : 'opacity-0 group-hover:opacity-100')}>
-                        {effectiveOnEdit && (
+                      <div className={cn('flex items-center gap-1 transition-opacity', isRowBusy ? 'opacity-100' : 'opacity-0 group-hover:opacity-100')}>
+                        {(effectiveOnEdit || onEditClick) && (
                           <button
                             type="button"
-                            className="p-1 text-slate-400 hover:text-emerald-600"
+                            disabled={isRowBusy}
+                            aria-busy={editClickingId === item.id || undefined}
+                            className="p-1 text-slate-400 hover:text-emerald-600 disabled:cursor-not-allowed"
                             title={t('editableSelect.edit')}
                             onClick={(e) => {
                               e.stopPropagation()
-                              startEdit(item)
+                              // External edit → spinner on the pencil while it loads,
+                              // then open the caller's modal + close this dropdown.
+                              if (onEditClick) void handleEditClick(item.id)
+                              else startEdit(item)
                             }}
                           >
-                            <Icon icon="lucide:pencil" className="text-[11px]" />
+                            <Icon
+                              icon={editClickingId === item.id ? 'lucide:loader-2' : 'lucide:pencil'}
+                              className={cn('text-[11px]', editClickingId === item.id && 'animate-spin')}
+                            />
                           </button>
                         )}
                         {effectiveOnDelete && !item.isDefault && (
@@ -343,7 +396,19 @@ export function EditableSelect({
                   )
                 })}
               </div>
-              {effectiveOnAdd && (
+              {onAddClick ? (
+                // External add → open caller modal + close this dropdown (W37).
+                <div className="border-t border-slate-100">
+                  <button
+                    type="button"
+                    onClick={() => { onAddClick(); setOpen(false); setView('list') }}
+                    className="w-full flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-emerald-700 hover:bg-emerald-50 cursor-pointer"
+                  >
+                    <Icon icon="lucide:plus" className="text-sm" />
+                    {addLabel ?? t('editableSelect.addNew')}
+                  </button>
+                </div>
+              ) : effectiveOnAdd ? (
                 <div className="border-t border-slate-100">
                   <button
                     type="button"
@@ -354,7 +419,7 @@ export function EditableSelect({
                     {t('editableSelect.addNew')}
                   </button>
                 </div>
-              )}
+              ) : null}
               {footerSlot && (
                 <div className="border-t border-slate-100">
                   {footerSlot}

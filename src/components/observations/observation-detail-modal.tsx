@@ -9,10 +9,10 @@ import { useObservationStore } from '@/stores/observation-store'
 import { useAuthStore } from '@/stores/auth-store'
 import { useTeamStore } from '@/stores/team-store'
 import { useTranslation } from '@/i18n'
-import { canTransferLeadership, canReviewRemediation, canSubmitRemediation, canUploadDocument, canRequestClosure, canReviewClosure, isObservationLeader } from '@/lib/permissions'
+import { canTransferLeadership, canReviewRemediation, canSubmitRemediation, canUploadDocument, canRequestClosure, canReviewClosure } from '@/lib/permissions'
 import { TransferLeadershipModal } from './transfer-leadership-modal'
-import { FileUploadModal, getFileType } from './file-upload-modal'
-import { RemediationPlanModal } from './remediation-plan-modal'
+import { FileUploadModal } from './file-upload-modal'
+import { RemediationPlanModal, type RemediationPlanInitial } from './remediation-plan-modal'
 
 import {
   ChecklistSection,
@@ -72,9 +72,8 @@ export const ObservationDetailModal = memo(function ObservationDetailModal({
   const {
     addComment, editComment, deleteComment,
     addChecklistItem, editChecklistItem, toggleChecklistItem, removeChecklistItem,
-    transferLeadership, submitRemediationPlan, reviewRemediationPlan, addDocument, requestClosure, reviewClosure, reopen,
+    transferLeadership, saveRemediationPlan, reviewRemediationPlan, uploadDocument, getDocumentUrl, removeDocument, requestClosure, reviewClosure, reopen,
     fetchById, selectedObservation: storeObservation,
-    archive: archiveObservation,
   } = store
   // `isDetailLoaded(id)` mirrors the policy/circular stores — true only after
   // the detail GET resolves. Read defensively so the modal still compiles if
@@ -113,8 +112,8 @@ export const ObservationDetailModal = memo(function ObservationDetailModal({
   const [showTransferModal, setShowTransferModal] = useState(false)
   const [showUploadModal, setShowUploadModal] = useState(false)
   const [showRemediationPlanModal, setShowRemediationPlanModal] = useState(false)
-  // O7: archive busy state for "Mark as Remediated" button spinner.
-  const [isArchiving, setIsArchiving] = useState(false)
+  // When set, the remediation modal edits/revises this plan; null = create new.
+  const [remediationModalInitial, setRemediationModalInitial] = useState<RemediationPlanInitial | null>(null)
 
   // Local documents state
   const [localDocuments, setLocalDocuments] = useState<{ id: string; name: string; type: 'pdf' | 'image' | 'doc' }[]>([])
@@ -242,26 +241,91 @@ export const ObservationDetailModal = memo(function ObservationDetailModal({
     await deleteComment(observation.id, commentId, user)
   }
 
-  // Leadership transfer
+  // Leadership transfer — close the modal immediately. The transfer is
+  // optimistic (the sidebar leader updates in the background; the store reverts
+  // and toasts on failure), so there's no reason to keep the dialog open.
   const handleTransferLeadership = async (newLeaderId: string, newLeaderName: string) => {
     if (!observation || !user) return
-    await transferLeadership(observation.id, newLeaderId, newLeaderName, user)
     setShowTransferModal(false)
+    await transferLeadership(observation.id, newLeaderId, newLeaderName, user)
   }
 
-  // Remediation plan review
+  // Remediation plan review (approve / reject by leader / manager / admin)
   const handleReviewRemediationPlan = async (approved: boolean, notes?: string) => {
     if (!observation || !user) return
     await reviewRemediationPlan(observation.id, approved, user, notes)
   }
 
-  const handleAddRemediationPlan = async (plan: { title: string; description: string; dueDate: string }) => {
+  // Open the plan modal in create mode.
+  const openCreatePlan = () => {
+    setRemediationModalInitial(null)
+    setShowRemediationPlanModal(true)
+  }
+
+  // Open the plan modal in edit / revise mode for the current plan.
+  const openEditPlan = () => {
+    const p = (storeObservation || observation)?.remediationPlan
+    if (!p) return
+    setRemediationModalInitial({
+      planId: p.id,
+      title: p.title,
+      description: p.description,
+      dueDate: p.dueDate,
+      status: p.status,
+      reviewNotes: p.reviewNotes,
+      documents: localRemediationDocs,
+    })
+    setShowRemediationPlanModal(true)
+  }
+
+  // Upload one attached remediation file (real bytes → bucket, flagged
+  // is_remediation). Rejects on failure so the modal can keep the form open.
+  const handleUploadPlanFile = async (file: File) => {
     if (!observation || !user) return
-    await submitRemediationPlan(observation.id, {
-      title: plan.title,
-      description: plan.description,
-      dueDate: plan.dueDate,
-    }, user, observation.leaderId)
+    await uploadDocument(observation.id, file, user, true)
+  }
+
+  // Persist the plan (create / edit / submit) after the files are uploaded.
+  const handleSavePlan = async (
+    plan: { title: string; description: string; dueDate: string },
+    status: 'draft' | 'submitted',
+  ) => {
+    if (!observation || !user) return
+    await saveRemediationPlan(
+      observation.id,
+      { planId: remediationModalInitial?.planId, ...plan },
+      status,
+      user,
+    )
+    void fetchById(observation.id)
+  }
+
+  // Submit an existing draft as-is (no edits) for review.
+  const handleSubmitDraft = async () => {
+    if (!observation || !user) return
+    const p = (storeObservation || observation)?.remediationPlan
+    if (!p) return
+    await saveRemediationPlan(
+      observation.id,
+      { planId: p.id, title: p.title, description: p.description, dueDate: p.dueDate },
+      'submitted',
+      user,
+    )
+    void fetchById(observation.id)
+  }
+
+  // Open a stored document in a new tab via a freshly-minted signed URL.
+  const handleOpenDocument = async (documentId: string) => {
+    if (!observation) return
+    const url = await getDocumentUrl(observation.id, documentId)
+    if (url) window.open(url, '_blank', 'noopener,noreferrer')
+  }
+
+  // Delete a stored document (DELETE /evidence + storage). Rejects on failure so
+  // the row's delete spinner can clear and the store toast surfaces.
+  const handleDeleteDocument = async (documentId: string, documentName: string) => {
+    if (!observation || !user) return
+    await removeDocument(observation.id, documentId, documentName, user)
     void fetchById(observation.id)
   }
 
@@ -286,36 +350,14 @@ export const ObservationDetailModal = memo(function ObservationDetailModal({
     await reopen(observation.id)
   }
 
-  // O7: Mark as Remediated — archive the observation (status→closed, archived_at→NOW())
-  const handleMarkRemediated = async () => {
-    if (!observation) return
-    setIsArchiving(true)
-    try {
-      await archiveObservation(observation.id, user || undefined)
-      onClose()
-    } catch {
-      // Error is surfaced via the store's toast system
-    } finally {
-      setIsArchiving(false)
-    }
-  }
-
-  // File upload
-  const handleFileUpload = async (files: File[], addToRemediationPlan: boolean) => {
+  // File upload (general related documents — real bytes → bucket, not flagged
+  // as remediation; remediation documents are attached via the plan modal).
+  const handleFileUpload = async (files: File[]) => {
     if (!observation || !user || files.length === 0) return
     for (const file of files) {
-      const fileType = getFileType(file.name)
-      const newDoc = {
-        id: crypto.randomUUID(),
-        name: file.name,
-        type: fileType,
-      }
-      setLocalDocuments((prev) => [...prev, newDoc])
-      if (addToRemediationPlan) {
-        setLocalRemediationDocs((prev) => [...prev, newDoc])
-      }
-      await addDocument(observation.id, { name: file.name, type: fileType }, user, addToRemediationPlan)
+      await uploadDocument(observation.id, file, user, false)
     }
+    void fetchById(observation.id)
     setShowUploadModal(false)
   }
 
@@ -375,8 +417,10 @@ export const ObservationDetailModal = memo(function ObservationDetailModal({
             </div>
           </div>
 
-          {/* W27.3-α: skeleton while detail fetch is in-flight */}
-          {isHydrating && (
+          {/* W27.3-α: skeleton while detail fetch is in-flight — but ONLY on the
+              first load. If this observation's detail is already cached (a prior
+              open), a background refetch must not flash the skeleton. */}
+          {isHydrating && !detailLoaded && (
             <div className="space-y-4 mb-6" data-skeleton="true" role="status" aria-busy="true" aria-live="polite">
               <Skeleton className="h-3 w-1/3" />
               <Skeleton className="h-4 w-full" />
@@ -432,34 +476,14 @@ export const ObservationDetailModal = memo(function ObservationDetailModal({
         <div className={`w-full lg:w-80 bg-slate-50 border-t lg:border-t-0 ${isRTL ? 'lg:border-r lg:border-l-0' : 'lg:border-l'} border-slate-200 p-8 space-y-8 shrink-0 overflow-y-auto hide-scrollbar`}>
           <SidebarSeverity severity={observation.severity} isRTL={isRTL} />
 
-          {/* O7: Mark as Remediated CTA — shown only when not already closed/archived */}
-          {liveObs.status !== 'closed' && !liveObs.archivedAt && (
-            <button
-              onClick={handleMarkRemediated}
-              disabled={isArchiving}
-              aria-busy={isArchiving || undefined}
-              className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white text-sm font-bold rounded-xl transition-colors cursor-pointer"
-            >
-              {isArchiving ? (
-                <>
-                  <Icon icon="lucide:loader-2" className="animate-spin text-base" />
-                  {t('observations.detail.markingRemediated' as import('@/i18n').TranslationKey)}
-                </>
-              ) : (
-                <>
-                  <Icon icon="lucide:check-circle-2" className="text-base" />
-                  {t('observations.detail.markRemediated' as import('@/i18n').TranslationKey)}
-                </>
-              )}
-            </button>
-          )}
-
-          {/* O1: completed (closed/archived) observations have no live deadline. */}
+          {/* O1: completed (closed/archived) observations have no live deadline.
+              Read from liveObs so an in-session plan transition flips the
+              countdown's date/label like every other panel. */}
           {!isClosed && (
             <DeadlineCountdown
-              submissionDueDate={observation.remediationSubmissionDueDate}
-              completionDueDate={observation.dueDate}
-              planStatus={observation.remediationPlan?.status}
+              submissionDueDate={liveObs.remediationSubmissionDueDate}
+              completionDueDate={liveObs.dueDate}
+              planStatus={liveObs.remediationPlan?.status}
               isRTL={isRTL}
             />
           )}
@@ -470,28 +494,33 @@ export const ObservationDetailModal = memo(function ObservationDetailModal({
 
           <ObservationLeader
             leader={leader ? { id: leader.id || '', name: leader.name, avatar: leader.avatar } : null}
-            canTransfer={!isClosed && canTransferLeadership(user, observation)}
+            canTransfer={!isClosed && canTransferLeadership(user, liveObs)}
             onTransfer={() => setShowTransferModal(true)}
             isRTL={isRTL}
           />
 
           <RemediationStatus
-            plan={observation.remediationPlan}
-            canReview={canReviewRemediation(user, observation)}
+            plan={liveObs.remediationPlan}
+            canReview={!isClosed && canReviewRemediation(user, liveObs)}
+            canSubmitPlan={!isClosed && canSubmitRemediation(user, liveObs)}
             onReview={handleReviewRemediationPlan}
-            onAddPlan={() => setShowRemediationPlanModal(true)}
-            canSubmitPlan={!isClosed && canSubmitRemediation(user, observation)}
+            onCreatePlan={openCreatePlan}
+            onEditPlan={openEditPlan}
+            onSubmitPlan={handleSubmitDraft}
+            onOpenDocument={handleOpenDocument}
+            onDeleteDocument={!isClosed && canUploadDocument(user, liveObs) ? handleDeleteDocument : undefined}
             documents={localRemediationDocs}
             isRTL={isRTL}
             isLoaded={detailLoaded}
           />
 
           <ClosureStatus
-            status={storeObservation?.status || observation.status}
-            closureRequest={storeObservation?.closureRequest || observation.closureRequest}
-            closureReview={storeObservation?.closureReview || observation.closureReview}
-            canRequestClosure={canRequestClosure(user, observation) && !isObservationLeader(user, observation)}
-            canReviewClosure={canReviewClosure(user, observation)}
+            status={liveObs.status}
+            closureRequest={liveObs.closureRequest}
+            closureReview={liveObs.closureReview}
+            canRequestClosure={!isClosed && canRequestClosure(user, liveObs)}
+            canReviewClosure={canReviewClosure(user, liveObs)}
+            remediationApproved={liveObs.remediationPlan?.status === 'approved'}
             onRequestClosure={handleRequestClosure}
             onReviewClosure={handleReviewClosure}
             onReopen={handleReopen}
@@ -500,8 +529,10 @@ export const ObservationDetailModal = memo(function ObservationDetailModal({
 
           <RelatedDocuments
             documents={regularDocuments}
-            canUpload={canUploadDocument(user, observation)}
+            canUpload={!isClosed && canUploadDocument(user, liveObs)}
             onUpload={() => setShowUploadModal(true)}
+            onOpenDocument={handleOpenDocument}
+            onDeleteDocument={!isClosed && canUploadDocument(user, liveObs) ? handleDeleteDocument : undefined}
             isRTL={isRTL}
             isLoaded={detailLoaded}
           />
@@ -523,20 +554,28 @@ export const ObservationDetailModal = memo(function ObservationDetailModal({
         currentLeaderId={liveObs.leaderId}
       />
 
-      {/* File Upload Modal */}
-      <FileUploadModal
-        isOpen={showUploadModal}
-        onClose={() => setShowUploadModal(false)}
-        onConfirm={handleFileUpload}
-      />
+      {/* File Upload Modal — mounted only while open so its form state resets. */}
+      {showUploadModal && (
+        <FileUploadModal
+          isOpen
+          onClose={() => setShowUploadModal(false)}
+          onConfirm={handleFileUpload}
+        />
+      )}
 
-      {/* Add Remediation Plan Modal */}
-      <RemediationPlanModal
-        isOpen={showRemediationPlanModal}
-        onClose={() => setShowRemediationPlanModal(false)}
-        onSubmit={handleAddRemediationPlan}
-        observationDueDate={observation?.dueDate}
-      />
+      {/* Remediation Plan Modal (create / edit / revise) — mounted only while
+          open so the initializers seed the form for the current target plan. */}
+      {showRemediationPlanModal && (
+        <RemediationPlanModal
+          isOpen
+          onClose={() => setShowRemediationPlanModal(false)}
+          onUploadFile={handleUploadPlanFile}
+          onSavePlan={handleSavePlan}
+          onDeleteExistingDocument={handleDeleteDocument}
+          observationDueDate={observation?.dueDate}
+          initialPlan={remediationModalInitial}
+        />
+      )}
     </Modal>
   )
 })

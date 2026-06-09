@@ -31,6 +31,7 @@ import type {
   RegulatoryBodyId,
 } from '@/types'
 import { api, ApiClientError } from '@/lib/api-client'
+import { supabase as supabaseClient } from '@/lib/supabase/client'
 import { requirePermission } from '@/lib/rbac-store-gate'
 import { newTempId, optimisticMutation } from '@/lib/optimistic'
 // Wave-20.cleanup — the `optimisticMutation` helper calls `pushToast`
@@ -43,6 +44,22 @@ import type { ToastMessage } from '@/stores/toast-store'
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 function isPersistedId(id: string): boolean {
   return UUID_RE.test(id)
+}
+
+// Real file storage — private bucket created in migration 025_storage_buckets.
+// We upload the actual bytes client-side (mirroring letter-store.uploadAttachment),
+// then register the metadata row via /evidence so reviewers can open the file
+// through the signed-URL endpoint.
+const OBSERVATION_DOCUMENTS_BUCKET = 'observation_documents'
+const MAX_DOCUMENT_BYTES = 50 * 1024 * 1024 // 50 MB — matches the bucket limit.
+
+function docTypeFromFile(file: File): 'pdf' | 'image' | 'doc' {
+  const ext = file.name.split('.').pop()?.toLowerCase()
+  if (ext === 'pdf' || file.type === 'application/pdf') return 'pdf'
+  if (['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(ext || '') || file.type.startsWith('image/')) {
+    return 'image'
+  }
+  return 'doc'
 }
 
 // Wave-20.cleanup / RTL-8 — friendly toast for a reverted optimistic mutation.
@@ -280,6 +297,18 @@ interface ObservationState {
     submitter: User,
     observationLeaderId?: string,
   ) => Promise<void>
+  /**
+   * Unified draft→submit writer. Creates a new plan (no `planId`) or edits an
+   * existing draft/rejected one. `status: 'draft'` keeps it private to the
+   * submitter; `'submitted'` sends it to the leader/manager/admin for review.
+   * Returns the persisted plan id (server id when reconciled).
+   */
+  saveRemediationPlan: (
+    observationId: string,
+    input: { planId?: string; title: string; description: string; dueDate: string },
+    status: 'draft' | 'submitted',
+    user: User,
+  ) => Promise<string | null>
   reviewRemediationPlan: (observationId: string, approved: boolean, reviewer: User, notes?: string) => Promise<void>
   requestClosure: (observationId: string, requester: User, notes?: string) => Promise<void>
   reviewClosure: (observationId: string, approved: boolean, reviewer: User, notes?: string) => Promise<void>
@@ -292,7 +321,21 @@ interface ObservationState {
     uploader: User,
     addToRemediationPlan?: boolean,
   ) => Promise<void>
+  /**
+   * Uploads the actual file bytes to the `observation_documents` bucket, then
+   * registers the metadata row. Unlike `addDocument` (metadata-only), the stored
+   * file is openable by reviewers via the signed-URL endpoint. Returns the
+   * created document id, or null on failure.
+   */
+  uploadDocument: (
+    observationId: string,
+    file: File,
+    uploader: User,
+    addToRemediationPlan?: boolean,
+  ) => Promise<string | null>
   removeDocument: (observationId: string, documentId: string, documentName: string, user: User) => Promise<void>
+  /** Mints a short-lived signed URL to open/download a stored document. */
+  getDocumentUrl: (observationId: string, documentId: string) => Promise<string | null>
 
   setFilters: (filters: ObservationFilters) => void
   clearFilters: () => void
@@ -646,31 +689,11 @@ export const useObservationStore = create<ObservationState>()((set, get) => ({
             }
           }
 
-          // O2: persist create-time documents to observation_documents via the
-          // evidence endpoint so they survive a reload. POST /observations only
-          // stores scalar fields; documents need a separate write (mirrors
-          // addDocument's storage_path convention).
-          if (data.documents && data.documents.length > 0) {
-            const refForApi = real.reference || row.id
-            const persisted: NonNullable<typeof data.documents> = []
-            for (const docu of data.documents) {
-              try {
-                const srow = await api.post<{ id: string; name: string; type: 'pdf' | 'image' | 'doc' }>(
-                  `/observations/${refForApi}/evidence`,
-                  {
-                    name: docu.name,
-                    type: docu.type,
-                    storage_path: `observations/${refForApi}/${docu.name}`,
-                  },
-                )
-                persisted.push({ ...docu, id: srow.id })
-              } catch {
-                // Non-fatal: keep the client-side row even if persistence fails.
-                persisted.push(docu)
-              }
-            }
-            real.documents = persisted
-          }
+          // W37: create-time attachments are uploaded for real (bytes → bucket)
+          // by the page AFTER this create resolves, via uploadDocument — so they
+          // are openable like every other document. We intentionally do NOT
+          // register metadata-only rows here (the old bytes-discarding path that
+          // produced non-viewable documents).
 
           // Server confirmed — NOW insert the real row at the top of the list.
           set((s) => ({
@@ -1915,6 +1938,190 @@ export const useObservationStore = create<ObservationState>()((set, get) => ({
     }
   },
 
+  // Unified draft→submit writer (W37). Create a new plan or edit/submit an
+  // existing draft/rejected one. Optimistically stamps the plan so the sidebar
+  // re-renders immediately; the modal calls fetchById afterwards to reconcile
+  // plan.documents from the server-flagged is_remediation rows.
+  saveRemediationPlan: async (observationId, input, status, user) => {
+    const isCreate = !input.planId || !isPersistedId(input.planId)
+    const submitting = status === 'submitted'
+    const now = new Date().toISOString()
+    const prevSelected = get().selectedObservation?.id === observationId ? get().selectedObservation : null
+    const prevById = get().byId[observationId]
+    const existingPlan = prevById?.remediationPlan
+    // If-Match for a plan PATCH must be the PLAN's own token (migration 067) or
+    // nothing — never the observation's, which would spuriously 412 against the
+    // route's plan-level staleness check.
+    const planUpdatedAt = existingPlan?.updatedAt
+    const tempPlanId = newTempId('temp-plan')
+
+    const optimisticPlan: RemediationPlan = {
+      id: isCreate ? tempPlanId : (input.planId as string),
+      title: input.title,
+      description: input.description,
+      dueDate: input.dueDate,
+      status,
+      submittedAt: submitting ? now : existingPlan?.submittedAt,
+      submittedBy: submitting ? user.id : existingPlan?.submittedBy,
+      // Re-submitting a previously-rejected plan clears the stale verdict.
+      reviewedAt: submitting ? undefined : existingPlan?.reviewedAt,
+      reviewedBy: submitting ? undefined : existingPlan?.reviewedBy,
+      reviewNotes: submitting ? undefined : existingPlan?.reviewNotes,
+      updatedAt: now,
+      // Documents are uploaded separately (uploadDocument) and re-derived on
+      // fetchById; preserve whatever the plan already carries here.
+      documents: existingPlan?.documents ?? [],
+      createdAt: existingPlan?.createdAt ?? now,
+    }
+
+    const timelineEntry: ObservationTimelineEntry = {
+      id: crypto.randomUUID(),
+      date: now,
+      dateKey: 'today',
+      description: submitting
+        ? `${user.name} submitted the remediation plan for review`
+        : `${user.name} saved a remediation plan draft`,
+      descriptionAr: submitting
+        ? `قدّم ${user.name} خطة المعالجة للمراجعة`
+        : `حفظ ${user.name} مسودة خطة المعالجة`,
+      descriptionKey: submitting
+        ? 'observations.detail.timeline.remediationSubmitted'
+        : 'observations.detail.timeline.remediationDrafted',
+      descriptionParams: { name: user.name },
+      userId: user.id,
+      userName: user.name,
+      userAvatar: user.avatar,
+      actionType: 'remediation_submitted',
+    }
+
+    type SavedPlanRow = {
+      id: string
+      title: string
+      description: string
+      due_date: string
+      status: string
+      submitted_at: string | null
+      submitted_by: string | null
+      reviewed_at: string | null
+      reviewed_by: string | null
+      review_notes: string | null
+      created_at: string
+      updated_at: string
+    }
+    let resultId: string | null = isCreate ? null : (input.planId as string)
+    try {
+      await optimisticMutation<SavedPlanRow>({
+        context: 'observation.saveRemediationPlan',
+        errorMessage: revertMessage,
+        apply: () => {
+          set((state) => {
+            const bump = (s: Observation['status']): Observation['status'] =>
+              submitting && s === 'open' ? 'in_progress' : s
+            const observations = state.observations.map((obs) =>
+              obs.id === observationId
+                ? { ...obs, remediationPlan: optimisticPlan, status: bump(obs.status) }
+                : obs,
+            )
+            let selectedObservation = state.selectedObservation
+            if (selectedObservation?.id === observationId) {
+              selectedObservation = {
+                ...selectedObservation,
+                remediationPlan: optimisticPlan,
+                status: bump(selectedObservation.status),
+                timeline: [timelineEntry, ...(selectedObservation.timeline || [])],
+              }
+            }
+            const previous = state.byId[observationId]
+            const byId = previous
+              ? {
+                  ...state.byId,
+                  [observationId]: {
+                    ...previous,
+                    remediationPlan: optimisticPlan,
+                    status: bump(previous.status),
+                  },
+                }
+              : state.byId
+            return { observations, byId, selectedObservation, isMutating: true, error: null }
+          })
+        },
+        request: () => {
+          if (isCreate) {
+            return api.post<SavedPlanRow>(`/observations/${observationId}/remediation`, {
+              title: input.title,
+              description: input.description,
+              due_date: input.dueDate,
+              status,
+            })
+          }
+          return api.patch<SavedPlanRow>(
+            `/observations/${observationId}/remediation/${input.planId}`,
+            {
+              title: input.title,
+              description: input.description,
+              due_date: input.dueDate,
+              ...(submitting ? { status: 'submitted' as const } : {}),
+            },
+            ifMatchHeader(planUpdatedAt),
+          )
+        },
+        reconcile: (row) => {
+          resultId = row.id
+          // Adopt the server-authoritative fields (status, stamps, and the real
+          // `updated_at` token) onto the optimistic plan, preserving its
+          // documents (the row doesn't carry them). Match the temp id on create
+          // or the existing plan id on edit.
+          const matchId = isCreate ? tempPlanId : (input.planId as string)
+          const serverFields: Omit<RemediationPlan, 'documents'> = {
+            id: row.id,
+            title: row.title,
+            description: row.description,
+            dueDate: row.due_date,
+            status: row.status as RemediationPlan['status'],
+            submittedAt: row.submitted_at ?? undefined,
+            submittedBy: row.submitted_by ?? undefined,
+            reviewedAt: row.reviewed_at ?? undefined,
+            reviewedBy: row.reviewed_by ?? undefined,
+            reviewNotes: row.review_notes ?? undefined,
+            updatedAt: row.updated_at ?? undefined,
+            createdAt: row.created_at,
+          }
+          const merge = (p: RemediationPlan | undefined): RemediationPlan | undefined =>
+            p && p.id === matchId ? { ...p, ...serverFields } : p
+          set((state) => {
+            const observations = state.observations.map((obs) =>
+              obs.id === observationId ? { ...obs, remediationPlan: merge(obs.remediationPlan) } : obs,
+            )
+            let selectedObservation = state.selectedObservation
+            if (selectedObservation?.id === observationId) {
+              selectedObservation = { ...selectedObservation, remediationPlan: merge(selectedObservation.remediationPlan) }
+            }
+            const previous = state.byId[observationId]
+            const byId = previous
+              ? { ...state.byId, [observationId]: { ...previous, remediationPlan: merge(previous.remediationPlan) } }
+              : state.byId
+            return { observations, byId, selectedObservation, isMutating: false }
+          })
+        },
+        revert: () => {
+          set((state) => ({
+            observations: state.observations.map((o) => (o.id === observationId && prevById ? prevById : o)),
+            byId: prevById ? { ...state.byId, [observationId]: prevById } : state.byId,
+            selectedObservation:
+              state.selectedObservation?.id === observationId && prevSelected
+                ? prevSelected
+                : state.selectedObservation,
+            isMutating: false,
+          }))
+        },
+      })
+    } catch (e) {
+      set({ error: errorMessage(e, 'Failed to save remediation plan') })
+      throw e
+    }
+    return resultId
+  },
+
   // PATCH /api/observations/[id]/remediation/[planId]. Wave-20.cleanup —
   // canonical `optimisticMutation` lifecycle. The plan is stamped locally
   // immediately; on success we reconcile with the server row; on failure
@@ -1967,34 +2174,13 @@ export const useObservationStore = create<ObservationState>()((set, get) => ({
         context: 'observation.reviewRemediationPlan',
         errorMessage: revertMessage,
         apply: () => {
-          set((state) => {
-            const observations = state.observations.map((obs) => {
-              if (obs.id !== observationId) return obs
-              const newStatus = approved && obs.status === 'open' ? 'in_progress' : obs.status
-              return { ...obs, remediationPlan: optimisticPlan, status: newStatus }
-            })
-            let selectedObservation = state.selectedObservation
-            if (selectedObservation?.id === observationId) {
-              const newStatus = approved && selectedObservation.status === 'open' ? 'in_progress' : selectedObservation.status
-              selectedObservation = {
-                ...selectedObservation,
-                remediationPlan: optimisticPlan,
-                status: newStatus,
-                timeline: [timelineEntry, ...(selectedObservation.timeline || [])],
-              }
-            }
-            const byId = prevByIdRow
-              ? {
-                  ...state.byId,
-                  [observationId]: {
-                    ...prevByIdRow,
-                    remediationPlan: optimisticPlan,
-                    status: approved && prevByIdRow.status === 'open' ? 'in_progress' : prevByIdRow.status,
-                  },
-                }
-              : state.byId
-            return { observations, byId, selectedObservation, isMutating: true, error: null }
-          })
+          // W37: do NOT optimistically flip the plan status here. A synchronous
+          // flip to approved/rejected unmounts the Approve/Reject buttons the
+          // instant the spinner appears — the "optimistic UI overflows the
+          // loading" glitch. Keep the submitted state + loading spinner until the
+          // server confirms, then transition once in reconcile() for a clean
+          // loading → done.
+          set({ isMutating: true, error: null })
         },
         request: () => {
           // GAP-20 — skip server call for a non-persisted temp id (e.g. a
@@ -2022,17 +2208,30 @@ export const useObservationStore = create<ObservationState>()((set, get) => ({
             reviewedBy: row.reviewed_by ?? optimisticPlan.reviewedBy,
             reviewNotes: row.review_notes ?? optimisticPlan.reviewNotes,
           }
+          // Server confirmed — NOW apply the verdict (status + timeline) in one
+          // clean transition. W37: approve → 'remediated' (work done, awaiting
+          // closure), reject → 'in_progress' (back to work). Never override a
+          // closure-flow status (resolved/closed).
+          const nextStatus = (s: Observation['status']): Observation['status'] => {
+            if (s === 'resolved' || s === 'closed') return s
+            return approved ? 'remediated' : 'in_progress'
+          }
           set((state) => {
             const observations = state.observations.map((obs) =>
-              obs.id === observationId ? { ...obs, remediationPlan: reconciled } : obs,
+              obs.id === observationId ? { ...obs, remediationPlan: reconciled, status: nextStatus(obs.status) } : obs,
             )
             let selectedObservation = state.selectedObservation
             if (selectedObservation?.id === observationId) {
-              selectedObservation = { ...selectedObservation, remediationPlan: reconciled }
+              selectedObservation = {
+                ...selectedObservation,
+                remediationPlan: reconciled,
+                status: nextStatus(selectedObservation.status),
+                timeline: [timelineEntry, ...(selectedObservation.timeline || [])],
+              }
             }
             const previous = state.byId[observationId]
             const byId = previous
-              ? { ...state.byId, [observationId]: { ...previous, remediationPlan: reconciled } }
+              ? { ...state.byId, [observationId]: { ...previous, remediationPlan: reconciled, status: nextStatus(previous.status) } }
               : state.byId
             return { observations, byId, selectedObservation, isMutating: false }
           })
@@ -2084,40 +2283,42 @@ export const useObservationStore = create<ObservationState>()((set, get) => ({
         context: 'observation.requestClosure',
         errorMessage: revertMessage,
         apply: () => {
-          set((state) => {
-            const observations = state.observations.map((obs) => {
-              if (obs.id !== observationId) return obs
-              return {
-                ...obs,
-                status: 'resolved' as const,
-                closureRequest,
-                closureReview: undefined,
-                timeline: [timelineEntry, ...(obs.timeline || [])],
-              }
-            })
-            let selectedObservation = state.selectedObservation
-            if (selectedObservation?.id === observationId) {
-              selectedObservation = {
-                ...selectedObservation,
-                status: 'resolved' as const,
-                closureRequest,
-                closureReview: undefined,
-                timeline: [timelineEntry, ...(selectedObservation.timeline || [])],
-              }
-            }
-            return { observations, selectedObservation }
-          })
+          // W37: keep the request form's clean loading state; flip to
+          // 'Pending Review' only after the server confirms (reconcile), so the
+          // pending state doesn't pop up over the still-loading form.
+          set({ isMutating: true, error: null })
         },
         request: async () => {
-          // BUG 4: /close now transitions the server status to 'resolved'
-          // (Pending Review) — matching the optimistic apply() above — so the
-          // closure-request state survives a page refresh. The move to 'closed'
-          // happens only on closure-review approval (reviewClosure).
+          // /close transitions the server status to 'resolved' (Pending Review);
+          // the move to 'closed' happens only on closure-review approval.
           await api.post(
             `/observations/${observationId}/close`,
             { notes },
             ifMatchHeader(parentUpdatedAt),
           )
+        },
+        reconcile: () => {
+          set((state) => {
+            const patch = (obs: Observation): Observation => ({
+              ...obs,
+              status: 'resolved' as const,
+              closureRequest,
+              closureReview: undefined,
+            })
+            const observations = state.observations.map((obs) => (obs.id === observationId ? patch(obs) : obs))
+            let selectedObservation = state.selectedObservation
+            if (selectedObservation?.id === observationId) {
+              selectedObservation = {
+                ...patch(selectedObservation),
+                comments: selectedObservation.comments,
+                checklist: selectedObservation.checklist,
+                timeline: [timelineEntry, ...(selectedObservation.timeline || [])],
+              } as typeof selectedObservation
+            }
+            const previous = state.byId[observationId]
+            const byId = previous ? { ...state.byId, [observationId]: patch(previous) as typeof previous } : state.byId
+            return { observations, byId, selectedObservation, isMutating: false }
+          })
         },
         revert: () => {
           set((state) => ({
@@ -2127,6 +2328,7 @@ export const useObservationStore = create<ObservationState>()((set, get) => ({
               state.selectedObservation?.id === observationId && prevSelected
                 ? prevSelected
                 : state.selectedObservation,
+            isMutating: false,
           }))
         },
       })
@@ -2146,7 +2348,10 @@ export const useObservationStore = create<ObservationState>()((set, get) => ({
       approved,
       notes,
     }
-    const newStatus = approved ? 'closed' : 'in_progress'
+    // W37: approve → 'closed' (+ archived). reject → 'remediated' (plan stays
+    // approved; closure can be re-requested), matching the server reopen route.
+    const now = new Date().toISOString()
+    const newStatus: Observation['status'] = approved ? 'closed' : 'remediated'
     const timelineEntry: ObservationTimelineEntry = {
       id: crypto.randomUUID(),
       date: new Date().toISOString(),
@@ -2174,35 +2379,16 @@ export const useObservationStore = create<ObservationState>()((set, get) => ({
         context: 'observation.reviewClosure',
         errorMessage: revertMessage,
         apply: () => {
-          set((state) => {
-            const observations = state.observations.map((obs) => {
-              if (obs.id !== observationId) return obs
-              return {
-                ...obs,
-                status: newStatus as 'closed' | 'in_progress',
-                closureReview,
-                closureRequest: approved ? obs.closureRequest : undefined,
-                timeline: [timelineEntry, ...(obs.timeline || [])],
-              }
-            })
-            let selectedObservation = state.selectedObservation
-            if (selectedObservation?.id === observationId) {
-              selectedObservation = {
-                ...selectedObservation,
-                status: newStatus as 'closed' | 'in_progress',
-                closureReview,
-                closureRequest: approved ? selectedObservation.closureRequest : undefined,
-                timeline: [timelineEntry, ...(selectedObservation.timeline || [])],
-              }
-            }
-            return { observations, selectedObservation }
-          })
+          // W37: defer the verdict flip to reconcile so the review buttons show a
+          // clean spinner until the server confirms (no optimistic overflow).
+          set({ isMutating: true, error: null })
         },
         request: async () => {
           if (approved) {
+            // Closing also archives the observation so it moves to the Archive.
             await api.patch(
               `/observations/${observationId}`,
-              { status: 'closed' },
+              { status: 'closed', archived_at: now },
               ifMatchHeader(parentUpdatedAt),
             )
           } else {
@@ -2213,6 +2399,30 @@ export const useObservationStore = create<ObservationState>()((set, get) => ({
             )
           }
         },
+        reconcile: () => {
+          set((state) => {
+            const patch = (obs: Observation): Observation => ({
+              ...obs,
+              status: newStatus,
+              archivedAt: approved ? now : null,
+              closureReview,
+              closureRequest: approved ? obs.closureRequest : undefined,
+            })
+            const observations = state.observations.map((obs) => (obs.id === observationId ? patch(obs) : obs))
+            let selectedObservation = state.selectedObservation
+            if (selectedObservation?.id === observationId) {
+              selectedObservation = {
+                ...patch(selectedObservation),
+                comments: selectedObservation.comments,
+                checklist: selectedObservation.checklist,
+                timeline: [timelineEntry, ...(selectedObservation.timeline || [])],
+              } as typeof selectedObservation
+            }
+            const previous = state.byId[observationId]
+            const byId = previous ? { ...state.byId, [observationId]: patch(previous) as typeof previous } : state.byId
+            return { observations, byId, selectedObservation, isMutating: false }
+          })
+        },
         revert: () => {
           set((state) => ({
             observations: state.observations.map((o) => (o.id === observationId && prevById ? prevById : o)),
@@ -2221,6 +2431,7 @@ export const useObservationStore = create<ObservationState>()((set, get) => ({
               state.selectedObservation?.id === observationId && prevSelected
                 ? prevSelected
                 : state.selectedObservation,
+            isMutating: false,
           }))
         },
       })
@@ -2361,6 +2572,129 @@ export const useObservationStore = create<ObservationState>()((set, get) => ({
       set({ error: errorMessage(e, 'Failed to add document') })
       // addDocument historically did not throw — keep the call-site contract
       // intact (callers don't await/handle a rejection here).
+    }
+  },
+
+  // Real upload (W37). Uploads the file bytes to the private
+  // `observation_documents` bucket, then registers the metadata row so a
+  // reviewer can open it via the signed-URL endpoint. Mirrors
+  // letter-store.uploadAttachment: bytes → bucket → /evidence → reflect state.
+  uploadDocument: async (observationId, file, uploader, addToRemediationPlan) => {
+    if (file.size === 0) {
+      set({ error: 'Cannot upload an empty file.' })
+      throw new Error('Cannot upload an empty file.')
+    }
+    if (file.size > MAX_DOCUMENT_BYTES) {
+      const msg = `File is too large (max 50 MB). File size: ${Math.round(file.size / 1024 / 1024)} MB.`
+      set({ error: msg })
+      throw new Error(msg)
+    }
+    const type = docTypeFromFile(file)
+    set({ isMutating: true, error: null })
+    try {
+      // 1) Upload bytes to the private bucket (uploader owns the object).
+      const safeName = file.name.replace(/[^A-Za-z0-9._-]/g, '_')
+      const storagePath = `${observationId}/${Date.now()}-${safeName}`
+      const { error: uploadError } = await supabaseClient.storage
+        .from(OBSERVATION_DOCUMENTS_BUCKET)
+        .upload(storagePath, file, {
+          cacheControl: '3600',
+          upsert: false,
+          contentType: file.type || 'application/octet-stream',
+        })
+      if (uploadError) throw uploadError
+
+      // 2) Register the metadata row. If this fails, roll back the just-uploaded
+      // object so a failed write doesn't leave orphaned bytes in the bucket.
+      let row: { id: string; name: string; type: 'pdf' | 'image' | 'doc' }
+      try {
+        row = await api.post<{ id: string; name: string; type: 'pdf' | 'image' | 'doc' }>(
+          `/observations/${observationId}/evidence`,
+          {
+            name: file.name,
+            type,
+            storage_path: storagePath,
+            is_remediation: Boolean(addToRemediationPlan),
+          },
+        )
+      } catch (postErr) {
+        await supabaseClient.storage
+          .from(OBSERVATION_DOCUMENTS_BUCKET)
+          .remove([storagePath])
+          .catch(() => {})
+        throw postErr
+      }
+
+      // 3) Reflect the new document in store state (+ remediation plan docs).
+      const realDocument = { id: row.id, name: row.name ?? file.name, type }
+      const timelineEntry: ObservationTimelineEntry = {
+        id: crypto.randomUUID(),
+        date: new Date().toISOString(),
+        dateKey: 'today',
+        description: addToRemediationPlan
+          ? `${uploader.name} attached remediation document: ${realDocument.name}`
+          : `${uploader.name} uploaded a document: ${realDocument.name}`,
+        descriptionAr: addToRemediationPlan
+          ? `أرفق ${uploader.name} مستند معالجة: ${realDocument.name}`
+          : `رفع ${uploader.name} مستند: ${realDocument.name}`,
+        descriptionKey: addToRemediationPlan
+          ? 'observations.detail.timeline.remediationDocumentUploaded'
+          : 'observations.detail.timeline.documentUploaded',
+        descriptionParams: { name: uploader.name, document: realDocument.name },
+        userId: uploader.id,
+        userName: uploader.name,
+        userAvatar: uploader.avatar,
+        actionType: 'document_add',
+      }
+      const attachToPlan = (plan: RemediationPlan | undefined): RemediationPlan | undefined => {
+        if (!addToRemediationPlan) return plan
+        if (plan) return { ...plan, documents: [...(plan.documents || []), realDocument] }
+        return plan
+      }
+      set((state) => {
+        const observations = state.observations.map((obs) =>
+          obs.id === observationId
+            ? { ...obs, documents: [...(obs.documents || []), realDocument], remediationPlan: attachToPlan(obs.remediationPlan) }
+            : obs,
+        )
+        let selectedObservation = state.selectedObservation
+        if (selectedObservation?.id === observationId) {
+          selectedObservation = {
+            ...selectedObservation,
+            documents: [...(selectedObservation.documents || []), realDocument],
+            remediationPlan: attachToPlan(selectedObservation.remediationPlan),
+            timeline: [timelineEntry, ...(selectedObservation.timeline || [])],
+          }
+        }
+        const previous = state.byId[observationId]
+        const byId = previous
+          ? {
+              ...state.byId,
+              [observationId]: {
+                ...previous,
+                documents: [...(previous.documents || []), realDocument],
+                remediationPlan: attachToPlan(previous.remediationPlan),
+              },
+            }
+          : state.byId
+        return { observations, byId, selectedObservation, isMutating: false }
+      })
+      return row.id
+    } catch (e) {
+      set({ error: errorMessage(e, 'Failed to upload document'), isMutating: false })
+      throw e
+    }
+  },
+
+  getDocumentUrl: async (observationId, documentId) => {
+    try {
+      const res = await api.get<{ url: string; name: string }>(
+        `/observations/${observationId}/evidence/${documentId}/url`,
+      )
+      return res.url
+    } catch (e) {
+      set({ error: errorMessage(e, 'Failed to open document') })
+      return null
     }
   },
 

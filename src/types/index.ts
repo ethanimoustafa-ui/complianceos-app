@@ -148,7 +148,7 @@ export type ObservationSource =
   | 'internal' | 'sharia'
   | (string & {})
 export type ObservationSeverity = 'critical' | 'high' | 'medium' | 'low'
-export type ObservationStatus = 'open' | 'in_progress' | 'resolved' | 'closed'
+export type ObservationStatus = 'open' | 'in_progress' | 'remediated' | 'resolved' | 'closed'
 
 export interface ObservationAssignee {
   id?: string

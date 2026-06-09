@@ -1,6 +1,9 @@
 export type ObservationSeverity = 'critical' | 'high' | 'medium' | 'low'
 
-export type ObservationStatus = 'open' | 'in_progress' | 'resolved' | 'closed'
+// Lifecycle order: open → in_progress (plan under review) → remediated (plan
+// approved, awaiting closure) → resolved (closure requested / pending review) →
+// closed (verified, archived).
+export type ObservationStatus = 'open' | 'in_progress' | 'remediated' | 'resolved' | 'closed'
 
 // ObservationSource is a framework id (lowercase) or 'internal'. The listed
 // values below are the built-in seeds that have hardcoded icon/label metadata
@@ -177,6 +180,11 @@ export const statusConfig: Record<
   in_progress: {
     label: 'In Progress',
     dotColor: 'bg-amber-400',
+    textColor: 'text-slate-700',
+  },
+  remediated: {
+    label: 'Remediated',
+    dotColor: 'bg-indigo-500',
     textColor: 'text-slate-700',
   },
   resolved: {

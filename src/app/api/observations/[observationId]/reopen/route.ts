@@ -42,9 +42,21 @@ export async function POST(req: NextRequest, { params }: Params) {
     const ifMatch = readIfMatch(req)
     assertNotStale(ifMatch, current.updated_at)
 
+    // W37: reopen to 'remediated' when the latest plan is still approved (e.g.
+    // closure was rejected, or a closed observation is reopened — the work is
+    // still done, awaiting a fresh closure). Otherwise reopen to 'open'.
+    const { data: latestPlan } = await supabase
+      .from('remediation_plans')
+      .select('status')
+      .eq('observation_id', observationId)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle<{ status: string }>()
+    const reopenStatus = latestPlan?.status === 'approved' ? 'remediated' : 'open'
+
     let updateQ = supabase
       .from('observations')
-      .update({ status: 'open', archived_at: null })
+      .update({ status: reopenStatus, archived_at: null })
       .eq('id', observationId)
       .is('deleted_at', null)
     if (ifMatch != null) updateQ = updateQ.eq('updated_at', ifMatch)
@@ -60,6 +72,15 @@ export async function POST(req: NextRequest, { params }: Params) {
       }
       throw NotFound('Transition returned no row')
     }
+
+    // W37: reopening resets the closure lifecycle so the observation can be
+    // re-worked and closure re-requested. Without this, a stale closure_request
+    // row would re-hydrate on the next fetch and permanently hide the
+    // "Request Closure" action (the rejected-closure dead-end).
+    await Promise.all([
+      supabase.from('closure_requests').delete().eq('observation_id', observationId),
+      supabase.from('closure_reviews').delete().eq('observation_id', observationId),
+    ])
 
     const actor = observationActorName(profile, user.id)
     await Promise.all([

@@ -36,13 +36,17 @@ import type {
 
 // Shared upload zone (kept local to the modal — same UX as the inline form).
 function UploadZone({
-  file, fileRef, label, required, t,
+  file, fileRef, label, required, t, existingName,
 }: {
   file: File | null
   fileRef: React.RefObject<HTMLInputElement | null>
   label: string
   required?: boolean
   t: (key: any, params?: Record<string, string>) => string
+  // W37: name of the document already uploaded to this policy, so the edit
+  // modal SHOWS it (with a click-to-replace affordance) instead of an empty
+  // drop zone.
+  existingName?: string
 }) {
   return (
     <div>
@@ -67,6 +71,18 @@ function UploadZone({
             <p className="text-[10px] text-emerald-500">{t('policies.clickToChange')}</p>
           </div>
           <Icon icon="lucide:refresh-cw" className="text-emerald-400 text-sm shrink-0" />
+        </div>
+      ) : existingName ? (
+        <div
+          onClick={() => fileRef.current?.click()}
+          className="flex items-center gap-3 p-3 bg-slate-50 border border-slate-200 rounded-xl cursor-pointer hover:bg-slate-100 transition-colors"
+        >
+          <Icon icon="lucide:file-text" className="text-slate-400 text-xl shrink-0" />
+          <div className="flex-1 min-w-0">
+            <p className="text-xs font-bold text-slate-700 truncate">{existingName}</p>
+            <p className="text-[10px] text-slate-400">{t('policies.clickToChange')}</p>
+          </div>
+          <Icon icon="lucide:refresh-cw" className="text-slate-400 text-sm shrink-0" />
         </div>
       ) : (
         <div
@@ -93,7 +109,7 @@ type Props = {
 }
 
 export function EditPolicyModal({ isOpen, onClose, policy, onSaved, t, isRTL }: Props) {
-  const { update } = usePolicyStore()
+  const { update, reseedWorkflowFromTier } = usePolicyStore()
   const { user: currentUser } = useAuthStore()
   const teamMembers = useTeamStore((s) => s.members)
   const policyCategoryItems = usePolicyCategoryStore((s) => s.categories)
@@ -140,10 +156,16 @@ export function EditPolicyModal({ isOpen, onClose, policy, onSaved, t, isRTL }: 
   const [formAffectedDepartments, setFormAffectedDepartments] = useState<string[]>([])
   const [formBusinessOwnerDepartmentId, setFormBusinessOwnerDepartmentId] = useState<string>('')
   const formDocFileRef = useRef<HTMLInputElement>(null)
+  // W37: when the approval tier changes, prompt whether to also reset the
+  // workflow steps to match the new tier (see doSave / the confirm overlay).
+  const [showTierConfirm, setShowTierConfirm] = useState(false)
+  const [isReseeding, setIsReseeding] = useState(false)
 
   // Reset form whenever the modal opens for a (possibly new) policy.
   useEffect(() => {
     if (!isOpen || !policy) return
+    setShowTierConfirm(false)
+    setIsReseeding(false)
     setFormName(policy.name)
     setFormCategory(policy.category)
     setFormTier(policy.approvalTier)
@@ -168,8 +190,13 @@ export function EditPolicyModal({ isOpen, onClose, policy, onSaved, t, isRTL }: 
 
   const formValid = !!(formName && formCategory && formTier && formDescription)
 
-  function handleSave() {
+  async function doSave(reseedSteps: boolean) {
     if (!policy || !formValid) return
+    // NOTE: we intentionally do NOT close the tier-confirm prompt here. For the
+    // reseed path it stays open showing the spinner on "Yes, reset steps to
+    // match" until the work completes; onClose() (below) then closes the whole
+    // modal at once. (Closing it up-front made the spinner invisible and the
+    // modal close felt abrupt.) The prompt flag is reset when the modal re-opens.
     const owner = OWNERS[formOwnerIdx] ?? policy.owner
     const today = new Date().toISOString().split('T')[0]
     const newVersion = formVersion || policy.version
@@ -235,6 +262,18 @@ export function EditPolicyModal({ isOpen, onClose, policy, onSaved, t, isRTL }: 
       user: actingUser,
     }
 
+    // W37: when the tier changed and the user opted to reset, reseed the
+    // workflow FIRST (the reseed route owns steps + status), then apply the
+    // field edits on top — its reconcile reads the freshly-seeded steps.
+    if (reseedSteps) {
+      setIsReseeding(true)
+      try {
+        await reseedWorkflowFromTier(policy.id, formTier as string)
+      } finally {
+        setIsReseeding(false)
+      }
+    }
+
     update(policy.id, {
       name: formName,
       description: formDescription,
@@ -261,11 +300,54 @@ export function EditPolicyModal({ isOpen, onClose, policy, onSaved, t, isRTL }: 
     onClose()
   }
 
+  // Changing the approval tier on an existing policy keeps the workflow steps by
+  // default; we prompt to optionally reset them to match the new tier.
+  function handleSave() {
+    if (!policy || !formValid) return
+    if (formTier !== policy.approvalTier) { setShowTierConfirm(true); return }
+    void doSave(false)
+  }
+
   if (!policy) return null
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title={t('policies.editPolicy')} size="xl">
       <div className="space-y-6">
+        {/* W37: tier-change → optional workflow reseed prompt. `fixed` so it
+            centers in the viewport regardless of how far the modal is scrolled. */}
+        {showTierConfirm && (
+          <div className="fixed inset-0 z-[60] bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-6">
+            <div className="w-full max-w-md bg-white border border-slate-200 rounded-xl shadow-xl p-6 space-y-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center shrink-0">
+                  <Icon icon="lucide:git-branch" className="text-amber-600 text-lg" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900">{t('policies.tierChangeTitle')}</h3>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    {t('policies.tierChangeBody', { tier: tierItems.find((ti) => ti.id === formTier)?.label ?? String(formTier) })}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-start gap-2 px-3 py-2 bg-amber-50 border border-amber-200 rounded-lg">
+                <Icon icon="lucide:alert-triangle" className="text-amber-500 text-sm shrink-0 mt-0.5" />
+                <span className="text-[11px] text-amber-700">{t('policies.tierChangeWarning')}</span>
+              </div>
+              <div className="flex flex-col gap-2 pt-1">
+                <Button variant="primary" disabled={isReseeding} aria-busy={isReseeding || undefined} onClick={() => void doSave(true)}>
+                  {isReseeding && <Icon icon="lucide:loader-2" className="w-4 h-4 animate-spin" />}
+                  {t('policies.tierChangeReset')}
+                </Button>
+                <Button variant="outline" disabled={isReseeding} onClick={() => void doSave(false)}>
+                  {t('policies.tierChangeKeep')}
+                </Button>
+                <Button variant="ghost" disabled={isReseeding} onClick={() => setShowTierConfirm(false)}>
+                  {t('common.cancel')}
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
         <p className="text-sm text-slate-500 -mt-2">{t('policies.editPolicySubtitle')}</p>
 
         <div className="grid grid-cols-2 gap-6">
@@ -341,21 +423,54 @@ export function EditPolicyModal({ isOpen, onClose, policy, onSaved, t, isRTL }: 
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('regulatoryUpdates.affectedDepartments' as any)}</label>
-              <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2 max-h-40 overflow-y-auto">
-                {departments.map((dept) => (
-                  <label key={dept.id} className="flex items-center gap-3 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      className="rounded text-emerald-600 focus:ring-emerald-500"
-                      checked={formAffectedDepartments.includes(dept.id)}
-                      onChange={() => setFormAffectedDepartments((prev) =>
-                        prev.includes(dept.id) ? prev.filter((d) => d !== dept.id) : [...prev, dept.id]
-                      )}
-                    />
-                    <span className="text-sm">{isRTL ? dept.nameAr : dept.name}</span>
-                  </label>
-                ))}
+              {/* W37: chip + removable-pill multi-select, matching the Create
+                  Policy modal (was an old checkbox list). */}
+              <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl">
+                <div className="flex flex-wrap gap-1.5">
+                  {departments.map((dept) => {
+                    const selected = formAffectedDepartments.includes(dept.id)
+                    return (
+                      <button
+                        type="button"
+                        key={dept.id}
+                        onClick={() => setFormAffectedDepartments((prev) =>
+                          prev.includes(dept.id) ? prev.filter((d) => d !== dept.id) : [...prev, dept.id]
+                        )}
+                        className={
+                          selected
+                            ? 'px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-600 text-white border border-emerald-600 cursor-pointer transition-colors'
+                            : 'px-2.5 py-1 rounded-full text-xs font-medium bg-white text-slate-600 border border-slate-200 hover:border-emerald-300 hover:text-emerald-700 cursor-pointer transition-colors'
+                        }
+                      >
+                        {isRTL ? dept.nameAr : dept.name}
+                      </button>
+                    )
+                  })}
+                </div>
               </div>
+              {formAffectedDepartments.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 mt-2">
+                  {formAffectedDepartments.map((id) => {
+                    const dept = departments.find((d) => d.id === id)
+                    if (!dept) return null
+                    return (
+                      <span
+                        key={id}
+                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-100"
+                      >
+                        {isRTL ? dept.nameAr : dept.name}
+                        <button
+                          type="button"
+                          onClick={() => setFormAffectedDepartments((prev) => prev.filter((d) => d !== id))}
+                          className="text-emerald-600 hover:text-rose-600 cursor-pointer"
+                        >
+                          <Icon icon="lucide:x" className="text-[10px]" />
+                        </button>
+                      </span>
+                    )
+                  })}
+                </div>
+              )}
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('policies.description')} *</label>
@@ -370,6 +485,7 @@ export function EditPolicyModal({ isOpen, onClose, policy, onSaved, t, isRTL }: 
               file={formDocFile}
               fileRef={formDocFileRef}
               label={t('policies.uploadDocument')}
+              existingName={policy.attachments?.[0]?.name ?? (policy.attachmentUrl || undefined)}
               t={t}
             />
           </div>

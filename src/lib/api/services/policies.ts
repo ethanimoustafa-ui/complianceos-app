@@ -103,6 +103,82 @@ export async function assertPolicyWorkflowStepExists(
   return data
 }
 
+// W37 — shared tier→workflow-step resolver, used by BOTH the policy CREATE
+// route (seed a new policy) and the workflow RESEED route (re-seed when the
+// user changes a policy's approval tier and opts to reset the workflow).
+// Resolution order:
+//   1. policy_templates override for the tier — the MOST-RECENT row that has
+//      NON-EMPTY default_workflow_steps (a tier can own several templates; an
+//      empty "Save as template" row must not shadow the real one).
+//   2. seeded per-tier defaults (policy_workflow_step_templates, migration 080).
+//   3. generic 3-step fallback so the workflow is never empty.
+// First step → 'current', the rest → 'pending'; sort_order is numbered from 1
+// AFTER blank steps are dropped (no gaps that would strand the 'current' step).
+export type TierSeedStep = {
+  step: string
+  sort_order: number
+  action_type: string | null
+  description: string | null
+}
+
+export async function resolveTierSeedSteps(
+  supabase: SupabaseClient,
+  tier: string,
+): Promise<TierSeedStep[]> {
+  const { data: tmplRows } = await supabase
+    .from('policy_templates')
+    .select('default_workflow_steps, created_at')
+    .eq('approval_tier', tier)
+    .order('created_at', { ascending: false })
+    .returns<Array<{ default_workflow_steps: unknown; created_at: string }>>()
+  const withSteps = (tmplRows ?? []).find(
+    (t) => Array.isArray(t.default_workflow_steps) && (t.default_workflow_steps as unknown[]).length > 0,
+  )
+  const rawSteps = withSteps?.default_workflow_steps
+  let seed: TierSeedStep[] = Array.isArray(rawSteps)
+    ? (rawSteps as Array<Record<string, unknown>>)
+        .map((s) => ({
+          step: String(s.step ?? s.label ?? '').trim(),
+          action_type: (s.actionType ?? s.action_type ?? null) as string | null,
+          description: (s.description ?? null) as string | null,
+        }))
+        .filter((s) => s.step.length > 0)
+        .map((s, i) => ({ ...s, sort_order: i + 1 }))
+    : []
+
+  if (seed.length === 0) {
+    const { data: tplRows } = await supabase
+      .from('policy_workflow_step_templates')
+      .select('step, sort_order, action_type, description')
+      .eq('tier', tier)
+      .order('sort_order', { ascending: true })
+      .returns<TierSeedStep[]>()
+    seed = tplRows ?? []
+  }
+
+  if (seed.length === 0) {
+    seed = [
+      { step: 'Initial Review', sort_order: 1, action_type: 'review_complete', description: 'Initial policy review and quality check' },
+      { step: 'Approval', sort_order: 2, action_type: 'approve', description: 'Formal approval of the policy' },
+      { step: 'Publish', sort_order: 3, action_type: 'publish', description: 'Publish and communicate the approved policy' },
+    ]
+  }
+  return seed
+}
+
+/** Insert seeded steps for a policy (first → current, rest → pending). */
+export function tierSeedStepRows(policyId: string, seed: TierSeedStep[]) {
+  return seed.map((t) => ({
+    policy_id: policyId,
+    step: t.step,
+    sort_order: t.sort_order,
+    action_type: t.action_type,
+    description: t.description,
+    status: t.sort_order === 1 ? 'current' : 'pending',
+    updated_at: new Date().toISOString(),
+  }))
+}
+
 export async function maxPolicyWorkflowStepSortOrder(
   supabase: SupabaseClient,
   policyId: string,

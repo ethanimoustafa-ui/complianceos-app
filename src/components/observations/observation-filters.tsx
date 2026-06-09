@@ -141,6 +141,7 @@ export function ObservationFilters({
             { id: 'all', label: t('observations.filters.allStatus') },
             { id: 'open', label: t('observations.statusOptions.open') },
             { id: 'in_progress', label: t('observations.statusOptions.inProgress') },
+            { id: 'remediated', label: t('observations.statusOptions.remediated') },
             { id: 'resolved', label: t('observations.statusOptions.pendingReview') },
             { id: 'closed', label: t('observations.statusOptions.closed') },
           ]}

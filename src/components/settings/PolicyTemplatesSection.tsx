@@ -162,23 +162,27 @@ export function PolicyTemplatesSection() {
       </div>
       )}
 
-      {/* Create Modal */}
+      {/* Create Modal — create() is optimistic (returns synchronously), so the
+          modal closes immediately on save. */}
       <PolicyTemplateFormModal
         isOpen={isCreateOpen}
         onClose={() => setIsCreateOpen(false)}
-        onSave={(data) => { create(data); setIsCreateOpen(false) }}
+        onSave={(data) => { create(data); return true }}
         t={t}
         isRTL={isRTL}
       />
 
-      {/* Edit Modal */}
+      {/* Edit Modal — onSave/onDelete are awaitable + return a success flag; the
+          modal shows an in-flight spinner and only closes once the server
+          confirms (W37: was fire-and-forget, so Delete looked like it "did
+          nothing" and a server failure silently rolled the row back). */}
       {editTemplate && (
         <PolicyTemplateFormModal
           isOpen={!!editId}
           onClose={() => setEditId(null)}
           template={editTemplate}
-          onSave={(data) => { update(editTemplate.id, data); setEditId(null) }}
-          onDelete={() => { deleteTemplate(editTemplate.id); setEditId(null) }}
+          onSave={(data) => update(editTemplate.id, data)}
+          onDelete={() => deleteTemplate(editTemplate.id)}
           t={t}
           isRTL={isRTL}
         />
@@ -199,8 +203,10 @@ function PolicyTemplateFormModal({
   isOpen: boolean
   onClose: () => void
   template?: PolicyTemplate
-  onSave: (data: any) => void
-  onDelete?: () => void
+  // W37: return a success flag (sync or async) so the modal can await the
+  // server, show a spinner, and only close on confirmed success.
+  onSave: (data: any) => boolean | Promise<boolean>
+  onDelete?: () => boolean | Promise<boolean>
   t: (key: any) => string
   isRTL: boolean
 }) {
@@ -216,6 +222,15 @@ function PolicyTemplateFormModal({
   const [description, setDescription] = useState(template?.defaultDescription ?? '')
   const [descriptionAr, setDescriptionAr] = useState(template?.defaultDescriptionAr ?? '')
   const [status] = useState<'active' | 'draft'>(template?.status ?? 'active')
+  // W37: in-flight + failure state so Save/Delete show a spinner and only close
+  // on confirmed success; a server failure keeps the modal open and surfaces why.
+  const [isSaving, setIsSaving] = useState(false)
+  const [isDeleting, setIsDeleting] = useState(false)
+  // W37: capture the failure message into LOCAL state at the moment an action
+  // fails (rather than subscribing to the live store error) so a stale error
+  // from an unrelated template op can never leak into this modal instance.
+  const [actionError, setActionError] = useState<string | null>(null)
+  const busy = isSaving || isDeleting
 
   function buildSchedule(): FrequencySchedule | undefined {
     if (frequency === 'ad_hoc') return adhocDate ? { adhocDate } : undefined
@@ -226,22 +241,45 @@ function PolicyTemplateFormModal({
     return undefined
   }
 
-  function handleSave() {
-    if (!name.trim()) return
-    onSave({
-      name,
-      nameAr: nameAr || undefined,
-      category,
-      approvalTier,
-      frequency,
-      frequencySchedule: buildSchedule(),
-      defaultDescription: description,
-      defaultDescriptionAr: descriptionAr || undefined,
-      defaultWorkflowSteps: template?.defaultWorkflowSteps ?? [],
-      versionPattern: template?.versionPattern ?? 'v{major}.{minor}',
-      framework: template?.framework,
-      status,
-    })
+  async function handleSave() {
+    if (!name.trim() || busy) return
+    setActionError(null)
+    setIsSaving(true)
+    try {
+      const ok = await onSave({
+        name,
+        nameAr: nameAr || undefined,
+        category,
+        approvalTier,
+        frequency,
+        frequencySchedule: buildSchedule(),
+        defaultDescription: description,
+        defaultDescriptionAr: descriptionAr || undefined,
+        defaultWorkflowSteps: template?.defaultWorkflowSteps ?? [],
+        versionPattern: template?.versionPattern ?? 'v{major}.{minor}',
+        framework: template?.framework,
+        status,
+      })
+      // The store sets `error` (errorMessage) before resolving false; surface it.
+      if (ok) onClose()
+      else setActionError(usePolicyTemplateStore.getState().error)
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  async function handleDelete() {
+    if (!onDelete || busy) return
+    setActionError(null)
+    setIsDeleting(true)
+    try {
+      const ok = await onDelete()
+      // The store sets `error` (errorMessage) before resolving false; surface it.
+      if (ok) onClose()
+      else setActionError(usePolicyTemplateStore.getState().error)
+    } finally {
+      setIsDeleting(false)
+    }
   }
 
   return (
@@ -393,16 +431,32 @@ function PolicyTemplateFormModal({
             Missing required: {t('settings.nameEnglish')}
           </p>
         )}
+        {actionError && (
+          <p className="text-xs text-rose-600 text-end">{actionError}</p>
+        )}
         <div className="flex gap-3 pt-4">
-          <Button variant="outline" onClick={onClose}>{t('common.cancel')}</Button>
+          <Button variant="outline" onClick={onClose} disabled={busy}>{t('common.cancel')}</Button>
           {onDelete && (
             <Gate perm="Manage Policy Templates">
-              <button onClick={onDelete} className="px-4 py-2 text-sm font-bold text-rose-600 hover:text-rose-700 hover:bg-rose-50 rounded-xl transition-colors cursor-pointer">
-                {t('settings.deleteTemplate')}
+              <button
+                onClick={() => void handleDelete()}
+                disabled={busy}
+                aria-busy={isDeleting || undefined}
+                className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-bold text-rose-600 hover:text-rose-700 hover:bg-rose-50 rounded-xl transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+              >
+                {isDeleting && <Icon icon="lucide:loader-2" className="w-4 h-4 animate-spin" />}
+                {isDeleting ? t('common.deleting') : t('settings.deleteTemplate')}
               </button>
             </Gate>
           )}
-          <LoadingButton variant="primary" className="flex-1" disabled={!name.trim()} onClick={handleSave}>
+          <LoadingButton
+            variant="primary"
+            className="flex-1"
+            loading={isSaving}
+            loadingLabel={t('common.saving')}
+            disabled={!name.trim() || busy}
+            onClick={() => void handleSave()}
+          >
             {t('common.saveChanges')}
           </LoadingButton>
         </div>

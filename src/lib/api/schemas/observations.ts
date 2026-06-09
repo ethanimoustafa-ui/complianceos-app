@@ -170,6 +170,10 @@ export const CreateRemediationPlanSchema = z
     title: PlainTextMin(500),
     description: PlainTextMin(10_000),
     due_date: DateString,
+    // Unified draft→submit flow: the assignee may save a 'draft' (still being
+    // built) or 'submitted' (sent to the leader/manager/admin for review).
+    // Defaults to 'submitted' for back-compat with callers that don't send it.
+    status: z.enum(['draft', 'submitted']).optional(),
   })
   .strict()
 export type CreateRemediationPlanInput = z.infer<typeof CreateRemediationPlanSchema>
@@ -181,6 +185,21 @@ export const ReviewRemediationPlanSchema = z
   })
   .strict()
 export type ReviewRemediationPlanInput = z.infer<typeof ReviewRemediationPlanSchema>
+
+// Draft-edit / submit-for-review path on PATCH (distinct from the review path
+// above, which carries `approved`). Lets the submitter revise a draft/rejected
+// plan's fields and/or transition it to 'submitted'. All fields optional so the
+// client can send just `{ status: 'submitted' }` to submit an unchanged draft.
+export const UpdateRemediationPlanSchema = z
+  .object({
+    title: PlainTextMin(500).optional(),
+    description: PlainTextMin(10_000).optional(),
+    due_date: DateString.optional(),
+    status: z.enum(['submitted']).optional(),
+  })
+  .strict()
+  .refine((v) => Object.keys(v).length > 0, { message: 'No fields to update' })
+export type UpdateRemediationPlanInput = z.infer<typeof UpdateRemediationPlanSchema>
 
 // ---------- comments ---------------------------------------------------------
 

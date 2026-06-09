@@ -139,7 +139,8 @@ export const ChecklistSection = memo(function ChecklistSection({
         <h3 className="text-xs font-black uppercase text-slate-400 tracking-widest">
           {t((titleKey || 'observations.detail.remediationChecklist') as Parameters<typeof t>[0])}
         </h3>
-        {items.length > 0 ? (
+        {/* Progress % is hidden once the observation is closed (read-only). */}
+        {!readOnly && items.length > 0 ? (
           <span className="text-xs font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">
             {t((completionKey || 'observations.detail.complete') as Parameters<typeof t>[0], { percent: progressPercent })}
           </span>
@@ -210,30 +211,43 @@ export const ChecklistSection = memo(function ChecklistSection({
               ) : (
                 /* Display mode */
                 <>
-                  <button
-                    type="button"
-                    onClick={readOnly ? undefined : () => void handleToggle(item.id, item.completed)}
-                    disabled={togglingIds.has(item.id)}
-                    aria-busy={togglingIds.has(item.id) || undefined}
-                    className={`flex items-center gap-3 flex-1 ${readOnly ? 'cursor-default' : 'cursor-pointer'} disabled:cursor-not-allowed ${isRTL ? 'text-right' : 'text-left'}`}
-                  >
-                    {togglingIds.has(item.id) ? (
+                  {readOnly ? (
+                    /* Closed: static, non-interactive indicator — no checkable circle. */
+                    <div className={`flex items-center gap-3 flex-1 ${isRTL ? 'text-right' : 'text-left'}`}>
                       <Icon
-                        icon="lucide:loader-2"
-                        className="text-emerald-500 text-xl shrink-0 animate-spin"
+                        icon={item.completed ? 'lucide:check-circle-2' : 'lucide:circle'}
+                        className={`text-xl shrink-0 ${item.completed ? 'text-emerald-500' : 'text-slate-300'}`}
                       />
-                    ) : item.completed ? (
-                      <Icon
-                        icon="lucide:check-circle-2"
-                        className="text-emerald-500 text-xl shrink-0"
-                      />
-                    ) : (
-                      <div className="w-5 h-5 border-2 border-slate-300 rounded-full shrink-0 hover:border-emerald-400 transition-colors" />
-                    )}
-                    <span className={`text-sm font-medium ${item.completed ? 'text-slate-500 line-through' : 'text-slate-700'}`}>
-                      {item.text}
-                    </span>
-                  </button>
+                      <span className={`text-sm font-medium ${item.completed ? 'text-slate-500 line-through' : 'text-slate-700'}`}>
+                        {item.text}
+                      </span>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => void handleToggle(item.id, item.completed)}
+                      disabled={togglingIds.has(item.id)}
+                      aria-busy={togglingIds.has(item.id) || undefined}
+                      className={`flex items-center gap-3 flex-1 cursor-pointer disabled:cursor-not-allowed ${isRTL ? 'text-right' : 'text-left'}`}
+                    >
+                      {togglingIds.has(item.id) ? (
+                        <Icon
+                          icon="lucide:loader-2"
+                          className="text-emerald-500 text-xl shrink-0 animate-spin"
+                        />
+                      ) : item.completed ? (
+                        <Icon
+                          icon="lucide:check-circle-2"
+                          className="text-emerald-500 text-xl shrink-0"
+                        />
+                      ) : (
+                        <div className="w-5 h-5 border-2 border-slate-300 rounded-full shrink-0 hover:border-emerald-400 transition-colors" />
+                      )}
+                      <span className={`text-sm font-medium ${item.completed ? 'text-slate-500 line-through' : 'text-slate-700'}`}>
+                        {item.text}
+                      </span>
+                    </button>
+                  )}
                   {onSetDeadline ? (
                     <InlineDeadlinePicker
                       value={item.deadline}

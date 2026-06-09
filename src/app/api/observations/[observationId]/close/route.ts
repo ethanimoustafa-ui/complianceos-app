@@ -41,6 +41,20 @@ export async function POST(req: NextRequest, { params }: Params) {
       return ok({ id: observationId, status: current.status })
     }
 
+    // W37: closure requires a verified (approved) remediation plan. Enforce the
+    // same gate the client applies (remediationApproved) at the trust boundary
+    // so a direct POST can't resolve an observation whose work isn't approved.
+    const { data: latestPlan } = await supabase
+      .from('remediation_plans')
+      .select('status')
+      .eq('observation_id', observationId)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle<{ status: string }>()
+    if (!latestPlan || latestPlan.status !== 'approved') {
+      throw Conflict('Closure requires an approved remediation plan.')
+    }
+
     // Wave-20.cleanup / W17.2 — optimistic-concurrency guard, atomic on the
     // CLIENT-supplied token (NOT the just-read value).
     const ifMatch = readIfMatch(req)

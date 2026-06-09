@@ -266,6 +266,7 @@ export function formatObservationSeverity(
 const OBSERVATION_STATUS_KEYS: Partial<Record<string, TranslationKey>> = {
   'open': 'observations.statusOptions.open',
   'in_progress': 'observations.statusOptions.inProgress',
+  'remediated': 'observations.statusOptions.remediated',
   'resolved': 'observations.statusOptions.pendingReview',
   'closed': 'observations.statusOptions.closed',
 }

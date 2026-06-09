@@ -86,8 +86,11 @@ const ACTION_TYPE_META: Record<string, { icon: string; color: string }> = {
   // missing here, so those steps rendered NO header icon. The earlier audit
   // checked the client TIER_WORKFLOWS const instead of the DB seed.
   'approve':          { icon: 'lucide:check-square',    color: 'text-emerald-400' },
-  'review_complete':  { icon: 'lucide:clipboard-check', color: 'text-blue-400'    },
-  'publish':          { icon: 'lucide:upload-cloud',    color: 'text-emerald-400' },
+  // W37: review_complete + publish both render as "Complete Step", so their
+  // step-row icon is a completion check (was the clipboard "review" icon, which
+  // no longer matches the collapsed label).
+  'review_complete':  { icon: 'lucide:check-circle-2',  color: 'text-emerald-400' },
+  'publish':          { icon: 'lucide:check-circle-2',  color: 'text-emerald-400' },
   'vote_approve':     { icon: 'lucide:vote',            color: 'text-violet-400'  },
 }
 
@@ -206,19 +209,25 @@ export function PolicyDetailsContent({
    *  Tries currentReviewCycleDate first, then parses "Review Month Year" strings. */
   function formatCycleLabel(label: string, isoDate?: string): string {
     const loc = isRTL ? 'ar-SA' : 'en-US'
-    const fmt = (d: Date, withTime: boolean) => {
-      const day = `${t('policies.reviewWord')} ${d.toLocaleDateString(loc, { month: 'long', day: 'numeric', year: 'numeric' })}`
-      return withTime ? `${day}, ${d.toLocaleTimeString(loc, { hour: 'numeric', minute: '2-digit' })}` : day
-    }
+    // W37: a review cycle is a CALENDAR concept — render the date only, never a
+    // clock time. Archived cycles are stored at UTC-midnight (the `today`
+    // fallback in the initiate-review route), which the old `withTime` branch
+    // rendered as a spurious "~4:00 AM" in the viewer's timezone.
+    const fmtDate = (d: Date) =>
+      `${t('policies.reviewWord')} ${d.toLocaleDateString(loc, { month: 'long', day: 'numeric', year: 'numeric' })}`
     if (isoDate) {
-      const d = new Date(isoDate)
-      if (!isNaN(d.getTime())) return fmt(d, isoDate.includes(':'))
+      // Parse a date-only string (YYYY-MM-DD) as LOCAL midnight so it can't shift
+      // a calendar day in timezones behind UTC; full timestamps parse as-is.
+      const d = /^\d{4}-\d{2}-\d{2}$/.test(isoDate)
+        ? new Date(`${isoDate}T00:00:00`)
+        : new Date(isoDate)
+      if (!isNaN(d.getTime())) return fmtDate(d)
     }
     // Parse stored English labels like "Review March 2026"
     const m = label.match(/^Review\s+(.+)$/i)
     if (m) {
       const parsed = new Date(m[1])
-      if (!isNaN(parsed.getTime())) return fmt(parsed, false)
+      if (!isNaN(parsed.getTime())) return fmtDate(parsed)
     }
     return label
   }
@@ -232,9 +241,14 @@ export function PolicyDetailsContent({
   // ── Evidence helpers ─────────────────────────────────────────────────
   const evidenceCycles = useMemo(() => {
     const cycles = new Map<string, string>()
-    // History cycles first (oldest → newest)
+    // W37: only ARCHIVED cycles that actually hold evidence are worth listing in
+    // the filter. Same-day re-initiation can spawn several empty cycles with an
+    // identical label ("Review Jun 9, 2026") — listing those produced confusing
+    // duplicates. The current cycle is always listed (below), even when empty.
+    const cyclesWithEvidence = new Set((fresh.evidence ?? []).map((e) => e.reviewCycleId))
+    // History cycles first (oldest → newest) — skip empty ones.
     for (const h of fresh.reviewCycleHistory ?? []) {
-      if (!cycles.has(h.id)) cycles.set(h.id, formatCycleLabel(h.label, h.initiatedAt))
+      if (cyclesWithEvidence.has(h.id) && !cycles.has(h.id)) cycles.set(h.id, formatCycleLabel(h.label, h.initiatedAt))
     }
     // Current cycle
     if (fresh.currentReviewCycleId) {
@@ -423,15 +437,16 @@ export function PolicyDetailsContent({
 
   // ── Workflow action handlers ─────────────────────────────────────────
   function handleManagerReceived() {
-    const currentStepName = fresh.workflowTimeline.find(s => s.status === 'current')?.step ?? ''
-    const actEntry: PolicyActivityEntry = {
-      id: Date.now().toString(), timestamp: new Date().toISOString(), date: today,
-      type: 'step_advanced',
-      textEn: `Manager acknowledged notification for step "${currentStepName}"`,
-      textAr: `أقرّ المدير بالإشعار للخطوة "${currentStepName}"`,
-      user: actingUser,
-    }
-    update(fresh.id, { activityLog: [...(fresh.activityLog ?? []), actEntry] })
+    // W37: persist the acknowledgement via the server 'acknowledge' action so it
+    // sticks in the activity timeline. The old local-only update({activityLog})
+    // was dropped by the policy PATCH (activityLog isn't a policy column), so the
+    // entry vanished on the next fetch ("manager acknowledgements don't stick").
+    const currentStep = fresh.workflowTimeline.find(s => s.status === 'current')
+    void advanceWorkflowStep(fresh.id, {
+      action: 'acknowledge',
+      stepId: currentStep?.id,
+      userName: actingUser,
+    })
     showToast(t('policies.managerReceivedToast'))
   }
 
@@ -441,19 +456,18 @@ export function PolicyDetailsContent({
       `Dear Team,\n\nThis is a request regarding the policy "${fresh.name}" (${fresh.id}).\n\nStep: ${step.step}\n${step.description ? 'Description: ' + step.description + '\n' : ''}\nPlease review and respond.\n\nThank you.`
     )
     window.open(`mailto:?subject=${subject}&body=${body}`)
-    // ISSUE-6: persist the awaiting-response state via the steps PATCH so it
-    // survives the server reconcile. The old update({workflowTimeline}) was
-    // dropped by the policy PATCH, so the step reverted to "Send Email".
-    void usePolicyStore.getState().setStepState(fresh.id, step.id, 'awaiting-response')
+    // W37: persist via the server 'send-email' action — sets awaiting-response,
+    // moves a draft policy to under-review, and writes an activity-log row
+    // (the old client-only setStepState wrote NO log). Loading-driven, not optimistic.
+    void advanceWorkflowStep(fresh.id, { action: 'send-email', stepId: step.id, userName: actingUser })
     showToast(t('policies.emailSentToast'))
   }
 
   function handleRequestApproval() {
-    // ISSUE-5: clicking "Request Approval"/"Send for Review" IS the submit-for-
-    // review action. Persist pending-approval so the Approve/Deny UI shows and
-    // survives a refetch (steps no longer auto-enter this state).
+    // W37: clicking "Submit for Approval" → server 'request-approval' action:
+    // sets pending-approval, starts the review for a draft policy, and logs it.
     const currentStep = fresh.workflowTimeline.find(s => s.status === 'current')
-    void usePolicyStore.getState().setStepState(fresh.id, currentStep?.id, 'pending-approval')
+    void advanceWorkflowStep(fresh.id, { action: 'request-approval', stepId: currentStep?.id, userName: actingUser })
   }
 
   // ── Note prompt ──────────────────────────────────────────────────────
@@ -465,260 +479,43 @@ export function PolicyDetailsContent({
   function handleConfirmAction() {
     const note = noteText.trim() || undefined
     const tl = fresh.workflowTimeline
-
-    // Helper: mark current step completed and advance next.
-    // P1 (W29): also fires advanceWorkflowStep to persist the step completion on
-    // the server (was previously local-only, causing "nothing sticks" symptom).
-    function advanceStep(textEn: string, textAr: string) {
-      const ci = tl.findIndex(s => s.status === 'current')
-      const currentStep = ci >= 0 ? tl[ci] : null
-      const newTl = tl.map((s, i) => {
-        if (i === ci) return { ...s, status: 'completed' as const, date: today, user: actingUser, note, stepState: undefined }
-        if (i === ci + 1 && s.status === 'pending') {
-          // P2 (W34): do NOT auto-enter 'awaiting-response' for a send-email step
-          // when it becomes current — that hid the "Send Email" action and jumped
-          // straight to "Received Response", auto-completing the mail step. Leave
-          // stepState undefined so the Send Email button renders; clicking it
-          // (handleSendEmail) then sets 'awaiting-response'.
-          // ISSUE-5/6/7: a step promoted to current starts with NO step_state, so
-          // its ACTION button (Send for Review / Request Approval / Send Email /
-          // Notify Manager) shows first; clicking it persists the awaiting/pending
-          // state (setStepState). Prevents auto-jump straight to Approve/Deny.
-          return { ...s, status: 'current' as const, stepState: undefined }
-        }
-        return s
-      })
-      const allDone = newTl.every(s => s.status === 'completed')
-      const actEntry: PolicyActivityEntry = allDone
-        ? {
-            id: Date.now().toString(), timestamp: new Date().toISOString(), date: today,
-            type: 'workflow_approved',
-            textEn: 'Policy approved — all steps completed',
-            textAr: 'تمت الموافقة على السياسة — اكتملت جميع الخطوات',
-            user: actingUser, note,
-          }
-        : {
-            id: Date.now().toString(), timestamp: new Date().toISOString(), date: today,
-            type: 'step_advanced', textEn, textAr, user: actingUser, note,
-          }
-      update(fresh.id, {
-        status: allDone ? 'approved' : 'under-review',
-        ...(allDone ? { approvedDate: today } : {}),
-        workflowTimeline: newTl,
-        activityLog: [...(fresh.activityLog ?? []), actEntry],
-      })
-      // P1 (W29): persist step completion to server. Fire-and-forget (toast on error).
-      // W31 (P6.2): always 'approve' — this path completes the current step and
-      // advances. The server derives final-vs-intermediate from the remaining
-      // pending steps. ('submit-for-review' is reserved for the request-review
-      // flow below, which must NOT advance the cursor.)
-      void advanceWorkflowStep(fresh.id, {
-        action: 'approve',
-        stepId: currentStep?.id,
-        note,
-        userName: actingUser,
-      })
-      if (allDone) onApprove()
-    }
-
-    if (notePromptFor === 'submit') {
-      const ci = tl.findIndex(s => s.status === 'current')
-      const currentStep = tl[ci]
-      // Stay on current step, just enter pending-approval state
-      const newTl = tl.map((s, i) =>
-        i === ci ? { ...s, stepState: 'pending-approval' as const } : s
-      )
-      const actEntry: PolicyActivityEntry = {
-        id: Date.now().toString(), timestamp: new Date().toISOString(), date: today,
-        type: 'step_advanced',
-        textEn: `Step "${currentStep?.step ?? ''}" submitted for review`,
-        textAr: `تم إرسال الخطوة "${currentStep?.step ?? ''}" للمراجعة`,
-        user: actingUser, note,
-      }
-      update(fresh.id, { status: 'under-review', workflowTimeline: newTl, activityLog: [...(fresh.activityLog ?? []), actEntry] })
-      // P1 (W29): persist submit-for-review to server.
-      void advanceWorkflowStep(fresh.id, {
-        action: 'submit-for-review',
-        stepId: currentStep?.id,
-        note,
-        userName: actingUser,
-      })
-      onSubmitForReview()
-
-    } else if (notePromptFor === 'advance') {
-      const currentStep = tl.find(s => s.status === 'current')
-      advanceStep(
-        `Step "${currentStep?.step ?? ''}" completed`,
-        `تم إكمال الخطوة "${currentStep?.step ?? ''}"`,
-      )
-
-    } else if (notePromptFor === 'approve-step') {
-      const currentStep = tl.find(s => s.status === 'current')
-      advanceStep(
-        `Step "${currentStep?.step ?? ''}" approved`,
-        `تمت الموافقة على الخطوة "${currentStep?.step ?? ''}"`,
-      )
-
-    } else if (notePromptFor === 'log-response') {
-      const currentStep = tl.find(s => s.status === 'current')
-      advanceStep(
-        `Response logged for step "${currentStep?.step ?? ''}"`,
-        `تم تسجيل الرد للخطوة "${currentStep?.step ?? ''}"`,
-      )
-
-    } else if (notePromptFor === 'manager-approved') {
-      const currentStep = tl.find(s => s.status === 'current')
-      advanceStep(
-        `Manager approved step "${currentStep?.step ?? ''}"`,
-        `وافق المدير على الخطوة "${currentStep?.step ?? ''}"`,
-      )
-
-    } else if (notePromptFor === 'deny-step') {
-      const currentStepName = tl.find(s => s.status === 'current')?.step ?? ''
-      const newTl = tl.map(s =>
-        s.status === 'current' ? { ...s, stepState: undefined, note: undefined } : s
-      )
-      const actEntry: PolicyActivityEntry = {
-        id: Date.now().toString(), timestamp: new Date().toISOString(), date: today,
-        type: 'step_denied',
-        textEn: `Step "${currentStepName}" denied`,
-        textAr: `تم رفض الخطوة "${currentStepName}"`,
-        user: actingUser, note,
-      }
-      update(fresh.id, { workflowTimeline: newTl, activityLog: [...(fresh.activityLog ?? []), actEntry] })
-
-    } else if (notePromptFor === 'notify-manager-prompt') {
-      const ci = tl.findIndex(s => s.status === 'current')
-      // ISSUE-7: persist the awaiting-manager state so the "Awaiting Manager
-      // Response" UI shows and survives a refetch (was dropped by the policy PATCH).
-      void usePolicyStore.getState().setStepState(fresh.id, tl[ci]?.id, 'awaiting-manager')
-      addNotification({
-        title: 'Manager Review Required',
-        message: `${actingUser} requested manager review for step "${tl[ci]?.step}" in policy "${fresh.name}"`,
-        type: 'info' as const,
-        route: '/correspondence/regulatory-updates/policies',
-      })
-      showToast(t('policies.managerNotifiedToast', { name: fresh.owner.name }))
-
-    } else if (notePromptFor === 'manager-rejected') {
-      const currentStepName = tl.find(s => s.status === 'current')?.step ?? ''
-      const newTl = tl.map(s =>
-        s.status === 'current' ? { ...s, stepState: undefined } : s
-      )
-      const actEntry: PolicyActivityEntry = {
-        id: Date.now().toString(), timestamp: new Date().toISOString(), date: today,
-        type: 'step_denied',
-        textEn: `Manager rejected step "${currentStepName}"`,
-        textAr: `رفض المدير الخطوة "${currentStepName}"`,
-        user: actingUser, note,
-      }
-      update(fresh.id, { workflowTimeline: newTl, activityLog: [...(fresh.activityLog ?? []), actEntry] })
-
-    } else if (notePromptFor === 'initiate') {
-      // W31 (P6.3): start the FIRST existing step — never append a transient
-      // "Review Initiated" row (it had no DB row and vanished on refetch,
-      // glitching the timeline). Mirror the server: reset every step to pending
-      // (clear prior date/user/note/stepState), then put step 1 into 'current'
-      // with the step_state derived from its action type.
-      const cleared = tl.map(s => ({
-        ...s,
-        status: 'pending' as const,
-        stepState: undefined,
-        date: '',
-        user: '',
-        note: undefined,
-      }))
-      // P2 (W34): a send-email first step starts with NO stepState so the
-      // "Send Email" action shows (instead of auto-jumping to "Received Response").
-      // ISSUE-5/6/7: the first step starts with NO step_state; its action button
-      // shows first and clicking it persists the awaiting/pending state.
-      const newTl = cleared.map((s, i) =>
-        i === 0
-          ? { ...s, status: 'current' as const, stepState: undefined }
-          : s
-      )
-      const actEntry: PolicyActivityEntry = {
-        id: Date.now().toString(), timestamp: new Date().toISOString(), date: today,
-        type: 'review_initiated',
-        textEn: 'Review cycle initiated',
-        textAr: 'تم بدء دورة المراجعة',
-        user: actingUser, note,
-      }
-      const cycleId = crypto.randomUUID()
-      const cycleLabel = `Review ${new Date().toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}`
-      const oldCycleEntry = fresh.currentReviewCycleId
-        ? [{ id: fresh.currentReviewCycleId, label: fresh.currentReviewCycleLabel ?? 'Review', initiatedAt: today }]
-        : []
-      // BUG-R4-03 Fix 3: mirror the route's cadence fallback so the optimistic
-      // update uses the same date even when reviewCycleDays is 0/null.
-      function cadenceToDaysLocal(schedule: string | null | undefined): number {
-        if (!schedule) return 365
-        const s = schedule.toLowerCase()
-        if (s.includes('month')) return 30
-        if (s.includes('quarter')) return 90
-        if (s.includes('semi') || s.includes('bi-annual') || s.includes('biannual')) return 182
-        if (s.includes('year') || s.includes('annual')) return 365
-        return 365
-      }
-      const effectiveDays = (fresh.reviewCycleDays && fresh.reviewCycleDays > 0)
-        ? fresh.reviewCycleDays
-        : cadenceToDaysLocal(fresh.reviewSchedule?.cadence ?? (fresh.reviewSchedule as unknown as string))
-      const advancedNextReview = new Date(new Date().getTime() + effectiveDays * 86400000)
-        .toISOString().split('T')[0]
-      update(fresh.id, {
-        status: newTl.length > 0 ? 'under-review' : 'draft',
-        workflowTimeline: newTl,
-        activityLog: [...(fresh.activityLog ?? []), actEntry],
-        currentReviewCycleId: cycleId,
-        currentReviewCycleLabel: cycleLabel,
-        currentReviewCycleDate: new Date().toISOString(),
-        reviewCycleHistory: [...(fresh.reviewCycleHistory ?? []), ...oldCycleEntry],
-        lastReviewDate: today,
-        nextReviewDate: advancedNextReview,
-      })
-      // P1 (W29): persist initiate-review to server.
-      void advanceWorkflowStep(fresh.id, { action: 'initiate-review', note, userName: actingUser })
-      onInitiateReview()
-
-    } else if (notePromptFor === 'undo') {
-      const lastCompleted = [...tl].reverse().findIndex(s => s.status === 'completed')
-      if (lastCompleted === -1) { closePrompt(); return }
-      const realIdx = tl.length - 1 - lastCompleted
-      const revertedStepId = tl[realIdx]?.id
-      // W31 (P6.1): mirror the server undo exactly — demote the current step to
-      // pending and revert the last-completed step to current, clearing its
-      // date/user/note/stepState (the server NULLs them). Prevents a flicker
-      // between this optimistic state and the post-undo fetchById reconcile.
-      const newTl = tl.map((s, i) => {
-        if (i === realIdx) return { ...s, status: 'current' as const, date: '', user: '', note: undefined, stepState: undefined }
-        if (s.status === 'current') return { ...s, status: 'pending' as const, stepState: undefined }
-        return s
-      })
-      const actEntry: PolicyActivityEntry = {
-        id: Date.now().toString(), timestamp: new Date().toISOString(), date: today,
-        type: 'step_reverted',
-        textEn: `Step "${tl[realIdx].step}" reverted`,
-        textAr: `تم إرجاع الخطوة "${tl[realIdx].step}"`,
-        user: actingUser, note,
-      }
-      update(fresh.id, {
-        // W31 (P6.1): undo always leaves a 'current' step → stay under-review
-        // (matches the server; avoids landing on the gated draft action).
-        status: 'under-review',
-        workflowTimeline: newTl,
-        activityLog: [...(fresh.activityLog ?? []), actEntry],
-      })
-      // P1 (W29): persist undo to server.
-      void advanceWorkflowStep(fresh.id, {
-        action: 'undo',
-        stepId: revertedStepId,
-        note,
-        userName: actingUser,
-      })
-    }
-
+    const currentStep = tl.find(s => s.status === 'current')
+    const promptType = notePromptFor
+    // W37: close the note overlay immediately, then run the action SERVER-SIDE
+    // with the `workflowProcessing` spinner. No optimistic local writes — the
+    // advance route persists + LOGS every transition and advanceWorkflowStep
+    // awaits the refetch, so the UI jumps straight to server truth instead of
+    // the old "reverts then comes back" optimistic flicker.
     closePrompt()
+    if (!promptType) return
+    void (async () => {
+      if (
+        promptType === 'advance' || promptType === 'approve-step' ||
+        promptType === 'log-response' || promptType === 'manager-approved'
+      ) {
+        // Complete the current step + advance (server derives final vs intermediate).
+        await advanceWorkflowStep(fresh.id, { action: 'approve', stepId: currentStep?.id, note, userName: actingUser })
+        if (usePolicyStore.getState().byId[fresh.id]?.status === 'approved') onApprove()
+      } else if (promptType === 'deny-step' || promptType === 'manager-rejected') {
+        await advanceWorkflowStep(fresh.id, { action: 'reject', stepId: currentStep?.id, note, userName: actingUser })
+      } else if (promptType === 'notify-manager-prompt') {
+        await advanceWorkflowStep(fresh.id, { action: 'notify-manager', stepId: currentStep?.id, note, userName: actingUser })
+        addNotification({
+          title: 'Manager Review Required',
+          message: `${actingUser} requested manager review for step "${currentStep?.step ?? ''}" in policy "${fresh.name}"`,
+          type: 'info' as const,
+          route: '/correspondence/regulatory-updates/policies',
+        })
+        showToast(t('policies.managerNotifiedToast', { name: fresh.owner.name }))
+      } else if (promptType === 'initiate') {
+        await advanceWorkflowStep(fresh.id, { action: 'initiate-review', note, userName: actingUser })
+        onInitiateReview()
+      } else if (promptType === 'undo') {
+        await advanceWorkflowStep(fresh.id, { action: 'undo', note, userName: actingUser })
+      }
+    })()
   }
+
 
   return (
     <div className={`flex flex-col md:flex-row gap-6`}>
@@ -1118,13 +915,18 @@ export function PolicyDetailsContent({
                           <span className="text-[10px] text-slate-400 shrink-0">due {step.deadline}</span>
                         )}
 
-                        {/* Status badge */}
-                        <span className={cn('text-[10px] font-bold uppercase shrink-0',
-                          isCompleted ? 'text-emerald-600' :
-                          (!isArchived && step.status === 'current') ? 'text-amber-600' : 'text-slate-300'
-                        )}>
-                          {isArchived && step.status === 'current' ? formatPolicyWorkflowStepStatus(t, 'pending') : formatPolicyWorkflowStepStatus(t, step.status)}
-                        </span>
+                        {/* Status badge. W37: on an ARCHIVED policy, non-completed
+                            steps show NO status label (no "PENDING"/"CURRENT") —
+                            the whole workflow is just shown grayed/as-is; only
+                            genuinely completed steps keep their "COMPLETED" tag. */}
+                        {(!isArchived || isCompleted) && (
+                          <span className={cn('text-[10px] font-bold uppercase shrink-0',
+                            isCompleted ? 'text-emerald-600' :
+                            (step.status === 'current') ? 'text-amber-600' : 'text-slate-300'
+                          )}>
+                            {formatPolicyWorkflowStepStatus(t, step.status)}
+                          </span>
+                        )}
 
                         <Icon
                           icon={isExpanded ? 'lucide:chevron-up' : 'lucide:chevron-down'}
@@ -1218,22 +1020,12 @@ export function PolicyDetailsContent({
               <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-3">
                 {t('policies.policyActions')}
               </h3>
-              {fresh.status === 'draft' && (
-                <Button
-                  variant="outline"
-                  className="w-full"
-                  onClick={() => setNotePromptFor('submit')}
-                  disabled={!canApprovePolicy || workflowProcessing}
-                  title={canApprovePolicy ? '' : t('rbac.deniedTooltip')}
-                >
-                  {workflowProcessing && <Icon icon="lucide:loader-2" className="w-4 h-4 animate-spin" />}
-                  {!workflowProcessing && <Icon icon="lucide:send" className="w-4 h-4" />}
-                  {t('policies.submitForReview')}
-                </Button>
-              )}
-
-              {/* Under-review: step state machine */}
-              {fresh.status === 'under-review' && (() => {
+              {/* W37: unified action area for draft + under-review. A draft policy
+                  shows the CURRENT step's action (so the button matches the step
+                  icon); clicking it both STARTS the review (server moves it to
+                  under-review) and performs the action — no separate "Submit for
+                  Review" gate. */}
+              {(fresh.status === 'draft' || fresh.status === 'under-review') && (() => {
                 const currentStep = fresh.workflowTimeline.find(s => s.status === 'current')
                 if (!currentStep) return null
 
@@ -1307,6 +1099,12 @@ export function PolicyDetailsContent({
                   )
                 }
 
+                // No step_state yet → show the step's ACTION button (matches the
+                // step's header icon). Clicking it on a DRAFT policy starts the
+                // review server-side. W37: action set collapsed per product call —
+                // send-for-review / approve / vote_approve all fold into one
+                // "Submit for Approval"; review_complete / publish fold into
+                // "Complete Step". Each maps to a logged server transition.
                 const actionType = currentStep.actionType ?? 'move-to-next'
 
                 if (actionType === 'send-email') {
@@ -1325,34 +1123,23 @@ export function PolicyDetailsContent({
                     </Button>
                   )
                 }
-                // QA fix: DB-seeded 'approve' steps ("Manager Approval",
-                // "Sharia Approval", "Audit Committee Approval") become current with
-                // step_state=null. Show a "Submit for Approval" action first; clicking
-                // it persists 'pending-approval' (handleRequestApproval -> setStepState),
-                // then Approve/Deny render. Without this case they fell through to the
-                // default "Move to Next Stage" and skipped the approval flow entirely.
-                if (actionType === 'approve' || actionType === 'vote_approve') {
-                  const isVote = actionType === 'vote_approve'
+                // Approval gate (collapsed): request-approval / send-for-review /
+                // approve / vote_approve → one "Submit for Approval".
+                if (['approve', 'vote_approve', 'request-approval', 'send-for-review'].includes(actionType)) {
                   return (
                     <Button variant="outline" className="w-full" onClick={() => handleRequestApproval()} disabled={workflowProcessing}>
-                      {workflowProcessing ? <Icon icon="lucide:loader-2" className="w-4 h-4 animate-spin" /> : <Icon icon={isVote ? 'lucide:vote' : 'lucide:check-square'} className="w-4 h-4" />}
-                      {isVote ? t('policies.submitToVote') : t('policies.submitForApproval')}
+                      {workflowProcessing ? <Icon icon="lucide:loader-2" className="w-4 h-4 animate-spin" /> : <Icon icon="lucide:check-square" className="w-4 h-4" />}
+                      {t('policies.submitForApproval')}
                     </Button>
                   )
                 }
-                if (actionType === 'request-approval' || actionType === 'send-for-review') {
-                  return (
-                    <Button variant="outline" className="w-full" onClick={() => handleRequestApproval()} disabled={workflowProcessing}>
-                      {workflowProcessing ? <Icon icon="lucide:loader-2" className="w-4 h-4 animate-spin" /> : <Icon icon={actionType === 'send-for-review' ? 'lucide:send' : 'lucide:check-square'} className="w-4 h-4" />}
-                      {actionType === 'send-for-review' ? t('policies.actionSendForReview') : t('policies.actionRequestApproval')}
-                    </Button>
-                  )
-                }
-                // Default: move-to-next
+                // Completion (collapsed): review_complete / publish → "Complete
+                // Step"; plain move-to-next keeps its label. Both advance.
+                const isComplete = actionType === 'review_complete' || actionType === 'publish'
                 return (
                   <Button variant="outline" className="w-full" onClick={() => setNotePromptFor('advance')} disabled={workflowProcessing}>
-                    {workflowProcessing ? <Icon icon="lucide:loader-2" className="w-4 h-4 animate-spin" /> : <Icon icon="lucide:arrow-right" className="w-4 h-4" />}
-                    {t('policies.actionMoveToNext')}
+                    {workflowProcessing ? <Icon icon="lucide:loader-2" className="w-4 h-4 animate-spin" /> : <Icon icon={isComplete ? 'lucide:check-circle-2' : 'lucide:arrow-right'} className="w-4 h-4" />}
+                    {isComplete ? t('policies.actionCompleteStep') : t('policies.actionMoveToNext')}
                   </Button>
                 )
               })()}
@@ -1519,7 +1306,7 @@ export function PolicyDetailsContent({
                               ? 'bg-emerald-100 border-emerald-500' :
                             entry.type === 'document_removed' || entry.type === 'evidence_removed' || entry.type === 'step_reverted' || entry.type === 'workflow_undone' || entry.type === 'step_denied' || entry.type === 'manager_rejected'
                               ? 'bg-rose-100 border-rose-400' :
-                            entry.type === 'submitted_for_review' || entry.type === 'step_advanced' || entry.type === 'review_initiated'
+                            entry.type === 'submitted_for_review' || entry.type === 'step_advanced' || entry.type === 'review_initiated' || entry.type === 'manager_acknowledged'
                               ? 'bg-blue-100 border-blue-400' :
                             entry.type === 'edited' || entry.type === 'leader_changed' || entry.type === 'leader_assigned'
                               ? 'bg-amber-100 border-amber-400' :

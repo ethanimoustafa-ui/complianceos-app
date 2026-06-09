@@ -1,7 +1,13 @@
 // POST /api/policies/[policyId]/workflow/advance
 //
-// Body: { action: 'submit-for-review' | 'approve' | 'undo' | 'initiate-review',
-//         step_id?, note?, user_name? }
+// Body: { action, step_id?, note?, user_name? } where action is one of (see
+//   AdvancePolicyWorkflowSchema): 'submit-for-review' | 'approve' | 'reject' |
+//   'acknowledge' | 'undo' | 'initiate-review' | 'notify-manager' | 'send-email' |
+//   'request-approval'. Every action writes a policy_activity_log row, and the
+//   step "start" actions (notify-manager/send-email/request-approval) also move
+//   a draft policy to under-review. Each action that targets a step refuses
+//   (409) when no target/current step can be resolved, so the audit trail never
+//   records a transition that didn't actually happen.
 //
 // Mutates `policy_workflow_steps` (status + step_state) and `policies.status`
 // according to the action, writes a `policy_activity_log` entry, and
@@ -98,44 +104,60 @@ export async function POST(req: NextRequest, { params }: Params) {
       //    (P6.2: one Approve = one cursor move). Persists user_name + date so
       //    the "Approved by … · date" caption survives reload (P5).
       case 'approve': {
-        let completedSort = 0
-        let hasNext = false
-        if (input.step_id) {
-          const { data: completedStep, error: stepErr } = await supabase
+        // Resolve the step to complete (explicit, else current). This is a
+        // COMPLETION op — it must have a real target. Without one, approve would
+        // otherwise fall through and silently mark the policy 'approved' with no
+        // step actually completed, so refuse it.
+        let approveId = input.step_id ?? null
+        if (!approveId) {
+          const { data: cur, error: curErr } = await supabase
             .from('policy_workflow_steps')
-            .update({
-              status: 'completed',
-              user_name: actor,
-              date: today,
-              note: input.note ?? null,
-              step_state: null,
-            })
-            .eq('id', input.step_id)
+            .select('id')
             .eq('policy_id', policyId)
-            .select('id, sort_order')
-            .single<{ id: string; sort_order: number }>()
-          if (stepErr) throw stepErr
-          completedSort = completedStep?.sort_order ?? 0
-
-          const { data: nextRows, error: nextErr } = await supabase
-            .from('policy_workflow_steps')
-            .select('id, step, note, action_type, sort_order')
-            .eq('policy_id', policyId)
-            .eq('status', 'pending')
-            .gt('sort_order', completedSort)
+            .eq('status', 'current')
             .order('sort_order', { ascending: true })
             .limit(1)
-          if (nextErr) throw nextErr
-          const next = (nextRows ?? [])[0] as StepRow | undefined
-          if (next) {
-            hasNext = true
-            const { error: promoteErr } = await supabase
-              .from('policy_workflow_steps')
-              .update({ status: 'current', step_state: deriveStepState(next.action_type) })
-              .eq('id', next.id)
-            if (promoteErr) throw promoteErr
-            promotedStep = next
-          }
+            .maybeSingle<{ id: string }>()
+          if (curErr) throw curErr
+          approveId = cur?.id ?? null
+        }
+        if (!approveId) throw Conflict('No current step to approve')
+
+        let hasNext = false
+        const { data: completedStep, error: stepErr } = await supabase
+          .from('policy_workflow_steps')
+          .update({
+            status: 'completed',
+            user_name: actor,
+            date: today,
+            note: input.note ?? null,
+            step_state: null,
+          })
+          .eq('id', approveId)
+          .eq('policy_id', policyId)
+          .select('id, sort_order')
+          .single<{ id: string; sort_order: number }>()
+        if (stepErr) throw stepErr
+        const completedSort = completedStep?.sort_order ?? 0
+
+        const { data: nextRows, error: nextErr } = await supabase
+          .from('policy_workflow_steps')
+          .select('id, step, note, action_type, sort_order')
+          .eq('policy_id', policyId)
+          .eq('status', 'pending')
+          .gt('sort_order', completedSort)
+          .order('sort_order', { ascending: true })
+          .limit(1)
+        if (nextErr) throw nextErr
+        const next = (nextRows ?? [])[0] as StepRow | undefined
+        if (next) {
+          hasNext = true
+          const { error: promoteErr } = await supabase
+            .from('policy_workflow_steps')
+            .update({ status: 'current', step_state: deriveStepState(next.action_type) })
+            .eq('id', next.id)
+          if (promoteErr) throw promoteErr
+          promotedStep = next
         }
         nextStatus = hasNext ? 'under-review' : 'approved'
         activityType = hasNext ? 'approval_step_committed' : 'workflow_approved'
@@ -144,6 +166,124 @@ export async function POST(req: NextRequest, { params }: Params) {
           ? 'تمت الموافقة على خطوة سير العمل'
           : 'تمت الموافقة على السياسة — اكتملت جميع الخطوات'
         runRecompute = true
+        break
+      }
+
+      // ── Reject / deny the CURRENT step: clear its step_state back to null so
+      //    the step's action button (Submit for Approval / Notify Manager / …)
+      //    renders again, and log the denial. The step is NOT completed and the
+      //    cursor does NOT move — the user re-runs the action. Persisting this
+      //    here is the fix for the prior "deny resets / stays stale" bug: the
+      //    client used to only call the policy PATCH (which drops nested
+      //    workflowTimeline edits), so the DB kept step_state='pending-approval'
+      //    /'awaiting-manager' and the stale state snapped back on the next fetch.
+      case 'reject': {
+        // Resolve the target step. The client normally passes step_id, but fall
+        // back to the policy's 'current' step (mirrors the undo case) so the
+        // denial is ALWAYS persisted — if step_id were missing we'd otherwise
+        // skip the DB write and the stale step_state would snap back on the next
+        // fetch, reproducing the original "reject resets / breaks" bug.
+        let rejectId = input.step_id ?? null
+        if (!rejectId) {
+          const { data: cur, error: curErr } = await supabase
+            .from('policy_workflow_steps')
+            .select('id')
+            .eq('policy_id', policyId)
+            .eq('status', 'current')
+            .order('sort_order', { ascending: true })
+            .limit(1)
+            .maybeSingle<{ id: string }>()
+          if (curErr) throw curErr
+          rejectId = cur?.id ?? null
+        }
+        // No target step → refuse rather than write a false "rejected" audit row.
+        if (!rejectId) throw Conflict('No step to reject')
+        // Derive the flavour (manager-reject vs plain deny) from the step's
+        // CURRENT step_state BEFORE we null it, so the activity copy is accurate.
+        const { data: stepRow, error: readErr } = await supabase
+          .from('policy_workflow_steps')
+          .select('step_state')
+          .eq('id', rejectId)
+          .eq('policy_id', policyId)
+          .maybeSingle<{ step_state: string | null }>()
+        if (readErr) throw readErr
+        const isManagerReject = stepRow?.step_state === 'awaiting-manager'
+
+        const { error: clearErr } = await supabase
+          .from('policy_workflow_steps')
+          .update({ step_state: null })
+          .eq('id', rejectId)
+          .eq('policy_id', policyId)
+        if (clearErr) throw clearErr
+        nextStatus = 'under-review'
+        activityType = isManagerReject ? 'manager_rejected' : 'step_denied'
+        textEn = isManagerReject ? 'Manager rejected the step' : 'Step denied'
+        textAr = isManagerReject ? 'رفض المدير الخطوة' : 'تم رفض الخطوة'
+        break
+      }
+
+      // ── Step "start" actions (notify-manager / send-email / request-approval):
+      //    set the CURRENT step's awaiting/pending state, move the policy to
+      //    under-review (so a DRAFT policy's first action both starts the review
+      //    and performs the step — the one-click model), and LOG it. Replaces the
+      //    old client-only setStepState, which wrote NO activity row.
+      case 'notify-manager':
+      case 'send-email':
+      case 'request-approval': {
+        const stateByAction: Record<string, string> = {
+          'notify-manager': 'awaiting-manager',
+          'send-email': 'awaiting-response',
+          'request-approval': 'pending-approval',
+        }
+        // Resolve the target step (explicit step_id, else the current step).
+        let stepId = input.step_id ?? null
+        if (!stepId) {
+          const { data: cur, error: curErr } = await supabase
+            .from('policy_workflow_steps')
+            .select('id')
+            .eq('policy_id', policyId)
+            .eq('status', 'current')
+            .order('sort_order', { ascending: true })
+            .limit(1)
+            .maybeSingle<{ id: string }>()
+          if (curErr) throw curErr
+          stepId = cur?.id ?? null
+        }
+        // No target step → refuse, so we never transition+log without actually
+        // setting the step's awaiting/pending state.
+        if (!stepId) throw Conflict('No current step to act on')
+        const { error } = await supabase
+          .from('policy_workflow_steps')
+          .update({ step_state: stateByAction[input.action] })
+          .eq('id', stepId)
+          .eq('policy_id', policyId)
+        if (error) throw error
+        nextStatus = 'under-review'
+        activityType =
+          input.action === 'notify-manager' ? 'manager_notified'
+          : input.action === 'send-email' ? 'email_sent'
+          : 'submitted_for_review'
+        textEn =
+          input.action === 'notify-manager' ? 'Manager notified for review'
+          : input.action === 'send-email' ? 'Email notification sent'
+          : 'Submitted for approval'
+        textAr =
+          input.action === 'notify-manager' ? 'تم إخطار المدير للمراجعة'
+          : input.action === 'send-email' ? 'تم إرسال إشعار بريدي'
+          : 'تم الإرسال للموافقة'
+        break
+      }
+
+      // ── Acknowledge: the manager confirms they saw the notification. Pure
+      //    audit entry — no step/policy state change (the step stays in its
+      //    awaiting-manager state). Persisted here because the client used to
+      //    only write a local activity entry via update(), which the policy
+      //    PATCH dropped — so the acknowledgement never stuck and rolled back.
+      case 'acknowledge': {
+        nextStatus = 'under-review'
+        activityType = 'manager_acknowledged'
+        textEn = 'Manager acknowledged the notification'
+        textAr = 'أقرّ المدير باستلام الإشعار'
         break
       }
 

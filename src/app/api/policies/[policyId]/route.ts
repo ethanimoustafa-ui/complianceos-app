@@ -260,16 +260,22 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         : Promise.resolve(),
     ])
 
-    // GAP-19 / W18 — append a `policy_versions` row ONLY when the `version`
-    // field itself changed (user explicitly bumped the version number, e.g.
-    // v1.0 → v2.0). Automated status/workflow changes that touch other fields
-    // (status, owner, etc.) must NOT pollute Version History — they are already
-    // captured in the Activity timeline.
-    // BUG-P-R2-03: guard on `version` field change specifically, not just any
-    // field change. The previous `if (fieldsUpdatedBody)` wrote a version row
-    // for every PATCH including status flips driven by workflow/backend logic.
-    const versionFieldChanged = changedKeys.includes('version')
-    if (versionFieldChanged && fieldsUpdatedBody) {
+    // W37 — append a `policy_versions` row when a user EDITS policy CONTENT
+    // (name, description, category, version, approval tier, owner, schedule,
+    // frameworks, affected departments). Previously this fired only when the
+    // `version` number changed, so editing any other field via the Edit modal
+    // showed an optimistic version-history row that the reconcile then dropped
+    // ("pops up then rolls back"). We still EXCLUDE automated/workflow churn —
+    // a PATCH that only flips `status` or rotates the review-cycle fields does
+    // NOT create a version row (those live in the Activity timeline, per
+    // BUG-P-R2-03's original intent).
+    const VERSIONABLE_FIELDS = new Set([
+      'name', 'description', 'category', 'version', 'approval_tier',
+      'owner_id', 'owner_name', 'owner_department', 'business_owner_department_id',
+      'review_schedule', 'framework_ids', 'affected_departments',
+    ])
+    const hasVersionableEdit = changedKeys.some((k) => VERSIONABLE_FIELDS.has(k))
+    if (hasVersionableEdit && fieldsUpdatedBody) {
       const versionLabel = (after.version as string | null) ?? 'v?'
       await insertPolicyVersion(
         supabase,

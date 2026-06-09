@@ -12,6 +12,8 @@ export interface ClosureStatusProps {
   closureReview: ClosureReview | null | undefined
   canRequestClosure: boolean
   canReviewClosure: boolean
+  /** Gate: closure can only be requested once the remediation plan is approved. */
+  remediationApproved: boolean
   onRequestClosure: (notes?: string) => Promise<void> | void
   onReviewClosure: (approved: boolean, notes?: string) => Promise<void> | void
   onReopen?: () => Promise<void> | void
@@ -24,6 +26,7 @@ export const ClosureStatus = memo(function ClosureStatus({
   closureReview,
   canRequestClosure,
   canReviewClosure,
+  remediationApproved,
   onRequestClosure,
   onReviewClosure,
   onReopen,
@@ -37,8 +40,17 @@ export const ClosureStatus = memo(function ClosureStatus({
   const [reviewingClosure, setReviewingClosure] = useState<'approve' | 'reject' | null>(null)
   const [reopening, setReopening] = useState(false)
 
-  // BUG-O08 fix: show Request Closure for open AND in_progress
-  const showRequestButton = (status === 'open' || status === 'in_progress') && canRequestClosure && !closureRequest
+  // BUG-O08 fix: show Request Closure for open AND in_progress.
+  // W37: closure is gated on an APPROVED remediation plan — the work must be
+  // verified before it can be closed. (The leader is no longer blocked from
+  // requesting; the reviewer of the closure is still a separate gate below.)
+  // 'remediated' (plan approved, awaiting closure) is the primary state from
+  // which closure is requested.
+  const isActive = status === 'open' || status === 'in_progress' || status === 'remediated'
+  const showRequestButton = isActive && canRequestClosure && !closureRequest && remediationApproved
+  // Explain WHY the button is hidden when the plan isn't approved yet.
+  const showNeedsApprovedPlanHint =
+    isActive && canRequestClosure && !closureRequest && !remediationApproved
 
   const showReviewSection = status === 'resolved' && closureRequest && canReviewClosure
   const showPendingInfo = status === 'resolved' && closureRequest
@@ -91,6 +103,13 @@ export const ClosureStatus = memo(function ClosureStatus({
           <Icon icon="lucide:check-circle" className="text-lg" />
           {t('observations.detail.requestClosure')}
         </button>
+      )}
+
+      {showNeedsApprovedPlanHint && (
+        <div className="flex items-start gap-2 px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-lg">
+          <Icon icon="lucide:lock" className="text-slate-400 text-sm mt-0.5 shrink-0" />
+          <p className="text-xs text-slate-500">{t('observations.detail.closureNeedsApprovedPlan')}</p>
+        </div>
       )}
 
       {showRequestForm && (
@@ -171,7 +190,7 @@ export const ClosureStatus = memo(function ClosureStatus({
           {onReopen && (
             <LoadingButton variant="primary" onClick={handleReopen} loading={reopening} className="w-full h-8 text-xs bg-slate-600 hover:bg-slate-700">
               <Icon icon="lucide:rotate-ccw" className="text-sm mr-1" />
-              Reopen Observation
+              {t('observations.detail.reopenObservation')}
             </LoadingButton>
           )}
         </div>
@@ -180,7 +199,7 @@ export const ClosureStatus = memo(function ClosureStatus({
       {status === 'closed' && !showClosedInfo && onReopen && (
         <div className="space-y-3">
           <div className="flex items-center gap-2">
-            <span className="px-2 py-1 bg-slate-500 text-white text-[10px] font-black rounded uppercase">Closed</span>
+            <span className="px-2 py-1 bg-slate-500 text-white text-[10px] font-black rounded uppercase">{t('observations.detail.closed')}</span>
           </div>
           <LoadingButton variant="primary" onClick={handleReopen} loading={reopening} className="w-full h-8 text-xs bg-slate-600 hover:bg-slate-700">
             <Icon icon="lucide:rotate-ccw" className="text-sm mr-1" />

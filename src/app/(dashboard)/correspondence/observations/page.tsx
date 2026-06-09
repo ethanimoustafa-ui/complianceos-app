@@ -40,6 +40,7 @@ export default function ObservationsPage() {
     update: updateObservation,
     delete: deleteObservation,
     removeDocument,
+    uploadDocument: uploadObservationDocument,
     setSelected: setStoreSelected,
   } = useObservationStore()
 
@@ -86,11 +87,11 @@ export default function ObservationsPage() {
   // Filter observations
   const filteredObservations = useMemo(() => {
     return observations.filter((obs) => {
-      // O7: archive filter — default hides archived rows; 'archived' shows only archived.
-      const matchesArchive =
-        archiveFilter === 'archived'
-          ? Boolean(obs.archivedAt)
-          : !obs.archivedAt
+      // O7 / W37: archive filter. A row is "archived" when it has an archived_at
+      // timestamp OR is Closed — closed (verified) observations belong in the
+      // Archive, not the active list. Default hides them; 'archived' shows only them.
+      const isArchivedRow = Boolean(obs.archivedAt) || obs.status === 'closed'
+      const matchesArchive = archiveFilter === 'archived' ? isArchivedRow : !isArchivedRow
 
       // Search filter (title, subtitle, reference)
       const matchesSearch =
@@ -142,7 +143,10 @@ export default function ObservationsPage() {
   // Handle add observation - calls Zustand store
   const handleAddObservation = async (data: ObservationFormData) => {
     try {
-      await createObservation({
+      // W37: don't register metadata-only document rows at create time (they
+      // produced non-viewable docs). Create the observation first, then upload
+      // the real attachment bytes via uploadDocument so they're openable.
+      const created = await createObservation({
         title: data.title,
         subTitle: data.subTitle,
         description: data.description,
@@ -153,12 +157,7 @@ export default function ObservationsPage() {
         department: data.department || 'Compliance',
         reference: data.reference || '',
         assignees: data.assignees && data.assignees.length > 0 ? data.assignees : undefined,
-        // Map uploaded files to document format
-        documents: data.attachments?.map(file => ({
-          id: file.id || crypto.randomUUID(),
-          name: file.name,
-          type: file.type.includes('pdf') ? 'pdf' as const : file.type.includes('image') ? 'image' as const : 'doc' as const,
-        })) || [],
+        documents: [],
         checklist: [],
         updates: [],
         timeline: [
@@ -178,6 +177,21 @@ export default function ObservationsPage() {
         ],
         remediationSubmissionDueDate: data.remediationSubmissionDueDate,
       }, user || undefined) // Pass user as creator
+
+      // Upload the real attachment bytes now that the observation exists.
+      if (user && data.attachments && data.attachments.length > 0) {
+        for (const att of data.attachments) {
+          if (att.file) {
+            try {
+              await uploadObservationDocument(created.reference || created.id, att.file, user, false)
+            } catch (uploadErr) {
+              // Non-fatal: the observation was created; the document can be
+              // re-uploaded from the detail view.
+              console.error('Failed to upload create-time attachment:', uploadErr)
+            }
+          }
+        }
+      }
       setIsAddModalOpen(false)
     } catch (error) {
       console.error('Failed to create observation:', error)

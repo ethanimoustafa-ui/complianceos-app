@@ -30,7 +30,7 @@ interface ObservationTableProps {
 // Severity order for sorting
 const severityOrder = { critical: 0, high: 1, medium: 2, low: 3 }
 // Status order for sorting
-const statusOrder = { open: 0, in_progress: 1, resolved: 2, closed: 3 }
+const statusOrder = { open: 0, in_progress: 1, remediated: 2, resolved: 3, closed: 4 }
 
 export const ObservationTable = memo(function ObservationTable({
   observations,

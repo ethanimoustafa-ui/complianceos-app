@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef } from 'react'
 import { Icon } from '@iconify/react'
 import { Modal } from '@/components/ui/modal'
 import { useTranslation } from '@/i18n'
@@ -9,7 +9,7 @@ import { formatBytes } from '@/lib/format'
 interface FileUploadModalProps {
   isOpen: boolean
   onClose: () => void
-  onConfirm: (files: File[], addToRemediationPlan: boolean) => void
+  onConfirm: (files: File[]) => Promise<void> | void
 }
 
 export function FileUploadModal({
@@ -19,21 +19,12 @@ export function FileUploadModal({
 }: FileUploadModalProps) {
   const { t, isRTL } = useTranslation()
   const [selectedFiles, setSelectedFiles] = useState<File[]>([])
-  const [addToRemediationPlan, setAddToRemediationPlan] = useState(false)
   const [isDragging, setIsDragging] = useState(false)
   // O1: track upload in-flight state to show spinner
   const [isUploading, setIsUploading] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
-
-  // Reset state when modal opens
-  useEffect(() => {
-    if (isOpen) {
-      setSelectedFiles([])
-      setAddToRemediationPlan(false)
-      setIsDragging(false)
-      setIsUploading(false)
-    }
-  }, [isOpen])
+  // The parent mounts this modal only while open, so state starts fresh on each
+  // open (a new mount) — no reset effect needed.
 
   const handleFilesSelect = (files: FileList | File[]) => {
     const newFiles = Array.from(files)
@@ -74,13 +65,9 @@ export function FileUploadModal({
     if (selectedFiles.length === 0) return
     setIsUploading(true)
     try {
-      await (onConfirm as (files: File[], addToRemediationPlan: boolean) => Promise<void> | void)(
-        selectedFiles,
-        addToRemediationPlan,
-      )
+      await onConfirm(selectedFiles)
       // Reset state after successful upload
       setSelectedFiles([])
-      setAddToRemediationPlan(false)
     } finally {
       setIsUploading(false)
     }
@@ -88,7 +75,6 @@ export function FileUploadModal({
 
   const handleClose = () => {
     setSelectedFiles([])
-    setAddToRemediationPlan(false)
     onClose()
   }
 
@@ -175,24 +161,6 @@ export function FileUploadModal({
             ))}
           </div>
         )}
-
-        {/* Add to Remediation Plan Checkbox - Always show */}
-        <label className={`flex items-center gap-3 mt-4 p-3 bg-amber-50 border border-amber-200 rounded-lg cursor-pointer hover:bg-amber-100 transition-colors`}>
-          <input
-            type="checkbox"
-            checked={addToRemediationPlan}
-            onChange={(e) => setAddToRemediationPlan(e.target.checked)}
-            className="w-4 h-4 text-amber-600 border-amber-300 rounded focus:ring-amber-500"
-          />
-          <div className={isRTL ? 'text-right' : ''}>
-            <p className="text-sm font-medium text-amber-800">
-              {t('observations.detail.addToRemediationPlan')}
-            </p>
-            <p className="text-xs text-amber-600">
-              {t('observations.detail.addToRemediationPlanDescription')}
-            </p>
-          </div>
-        </label>
 
         {/* Actions */}
         <div className={`flex gap-3 mt-6`}>
