@@ -171,17 +171,19 @@ export function EditableSelect({
   useLayoutEffect(() => {
     if (!open || !rootRef.current) return
     const rect = rootRef.current.getBoundingClientRect()
-    const scrollY = window.scrollY || document.documentElement.scrollTop
-    const scrollX = window.scrollX || document.documentElement.scrollLeft
     const viewportHeight = window.innerHeight
     const spaceBelow = viewportHeight - rect.bottom
     const flipUp = spaceBelow < DROPDOWN_MAX_HEIGHT && rect.top > DROPDOWN_MAX_HEIGHT
+    // W38: position FIXED (viewport coords), not absolute. The app scrolls in
+    // inner containers and modals lock body overflow, so `position:absolute`
+    // offsets were measured against the full body box — the flip-up branch in
+    // particular rendered the dropdown detached at the top of the screen.
     setDropdownStyle({
-      position: 'absolute',
+      position: 'fixed',
       ...(flipUp
-        ? { bottom: viewportHeight - rect.top + scrollY + 4, top: 'auto' }
-        : { top: rect.bottom + scrollY + 4, bottom: 'auto' }),
-      left: rect.left + scrollX,
+        ? { bottom: viewportHeight - rect.top + 4, top: 'auto' }
+        : { top: rect.bottom + 4, bottom: 'auto' }),
+      left: rect.left,
       width: Math.max(rect.width, 224), // min-w-[14rem] = 224px
       zIndex: 9999,
     })

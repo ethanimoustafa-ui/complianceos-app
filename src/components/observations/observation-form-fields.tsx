@@ -230,6 +230,15 @@ export const AssigneeField = memo(function AssigneeField({
   required?: boolean
 }) {
   const { t } = useTranslation()
+  const allDepartments = useDepartmentStore((s) => s.departments)
+
+  // W38: member.department carries the raw department UUID from profiles —
+  // resolve it to the localized name so options don't read "(d07fc34b-…)".
+  const deptLabel = (val?: string | null): string => {
+    if (!val) return ''
+    const d = allDepartments.find((x) => x.id === val || x.key === val || x.name === val)
+    return d ? (isRTL && d.nameAr ? d.nameAr : d.name) : val
+  }
 
   const handleAdd = (memberId: string) => {
     const member = availableMembers.find(m => m.id === memberId)
@@ -281,10 +290,13 @@ export const AssigneeField = memo(function AssigneeField({
         locked
         value={null}
         onChange={(id) => handleAdd(id)}
-        items={filteredMembers.map((m) => ({
-          id: m.id,
-          label: `${m.name} - ${m.role} (${m.department})`,
-        }))}
+        items={filteredMembers.map((m) => {
+          const dept = deptLabel(m.department)
+          return {
+            id: m.id,
+            label: dept ? `${m.name} - ${m.role} (${dept})` : `${m.name} - ${m.role}`,
+          }
+        })}
         placeholder={t('observations.form.addAssignee')}
         isRTL={isRTL}
       />

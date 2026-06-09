@@ -3,7 +3,6 @@
 import { useState, useEffect, memo } from 'react'
 import { Icon } from '@iconify/react'
 import { Modal } from '@/components/ui/modal'
-import { Skeleton } from '@/components/ui/skeleton'
 import { Observation } from './observation-types'
 import { useObservationStore } from '@/stores/observation-store'
 import { useAuthStore } from '@/stores/auth-store'
@@ -417,21 +416,11 @@ export const ObservationDetailModal = memo(function ObservationDetailModal({
             </div>
           </div>
 
-          {/* W27.3-α: skeleton while detail fetch is in-flight — but ONLY on the
-              first load. If this observation's detail is already cached (a prior
-              open), a background refetch must not flash the skeleton. */}
-          {isHydrating && !detailLoaded && (
-            <div className="space-y-4 mb-6" data-skeleton="true" role="status" aria-busy="true" aria-live="polite">
-              <Skeleton className="h-3 w-1/3" />
-              <Skeleton className="h-4 w-full" />
-              <Skeleton className="h-4 w-5/6" />
-              <Skeleton className="h-4 w-2/3" />
-              <Skeleton className="h-3 w-1/4 mt-4" />
-              <Skeleton className="h-5 w-full" />
-              <Skeleton className="h-5 w-full" />
-            </div>
-          )}
-
+          {/* W38: the generic top-of-modal skeleton stack was removed — the
+              header + Finding Overview render instantly from list-row data, so
+              it stacked placeholder bars ON TOP of already-visible content.
+              Deferred sections (comments, documents, remediation, closure)
+              carry their own isLoaded-gated skeletons. */}
           <div className="space-y-8">
             {/* Finding Overview */}
             <section>
