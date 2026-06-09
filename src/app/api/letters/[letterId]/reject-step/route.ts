@@ -1,6 +1,8 @@
 // POST /api/letters/[letterId]/reject-step
 //   body: { step_index: 1|2|3, reason: string }
-// Rejects the current step → letter status `draft` (author revises + re-submits).
+// Rejects the current step → letter status `rejected` (W40 product rule: a
+// rejected letter stays visibly rejected WITH its reason, remains editable,
+// and can be resubmitted — submit-for-approval resets the chain fresh).
 //
 // Wave-21: assertUuid + dual-store timeline write.
 
@@ -64,9 +66,11 @@ export async function POST(req: NextRequest, { params }: Params) {
       .lt('step', body.step_index)
     if (resetErr) throw resetErr
 
+    // W40: land in 'rejected' (not silent 'draft') so the verdict + reason are
+    // visible on the row and the detail banner until the author resubmits.
     const { data, error } = await supabase
       .from('letters')
-      .update({ status: 'draft' })
+      .update({ status: 'rejected', rejection_reason: body.reason })
       .eq('id', letterId)
       .select(LETTER_LIST_COLUMNS)
       .single()

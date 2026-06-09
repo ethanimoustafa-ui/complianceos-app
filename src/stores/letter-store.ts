@@ -91,6 +91,7 @@ interface LetterApiRow {
   response_deadline: string | null
   response_received_date: string | null
   response_note?: string | null
+  rejection_reason?: string | null
   recipient_name?: string | null
   recipient_org?: string | null
   recipient_city?: string | null
@@ -250,6 +251,7 @@ function mapRow(row: LetterApiRow, previous?: Letter): Letter {
     responseReceivedDate:
       row.response_received_date ?? previous?.responseReceivedDate ?? undefined,
     responseNote: row.response_note !== undefined ? row.response_note : previous?.responseNote,
+    rejectionReason: row.rejection_reason !== undefined ? row.rejection_reason : previous?.rejectionReason,
     recipientName: row.recipient_name ?? previous?.recipientName ?? undefined,
     recipientOrg: row.recipient_org ?? previous?.recipientOrg ?? undefined,
     recipientCity: row.recipient_city ?? previous?.recipientCity ?? undefined,
@@ -384,6 +386,8 @@ interface LetterState {
   delete: (id: string) => Promise<void>
 
   uploadAttachment: (letterId: string, file: File) => Promise<Attachment>
+  // W40: persisted attachment removal (DELETE metadata + storage server-side).
+  removeAttachment: (letterId: string, attachmentId: string) => Promise<void>
 
   submitForApproval: (id: string) => Promise<void>
   approve: (id: string, comment?: string) => Promise<void>
@@ -641,16 +645,27 @@ export const useLetterStore = create<LetterState>()((set, get) => ({
         })
       if (uploadError) throw uploadError
 
-      // 2) Register the metadata row via the Route Handler.
-      const row = await api.post<AttachmentApiRow>(
-        `/letters/${letterId}/attachments`,
-        {
-          name: file.name,
-          storage_path: storagePath,
-          type: file.type || undefined,
-          size: file.size,
-        },
-      )
+      // 2) Register the metadata row via the Route Handler. W40: if this fails
+      // after the bytes landed, best-effort remove the orphaned storage object
+      // so the bucket doesn't accumulate unreachable files.
+      let row: AttachmentApiRow
+      try {
+        row = await api.post<AttachmentApiRow>(
+          `/letters/${letterId}/attachments`,
+          {
+            name: file.name,
+            storage_path: storagePath,
+            type: file.type || undefined,
+            size: file.size,
+          },
+        )
+      } catch (metaErr) {
+        void supabaseClient.storage
+          .from(LETTER_ATTACHMENTS_BUCKET)
+          .remove([storagePath])
+          .catch(() => {})
+        throw metaErr
+      }
       const attachment = mapAttachment(row)
 
       // 3) Reflect the new attachment in store state.
@@ -672,6 +687,39 @@ export const useLetterStore = create<LetterState>()((set, get) => ({
       return attachment
     } catch (e) {
       set({ error: errorMessage(e, 'Failed to upload attachment'), isMutating: false })
+      throw e
+    }
+  },
+
+  // W40: the detail panel's attachment "x" used to filter the array via a
+  // local-only store.update — the letter_attachments row and the storage
+  // object survived, so the file reappeared on reload. This persists the
+  // removal with an optimistic drop + rollback.
+  removeAttachment: async (letterId, attachmentId) => {
+    const snapshot = get().byId[letterId]
+    if (!snapshot) return
+    const apply = (attachments: Letter['attachments']) =>
+      set((state) => {
+        const existing = state.byId[letterId]
+        if (!existing) return {}
+        const updated: Letter = { ...existing, attachments }
+        return {
+          letters: state.letters.map((l) => (l.id === letterId ? updated : l)),
+          byId: { ...state.byId, [letterId]: updated },
+          selectedLetter:
+            state.selectedLetter?.id === letterId ? updated : state.selectedLetter,
+        }
+      })
+
+    const previous = snapshot.attachments
+    apply(previous.filter((a) => a.id !== attachmentId))
+    set({ isMutating: true, error: null })
+    try {
+      await api.delete(`/letters/${letterId}/attachments/${attachmentId}`)
+      set({ isMutating: false })
+    } catch (e) {
+      apply(previous)
+      set({ error: errorMessage(e, 'Failed to remove attachment'), isMutating: false })
       throw e
     }
   },

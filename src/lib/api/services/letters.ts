@@ -28,11 +28,13 @@ import { renderBilingual } from '@/lib/i18n/server'
 // temporarily clear the signature when they win the byId merge race ahead of
 // the detail-fetch. signature_image_url is a stored https URL (~50 chars) so
 // including it in the list payload is acceptable.
+// W40: rejection_reason included so the rejected-state banner + row tooltip
+// can render the reviewer's reason without a detail fetch.
 export const LETTER_LIST_COLUMNS =
-  'id, reference, authority, type, sub_category, sama_department, subject, subject_ar, body, status, priority, created_by, creator:profiles!sama_letters_created_by_fkey(name), assigned_to, sent_date, response_deadline, response_received_date, response_note, recipient_name, recipient_org, framework_ids, signature_image_url, created_at, updated_at'
+  'id, reference, authority, type, sub_category, sama_department, subject, subject_ar, body, status, priority, created_by, creator:profiles!sama_letters_created_by_fkey(name), assigned_to, sent_date, response_deadline, response_received_date, response_note, rejection_reason, recipient_name, recipient_org, framework_ids, signature_image_url, created_at, updated_at'
 
 export const LETTER_DETAIL_COLUMNS =
-  'id, reference, authority, type, sub_category, sama_department, subject, subject_ar, body, body_ar, status, priority, created_by, creator:profiles!sama_letters_created_by_fkey(name), assigned_to, sent_date, response_deadline, response_received_date, response_note, recipient_name, recipient_org, recipient_city, recipient_name_ar, recipient_org_ar, recipient_city_ar, signer_name, signer_title, signer_name_ar, signer_title_ar, signature_image_url, framework_ids, placeholder_defs, placeholder_values, created_at, updated_at'
+  'id, reference, authority, type, sub_category, sama_department, subject, subject_ar, body, body_ar, status, priority, created_by, creator:profiles!sama_letters_created_by_fkey(name), assigned_to, sent_date, response_deadline, response_received_date, response_note, rejection_reason, recipient_name, recipient_org, recipient_city, recipient_name_ar, recipient_org_ar, recipient_city_ar, signer_name, signer_title, signer_name_ar, signer_title_ar, signature_image_url, framework_ids, placeholder_defs, placeholder_values, created_at, updated_at'
 
 export const LETTER_TEMPLATE_COLUMNS =
   'id, name, type, icon, color, description, status, default_subject_en, default_subject_ar, default_body_en, default_body_ar, default_signer_name, default_signer_title, default_signer_name_ar, default_signer_title_ar, default_signature_image_url, default_sama_department, default_recipient_name, default_recipient_org, default_recipient_city, default_recipient_name_ar, default_recipient_org_ar, default_recipient_city_ar, placeholder_defs, usage_count, created_at, updated_at'

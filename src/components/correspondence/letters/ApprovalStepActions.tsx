@@ -21,6 +21,9 @@ export function ApprovalStepActions({
   const isMutating = useLetterStore((s) => s.isMutating)
   const [notes, setNotes] = useState('')
   const [showNotes, setShowNotes] = useState(false)
+  // W40: rejecting REQUIRES a reason (spec story 6) — first click without one
+  // opens the notes box with a hint instead of firing an empty rejection.
+  const [rejectNeedsReason, setRejectNeedsReason] = useState(false)
   const [busy, setBusy] = useState<'approve' | 'reject' | null>(null)
   const canApprove = useCan('Approve SAMA Letters')
 
@@ -40,6 +43,12 @@ export function ApprovalStepActions({
   }
 
   const handleReject = async () => {
+    if (!notes.trim()) {
+      setShowNotes(true)
+      setRejectNeedsReason(true)
+      return
+    }
+    setRejectNeedsReason(false)
     setBusy('reject')
     try {
       await store.rejectStep(letterId, step, notes)
@@ -55,13 +64,20 @@ export function ApprovalStepActions({
   return (
     <div className={`ml-9 space-y-2 ${isRTL ? 'mr-9 ml-0' : ''}`}>
       {showNotes && (
-        <textarea
-          value={notes}
-          onChange={(e) => setNotes(e.target.value)}
-          placeholder={t('letters.addNotes')}
-          rows={2}
-          className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-xs focus:ring-2 focus:ring-emerald-500 outline-none resize-none"
-        />
+        <>
+          <textarea
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            placeholder={t('letters.addNotes')}
+            rows={2}
+            className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-xs focus:ring-2 focus:ring-emerald-500 outline-none resize-none"
+          />
+          {rejectNeedsReason && !notes.trim() && (
+            <p className="text-[10px] text-rose-600 font-medium">
+              {t('letters.rejectReasonRequired')}
+            </p>
+          )}
+        </>
       )}
       <div className={`flex gap-2`}>
         <button

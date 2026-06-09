@@ -88,6 +88,11 @@ export default function LettersPage() {
   const [confirmDeleteLetterId, setConfirmDeleteLetterId] = useState<string | null>(null)
   const [submitBusy, setSubmitBusy] = useState(false)
   const [approveBusy, setApproveBusy] = useState(false)
+  // W40: Reject (required reason) — lands in 'rejected', which stays revisable
+  // and resubmittable instead of dead-ending the letter.
+  const [rejectBusy, setRejectBusy] = useState(false)
+  const [rejectModalLetterId, setRejectModalLetterId] = useState<string | null>(null)
+  const [rejectReasonText, setRejectReasonText] = useState('')
   // L4: spinner state for the Print/Download PDF button (slow job-queue pipeline).
   const [pdfBusy, setPdfBusy] = useState(false)
   const [sendBusy, setSendBusy] = useState(false)
@@ -369,7 +374,9 @@ export default function LettersPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedLetter?.id])
 
-  const isDraft = selectedLetter?.status === 'draft'
+  // W40: a REJECTED letter is revisable (same editing surface as draft) so the
+  // author can address the rejection reason and resubmit.
+  const isDraft = selectedLetter?.status === 'draft' || selectedLetter?.status === 'rejected'
   const saveField = (patch: Partial<Letter>) => {
     if (selectedLetter) store.update(selectedLetter.id, patch)
   }
@@ -909,6 +916,7 @@ export default function LettersPage() {
       case 'pending-approval': return { color: 'text-amber-600', dotColor: 'bg-amber-600' }
       case 'response-received': return { color: 'text-emerald-600', dotColor: 'bg-emerald-600' }
       case 'overdue': return { color: 'text-rose-600', dotColor: 'bg-rose-600' }
+      case 'rejected': return { color: 'text-rose-600', dotColor: 'bg-rose-600' }
       default: return { color: 'text-slate-600', dotColor: 'bg-slate-600' }
     }
   }
@@ -1467,6 +1475,9 @@ export default function LettersPage() {
                       <th className={`px-6 py-4`}><LetterSortHeader label={t('common.type')} col="type" sort={sort} onSort={handleLetterSort} onClear={() => setSort(null)} /></th>
                       <th className={`px-6 py-4`}><LetterSortHeader label={t('letters.subject')} col="subject" sort={sort} onSort={handleLetterSort} onClear={() => setSort(null)} /></th>
                       <th className={`px-6 py-4`}><LetterSortHeader label={t('common.status')} col="status" sort={sort} onSort={handleLetterSort} onClear={() => setSort(null)} /></th>
+                      {/* W40 (story 2): sent + response-due surfaced on the row. */}
+                      <th className={`px-6 py-4`}>{t('letters.tableSent')}</th>
+                      <th className={`px-6 py-4`}>{t('letters.tableResponseDue')}</th>
                       <th className={`px-6 py-4`}><LetterSortHeader label={t('letters.lastModified')} col="updatedAt" sort={sort} onSort={handleLetterSort} onClear={() => setSort(null)} /></th>
                       <th className={`px-6 py-4 ${isRTL ? 'text-left' : 'text-right'}`}>{t('common.actions')}</th>
                     </tr>
@@ -1517,6 +1528,25 @@ export default function LettersPage() {
                               {getStatusLabel(letter.status)}
                             </span>
                           </td>
+                          <td className="px-6 py-4 text-sm text-slate-400 whitespace-nowrap">
+                            {letter.sentDate ? formatDate(letter.sentDate) : '—'}
+                          </td>
+                          <td className="px-6 py-4 text-sm whitespace-nowrap">
+                            {letter.responseDeadline ? (
+                              <span
+                                className={
+                                  (letter.status === 'sent' || letter.status === 'overdue') &&
+                                  new Date(letter.responseDeadline).getTime() < Date.now()
+                                    ? 'text-rose-600 font-bold'
+                                    : 'text-slate-400'
+                                }
+                              >
+                                {formatDate(letter.responseDeadline)}
+                              </span>
+                            ) : (
+                              <span className="text-slate-300">—</span>
+                            )}
+                          </td>
                           <td className="px-6 py-4 text-sm text-slate-400">{formatDate(letter.updatedAt)}</td>
                           <td className="px-6 py-4 text-right">
                             <button
@@ -1541,7 +1571,7 @@ export default function LettersPage() {
                     })}
                     {sortedLetters.length === 0 && (
                       <tr>
-                        <td colSpan={7} className="px-6 py-4">
+                        <td colSpan={9} className="px-6 py-4">
                           {(letterSearch || authorityFilter.size > 0 || dateFilter !== 'any') ? (
                             <NoResultsEmptyState
                               onClearFilters={resetFilters}
@@ -1596,7 +1626,8 @@ export default function LettersPage() {
                   {pdfBusy ? t('letters.generatingPdf' as Parameters<typeof t>[0]) : t('letters.printPdf')}
                 </button>
                 {/* Status-specific primary actions */}
-                {selectedLetter?.status === 'draft' && (
+                {/* W40: rejected letters resubmit through the same action. */}
+                {(selectedLetter?.status === 'draft' || selectedLetter?.status === 'rejected') && (
                   <button
                     onClick={async () => {
                       if (!selectedLetter) return
@@ -1608,7 +1639,9 @@ export default function LettersPage() {
                     className={`px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-emerald-700 transition-colors shadow-lg shadow-emerald-100 cursor-pointer disabled:opacity-60`}
                   >
                     <Icon icon={submitBusy ? 'lucide:loader-2' : 'lucide:send'} className={submitBusy ? 'animate-spin' : ''} />
-                    {t('letters.submitForApproval')}
+                    {selectedLetter?.status === 'rejected'
+                      ? t('letters.resubmitForApproval')
+                      : t('letters.submitForApproval')}
                   </button>
                 )}
                 {/* W28-BUG-B2 — Admin direct-approve when no chain configured.
@@ -1617,24 +1650,40 @@ export default function LettersPage() {
                     (ApprovalStepActions → /reject-step), which returns the letter to
                     'draft' so the author can refine and resubmit instead of killing it. */}
                 {selectedLetter?.status === 'pending-approval' && (
-                  <button
-                    onClick={async () => {
-                      if (!selectedLetter) return
-                      setApproveBusy(true)
-                      try {
-                        await store.approve(selectedLetter.id)
-                        showToast(t('letters.approveSuccess'))
-                      } finally {
-                        setApproveBusy(false)
-                      }
-                    }}
-                    disabled={approveBusy}
-                    aria-busy={approveBusy || undefined}
-                    className={`px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-emerald-700 transition-colors shadow-lg shadow-emerald-100 cursor-pointer disabled:opacity-60`}
-                  >
-                    <Icon icon={approveBusy ? 'lucide:loader-2' : 'lucide:check-circle'} className={approveBusy ? 'animate-spin' : ''} />
-                    {t('letters.approve')}
-                  </button>
+                  <>
+                    {/* W40: Reject restored — no longer terminal (the letter
+                        stays revisable + resubmittable in 'rejected'). */}
+                    <button
+                      onClick={() => {
+                        if (!selectedLetter) return
+                        setRejectReasonText('')
+                        setRejectModalLetterId(selectedLetter.id)
+                      }}
+                      disabled={rejectBusy || approveBusy}
+                      className={`px-4 py-2 bg-white border border-rose-200 text-rose-600 rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-rose-50 transition-colors cursor-pointer disabled:opacity-60`}
+                    >
+                      <Icon icon="lucide:x-circle" />
+                      {t('letters.reject')}
+                    </button>
+                    <button
+                      onClick={async () => {
+                        if (!selectedLetter) return
+                        setApproveBusy(true)
+                        try {
+                          await store.approve(selectedLetter.id)
+                          showToast(t('letters.approveSuccess'))
+                        } finally {
+                          setApproveBusy(false)
+                        }
+                      }}
+                      disabled={approveBusy || rejectBusy}
+                      aria-busy={approveBusy || undefined}
+                      className={`px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-emerald-700 transition-colors shadow-lg shadow-emerald-100 cursor-pointer disabled:opacity-60`}
+                    >
+                      <Icon icon={approveBusy ? 'lucide:loader-2' : 'lucide:check-circle'} className={approveBusy ? 'animate-spin' : ''} />
+                      {t('letters.approve')}
+                    </button>
+                  </>
                 )}
                 {selectedLetter?.status === 'approved' && (
                   <button
@@ -1668,6 +1717,20 @@ export default function LettersPage() {
                 )}
               </div>
             </div>
+
+            {/* W40: rejected-state banner — the reviewer's reason stays visible
+                until the author revises and resubmits. */}
+            {selectedLetter?.status === 'rejected' && (
+              <div className="mb-6 flex items-start gap-3 p-4 bg-rose-50 border border-rose-200 rounded-2xl" data-pdf-hide>
+                <Icon icon="lucide:octagon-x" className="text-rose-600 text-lg shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-sm font-bold text-rose-700">{t('letters.rejectedBanner')}</p>
+                  {selectedLetter.rejectionReason && (
+                    <p className="text-sm text-rose-600 mt-1">{selectedLetter.rejectionReason}</p>
+                  )}
+                </div>
+              </div>
+            )}
 
             <div className="grid grid-cols-12 gap-8">
               {/* Letter Content */}
@@ -2320,7 +2383,13 @@ export default function LettersPage() {
                           className="text-slate-300 group-hover:text-slate-600"
                         />
                         <button
-                          onClick={(e) => { e.stopPropagation(); store.update(selectedLetter!.id, { attachments: selectedLetter!.attachments.filter(a => a.id !== attachment.id) }) }}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            // W40: persist the removal — the old local-only
+                            // store.update left the DB row + storage object
+                            // behind, so the attachment came back on reload.
+                            void store.removeAttachment(selectedLetter!.id, attachment.id)
+                          }}
                           className="text-slate-300 hover:text-rose-500 transition-colors cursor-pointer ml-auto"
                         >
                           <Icon icon="lucide:x" className="text-xs" />
@@ -2618,7 +2687,7 @@ export default function LettersPage() {
               className="w-full px-4 py-2 text-left text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-2 cursor-pointer">
               <Icon icon="lucide:eye" className="text-slate-400" /> {t('common.view')}
             </button>
-            {letter.status === 'draft' && (
+            {(letter.status === 'draft' || letter.status === 'rejected') && (
               <button
                 disabled={isMutating}
                 onClick={async () => {
@@ -2626,7 +2695,8 @@ export default function LettersPage() {
                   await store.submitForApproval(letter.id)
                 }}
                 className="w-full px-4 py-2 text-left text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-2 cursor-pointer disabled:opacity-50">
-                <Icon icon="lucide:send" className="text-slate-400" /> {t('letters.submitForApproval')}
+                <Icon icon="lucide:send" className="text-slate-400" />{' '}
+                {letter.status === 'rejected' ? t('letters.resubmitForApproval') : t('letters.submitForApproval')}
               </button>
             )}
             {letter.status === 'approved' && (
@@ -2661,8 +2731,55 @@ export default function LettersPage() {
         )
       })()}
 
-      {/* L2: terminal "Reject with reason" modal removed — rejection is handled
-          per-step in the Approval Chain card (returns the letter to draft to refine). */}
+      {/* W40: Reject with a required reason. NOT terminal — the letter lands in
+          'rejected' (revisable + resubmittable; submit resets the chain). */}
+      <Modal
+        isOpen={rejectModalLetterId !== null}
+        onClose={() => { if (!rejectBusy) { setRejectModalLetterId(null); setRejectReasonText('') } }}
+        size="sm"
+      >
+        <div className="p-8">
+          <h2 className="text-xl font-bold text-slate-900 mb-2">{t('letters.rejectLetter')}</h2>
+          <p className="text-sm text-slate-500 mb-4">{t('letters.rejectReasonRequired')}</p>
+          <textarea
+            value={rejectReasonText}
+            onChange={(e) => setRejectReasonText(e.target.value)}
+            placeholder={t('letters.rejectReasonPlaceholder')}
+            rows={4}
+            className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-rose-500 outline-none resize-none mb-4"
+          />
+          <div className="flex gap-3">
+            <button
+              onClick={() => { setRejectModalLetterId(null); setRejectReasonText('') }}
+              disabled={rejectBusy}
+              className="flex-1 px-4 py-2.5 bg-slate-100 text-slate-600 rounded-xl text-sm font-bold hover:bg-slate-200 transition-colors cursor-pointer disabled:opacity-50"
+            >
+              {t('common.cancel')}
+            </button>
+            <button
+              onClick={async () => {
+                if (!rejectModalLetterId || !rejectReasonText.trim()) return
+                const id = rejectModalLetterId
+                setRejectBusy(true)
+                try {
+                  await store.reject(id, rejectReasonText.trim())
+                  setRejectModalLetterId(null)
+                  setRejectReasonText('')
+                  showToast(t('letters.rejectSuccess'))
+                } finally {
+                  setRejectBusy(false)
+                }
+              }}
+              disabled={rejectBusy || !rejectReasonText.trim()}
+              aria-busy={rejectBusy || undefined}
+              className="flex-1 px-4 py-2.5 bg-rose-600 text-white rounded-xl text-sm font-bold hover:bg-rose-700 transition-colors cursor-pointer disabled:opacity-60 inline-flex items-center justify-center gap-2"
+            >
+              {rejectBusy && <Icon icon="lucide:loader-2" className="animate-spin" />}
+              {t('letters.confirmReject')}
+            </button>
+          </div>
+        </div>
+      </Modal>
 
       {/* W29-L2: Mark Response Received — optional note modal */}
       <Modal

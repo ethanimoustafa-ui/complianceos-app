@@ -567,6 +567,8 @@ export interface Letter {
   responseDeadline?: string
   responseReceivedDate?: string
   responseNote?: string | null
+  // W40: reviewer's reason when status === 'rejected' (cleared on resubmit).
+  rejectionReason?: string | null
   recipientName?: string
   recipientOrg?: string
   recipientCity?: string
