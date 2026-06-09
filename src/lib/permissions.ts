@@ -232,11 +232,14 @@ export function canEditComment(user: User | null, authorId: string): boolean {
   return user.id === authorId
 }
 
+// W38: author-or-admin only — aligned with the server gate on
+// PATCH/DELETE /api/observations/[id]/comments/[commentId] (author, or a
+// holder of `observation:delete`, i.e. org_admin). The old
+// 'Manage Audit Findings' loophole showed a delete button the server 403'd.
 export function canDeleteComment(user: User | null, authorId: string): boolean {
   if (!user) return false
   if (user.role === 'admin') return true
-  if (user.id === authorId) return true
-  return hasPermission(user, 'Manage Audit Findings')
+  return user.id === authorId
 }
 
 export function isObservationLeader(user: User | null, obs: { leaderId?: string }): boolean {

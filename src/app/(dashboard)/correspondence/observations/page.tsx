@@ -1,7 +1,7 @@
 ﻿'use client'
 
 import { useState, useMemo, useEffect } from 'react'
-import { useSearchParams } from 'next/navigation'
+import { useSearchParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Icon } from '@iconify/react'
 import { Button } from '@/components/ui/button'
@@ -32,6 +32,7 @@ import type {
 export default function ObservationsPage() {
   const { t, isRTL } = useTranslation()
   const searchParams = useSearchParams()
+  const router = useRouter()
 
   // Zustand store - single source of truth
   const {
@@ -131,14 +132,28 @@ export default function ObservationsPage() {
     setIsDetailModalOpen(true)
   }
 
-  // Deep-link: auto-open detail modal when ?id= is present
+  // Deep-link: auto-open detail modal when ?id= is present.
+  // W38: only auto-open while the modal is CLOSED — without this guard, any
+  // list refetch (new `observations` array identity) re-ran the effect and the
+  // modal reopened itself after the user closed it.
+  const deepLinkId = searchParams.get('id')
   useEffect(() => {
-    const id = searchParams.get('id')
-    if (!id) return
-    const obs = observations.find(o => o.id === id)
+    if (!deepLinkId || isDetailModalOpen) return
+    const obs = observations.find(o => o.id === deepLinkId)
     if (obs) handleRowClick(obs)
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchParams, observations])
+  }, [deepLinkId, observations])
+
+  // W38: deep-link to an unknown / hard-deleted observation — surface a
+  // "Not found" panel instead of silently rendering the list. The ?id= param
+  // is preserved (per spec) until the user clicks back to the list.
+  const deepLinkNotFound =
+    !!deepLinkId &&
+    lastFetched !== null &&
+    !isLoading &&
+    !observations.some((o) => o.id === deepLinkId)
+
+  const clearDeepLink = () => router.replace('/correspondence/observations')
 
   // Handle add observation - calls Zustand store
   const handleAddObservation = async (data: ObservationFormData) => {
@@ -399,6 +414,24 @@ export default function ObservationsPage() {
 
       {/* Content Area */}
       <div className="flex-1 overflow-auto hide-scrollbar bg-slate-50 p-8">
+        {/* W38: deep-link target missing (deleted or bad link) — "Not found". */}
+        {deepLinkNotFound && (
+          <div className="mb-6 bg-white border border-rose-100 rounded-2xl p-8 flex flex-col items-center text-center">
+            <div className="w-14 h-14 rounded-full bg-rose-50 flex items-center justify-center mb-4">
+              <Icon icon="lucide:file-x" className="text-2xl text-rose-500" />
+            </div>
+            <h3 className="text-base font-bold text-slate-900 mb-1">
+              {t('observations.notFoundTitle')}
+            </h3>
+            <p className="text-sm text-slate-500 mb-1">{t('observations.notFoundBody')}</p>
+            <p className="text-xs font-mono text-slate-400 mb-4">{deepLinkId}</p>
+            <Button variant="outline" onClick={clearDeepLink}>
+              <Icon icon={isRTL ? 'lucide:arrow-right' : 'lucide:arrow-left'} className="w-4 h-4" />
+              {t('observations.backToList')}
+            </Button>
+          </div>
+        )}
+
         {/* Metrics Strip */}
         <ObservationStats stats={observationStats} />
 
@@ -450,6 +483,9 @@ export default function ObservationsPage() {
           setIsDetailModalOpen(false)
           setSelectedObservation(null)
           setStoreSelected(null) // Clear store's selected observation
+          // W38: drop the ?id= deep-link param so the modal doesn't reopen on
+          // the next list refetch and the URL returns to the plain list.
+          if (deepLinkId) clearDeepLink()
         }}
       />
 

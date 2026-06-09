@@ -471,12 +471,14 @@ export const useObservationStore = create<ObservationState>()((set, get) => ({
           requested_at: string
           requested_by: string
           notes: string | null
+          requester?: { id: string; name: string | null } | null
         } | null
         closure_review?: {
           reviewed_at: string
           reviewed_by: string
           approved: boolean
           notes: string | null
+          reviewer?: { id: string; name: string | null } | null
         } | null
       }>(`/observations/${id}`)
       const previous = get().byId[id]
@@ -577,22 +579,35 @@ export const useObservationStore = create<ObservationState>()((set, get) => ({
             })),
         }
       }
+      // W38: the detail response ALWAYS carries both closure keys (null when
+      // absent) — a null must CLEAR any stale optimistic state, not keep it,
+      // otherwise a rejected/cleared request survives refetches forever.
       if (row.closure_request) {
         observation.closureRequest = {
           requestedAt: row.closure_request.requested_at,
           requestedBy: row.closure_request.requested_by,
-          requestedByName: previous?.closureRequest?.requestedByName ?? '',
+          requestedByName:
+            row.closure_request.requester?.name ??
+            previous?.closureRequest?.requestedByName ??
+            '',
           notes: row.closure_request.notes ?? undefined,
         }
+      } else if (row.closure_request === null) {
+        observation.closureRequest = undefined
       }
       if (row.closure_review) {
         observation.closureReview = {
           reviewedAt: row.closure_review.reviewed_at,
           reviewedBy: row.closure_review.reviewed_by,
-          reviewedByName: previous?.closureReview?.reviewedByName ?? '',
+          reviewedByName:
+            row.closure_review.reviewer?.name ??
+            previous?.closureReview?.reviewedByName ??
+            '',
           approved: row.closure_review.approved,
           notes: row.closure_review.notes ?? undefined,
         }
+      } else if (row.closure_review === null) {
+        observation.closureReview = undefined
       }
       // Also fetch the timeline so the activity feed renders.
       const timeline = await get().fetchTimeline(id)
@@ -2384,20 +2399,15 @@ export const useObservationStore = create<ObservationState>()((set, get) => ({
           set({ isMutating: true, error: null })
         },
         request: async () => {
-          if (approved) {
-            // Closing also archives the observation so it moves to the Archive.
-            await api.patch(
-              `/observations/${observationId}`,
-              { status: 'closed', archived_at: now },
-              ifMatchHeader(parentUpdatedAt),
-            )
-          } else {
-            await api.post(
-              `/observations/${observationId}/reopen`,
-              undefined,
-              ifMatchHeader(parentUpdatedAt),
-            )
-          }
+          // W38: one dedicated endpoint persists the verdict to
+          // `closure_reviews` (reviewer, date, notes survive reloads), blocks
+          // self-review server-side, and handles the status transition
+          // (approve → closed+archived, reject → remediated + request cleared).
+          await api.post(
+            `/observations/${observationId}/closure-review`,
+            { approved, notes },
+            ifMatchHeader(parentUpdatedAt),
+          )
         },
         reconcile: () => {
           set((state) => {

@@ -3,7 +3,7 @@
 
 import type { NextRequest } from 'next/server'
 import { requirePerm } from '@/lib/api/auth'
-import { handle, NotFound, PreconditionFailed } from '@/lib/api/errors'
+import { handle, Forbidden, NotFound, PreconditionFailed } from '@/lib/api/errors'
 import { ok } from '@/lib/api/response'
 import { assertNotStale, assertUuid, parseJson, readIfMatch } from '@/lib/api/validate'
 import { cacheTags, revalidateAll } from '@/lib/api/cache'
@@ -26,20 +26,27 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   try {
     const { observationId: observationIdParam, commentId } = await params
     assertUuid(commentId)
-    const { supabase, user, profile } = await requirePerm('observation:edit')
+    // W38: comment mutation needs the comment capability, not observation:edit
+    // (an assignee who can comment must be able to fix their own typo). The
+    // author check below is the real gate.
+    const { supabase, user, profile, permissions } = await requirePerm('observation:comment')
     const observationId = await assertObservationExists(supabase, observationIdParam)
     const ifMatch = readIfMatch(req)
     const input = await parseJson(req, UpdateObservationCommentSchema)
 
-    if (ifMatch != null) {
-      const { data: current } = await supabase
-        .from('observation_updates')
-        .select('updated_at')
-        .eq('id', commentId)
-        .eq('observation_id', observationId)
-        .maybeSingle<{ updated_at: string }>()
-      assertNotStale(ifMatch, current?.updated_at)
+    const { data: current } = await supabase
+      .from('observation_updates')
+      .select('author_id, updated_at')
+      .eq('id', commentId)
+      .eq('observation_id', observationId)
+      .maybeSingle<{ author_id: string | null; updated_at: string }>()
+    if (!current) throw NotFound(`Comment ${commentId} not found`)
+    // W38: only the author (or an admin holding observation:delete) may edit —
+    // mirrors the client-side `canEditComment` gate at the trust boundary.
+    if (current.author_id !== user.id && !permissions.includes('observation:delete')) {
+      throw Forbidden('Only the comment author can edit this comment.')
     }
+    if (ifMatch != null) assertNotStale(ifMatch, current.updated_at)
 
     let q = supabase
       .from('observation_updates')
@@ -95,19 +102,22 @@ export async function DELETE(req: NextRequest, { params }: Params) {
   try {
     const { observationId: observationIdParam, commentId } = await params
     assertUuid(commentId)
-    const { supabase, user, profile } = await requirePerm('observation:edit')
+    // W38: same author-or-admin gate as PATCH (see above).
+    const { supabase, user, profile, permissions } = await requirePerm('observation:comment')
     const observationId = await assertObservationExists(supabase, observationIdParam)
     const ifMatch = readIfMatch(req)
 
-    if (ifMatch != null) {
-      const { data: current } = await supabase
-        .from('observation_updates')
-        .select('updated_at')
-        .eq('id', commentId)
-        .eq('observation_id', observationId)
-        .maybeSingle<{ updated_at: string }>()
-      assertNotStale(ifMatch, current?.updated_at)
+    const { data: current } = await supabase
+      .from('observation_updates')
+      .select('author_id, updated_at')
+      .eq('id', commentId)
+      .eq('observation_id', observationId)
+      .maybeSingle<{ author_id: string | null; updated_at: string }>()
+    if (!current) throw NotFound(`Comment ${commentId} not found`)
+    if (current.author_id !== user.id && !permissions.includes('observation:delete')) {
+      throw Forbidden('Only the comment author can delete this comment.')
     }
+    if (ifMatch != null) assertNotStale(ifMatch, current.updated_at)
 
     let q = supabase
       .from('observation_updates')

@@ -501,7 +501,13 @@ export const ObservationDetailModal = memo(function ObservationDetailModal({
 
           <RemediationStatus
             plan={liveObs.remediationPlan}
-            canReview={!isClosed && canReviewRemediation(user, liveObs)}
+            // W38: the submitter never reviews their own plan (server enforces
+            // the same block — hide the buttons so the 403 can't be reached).
+            canReview={
+              !isClosed &&
+              canReviewRemediation(user, liveObs) &&
+              (!liveObs.remediationPlan?.submittedBy || liveObs.remediationPlan.submittedBy !== user?.id)
+            }
             canSubmitPlan={!isClosed && canSubmitRemediation(user, liveObs)}
             onReview={handleReviewRemediationPlan}
             onCreatePlan={openCreatePlan}
@@ -519,7 +525,12 @@ export const ObservationDetailModal = memo(function ObservationDetailModal({
             closureRequest={liveObs.closureRequest}
             closureReview={liveObs.closureReview}
             canRequestClosure={!isClosed && canRequestClosure(user, liveObs)}
-            canReviewClosure={canReviewClosure(user, liveObs)}
+            // W38: the closure requester cannot approve/reject their own
+            // request (server enforces the same block).
+            canReviewClosure={
+              canReviewClosure(user, liveObs) &&
+              (!liveObs.closureRequest?.requestedBy || liveObs.closureRequest.requestedBy !== user?.id)
+            }
             remediationApproved={liveObs.remediationPlan?.status === 'approved'}
             onRequestClosure={handleRequestClosure}
             onReviewClosure={handleReviewClosure}

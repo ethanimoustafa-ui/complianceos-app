@@ -19,7 +19,7 @@
 import type { NextRequest } from 'next/server'
 import { z } from 'zod'
 import { requirePerm } from '@/lib/api/auth'
-import { handle, NotFound, Conflict } from '@/lib/api/errors'
+import { handle, Forbidden, NotFound, Conflict } from '@/lib/api/errors'
 import { ok } from '@/lib/api/response'
 import { assertNotStale, parseJson, readIfMatch } from '@/lib/api/validate'
 import { cacheTags, revalidateAll } from '@/lib/api/cache'
@@ -60,10 +60,10 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     // its `updated_at` (migration 067) backs the optimistic-concurrency guard.
     const { data: currentPlan } = await supabase
       .from('remediation_plans')
-      .select('status, updated_at')
+      .select('status, submitted_by, updated_at')
       .eq('id', planId)
       .eq('observation_id', observationId)
-      .maybeSingle<{ status: string; updated_at: string }>()
+      .maybeSingle<{ status: string; submitted_by: string | null; updated_at: string }>()
     if (!currentPlan) throw NotFound(`Remediation plan ${planId} not found`)
 
     // W24-6a — If-Match 412 if the plan was concurrently updated.
@@ -79,6 +79,11 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     // mutating an already-approved plan's content without re-review.
     if (isReview && currentPlan.status !== 'submitted') {
       throw Conflict(`Cannot review a remediation plan in status '${currentPlan.status}'.`)
+    }
+    // W38: author-blocking — the submitter cannot approve/reject their own
+    // plan (spec: BO who authored the plan is NOT allowed to self-review).
+    if (isReview && currentPlan.submitted_by === user.id) {
+      throw Forbidden('You cannot review a remediation plan you submitted yourself.')
     }
     if (!isReview && currentPlan.status !== 'draft' && currentPlan.status !== 'rejected') {
       throw Conflict(`Cannot edit a remediation plan in status '${currentPlan.status}'.`)

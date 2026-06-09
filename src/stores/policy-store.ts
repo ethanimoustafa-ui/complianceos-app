@@ -34,7 +34,6 @@ import { api, ApiClientError } from '@/lib/api-client'
 import { computeNextReview, cadenceToReviewCycleDays } from '@/lib/review-schedule'
 import { validateChildDeadline } from '@/lib/deadline-validation'
 import { requirePermission } from '@/lib/rbac-store-gate'
-import { useUserLogStore } from '@/stores/user-log-store'
 import { pushToast, type ToastMessage } from '@/stores/toast-store'
 
 // W18 / W17-1 / SEC-1: build an `If-Match: W/"<updatedAt>"` header object when
@@ -453,10 +452,6 @@ interface PolicyStoreState {
   setFilters: (filters: PolicyFilters) => void
   clearFilters: () => void
 
-  submitForReview: (id: string) => void
-  approve: (id: string, notes?: string) => void
-  initiateReview: (id: string) => void
-
   reviewAlerts: () => Policy[]
   checkAndUpdateStatuses: () => void
 
@@ -811,94 +806,10 @@ export const usePolicyStore = create<PolicyStoreState>()((set, get) => ({
   setFilters: (filters) => set({ filters }),
   clearFilters: () => set({ filters: {} }),
 
-  submitForReview: (id) => {
-    requirePermission('Approve Policy Reviews', { storeName: 'policy', actionName: 'submitForReview', id })
-    const policy = get().byId[id]
-    if (!policy) return
-    const newTimeline = policy.workflowTimeline.map((step) =>
-      step.status === 'current' ? { ...step, stepState: 'pending-approval' as const } : step,
-    )
-    get().update(id, {
-      status: 'under-review' as PolicyStatus,
-      workflowTimeline: newTimeline,
-    })
-  },
-
-  approve: (id, notes?) => {
-    const user = requirePermission('Approve Policy Reviews', { storeName: 'policy', actionName: 'approve', id })
-    const policy = get().byId[id]
-    if (!policy) return
-    useUserLogStore.getState().log({
-      userId: user.id,
-      action: 'policy.approval_step_committed',
-      target: id,
-      metadata: notes ? { notes } : undefined,
-    })
-    const today = new Date().toISOString().split('T')[0]
-    const currentIdx = policy.workflowTimeline.findIndex((s) => s.status === 'current')
-    const updatedTimeline = policy.workflowTimeline.map((step, idx) =>
-      step.status !== 'completed'
-        ? {
-            ...step,
-            status: 'completed' as const,
-            date: step.date || today,
-            stepState: undefined,
-            ...(idx === currentIdx && notes ? { note: notes } : {}),
-          }
-        : step,
-    )
-    const activityEntry: PolicyActivityEntry = {
-      id: Date.now().toString(),
-      timestamp: new Date().toISOString(),
-      date: today,
-      type: 'workflow_approved',
-      textEn: notes ? `Policy approved — ${notes}` : 'Policy approved',
-      textAr: notes ? `تمت الموافقة على السياسة — ${notes}` : 'تمت الموافقة على السياسة',
-      user: user.name,
-    }
-    get().update(id, {
-      status: 'approved' as PolicyStatus,
-      approvedDate: today,
-      workflowTimeline: updatedTimeline,
-      activityLog: [...(policy.activityLog ?? []), activityEntry],
-    })
-  },
-
-  initiateReview: (id) => {
-    requirePermission('Approve Policy Reviews', { storeName: 'policy', actionName: 'initiateReview', id })
-    const policy = get().byId[id]
-    if (!policy) return
-    const today = new Date().toISOString().split('T')[0]
-    const cycleId = crypto.randomUUID()
-    const cycleLabel = `Review ${new Date().toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}`
-    const oldEntry = policy.currentReviewCycleId
-      ? [{ id: policy.currentReviewCycleId, label: policy.currentReviewCycleLabel ?? 'Review', initiatedAt: today }]
-      : []
-    const resetTimeline = policy.workflowTimeline.map((step) =>
-      step.status === 'current' ? { ...step, status: 'completed' as const, date: today } : step,
-    )
-    const newStep: PolicyWorkflowStep = {
-      step: 'Review Initiated',
-      date: today,
-      user: policy.owner.name,
-      status: 'current',
-    }
-    const nextReviewDate = policy.reviewSchedule
-      ? computeNextReview(policy.reviewSchedule, new Date())
-      : policy.nextReviewDate
-    // BUG-P-R2-06: set lastReviewDate to today so "Last Review" field shows
-    // the current date immediately after initiating a review.
-    get().update(id, {
-      status: 'draft' as PolicyStatus,
-      workflowTimeline: [...resetTimeline, newStep],
-      currentReviewCycleId: cycleId,
-      currentReviewCycleLabel: cycleLabel,
-      currentReviewCycleDate: new Date().toISOString(),
-      reviewCycleHistory: [...(policy.reviewCycleHistory ?? []), ...oldEntry],
-      nextReviewDate,
-      lastReviewDate: today,
-    })
-  },
+  // W38: the legacy client-only `submitForReview` / `approve` / `initiateReview`
+  // methods were removed — they flipped status + timeline locally (changes that
+  // vanished on reload) and had no callers. The server-persisted path is
+  // `advanceWorkflowStep` (POST /workflow/advance with the matching action).
 
   reviewAlerts: (): Policy[] => {
     const now = new Date()
@@ -997,7 +908,7 @@ export const usePolicyStore = create<PolicyStoreState>()((set, get) => ({
     return { ok: true }
   },
 
-  renameWorkflowStep: (policyId, stepIndex, newLabel, actingUser) => {
+  renameWorkflowStep: (policyId, stepIndex, newLabel, _actingUser) => {
     const policy = get().byId[policyId]
     if (!policy) return
     if (stepIndex < 0 || stepIndex >= policy.workflowTimeline.length) return
@@ -1009,20 +920,51 @@ export const usePolicyStore = create<PolicyStoreState>()((set, get) => ({
     const newTimeline = policy.workflowTimeline.map((s, i) =>
       i === stepIndex ? { ...s, step: trimmed } : s,
     )
-    const today = new Date().toISOString().split('T')[0]
-    const entry: PolicyActivityEntry = {
-      id: Date.now().toString(),
-      timestamp: new Date().toISOString(),
-      date: today,
-      type: 'step_renamed',
-      textEn: `Workflow step renamed from "${previous}" to "${trimmed}"`,
-      textAr: `تمت إعادة تسمية الخطوة من "${previous}" إلى "${trimmed}"`,
-      user: actingUser,
-    }
-    get().update(policyId, {
-      workflowTimeline: newTimeline,
-      activityLog: [...(policy.activityLog ?? []), entry],
+
+    // Optimistic local rename (mirrors setPhaseDeadline's pattern).
+    set((s) => {
+      const cur = s.byId[policyId]
+      if (!cur) return {}
+      const next: Policy = { ...cur, workflowTimeline: newTimeline }
+      return {
+        byId: { ...s.byId, [policyId]: next },
+        policies: s.policies.map((p) => (p.id === policyId ? next : p)),
+        selectedPolicy: s.selectedPolicy?.id === policyId ? next : s.selectedPolicy,
+      }
     })
+
+    // W38: persist via PATCH /workflow/steps/[stepId]. The old implementation
+    // went through update(), whose toUpdatePayload never mapped
+    // workflowTimeline — the rename existed only in memory and vanished on
+    // reload. The route also emits the `step_renamed` activity row, so no
+    // client-side activity entry is appended (fetchById reconciles it).
+    const stepId = step.id
+    if (stepId && isPersistedId(stepId)) {
+      const apiId = policy.uuid ?? policyId
+      void (async () => {
+        try {
+          await api.patch(`/policies/${apiId}/workflow/steps/${stepId}`, { step: trimmed })
+          void get().fetchById(policyId)
+        } catch (e) {
+          set((s) => {
+            const cur = s.byId[policyId]
+            if (!cur) return {}
+            const rolled: Policy = {
+              ...cur,
+              workflowTimeline: cur.workflowTimeline.map((st, i) =>
+                i === stepIndex ? { ...st, step: previous } : st,
+              ),
+            }
+            return {
+              byId: { ...s.byId, [policyId]: rolled },
+              policies: s.policies.map((p) => (p.id === policyId ? rolled : p)),
+              selectedPolicy: s.selectedPolicy?.id === policyId ? rolled : s.selectedPolicy,
+            }
+          })
+          pushToast(revertMessage(e), 'error')
+        }
+      })()
+    }
   },
 
   checkAndUpdateStatuses: () => {

@@ -126,6 +126,18 @@ export const CloseObservationSchema = z
   .strict()
 export type CloseObservationInput = z.infer<typeof CloseObservationSchema>
 
+// W38: closure review — the approve/reject verdict on a pending closure
+// request. Persisted to `closure_reviews` so the verdict (reviewer, date,
+// notes) survives reloads; previously the client PATCHed `status` directly and
+// the review metadata was lost.
+export const ReviewClosureSchema = z
+  .object({
+    approved: z.boolean(),
+    notes: PlainText(5_000).optional(),
+  })
+  .strict()
+export type ReviewClosureInput = z.infer<typeof ReviewClosureSchema>
+
 // ---------- checklist --------------------------------------------------------
 
 export const CreateChecklistItemSchema = z

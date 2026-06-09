@@ -27,14 +27,18 @@ interface ApprovalItem {
   evidence?: PolicyEvidence[]
   attachments?: PolicyAttachment[]
   approvalChain?: LetterApprovalStep[]
+  /** W38: the policy workflow step awaiting the manager — target of approve/reject. */
+  currentStepId?: string
 }
 
 export function PendingApprovalsCard() {
   const { t } = useTranslation()
   const currentUser = useAuthStore((s) => s.user)
   const policies = usePolicyStore((s) => s.policies)
-  const policyApprove = usePolicyStore((s) => s.approve)
-  const policyUpdate = usePolicyStore((s) => s.update)
+  // W38: approvals from this card go through the server-driven workflow action
+  // (POST /workflow/advance). The old client-only `approve`/`update` calls
+  // flipped local state that vanished on reload — nothing was persisted.
+  const advancePolicyWorkflow = usePolicyStore((s) => s.advanceWorkflowStep)
   const letters = useLetterStore((s) => s.letters)
   const approveLetterStep = useLetterStore((s) => s.approveStep)
   const rejectLetterStep = useLetterStore((s) => s.rejectStep)
@@ -70,6 +74,7 @@ export function PendingApprovalsCard() {
           workflowTimeline: p.workflowTimeline,
           evidence: p.evidence,
           attachments: p.attachments,
+          currentStepId: currentStep.id,
         })
       }
     }
@@ -113,8 +118,14 @@ export function PendingApprovalsCard() {
   const handleApprove = (item: ApprovalItem) => {
     const name = currentUser?.name || 'Manager'
     if (item.type === 'policy') {
-      // Round 4 Phase 6: store derives approver from auth user.
-      policyApprove(item.id, notes || undefined)
+      // W38: server-driven approve — persists the step completion + activity
+      // row and promotes the next step (same path as PolicyDetailsContent).
+      void advancePolicyWorkflow(item.id, {
+        action: 'approve',
+        stepId: item.currentStepId,
+        note: notes || undefined,
+        userName: name,
+      })
     } else if (item.type === 'sama-letter') {
       const letter = letters.find(l => l.id === item.id)
       if (letter) {
@@ -131,28 +142,16 @@ export function PendingApprovalsCard() {
   }
 
   const handleReject = (item: ApprovalItem) => {
-    const name = currentUser?.name || 'Manager'
     if (item.type === 'policy') {
-      const policy = policies.find(p => p.id === item.id)
-      const today = new Date().toISOString().split('T')[0]
-      const resetTimeline = policy?.workflowTimeline.map(step =>
-        step.status === 'current'
-          ? { ...step, stepState: undefined, note: notes || undefined }
-          : step
-      )
-      const rejectActivity = {
-        id: Date.now().toString(),
-        timestamp: new Date().toISOString(),
-        date: today,
-        type: 'step_denied' as const,
-        textEn: notes ? `Policy rejected by ${name} — ${notes}` : `Policy rejected by ${name}`,
-        textAr: notes ? `تم رفض السياسة بواسطة ${name} — ${notes}` : `تم رفض السياسة بواسطة ${name}`,
-        user: name,
-      }
-      policyUpdate(item.id, {
-        ...(resetTimeline ? { workflowTimeline: resetTimeline } : {}),
-        activityLog: [...(policy?.activityLog ?? []), rejectActivity],
-      } as never)
+      // W38: server-driven reject — clears the awaiting state and writes the
+      // step_denied activity row server-side (the old local update() persisted
+      // nothing: toUpdatePayload never mapped workflowTimeline/activityLog).
+      void advancePolicyWorkflow(item.id, {
+        action: 'reject',
+        stepId: item.currentStepId,
+        note: notes || undefined,
+        userName: currentUser?.name || 'Manager',
+      })
     } else if (item.type === 'sama-letter') {
       const letter = letters.find(l => l.id === item.id)
       if (letter) {

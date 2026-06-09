@@ -618,6 +618,9 @@
   "observations": {
     "observation": "observation",
     "deleteSuccess": "Observation deleted",
+    "notFoundTitle": "Observation not found",
+    "notFoundBody": "It may have been deleted, or the link is invalid.",
+    "backToList": "Back to all observations",
     "title": "Observations Tracker",
     "subtitle": "Audit & Remediation Management",
     "addObservation": "Add Observation",
@@ -1123,6 +1126,8 @@
       "observationUpdated": "Observation updated — {{fields}}",
       "observationClosed": "Observation closed",
       "observationClosureRequested": "Closure requested — pending review",
+      "observationClosureApproved": "Closure approved — observation closed",
+      "observationClosureRejected": "Closure rejected — returned for remediation",
       "observationReopened": "Observation reopened",
       "observationLeaderAssigned": "Observation leader assigned: {{to}}",
       "observationLeaderChanged": "Observation leader changed from {{from}} to {{to}}",

@@ -173,6 +173,8 @@ test.describe('Observations E2E', () => {
     // selectors drift between styling passes. Fix-2 verification took the
     // same shortcut. The UI is still exercised in steps 3+ for the detail
     // view, which is what the brief actually wants the spec to certify.
+    // W38: `reference` is server-minted (Wave-20 Q1) and CreateObservationSchema
+    // is .strict() — sending it 400s. Read the minted reference off the response.
     const createRes = await ctx.request.post('/api/observations', {
       data: {
         title: OBS_TITLE,
@@ -182,7 +184,6 @@ test.describe('Observations E2E', () => {
         severity: 'high',
         due_date: PLUS_30,
         department: 'Compliance',
-        reference: OBS_REF,
         framework_ids: [],
         remediation_submission_due: PLUS_14,
       },
@@ -194,7 +195,7 @@ test.describe('Observations E2E', () => {
     const env = await createRes.json()
     const created = env.data ?? env
     S.observationId = created.id
-    S.observationReference = OBS_REF
+    S.observationReference = created.reference ?? OBS_REF
     expect(S.observationId).toMatch(/^[0-9a-f-]{36}$/)
 
     // Now load the page and confirm the row renders + survives a hard reload.

@@ -305,6 +305,9 @@ export function EditableSelect({
         <div
           ref={portalRef}
           style={dropdownStyle}
+          // W38: role="listbox" — without it neither screen readers nor the
+          // e2e specs can identify the portal-rendered dropdown panel.
+          role="listbox"
           className="bg-white border border-slate-200 rounded-lg shadow-xl overflow-hidden"
           onWheel={(e) => e.stopPropagation()}
         >
@@ -324,6 +327,8 @@ export function EditableSelect({
                   return (
                     <div
                       key={item.id}
+                      role="option"
+                      aria-selected={isSelected}
                       className={cn(
                         'group flex items-center justify-between px-3 py-2 text-xs hover:bg-slate-50',
                         isSelected && 'bg-emerald-50',

@@ -169,14 +169,16 @@ export async function getObservationDetail(
       .select(REMEDIATION_PLAN_COLUMNS)
       .eq('observation_id', observationId)
       .order('created_at', { ascending: false }),
+    // W38: embed the requester/reviewer profile so the closure panels can
+    // render real names after a hard reload (the rows only carry UUIDs).
     supabase
       .from('closure_requests')
-      .select('observation_id, requested_at, requested_by, notes')
+      .select('observation_id, requested_at, requested_by, notes, requester:profiles!closure_requests_requested_by_fkey(id, name)')
       .eq('observation_id', observationId)
       .maybeSingle(),
     supabase
       .from('closure_reviews')
-      .select('observation_id, reviewed_at, reviewed_by, approved, notes')
+      .select('observation_id, reviewed_at, reviewed_by, approved, notes, reviewer:profiles!closure_reviews_reviewed_by_fkey(id, name)')
       .eq('observation_id', observationId)
       .maybeSingle(),
   ])
@@ -195,6 +197,18 @@ export async function getObservationDetail(
     author: Array.isArray(u.author) ? (u.author[0] ?? null) : u.author,
   }))
 
+  // Supabase may type to-one FK embeds as arrays — normalize to an object.
+  const normalizeProfile = (v: unknown): { id: string; name: string | null } | null =>
+    Array.isArray(v)
+      ? ((v[0] as { id: string; name: string | null } | undefined) ?? null)
+      : ((v as { id: string; name: string | null } | null) ?? null)
+  const closureRequestRow = closureReq.data
+    ? { ...closureReq.data, requester: normalizeProfile((closureReq.data as { requester?: unknown }).requester) }
+    : null
+  const closureReviewRow = closureRev.data
+    ? { ...closureRev.data, reviewer: normalizeProfile((closureRev.data as { reviewer?: unknown }).reviewer) }
+    : null
+
   return {
     ...obs,
     assignees: (assignees.data as ObservationDetail['assignees']) ?? [],
@@ -202,8 +216,8 @@ export async function getObservationDetail(
     documents: (documents.data as ObservationDetail['documents']) ?? [],
     updates: updatesNormalized,
     remediation_plans: plans.data ?? [],
-    closure_request: closureReq.data ?? null,
-    closure_review: closureRev.data ?? null,
+    closure_request: closureRequestRow,
+    closure_review: closureReviewRow,
   }
 }
 

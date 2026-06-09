@@ -362,7 +362,13 @@ function RegulatoryUpdatesRulesPageContent() {
       {/* ── Circular Details Modal ─────────────────────────────────────────── */}
       <Modal
         isOpen={selectedCircular !== null}
-        onClose={() => setSelected(null)}
+        onClose={() => {
+          setSelected(null)
+          // W38: drop the ?id= deep-link param on close — leaving it in the
+          // URL made the auto-open effect re-fire on the next list refetch,
+          // so the modal reopened itself after the user closed it.
+          if (deepLinkId) clearDeepLink()
+        }}
         size="xl"
         title={selectedCircular?.title ?? ''}
       >
@@ -407,7 +413,16 @@ function RegulatoryUpdatesRulesPageContent() {
         isOpen={isDeleteConfirmOpen}
         onClose={() => { setIsDeleteConfirmOpen(false); setDeleteTargetId(null) }}
         targetId={deleteTargetId ?? selectedCircular?.id ?? null}
-        onDeleted={(msg) => { setIsDeleteConfirmOpen(false); setDeleteTargetId(null); showToast(msg) }}
+        onDeleted={(msg) => {
+          setIsDeleteConfirmOpen(false)
+          setDeleteTargetId(null)
+          // W38: close the details modal explicitly — relying on the store's
+          // selectedCircular-nulling proved racy, leaving the details panel of
+          // a just-deleted circular open over the list.
+          setSelected(null)
+          if (deepLinkId) clearDeepLink()
+          showToast(msg)
+        }}
         t={t}
       />
 

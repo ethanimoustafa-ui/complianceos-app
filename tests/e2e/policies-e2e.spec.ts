@@ -192,11 +192,12 @@ test.describe.serial('Policies E2E', () => {
     test.setTimeout(45_000)
     const request = sharedReq
 
-    const refCode = `POL-E2E-${UNIQUE_SUFFIX}`
+    // W38: `ref_code` is server-minted (insertWithRefCode) and the create
+    // schema is .strict() — sending one 400s. Read the minted code off the
+    // response instead.
     createdAt = new Date().toISOString().slice(0, 10)
 
     const payload = {
-      ref_code: refCode,
       name: POLICY_NAME,
       description: 'E2E integration spec — created by tests/e2e/policies-e2e.spec.ts',
       category: 'compliance',
@@ -219,6 +220,7 @@ test.describe.serial('Policies E2E', () => {
     }
     const body = await res.json()
     const row = body.data as PolicyRow
+    const refCode = row.ref_code
     createdPolicy = { id: row.id, ref_code: row.ref_code, name: row.name }
 
     // Sanity: a follow-up list should contain the new policy.
@@ -334,24 +336,37 @@ test.describe.serial('Policies E2E', () => {
     const submitBody = await submitRes.json()
     expect(submitBody.data?.status).toBe('under-review')
 
-    // Approve — drives the route to also auto-emit a policy_versions row.
-    const approveRes = await request.post(`/api/policies/${createdPolicy!.id}/workflow/advance`, {
-      data: { action: 'approve', user_name: 'E2E Bot', note: 'E2E approval' },
-    })
-    if (!approveRes.ok()) {
-      const t = await approveRes.text()
-      report['6-workflow'] = `FAIL — approve ${approveRes.status()}: ${t.slice(0, 200)}`
-      expect(approveRes.ok(), `approve → ${approveRes.status()}: ${t.slice(0, 300)}`).toBeTruthy()
+    // W38: one approve completes ONE step and promotes the next (user story 6);
+    // the policy flips to 'approved' only when the LAST step completes. Step
+    // through the seeded tier workflow until it does (bounded loop).
+    let status = ''
+    for (let i = 0; i < 12 && status !== 'approved'; i++) {
+      const approveRes = await request.post(`/api/policies/${createdPolicy!.id}/workflow/advance`, {
+        data: { action: 'approve', user_name: 'E2E Bot', note: 'E2E approval' },
+      })
+      if (!approveRes.ok()) {
+        const t = await approveRes.text()
+        report['6-workflow'] = `FAIL — approve ${approveRes.status()}: ${t.slice(0, 200)}`
+        expect(approveRes.ok(), `approve → ${approveRes.status()}: ${t.slice(0, 300)}`).toBeTruthy()
+      }
+      const approveBody = await approveRes.json()
+      status = approveBody.data?.status
     }
-    const approveBody = await approveRes.json()
-    expect(approveBody.data?.status).toBe('approved')
+    expect(status).toBe('approved')
 
-    // Versions list should now contain a row whose `changes` includes the note.
-    const versions = await getPolicyVersions(request, createdPolicy!.id)
-    const matched = versions.find((v) => (v.changes ?? '').includes('E2E approval'))
-    expect(matched, 'policy_versions row emitted on approve').toBeTruthy()
+    // W38: the W31 advance rewrite no longer emits a policy_versions row on
+    // approve — per the user stories, versions come from edits / explicit
+    // publishes; full approval emits a `workflow_approved` ACTIVITY row.
+    // Assert the spec'd behavior: approved_date stamped + activity row present.
+    const detailRes = await request.get(`/api/policies/${createdPolicy!.id}`)
+    expect(detailRes.ok(), `detail GET → ${detailRes.status()}`).toBeTruthy()
+    const detail = (await detailRes.json()).data
+    expect(detail?.approved_date, 'approved_date stamped on full approval').toBeTruthy()
+    const activity = (detail?.activity_log ?? []) as Array<{ type?: string }>
+    const approvedRow = activity.find((a) => a.type === 'workflow_approved')
+    expect(approvedRow, 'workflow_approved activity row emitted').toBeTruthy()
 
-    report['6-workflow'] = `PASS — under-review → approved; ${versions.length} version rows; auto-emit changes="${matched?.changes}"`
+    report['6-workflow'] = `PASS — under-review → approved; approved_date=${detail?.approved_date}; workflow_approved activity row present`
   })
 
   test('Step 7: hard-delete cascades to children', async () => {

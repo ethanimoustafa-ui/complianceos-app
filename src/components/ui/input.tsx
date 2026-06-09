@@ -7,7 +7,9 @@ export interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> 
 }
 
 export const Input = forwardRef<HTMLInputElement, InputProps>(
-  ({ className, type, error, label, ...props }, ref) => {
+  // W38: default type="text" — without it the input renders type-less, which
+  // breaks `input[type="text"]` CSS/test selectors and autofill heuristics.
+  ({ className, type = 'text', error, label, ...props }, ref) => {
     return (
       <div className="w-full">
         {label && (

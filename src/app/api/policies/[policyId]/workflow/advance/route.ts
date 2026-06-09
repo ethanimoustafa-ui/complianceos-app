@@ -65,7 +65,10 @@ export async function POST(req: NextRequest, { params }: Params) {
   try {
     const { policyId: policyIdParam } = await params
     // W26-C param parity: assertPolicyExists accepts UUID or ref_code.
-    const { supabase, user, profile } = await requirePerm('settings:edit')
+    // W38: was requirePerm('settings:edit') — an org_admin-only key that locked
+    // compliance officers out of submit/approve/initiate-review. 'edit' matches
+    // every other policy mutation route (PATCH, steps, reseed).
+    const { supabase, user, profile } = await requirePerm('edit')
     const policyId = await assertPolicyExists(supabase, policyIdParam)
     const input = await parseJson(req, AdvancePolicyWorkflowSchema)
 
@@ -442,9 +445,19 @@ export async function POST(req: NextRequest, { params }: Params) {
         throw Conflict(`Unknown workflow action: ${input.action}`)
     }
 
+    // W38 (story 6): stamp approved_date when the LAST step completes —
+    // `update({ status })` alone left it null forever. Symmetrically, an undo
+    // that takes the policy back out of 'approved' rescinds the stamp.
+    const policyUpdate: Record<string, unknown> = { status: nextStatus }
+    if (input.action === 'approve' && nextStatus === 'approved') {
+      policyUpdate.approved_date = today
+    } else if (input.action === 'undo' && nextStatus !== 'approved') {
+      policyUpdate.approved_date = null
+    }
+
     const { data, error } = await supabase
       .from('policies')
-      .update({ status: nextStatus })
+      .update(policyUpdate)
       .eq('id', policyId)
       .is('deleted_at', null)
       .select(POLICY_LIST_COLUMNS)

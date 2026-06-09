@@ -618,6 +618,9 @@
   "observations": {
     "observation": "الملاحظة",
     "deleteSuccess": "تم حذف الملاحظة",
+    "notFoundTitle": "الملاحظة غير موجودة",
+    "notFoundBody": "ربما تم حذفها أو أن الرابط غير صالح.",
+    "backToList": "العودة إلى جميع الملاحظات",
     "title": "متتبع الملاحظات",
     "subtitle": "إدارة التدقيق والمعالجة",
     "addObservation": "إضافة ملاحظة",
@@ -1123,6 +1126,8 @@
       "observationUpdated": "تم تحديث الملاحظة — {{fields}}",
       "observationClosed": "تم إغلاق الملاحظة",
       "observationClosureRequested": "تم طلب الإغلاق — في انتظار المراجعة",
+      "observationClosureApproved": "تمت الموافقة على الإغلاق — تم إغلاق الملاحظة",
+      "observationClosureRejected": "تم رفض الإغلاق — أُعيدت للمعالجة",
       "observationReopened": "تمت إعادة فتح الملاحظة",
       "observationLeaderAssigned": "تم تعيين قائد الملاحظة: {{to}}",
       "observationLeaderChanged": "تم تغيير قائد الملاحظة من {{from}} إلى {{to}}",

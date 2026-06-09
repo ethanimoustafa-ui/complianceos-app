@@ -51,7 +51,12 @@ export function Modal({ isOpen, onClose, title, subtitle, children, size = 'md' 
       />
 
       {/* Modal Content - separate slide animation */}
+      {/* W38: role="dialog" + aria-modal — screen readers (and the e2e specs)
+          could not identify the modal as a dialog without it. */}
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={title || undefined}
         className={cn(
           'modal-content relative w-full bg-white rounded-2xl shadow-2xl max-h-[90vh] overflow-y-auto hide-scrollbar',
           sizeClasses[size]

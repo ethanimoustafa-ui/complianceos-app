@@ -189,9 +189,10 @@ test.describe('Circulars E2E', () => {
       await trigger.scrollIntoViewIfNeeded()
       await trigger.click({ timeout: 5000 })
       await page.waitForTimeout(250)
-      // The dropdown is now open — find the option text inside the z-50 popover.
-      const popover = page.locator('.absolute.z-50').last()
-      const opt = popover.locator('div', { hasText: optionText }).first()
+      // W38: the EditableSelect dropdown is a body-portal with role="listbox"
+      // (the old `.absolute.z-50` in-tree panel is gone).
+      const popover = page.locator('[role="listbox"]').last()
+      const opt = popover.locator('[role="option"]').filter({ hasText: optionText }).first()
       await opt.click({ timeout: 5000 })
       await page.waitForTimeout(200)
     }
@@ -215,29 +216,31 @@ test.describe('Circulars E2E', () => {
     // Reference URL
     await modal.locator('input[type="url"]').fill('https://example.com/test')
 
-    // Departments — check Compliance, Legal, Information Technology.
-    // Click the label (not the checkbox directly) — react's onChange fires
-    // reliably on label clicks. Use exact-text filter to avoid substring matches.
+    // Departments — W38: the Register modal renders chip-style toggle BUTTONS
+    // (W35 redesign); the old label+checkbox grid is gone. Without at least one
+    // selected, "Initiate Tracker" stays disabled and the submit click hangs.
     for (const dept of ['Compliance', 'Legal', 'Information Technology']) {
+      const chip = modal.getByRole('button', { name: new RegExp(`^\\s*${dept}\\s*$`) }).first()
+      if ((await chip.count()) > 0) {
+        await chip.click({ timeout: 3000 })
+        await page.waitForTimeout(80)
+        continue
+      }
+      // Legacy fallback: label + checkbox grid.
       const label = modal.locator('label').filter({ hasText: new RegExp(`^\\s*${dept}\\s*$`) }).first()
-      const labelCount = await label.count()
-      if (labelCount === 0) {
-        console.log(`[step 2] WARN: dept label not found: "${dept}"`)
+      if ((await label.count()) === 0) {
+        console.log(`[step 2] WARN: dept chip/label not found: "${dept}"`)
         continue
       }
       const cb = label.locator('input[type="checkbox"]')
       const checked = await cb.isChecked().catch(() => false)
       if (!checked) {
-        // Click the visible span to trigger the label's onChange.
         await label.locator('span').first().click({ timeout: 3000 }).catch(async () => {
           await cb.click({ force: true })
         })
         await page.waitForTimeout(80)
       }
     }
-    // Log which departments are now checked for diagnostics
-    const checkedDepts = await modal.locator('label:has(input[type="checkbox"]:checked) span').allTextContents()
-    console.log(`[step 2] departments checked in modal: ${JSON.stringify(checkedDepts)}`)
 
     // Description
     await modal.locator('textarea').first().fill('Playwright E2E test')
@@ -360,17 +363,15 @@ test.describe('Circulars E2E', () => {
     const deptTrigger = deptLabel.locator('xpath=following::button[1]')
     await deptTrigger.click({ timeout: 5000 }).catch(() => {})
     await page.waitForTimeout(250)
-    const deptPopover = page.locator('.absolute.z-50').last()
-    await deptPopover.locator('div', { hasText: /^Compliance$/ }).first().click({ timeout: 3000 }).catch(() => {})
+    // W38: EditableSelect dropdown is a body-portal with role="listbox".
+    const deptPopover = page.locator('[role="listbox"]').last()
+    await deptPopover.locator('[role="option"]').filter({ hasText: /^Compliance$/ }).first().click({ timeout: 3000 }).catch(() => {})
     await page.waitForTimeout(200)
-    // Title (third visible text input in modal — easier: look for placeholder)
-    const titleInput = articleModal.locator('input[placeholder*="title" i]').first()
-    if (await titleInput.count() > 0) {
-      await titleInput.fill('E2E Article')
-    } else {
-      // Fallback: 2nd input
-      await articleModal.locator('input[type="text"]').nth(1).fill('E2E Article')
-    }
+    // Title — W38: the placeholder is "e.g., Disclosure Requirements" (no
+    // "title" substring) and the Input renders without a type attribute, so
+    // target the input that FOLLOWS the "Article Title" label instead.
+    const titleLabel = articleModal.locator('label', { hasText: /article title/i }).first()
+    await titleLabel.locator('xpath=following::input[1]').fill('E2E Article')
     // Add 3 checklist items via the "Add Checklist Item" input
     const checklistInput = articleModal.locator('input[placeholder*="checklist" i]')
     if (await checklistInput.count() === 0) {
@@ -434,15 +435,19 @@ test.describe('Circulars E2E', () => {
     await page.waitForTimeout(800)
     await page.getByRole('button', { name: /assign business owner|change business owner/i }).click()
     await page.waitForTimeout(400)
-    const boModal = page.locator('.fixed.inset-0.z-50').last()
-    const boLabel = boModal.locator('label', { hasText: /business owner/i }).first()
-    const boTrigger = boLabel.locator('xpath=following::button[1]')
-    await boTrigger.click({ timeout: 4000 }).catch(() => {})
-    await page.waitForTimeout(250)
-    const boPopover = page.locator('.absolute.z-50').last()
-    await boPopover.locator('div', { hasText: /^Compliance$/ }).first().click({ timeout: 3000 }).catch(() => {})
+    // W38: deterministic flow — role-based dialog, real waits, no silent
+    // catches (the old silently-caught clicks left "Assign" disabled and the
+    // final click hung the whole test).
+    const boModal = page.getByRole('dialog', { name: /assign business owner/i })
+    await boModal.getByRole('button', { name: /select department/i }).click({ timeout: 5000 })
+    const boPopover = page.locator('[role="listbox"]').last()
+    await boPopover
+      .locator('[role="option"]')
+      .filter({ hasText: /^Compliance$/ })
+      .first()
+      .click({ timeout: 10_000 })
     await page.waitForTimeout(300)
-    await boModal.getByRole('button', { name: /assign|change/i }).last().click()
+    await boModal.getByRole('button', { name: /assign|change/i }).last().click({ timeout: 5000 })
     await page.waitForTimeout(1200)
     await page.reload({ waitUntil: 'domcontentloaded', timeout: 30_000 })
     await page.waitForLoadState('networkidle', { timeout: 20_000 }).catch(() => {})
