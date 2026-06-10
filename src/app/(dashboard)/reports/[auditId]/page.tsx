@@ -20,6 +20,7 @@ import { useAuditLogStore, type AuditLog } from '@/stores/audit-log-store'
 import { useAuditTaskStore, type AuditTask } from '@/stores/audit-task-store'
 import { useTeamStore } from '@/stores/team-store'
 import { useDepartmentStore } from '@/stores/department-store'
+import { formatAuditAction } from '@/lib/audit-log-format'
 import { useAuthStore } from '@/stores/auth-store'
 import { useFrameworkConfigStore } from '@/stores/framework-config-store'
 import type { RegulatoryBodyId } from '@/types'
@@ -161,7 +162,9 @@ export default function AuditDetailPage() {
     return calculateNextOccurrence(audit.dueDate, audit.frequency)
   }, [audit?.dueDate, audit?.frequency])
 
-  // Pre-fill values for scheduling next audit
+  // Pre-fill values for scheduling next audit — W48: carry EVERYTHING forward
+  // (title, cadence/schedule, frameworks were missing; the owner had to
+  // retype them on every reschedule).
   const scheduleNextInitialValues = useMemo(() => {
     if (!audit || !nextOccurrence) return undefined
     return {
@@ -171,9 +174,11 @@ export default function AuditDetailPage() {
       priority: audit.priority,
       dueDate: nextOccurrence.toISOString().split('T')[0],
       assigneeId: audit.assignee?.id || '',
-      title: '',
+      title: audit.title,
       description: audit.description || '',
       status: 'pending' as const,
+      reviewSchedule: audit.reviewSchedule,
+      frameworkIds: audit.frameworkIds,
     }
   }, [audit, nextOccurrence])
 
@@ -321,7 +326,14 @@ export default function AuditDetailPage() {
       })
       return translated
     }
-    return log.description
+    // W48: server rows often carry only the raw action key
+    // ("audit.document.register") — humanize it instead of leaking dots into
+    // the UI (the owner read them as an RTL glitch).
+    const d = log.description
+    if (d && /^[a-z0-9_]+(\.[a-z0-9_]+)+$/i.test(d.trim())) {
+      return formatAuditAction(d.trim(), null, t)
+    }
+    return d
   }
 
   // Get timeline items from audit log store
@@ -350,6 +362,9 @@ export default function AuditDetailPage() {
     return items
   }, [getLogsByAuditId, auditId, t])
 
+  // W48: cap the activity timeline at 10 entries with a Load More (parity
+  // with the other activity logs).
+  const [visibleTimelineCount, setVisibleTimelineCount] = useState(10)
   const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null)
   const [taskOptionsId, setTaskOptionsId] = useState<string | null>(null)
   const [editingTask, setEditingTask] = useState<AuditTask | null>(null)
@@ -945,14 +960,14 @@ export default function AuditDetailPage() {
                   </div>
                 ) : (
                   <div className="space-y-8 relative">
-                    {timelineItems.map((item, index) => (
+                    {timelineItems.slice(0, visibleTimelineCount).map((item, index) => (
                       <div
                         key={item.id}
                         className={`flex gap-4 relative cursor-pointer hover:bg-slate-50/50 -mx-4 px-4 py-2 rounded-xl transition-colors`}
                         onClick={() => handleTimelineClick(item)}
                       >
                         {/* Timeline line */}
-                        {index < timelineItems.length - 1 && (
+                        {index < Math.min(timelineItems.length, visibleTimelineCount) - 1 && (
                           <div className={`absolute ${isRTL ? 'right-[11px]' : 'left-[11px]'} top-[24px] bottom-0 w-0.5 bg-slate-200 ml-4`}></div>
                         )}
                         <div className={`relative z-10 w-6 h-6 rounded-full ${item.type === 'comment' ? 'bg-slate-200 text-slate-500' : timelineStyles[item.type].bg + ' text-white'} flex items-center justify-center ring-4 ring-white shrink-0`}>
@@ -971,6 +986,14 @@ export default function AuditDetailPage() {
                         </div>
                       </div>
                     ))}
+                    {timelineItems.length > visibleTimelineCount && (
+                      <button
+                        onClick={() => setVisibleTimelineCount((c) => c + 10)}
+                        className="w-full py-2.5 text-xs font-bold text-emerald-600 hover:text-emerald-700 bg-emerald-50 hover:bg-emerald-100 rounded-lg transition-colors cursor-pointer"
+                      >
+                        {t('common.loadMore')} ({timelineItems.length - visibleTimelineCount})
+                      </button>
+                    )}
                   </div>
                 )}
               </Card>
@@ -1793,22 +1816,28 @@ export default function AuditDetailPage() {
               </div>
             </div>
             {selectedTimeline.detail && (
-              <p className={`text-sm text-slate-600 leading-relaxed italic border-l-4 border-slate-100 pl-4`}>
+              <p className={`text-sm text-slate-600 leading-relaxed italic ${isRTL ? 'border-r-4 pr-4' : 'border-l-4 pl-4'} border-slate-100`}>
                 {selectedTimeline.detail}
               </p>
             )}
-            <div className={`bg-slate-50 p-4 rounded-xl`}>
-              <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">{t('auditDetail.evidenceHash')}</h4>
-              <code className="text-[10px] text-slate-500 break-all bg-white p-2 block border border-slate-200 rounded">sha256:8f2a3194...e71c9b2f</code>
+            {/* W48: the "evidence hash" was hardcoded placeholder data with
+                no user value — show the activity's real details instead. */}
+            <div className={`bg-slate-50 p-4 rounded-xl grid grid-cols-2 gap-4`}>
+              <div>
+                <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">{t('common.date')}</h4>
+                <p className="text-sm font-medium text-slate-700">
+                  {selectedTimeline.timestamp.toLocaleString(isRTL ? 'ar-SA' : 'en-US', { dateStyle: 'medium', timeStyle: 'short' })}
+                </p>
+              </div>
+              <div>
+                <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">{t('reports.audit')}</h4>
+                <p className="text-sm font-medium text-slate-700 truncate">{audit?.title || '-'}</p>
+              </div>
             </div>
           </div>
         )}
         <div className={`mt-6 pt-6 border-t border-slate-100 flex justify-end gap-3`}>
           <Button variant="outline" onClick={() => setShowTimelineModal(false)}>{t('common.close')}</Button>
-          <Button variant="dark">
-            <Icon icon="lucide:download" />
-            {t('auditDetail.downloadLogs')}
-          </Button>
         </div>
       </Modal>
 

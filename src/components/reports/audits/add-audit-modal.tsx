@@ -44,7 +44,11 @@ interface AddAuditModalProps {
   isOpen: boolean
   onClose: () => void
   onSuccess?: (audit: Audit) => void
-  initialValues?: Partial<AuditFormData>
+  initialValues?: Partial<AuditFormData> & {
+    // W48: reschedule carries the full picture forward.
+    reviewSchedule?: ReviewSchedule
+    frameworkIds?: RegulatoryBodyId[]
+  }
 }
 
 export function AddAuditModal({ isOpen, onClose, onSuccess, initialValues }: AddAuditModalProps) {
@@ -147,6 +151,9 @@ export function AddAuditModal({ isOpen, onClose, onSuccess, initialValues }: Add
       if (initialValues.type) {
         setSelectedType(initialValues.type)
       }
+      // W48: cadence + frameworks carry forward on reschedule.
+      if (initialValues.reviewSchedule) setSchedule(initialValues.reviewSchedule)
+      if (initialValues.frameworkIds) setFrameworkIds(initialValues.frameworkIds)
     }
   }, [initialValues, isOpen, reset])
 
@@ -319,6 +326,54 @@ export function AddAuditModal({ isOpen, onClose, onSuccess, initialValues }: Add
                   ...auditEntityTemplates.map((et) => ({ id: `et-${et.id}`, label: et.name })),
                 ]}
                 isRTL={isRTL}
+                // W48 (owner): "Save as template" lives IN the dropdown
+                // (policy parity), not next to the submit buttons.
+                footerSlot={
+                  showSaveAuditTemplateForm ? (
+                    <div className="flex items-center gap-1.5 p-2" onClick={(e) => e.stopPropagation()}>
+                      <input
+                        type="text"
+                        autoFocus
+                        className="flex-1 min-w-0 h-8 rounded-md border border-slate-200 bg-white px-2 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                        placeholder={t('regulatoryUpdates.templateNamePlaceholder' as any)}
+                        value={auditTemplateNameInput}
+                        onChange={(e) => setAuditTemplateNameInput(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') void handleSaveAuditTemplate()
+                          if (e.key === 'Escape') {
+                            e.stopPropagation()
+                            setShowSaveAuditTemplateForm(false)
+                          }
+                        }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => void handleSaveAuditTemplate()}
+                        disabled={isSavingAuditTemplate || !auditTemplateNameInput.trim()}
+                        className="p-1.5 text-emerald-600 hover:text-emerald-700 disabled:opacity-40 cursor-pointer"
+                        title={t('regulatoryUpdates.saveTemplateConfirm' as any)}
+                      >
+                        <Icon icon={isSavingAuditTemplate ? 'lucide:loader-2' : 'lucide:check'} className={`text-sm ${isSavingAuditTemplate ? 'animate-spin' : ''}`} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => { setShowSaveAuditTemplateForm(false); setAuditTemplateNameInput('') }}
+                        className="p-1.5 text-slate-400 hover:text-slate-600 cursor-pointer"
+                      >
+                        <Icon icon="lucide:x" className="text-sm" />
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); setShowSaveAuditTemplateForm(true) }}
+                      className="w-full flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-emerald-700 hover:bg-emerald-50 cursor-pointer"
+                    >
+                      <Icon icon="lucide:save" className="text-sm" />
+                      {t('regulatoryUpdates.saveAsTemplate' as any)}
+                    </button>
+                  )
+                }
               />
             </div>
 
@@ -523,74 +578,20 @@ export function AddAuditModal({ isOpen, onClose, onSuccess, initialValues }: Add
           </form>
         </div>
 
-        {/* Footer — W43: one compact row (save-as-template left, actions
-            right) instead of the stacked layout where the template input
-            stretched across the whole (xl) modal width. */}
-        <div className="p-6 bg-slate-50 border-t border-slate-200 flex items-center justify-between gap-4">
-          {/* M2: Save current form as entity template */}
-          {showSaveAuditTemplateForm ? (
-            <div className="flex items-center gap-2 max-w-sm flex-1">
-              <input
-                type="text"
-                autoFocus
-                className="flex-1 min-w-0 h-9 rounded-lg border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
-                placeholder={t('regulatoryUpdates.templateNamePlaceholder' as any)}
-                value={auditTemplateNameInput}
-                onChange={(e) => setAuditTemplateNameInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') void handleSaveAuditTemplate()
-                  if (e.key === 'Escape') {
-                    // W44: only collapse the inline form — without
-                    // stopPropagation the modal's global Escape also fired
-                    // and closed the whole dialog.
-                    e.stopPropagation()
-                    setShowSaveAuditTemplateForm(false)
-                  }
-                }}
-              />
-              <Button
-                variant="secondary"
-                className="h-9 px-3 text-xs"
-                onClick={() => void handleSaveAuditTemplate()}
-                disabled={isSavingAuditTemplate || !auditTemplateNameInput.trim()}
-              >
-                {isSavingAuditTemplate ? (
-                  <Icon icon="lucide:loader-2" className="animate-spin text-sm" />
-                ) : (
-                  t('regulatoryUpdates.saveTemplateConfirm' as any)
-                )}
-              </Button>
-              <button
-                type="button"
-                onClick={() => { setShowSaveAuditTemplateForm(false); setAuditTemplateNameInput('') }}
-                className="text-slate-400 hover:text-slate-600"
-              >
-                <Icon icon="lucide:x" className="text-sm" />
-              </button>
-            </div>
-          ) : (
-            <button
-              type="button"
-              onClick={() => setShowSaveAuditTemplateForm(true)}
-              className="text-xs text-slate-500 hover:text-emerald-700 flex items-center gap-1.5 transition-colors"
-            >
-              <Icon icon="lucide:save" className="text-[13px]" />
-              {t('regulatoryUpdates.saveAsTemplate' as any)}
-            </button>
-          )}
-          <div className="flex justify-end gap-3 shrink-0">
-            <Button variant="ghost" onClick={handleClose} disabled={isMutating}>
-              {t('common.cancel')}
-            </Button>
-            <LoadingButton
-              variant="primary"
-              loading={isMutating}
-              loadingLabel={t('auditDetail.creating')}
-              onClick={handleSubmit(onSubmit)}
-            >
-              {t('auditDetail.createAudit')}
-            </LoadingButton>
-          </div>
+        {/* Footer — W48: actions only; "Save as template" moved into the
+            Select Template dropdown (policy parity). */}
+        <div className="p-6 bg-slate-50 border-t border-slate-200 flex items-center justify-end gap-3">
+          <Button variant="ghost" onClick={handleClose} disabled={isMutating}>
+            {t('common.cancel')}
+          </Button>
+          <LoadingButton
+            variant="primary"
+            loading={isMutating}
+            loadingLabel={t('auditDetail.creating')}
+            onClick={handleSubmit(onSubmit)}
+          >
+            {t('auditDetail.createAudit')}
+          </LoadingButton>
         </div>
       </div>
     </Modal>
