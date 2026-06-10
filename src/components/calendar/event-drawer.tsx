@@ -45,9 +45,11 @@ interface EventDrawerProps {
   items: UnifiedCalendarItem[]
   calendarType: CalendarType
   onClose: () => void
+  // W43: opens the (previously orphaned) EditEventModal for a user event.
+  onEditEvent?: (event: CalendarEvent) => void
 }
 
-export function EventDrawer({ selectedDayKey, items, calendarType, onClose }: EventDrawerProps) {
+export function EventDrawer({ selectedDayKey, items, calendarType, onClose, onEditEvent }: EventDrawerProps) {
   const { t, isRTL } = useTranslation()
   const router = useRouter()
   const calendarEvents = useCalendarStore((s) => s.events)
@@ -222,6 +224,24 @@ export function EventDrawer({ selectedDayKey, items, calendarType, onClose }: Ev
                         </LoadingButton>
                       )
 
+                      // W43: edit was impossible from the UI (the modal
+                      // existed but nothing opened it).
+                      const editBtn = onEditEvent && calEvent ? (
+                        <LoadingButton
+                          onClick={() => onEditEvent(calEvent)}
+                          aria-label={t('common.edit' as TranslationKey)}
+                          title={t('common.edit' as TranslationKey)}
+                          variant="ghost"
+                          size="sm"
+                          className={cn(
+                            'mt-1 shrink-0 px-3 text-xs font-bold py-2 rounded-lg border',
+                            'bg-white text-slate-600 border-slate-200 hover:bg-slate-50 hover:border-slate-300'
+                          )}
+                        >
+                          <Icon icon="lucide:pencil" className="text-sm" />
+                        </LoadingButton>
+                      ) : null
+
                       return (
                         <>
                           {/* Lazy detail block — kept compact; defers
@@ -260,6 +280,7 @@ export function EventDrawer({ selectedDayKey, items, calendarType, onClose }: Ev
                                 <Icon icon="lucide:check-circle-2" className="text-base" />
                                 <span>{t('calendar.markAsComplete' as TranslationKey)}</span>
                               </div>
+                              {editBtn}
                               {deleteBtn}
                             </div>
                           ) : (
@@ -277,6 +298,7 @@ export function EventDrawer({ selectedDayKey, items, calendarType, onClose }: Ev
                                 <Icon icon="lucide:check-circle-2" className="text-sm" />
                                 {t('calendar.markAsComplete' as TranslationKey)}
                               </LoadingButton>
+                              {editBtn}
                               {deleteBtn}
                             </div>
                           )}

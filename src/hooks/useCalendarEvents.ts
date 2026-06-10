@@ -33,16 +33,41 @@ export function useCalendarEvents() {
   const calendarEvents = useCalendarStore((s) => s.events)
   const fetchCalendarEvents = useCalendarStore((s) => s.fetchAll)
   const fetchCalendarEventTypes = useCalendarEventTypeStore((s) => s.fetchAll)
+  const fetchAudits = useAuditStore((s) => s.fetchAll)
+  const fetchObservations = useObservationStore((s) => s.fetchAll)
+  const fetchPolicies = usePolicyStore((s) => s.fetchAll)
+  const fetchLetters = useLetterStore((s) => s.fetchAll)
+  const fetchCirculars = useCircularStore((s) => s.fetchAll)
+  const fetchEmployees = useTrainingStore((s) => s.fetchEmployees)
+  const fetchCorrespondence = useCorrespondenceStore((s) => s.fetchAll)
+  const fetchAdvisory = useAdvisoryStore((s) => s.fetchAll)
+  const fetchRisks = useRiskStore((s) => s.fetchAll)
 
   // Hydrate the user-created `calendar_events` collection and its `event_types`
   // lookup on mount. Without this, freshly-signed-in users (or anyone after a
   // page reload) see an empty list because the store starts cold. Server
   // mutations already round-trip via `/api/calendar/*`; this just keeps the
   // local mirror in sync with the server source of truth.
+  //
+  // W43: ALSO hydrate the nine aggregated source stores — the calendar merged
+  // whatever happened to be in memory, so on a cold load (or direct deep
+  // navigation) every module's deadlines were missing until the user visited
+  // that module's page. Each fetch is independent + TTL-guarded by its store;
+  // one failure doesn't block the others (no Promise.all).
   useEffect(() => {
     void fetchCalendarEvents()
     void fetchCalendarEventTypes()
-  }, [fetchCalendarEvents, fetchCalendarEventTypes])
+    void fetchAudits()
+    void fetchObservations()
+    void fetchPolicies()
+    void fetchLetters()
+    void fetchCirculars()
+    void fetchEmployees()
+    void fetchCorrespondence()
+    void fetchAdvisory()
+    void fetchRisks()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const items = useMemo(() => {
     const result: UnifiedCalendarItem[] = []

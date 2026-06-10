@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useCallback } from 'react'
-import type { CalendarSourceType } from '@/types'
+import type { CalendarSourceType, CalendarEvent } from '@/types'
 import type { ViewMode, CalendarType } from '@/components/calendar/calendar-types'
 import { ALL_SOURCE_TYPES } from '@/components/calendar/calendar-utils'
 import { useCalendarEvents } from '@/hooks/useCalendarEvents'
@@ -13,6 +13,7 @@ import { SubmissionsList } from '@/components/calendar/submissions-list'
 import { EventDrawer } from '@/components/calendar/event-drawer'
 import { DatePickerModal } from '@/components/calendar/date-picker-modal'
 import { CreateEventModal } from '@/components/calendar/create-event-modal'
+import { EditEventModal } from '@/components/calendar/edit-event-modal'
 
 export default function CalendarPage() {
   const { t, isRTL } = useTranslation()
@@ -36,6 +37,9 @@ export default function CalendarPage() {
   const [isPickerOpen, setIsPickerOpen] = useState(false)
   const [pickerDate, setPickerDate] = useState(() => new Date())
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
+  // W43: the EditEventModal existed but nothing ever opened it — create was
+  // the only mutation reachable from the UI.
+  const [editingEvent, setEditingEvent] = useState<CalendarEvent | null>(null)
 
   // Navigation
   const navigateDate = useCallback((offset: number) => {
@@ -136,6 +140,7 @@ export default function CalendarPage() {
         items={items}
         calendarType={calendarType}
         onClose={closeDrawer}
+        onEditEvent={setEditingEvent}
       />
 
       {isPickerOpen && (
@@ -165,6 +170,17 @@ export default function CalendarPage() {
         isOpen={isCreateModalOpen}
         onClose={() => setIsCreateModalOpen(false)}
         onSuccess={(dateKey) => selectDay(dateKey)}
+      />
+
+      <EditEventModal
+        isOpen={editingEvent !== null}
+        event={editingEvent}
+        onClose={() => setEditingEvent(null)}
+        onSuccess={(updated) => {
+          setEditingEvent(null)
+          // Keep the drawer on the (possibly new) date of the edited event.
+          if (updated.date) selectDay(updated.date.substring(0, 10))
+        }}
       />
     </div>
   )

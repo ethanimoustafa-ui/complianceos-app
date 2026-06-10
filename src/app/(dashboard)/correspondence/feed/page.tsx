@@ -263,25 +263,40 @@ export default function CorrespondenceFeedPage() {
     return Math.round(total / trainings.length)
   }, [trainingStore.trainings])
 
+  // W43: "Current %" = the MEAN of each policy's approval-workflow ratio
+  // (workflow_progress is decorated on GET /api/policies: completed steps /
+  // total steps). Policies without a workflow yet fall back to status
+  // (approved = 100, everything else 0). Overdue counts expired policies and
+  // approved ones past their review date.
   const policyStats = useMemo(() => {
-    const policies = policyStore.policies
+    const policies = policyStore.policies.filter(p => !p.archivedAt)
     if (policies.length === 0) return { currentPct: 0, overdueCount: 0 }
     const now = new Date()
-    const active = policies.filter(p => p.status === 'approved').length
-    const overdue = policies.filter(p => p.status === 'approved' && new Date(p.nextReviewDate) < now).length
+    const progressOf = (p: (typeof policies)[number]) =>
+      typeof p.workflowProgress === 'number'
+        ? p.workflowProgress
+        : p.status === 'approved' ? 100 : 0
+    const sum = policies.reduce((acc, p) => acc + progressOf(p), 0)
+    const overdue = policies.filter(
+      p => p.isExpired || (p.status === 'approved' && p.nextReviewDate && new Date(p.nextReviewDate) < now),
+    ).length
     return {
-      currentPct: Math.round((active / policies.length) * 100),
+      currentPct: Math.round(sum / policies.length),
       overdueCount: overdue,
     }
   }, [policyStore.policies])
 
+  // W43: "Current %" = the MEAN of each circular's own progress (the
+  // server-maintained requirements-completion %) instead of the old binary
+  // overdue/not-overdue split.
   const circularStats = useMemo(() => {
     const circs = circularStore.circulars
     if (circs.length === 0) return { currentPct: 0, overdueCount: 0 }
     const now = new Date()
+    const sum = circs.reduce((acc, c) => acc + (typeof c.progress === 'number' ? c.progress : 0), 0)
     const overdue = circs.filter(c => c.status === 'overdue' || (c.dueDate && new Date(c.dueDate) < now && c.status !== 'completed')).length
     return {
-      currentPct: Math.round(((circs.length - overdue) / circs.length) * 100),
+      currentPct: Math.round(sum / circs.length),
       overdueCount: overdue,
     }
   }, [circularStore.circulars])

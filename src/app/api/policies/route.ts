@@ -57,6 +57,30 @@ export async function GET(req: NextRequest) {
       .range(from, to)
     if (error) throw error
 
+    // W43: decorate each row with `workflow_progress` (completed steps / total
+    // steps, 0–100) in ONE grouped query — list rows don't carry the nested
+    // workflow steps (hydration-gotcha), and the feed's Policy Review panel
+    // derives its "Current %" from the per-policy approval-workflow ratio.
+    const rows = (data ?? []) as Array<Record<string, unknown>>
+    if (rows.length > 0) {
+      const ids = rows.map((r) => r.id as string)
+      const { data: stepRows } = await supabase
+        .from('policy_workflow_steps')
+        .select('policy_id, status')
+        .in('policy_id', ids)
+      const totals = new Map<string, { total: number; done: number }>()
+      for (const s of (stepRows ?? []) as Array<{ policy_id: string; status: string }>) {
+        const t = totals.get(s.policy_id) ?? { total: 0, done: 0 }
+        t.total += 1
+        if (s.status === 'completed') t.done += 1
+        totals.set(s.policy_id, t)
+      }
+      for (const r of rows) {
+        const t = totals.get(r.id as string)
+        r.workflow_progress = t && t.total > 0 ? Math.round((t.done / t.total) * 100) : null
+      }
+    }
+
     // Wave-19.1 / Q2 — ship the persisted `is_expired` column verbatim.
     // Migration 055 added the bool column on `policies` and a BEFORE
     // INSERT/UPDATE trigger + daily pg_cron resync to keep it in sync with

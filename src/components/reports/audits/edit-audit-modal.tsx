@@ -12,6 +12,7 @@ import { cn } from '@/lib/utils'
 import { useAuditStore } from '@/stores/audit-store'
 import { useTeamStore } from '@/stores/team-store'
 import { useAuthStore } from '@/stores/auth-store'
+import { useDepartmentStore } from '@/stores/department-store'
 import { useTranslation } from '@/i18n'
 import type { Audit, AuditAuthority, ReviewSchedule, RegulatoryBodyId } from '@/types'
 import { ReviewSchedulePicker } from '@/components/ui/ReviewSchedulePicker'
@@ -48,6 +49,11 @@ export function EditAuditModal({ isOpen, onClose, audit, onSuccess, calculatedPr
   const { t, isRTL } = useTranslation()
   const { update, isMutating } = useAuditStore()
   const { members } = useTeamStore()
+  // W43: member.department is a department UUID — resolve it to a name
+  // (the picker rendered "Khalid Al-Harbi - d07fc34b-…" otherwise).
+  const departments = useDepartmentStore((s) => s.departments)
+  const deptName = (id: string | undefined) =>
+    (id && departments.find((d) => d.id === id)?.name) || ''
   const currentUser = useAuthStore((state) => state.user)
   // Select stable framework list, then derive with useMemo. Filtering or
   // lookups inside the Zustand selector produce new objects each render
@@ -191,7 +197,8 @@ export function EditAuditModal({ isOpen, onClose, audit, onSuccess, calculatedPr
   const displayProgress = calculatedProgress ?? audit.progress
 
   return (
-    <Modal isOpen={isOpen} onClose={handleClose} size="xl">
+    // W43: lg (not xl) — match AddAuditModal.
+    <Modal isOpen={isOpen} onClose={handleClose} size="lg">
       <div className="flex flex-col max-h-[85vh] -m-6">
         <div className="p-8 flex-1 overflow-y-auto hide-scrollbar">
           <div className="flex justify-between items-start mb-8">
@@ -358,10 +365,13 @@ export function EditAuditModal({ isOpen, onClose, audit, onSuccess, calculatedPr
                           : []),
                         ...members
                           .filter((m) => m.id !== currentUser?.id)
-                          .map((member) => ({
-                            id: member.id,
-                            label: `${member.name} - ${member.department}`,
-                          })),
+                          .map((member) => {
+                            const dept = deptName(member.department)
+                            return {
+                              id: member.id,
+                              label: dept ? `${member.name} — ${dept}` : member.name,
+                            }
+                          }),
                       ]}
                       placeholder={t('auditDetail.selectLeadAuthor')}
                       isRTL={isRTL}

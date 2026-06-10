@@ -11,7 +11,7 @@
 
 import type { NextRequest } from 'next/server'
 import { requirePerm, requireUser } from '@/lib/api/auth'
-import { handle, NotFound, ValidationFailed } from '@/lib/api/errors'
+import { Conflict, handle, NotFound, ValidationFailed } from '@/lib/api/errors'
 import { ok, paginate } from '@/lib/api/response'
 import { parseJson } from '@/lib/api/validate'
 import { rangeFor } from '@/lib/api/pagination'
@@ -99,7 +99,14 @@ export async function POST(req: NextRequest) {
       })
       .select(AUDIT_LIST_COLUMNS)
       .single()
-    if (error || !data) throw error ?? NotFound('Insert returned no row')
+    if (error) {
+      // W43: friendly 409 instead of an opaque 500 on unique violations.
+      if ((error as { code?: string }).code === '23505') {
+        throw Conflict('An audit with this title/reference already exists.')
+      }
+      throw error
+    }
+    if (!data) throw NotFound('Insert returned no row')
 
     const created = data as { id: string; title: string }
     const actorName = profile.name ?? profile.email ?? user.id

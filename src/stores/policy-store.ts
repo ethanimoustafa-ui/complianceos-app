@@ -110,6 +110,9 @@ interface PolicyApiRow {
   is_expired?: boolean
   // P6 (W29): archived_at from migration 081. Set when Archive button is clicked.
   archived_at?: string | null
+  // W43: list decoration — completed/total workflow steps as 0-100 (null when
+  // the policy has no workflow steps yet).
+  workflow_progress?: number | null
   created_at: string
   updated_at: string
   // Detail-GET-only nested children. Wave-19.3 / P18-BUG-1 — `mapRow` now
@@ -353,6 +356,8 @@ function mapRow(row: PolicyApiRow, previous?: Policy): Policy {
     isExpired: row.is_expired ?? previous?.isExpired,
     // P6 (W29): archived_at from migration 081.
     archivedAt: row.archived_at !== undefined ? row.archived_at : previous?.archivedAt,
+    // W43: approval-workflow ratio decorated on the list response.
+    workflowProgress: row.workflow_progress !== undefined ? row.workflow_progress : previous?.workflowProgress,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }

@@ -899,6 +899,9 @@ export interface Policy {
   isExpired?: boolean
   // P6 (W29): set when "Archive Policy" is clicked (migration 081). Null = active.
   archivedAt?: string | null
+  // W43: completed/total approval-workflow steps as 0-100, decorated on the
+  // list response (null when the policy has no steps yet).
+  workflowProgress?: number | null
   createdAt: string
   updatedAt: string
 }

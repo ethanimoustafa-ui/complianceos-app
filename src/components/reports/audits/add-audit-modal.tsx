@@ -12,6 +12,7 @@ import { cn } from '@/lib/utils'
 import { useAuditStore } from '@/stores/audit-store'
 import { useTeamStore } from '@/stores/team-store'
 import { useAuthStore } from '@/stores/auth-store'
+import { useDepartmentStore } from '@/stores/department-store'
 import { useTranslation, type TranslationKey } from '@/i18n'
 import type { Audit, AuditAuthority, AuditCategory, ReviewSchedule, RegulatoryBodyId } from '@/types'
 import { ReviewSchedulePicker } from '@/components/ui/ReviewSchedulePicker'
@@ -50,6 +51,11 @@ export function AddAuditModal({ isOpen, onClose, onSuccess, initialValues }: Add
   const { t, isRTL } = useTranslation()
   const { create, isMutating } = useAuditStore()
   const { members } = useTeamStore()
+  // W43: member.department is a department UUID — resolve it to a name
+  // (the picker rendered "Khalid Al-Harbi - d07fc34b-…" otherwise).
+  const departments = useDepartmentStore((s) => s.departments)
+  const deptName = (id: string | undefined) =>
+    (id && departments.find((d) => d.id === id)?.name) || ''
   const currentUser = useAuthStore((state) => state.user)
   const { templates: auditTemplates, incrementUsage } = useAuditTemplateStore()
   // M2: entity-template store for saving current form as a reusable template.
@@ -239,7 +245,8 @@ export function AddAuditModal({ isOpen, onClose, onSuccess, initialValues }: Add
   }
 
   return (
-    <Modal isOpen={isOpen} onClose={handleClose} size="xl">
+    // W43: lg (not xl) — the 2-col grid floated in whitespace at xl width.
+    <Modal isOpen={isOpen} onClose={handleClose} size="lg">
       <div className="flex flex-col max-h-[85vh] -m-6">
         <div className="p-8 flex-1 overflow-y-auto hide-scrollbar">
           <div className="flex justify-between items-start mb-8">
@@ -430,10 +437,13 @@ export function AddAuditModal({ isOpen, onClose, onSuccess, initialValues }: Add
                           : []),
                         ...members
                           .filter((m) => m.id !== currentUser?.id)
-                          .map((member) => ({
-                            id: member.id,
-                            label: `${member.name} - ${member.department}`,
-                          })),
+                          .map((member) => {
+                            const dept = deptName(member.department)
+                            return {
+                              id: member.id,
+                              label: dept ? `${member.name} — ${dept}` : member.name,
+                            }
+                          }),
                       ]}
                       placeholder={t('auditDetail.selectLeadAuthor')}
                       isRTL={isRTL}
@@ -470,15 +480,17 @@ export function AddAuditModal({ isOpen, onClose, onSuccess, initialValues }: Add
           </form>
         </div>
 
-        {/* Footer */}
-        <div className="p-8 bg-slate-50 border-t border-slate-200 flex flex-col gap-3">
+        {/* Footer — W43: one compact row (save-as-template left, actions
+            right) instead of the stacked layout where the template input
+            stretched across the whole (xl) modal width. */}
+        <div className="p-6 bg-slate-50 border-t border-slate-200 flex items-center justify-between gap-4">
           {/* M2: Save current form as entity template */}
           {showSaveAuditTemplateForm ? (
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 max-w-sm flex-1">
               <input
                 type="text"
                 autoFocus
-                className="flex-1 h-9 rounded-lg border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                className="flex-1 min-w-0 h-9 rounded-lg border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
                 placeholder={t('regulatoryUpdates.templateNamePlaceholder' as any)}
                 value={auditTemplateNameInput}
                 onChange={(e) => setAuditTemplateNameInput(e.target.value)}
@@ -511,13 +523,13 @@ export function AddAuditModal({ isOpen, onClose, onSuccess, initialValues }: Add
             <button
               type="button"
               onClick={() => setShowSaveAuditTemplateForm(true)}
-              className="self-start text-xs text-slate-500 hover:text-emerald-700 flex items-center gap-1.5 transition-colors"
+              className="text-xs text-slate-500 hover:text-emerald-700 flex items-center gap-1.5 transition-colors"
             >
               <Icon icon="lucide:save" className="text-[13px]" />
               {t('regulatoryUpdates.saveAsTemplate' as any)}
             </button>
           )}
-          <div className="flex justify-end gap-3">
+          <div className="flex justify-end gap-3 shrink-0">
             <Button variant="ghost" onClick={handleClose} disabled={isMutating}>
               {t('common.cancel')}
             </Button>
