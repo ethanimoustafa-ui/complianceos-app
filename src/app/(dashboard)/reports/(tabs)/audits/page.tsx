@@ -170,6 +170,9 @@ export default function ReportsAuditsPage() {
   // W45: user-added categories (hydrated on mount) — feeds the filter options
   // and the unknown-category passthrough below.
   const customAuditCategories = useAuditCategoryStore((s) => s.categories)
+  // W53: archived-cycle count for the delete-confirmation warning.
+  const cyclesByAudit = useAuditStore((s) => s.cyclesByAudit)
+  const deleteTargetCycles = auditToDelete ? cyclesByAudit[auditToDelete.id] : undefined
 
   const [showScheduleAuditModal, setShowScheduleAuditModal] = useState(false)
   const [auditSearchTerm, setAuditSearchTerm] = useState('')
@@ -780,6 +783,9 @@ export default function ReportsAuditsPage() {
                 const storeAudit = storeAudits.find(a => a.id === auditDropdownOpen.id)
                 if (storeAudit) {
                   setAuditToDelete(storeAudit)
+                  // W53: the confirm warns about archived cycles — fetch the
+                  // count before the user can hit Delete.
+                  void useAuditStore.getState().fetchCycles(storeAudit.id)
                   setShowDeleteConfirm(true)
                 }
                 setAuditDropdownOpen(null)
@@ -816,6 +822,12 @@ export default function ReportsAuditsPage() {
         }}
         itemType={t('reports.audit')}
         itemName={auditToDelete?.title || ''}
+        // W53 (owner): plainly state that archived cycles die with the audit.
+        description={
+          (deleteTargetCycles?.length ?? 0) > 0
+            ? t('auditDetail.deleteWithCyclesWarning').replace('{{n}}', String(deleteTargetCycles?.length ?? 0))
+            : t('auditDetail.deleteWarning')
+        }
       />
     </div>
   )

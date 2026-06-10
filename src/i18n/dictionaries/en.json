@@ -2831,6 +2831,8 @@
     "backToCurrent": "Back to Current",
     "closedAt": "Closed",
     "uploadFailed": "Upload failed — please retry.",
+    "deleteWarning": "This will permanently delete the audit and all its team assignments, comments, documents, findings, and activity. This cannot be undone.",
+    "deleteWithCyclesWarning": "This will permanently destroy {{n}} archived audit cycle(s) — the previous reviews and their snapshots — along with the audit, its team assignments, comments, documents, findings, and activity. This cannot be undone.",
     "downloadUnavailable": "No file is stored for this document (it was registered before file uploads existed).",
     "historyChecklist": "Checklist",
     "historyDocuments": "Documents",

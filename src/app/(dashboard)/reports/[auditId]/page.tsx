@@ -424,6 +424,8 @@ export default function AuditDetailPage() {
   const [rescheduleDate, setRescheduleDate] = useState('')
   // W51: when set, the WHOLE page shows the archived cycle (read-only).
   const [viewingCycle, setViewingCycle] = useState<AuditCycleDetail | null>(null)
+  // W53: archived-cycle count feeds the delete-confirmation warning.
+  const auditCycles = useAuditStore((s) => s.cyclesByAudit[auditId])
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [selectedTimeline, setSelectedTimeline] = useState<TimelineItem | null>(null)
 
@@ -2058,7 +2060,12 @@ export default function AuditDetailPage() {
         }}
         itemType={t('reports.audit')}
         itemName={audit?.title || ''}
-        description={`This will permanently delete the audit and all its team assignments, comments, documents, findings, and activity. This cannot be undone.`}
+        // W53 (owner): say PLAINLY that the archived cycles die with it.
+        description={
+          (auditCycles?.length ?? 0) > 0
+            ? t('auditDetail.deleteWithCyclesWarning').replace('{{n}}', String(auditCycles?.length ?? 0))
+            : t('auditDetail.deleteWarning')
+        }
         requireConfirmation
       />
 
