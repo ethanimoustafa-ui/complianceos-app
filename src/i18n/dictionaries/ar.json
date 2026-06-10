@@ -2830,6 +2830,8 @@
     "downloadReport": "تنزيل التقرير",
     "backToCurrent": "العودة إلى الحالي",
     "closedAt": "أُغلق في",
+    "uploadFailed": "فشل الرفع — حاول مرة أخرى.",
+    "downloadUnavailable": "لا يوجد ملف مخزن لهذا المستند (سُجّل قبل دعم رفع الملفات).",
     "historyChecklist": "قائمة المهام",
     "historyDocuments": "المستندات",
     "historyComments": "التعليقات",

@@ -952,29 +952,9 @@ export default function ReportsExecutivePage() {
                 )}
               </div>
               <div className="pt-6 border-t border-slate-100 flex gap-3">
-                <button
-                  onClick={() => {
-                    const rows = [{
-                      [t('reports.auditName')]: selectedFinding.auditName,
-                      [t('reports.id')]: selectedFinding.id,
-                      Category: auditTypeLabels[selectedFinding.category] || selectedFinding.category,
-                      [t('reports.severity')]: severityLabels[selectedFinding.severity],
-                      [t('reports.status')]: statusLabels[selectedFinding.status],
-                      [t('reports.owner')]: selectedFinding.owner.name,
-                      [t('reports.dueDate')]: selectedFinding.dueDate.toLocaleDateString(),
-                      [t('reports.progress')]: `${sourceAudit?.progress ?? 0}%`,
-                      [t('reports.issueSummary')]: selectedFinding.description,
-                    }]
-                    generatePrintableReport(
-                      `${t('reports.findingDetail')} — ${selectedFinding.auditName}`,
-                      rows,
-                      { subtitle: auditTypeLabels[selectedFinding.category] || selectedFinding.category },
-                    )
-                  }}
-                  className="flex-1 bg-slate-100 text-slate-900 py-3 rounded-xl font-bold text-xs uppercase tracking-widest hover:bg-slate-200 transition-all cursor-pointer"
-                >
-                  {t('reports.shareReport')}
-                </button>
+                {/* W52 (owner): the printable "Share Report" of a single
+                    finding row made no sense — the audit's details live in
+                    the audit itself. The drawer's one action is going there. */}
                 {sourceAudit && (
                   <Link href={`/reports/${sourceAudit.id}`} className="flex-1 bg-slate-900 text-white py-3 px-4 rounded-xl font-bold text-xs uppercase tracking-wider shadow-lg hover:bg-slate-800 transition-all flex items-center justify-center gap-2 text-center">
                     {t('reports.viewAuditDetails')} <Icon icon="lucide:external-link" className="w-3 h-3 shrink-0" />

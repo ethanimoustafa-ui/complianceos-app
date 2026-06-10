@@ -81,6 +81,9 @@ export interface AuditDocument {
   type: 'pdf' | 'image' | 'doc'
   uploadedAt: string
   uploadedBy?: string
+  // W52: storage object path in the audit_documents bucket — downloads mint
+  // a signed URL from it.
+  storagePath?: string
 }
 
 export interface AuditTeamMember {

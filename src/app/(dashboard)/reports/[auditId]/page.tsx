@@ -14,6 +14,7 @@ import { DeleteConfirmationDialog } from '@/components/ui/delete-confirmation-di
 import { useTranslation } from '@/i18n'
 import { formatRelativeTime, formatLocalizedDateShort, calculateNextOccurrence, formatFutureCountdown } from '@/lib/time-utils'
 import { computeNextReview } from '@/lib/review-schedule'
+import { supabase as supabaseClient } from '@/lib/supabase/client'
 import { formatTimelineDate } from '@/lib/format-date'
 import { useAuditStore } from '@/stores/audit-store'
 import { useAuditCategoryStore } from '@/stores/audit-category-store'
@@ -450,6 +451,8 @@ export default function AuditDetailPage() {
   // File upload state
   // W46: multi-file — uploading artifacts one at a time was needlessly slow.
   const [uploadFiles, setUploadFiles] = useState<File[]>([])
+  // W52: real byte upload in flight.
+  const [uploadBusy, setUploadBusy] = useState(false)
 
   // Edit task form state
   const [editTaskForm, setEditTaskForm] = useState({
@@ -596,24 +599,64 @@ export default function AuditDetailPage() {
   }
 
   // Document handlers
-  const handleFileUpload = () => {
+  const handleFileUpload = async () => {
     if (uploadFiles.length === 0) {
       showToast(t('auditDetail.pleaseSelectFile'))
       return
     }
 
-    for (const file of uploadFiles) {
-      const fileType = file.type.includes('pdf') ? 'pdf' :
-                       file.type.includes('image') ? 'image' : 'doc'
-      addDocument(auditId, {
-        name: file.name,
-        type: fileType,
-      }, { name: currentUser?.name || 'User' })
+    // W52: actually upload the BYTES — the old flow recorded metadata with a
+    // stub path and nothing was ever downloadable.
+    setUploadBusy(true)
+    try {
+      for (const file of uploadFiles) {
+        const fileType = file.type.includes('pdf') ? 'pdf' :
+                         file.type.includes('image') ? 'image' : 'doc'
+        const safeName = file.name.replace(/[^a-zA-Z0-9._-]+/g, '_')
+        const storagePath = `audits/${auditId}/${Date.now()}-${safeName}`
+        const { error: upErr } = await supabaseClient.storage
+          .from('audit_documents')
+          .upload(storagePath, file)
+        if (upErr) {
+          showToast(t('auditDetail.uploadFailed'))
+          continue
+        }
+        await addDocument(auditId, {
+          name: file.name,
+          type: fileType,
+          storage_path: storagePath,
+        }, { name: currentUser?.name || 'User' })
+      }
+      setUploadFiles([])
+      setShowUploadModal(false)
+      showToast(t('auditDetail.documentUploaded'))
+    } finally {
+      setUploadBusy(false)
     }
+  }
 
-    setUploadFiles([])
-    setShowUploadModal(false)
-    showToast(t('auditDetail.documentUploaded'))
+  // W52: download via a short-lived signed URL from the private bucket.
+  const handleDownloadDocument = async (name: string, storagePath?: string) => {
+    if (!storagePath) {
+      showToast(t('auditDetail.downloadUnavailable'))
+      return
+    }
+    const { data, error } = await supabaseClient.storage
+      .from('audit_documents')
+      .createSignedUrl(storagePath, 60, { download: name })
+    if (error || !data?.signedUrl) {
+      // Legacy stub-path rows (pre-W52) have no storage object behind them.
+      showToast(t('auditDetail.downloadUnavailable'))
+      return
+    }
+    // Anchor click instead of window.open — popup blockers kill window.open
+    // calls that happen after an await.
+    const a = document.createElement('a')
+    a.href = data.signedUrl
+    a.download = name
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
   }
 
   const handleRemoveDocument = (docId: string) => {
@@ -1541,6 +1584,14 @@ export default function AuditDetailPage() {
                         className="text-slate-500 group-hover:text-emerald-400"
                       />
                       <span className="text-xs font-medium text-slate-300 flex-1">{doc.name}</span>
+                      {/* W52: download via signed URL. */}
+                      <button
+                        onClick={() => void handleDownloadDocument(doc.name, doc.storagePath)}
+                        className="p-1 text-slate-500 hover:text-emerald-400 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
+                        title={t('auditDetail.downloadReport')}
+                      >
+                        <Icon icon="lucide:download" className="text-sm" />
+                      </button>
                       <button
                         onClick={() => handleRemoveDocument(doc.id)}
                         className="p-1 text-slate-500 hover:text-rose-400 opacity-0 group-hover:opacity-100 transition-opacity"
@@ -1950,7 +2001,7 @@ export default function AuditDetailPage() {
         </div>
         <div className={`mt-6 pt-6 border-t border-slate-100 flex justify-end gap-3`}>
           <Button variant="outline" onClick={() => { setUploadFiles([]); setShowUploadModal(false) }} disabled={isMutating}>{t('common.cancel')}</Button>
-          <LoadingButton variant="primary" loading={isMutating} onClick={handleFileUpload} disabled={uploadFiles.length === 0}>
+          <LoadingButton variant="primary" loading={uploadBusy || isMutating} onClick={() => void handleFileUpload()} disabled={uploadFiles.length === 0}>
             <Icon icon="lucide:upload" />
             {t('auditDetail.upload')}
           </LoadingButton>

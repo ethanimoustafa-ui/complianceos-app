@@ -2830,6 +2830,8 @@
     "downloadReport": "Download Report",
     "backToCurrent": "Back to Current",
     "closedAt": "Closed",
+    "uploadFailed": "Upload failed — please retry.",
+    "downloadUnavailable": "No file is stored for this document (it was registered before file uploads existed).",
     "historyChecklist": "Checklist",
     "historyDocuments": "Documents",
     "historyComments": "Comments",

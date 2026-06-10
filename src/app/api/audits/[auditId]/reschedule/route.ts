@@ -58,6 +58,28 @@ export async function POST(req: NextRequest, { params }: Params) {
     if (!auditRes.data) throw NotFound(`Audit ${auditId} not found`)
     const auditRow = auditRes.data as Record<string, unknown>
 
+    // W52: freeze author NAMES into the comment snapshot — author_id alone
+    // renders nameless once the cycle is archived (and profiles can churn).
+    const commentRows = (commentsRes.data ?? []) as Array<Record<string, unknown>>
+    const authorIds = [...new Set(commentRows.map((c) => c.author_id).filter(Boolean))] as string[]
+    let names: Record<string, string> = {}
+    if (authorIds.length > 0) {
+      const { data: profiles } = await supabase
+        .from('profiles')
+        .select('id, name, email')
+        .in('id', authorIds)
+      names = Object.fromEntries(
+        ((profiles ?? []) as Array<{ id: string; name: string | null; email: string | null }>).map((p) => [
+          p.id,
+          p.name ?? p.email ?? '',
+        ]),
+      )
+    }
+    const enrichedComments = commentRows.map((c) => ({
+      ...c,
+      author_name: names[(c.author_id as string) ?? ''] ?? null,
+    }))
+
     // ── 2. archive the cycle ──
     const { count } = await supabase
       .from('audit_cycles')
@@ -77,7 +99,7 @@ export async function POST(req: NextRequest, { params }: Params) {
           audit: auditRow,
           tasks: tasksRes.data ?? [],
           documents: docsRes.data ?? [],
-          comments: commentsRes.data ?? [],
+          comments: enrichedComments,
           team: teamRes.data ?? [],
           logs: logsRes.data ?? [],
         },

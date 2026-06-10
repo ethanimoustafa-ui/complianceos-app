@@ -11,8 +11,10 @@ import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { useTranslation } from '@/i18n'
 import { useAuditStore, type AuditCycleSummary, type AuditCycleDetail } from '@/stores/audit-store'
+import { useTeamStore } from '@/stores/team-store'
 import { generateAuditCyclePdf } from '@/lib/audit-cycle-pdf'
 import { formatAuditAction } from '@/lib/audit-log-format'
+import { supabase as supabaseClient } from '@/lib/supabase/client'
 
 const STATUS_STYLE: Record<string, string> = {
   completed: 'bg-emerald-50 text-emerald-600 border-emerald-200',
@@ -108,8 +110,33 @@ export function ArchivedCycleView({
   onBack: () => void
 }) {
   const { t, isRTL } = useTranslation()
+  const teamMembers = useTeamStore((s) => s.members)
   const snap = cycle.snapshot
   const audit = snap.audit as Record<string, unknown>
+
+  // W52: snapshots taken after this fix carry author_name; older ones only
+  // have author_id — resolve those through the org directory.
+  const commentAuthor = (c: { author_name?: string | null; author_id?: string | null }): string =>
+    c.author_name ||
+    (c.author_id ? teamMembers.find((m) => m.id === c.author_id)?.name : undefined) ||
+    '—'
+
+  // W52: archived documents stay downloadable — the storage objects outlive
+  // the cycle (only the live metadata rows are cleared on reschedule).
+  const downloadDoc = async (name: string, storagePath?: string) => {
+    if (!storagePath) return
+    const { data } = await supabaseClient.storage
+      .from('audit_documents')
+      .createSignedUrl(storagePath, 60, { download: name })
+    if (!data?.signedUrl) return
+    // Anchor click — popup blockers kill window.open after an await.
+    const a = document.createElement('a')
+    a.href = data.signedUrl
+    a.download = name
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+  }
 
   return (
     <div dir={isRTL ? 'rtl' : 'ltr'}>
@@ -204,12 +231,22 @@ export function ArchivedCycleView({
                 </h3>
               </div>
               <div className="p-5 space-y-1.5 max-h-32 overflow-y-auto hide-scrollbar">
-                {snap.documents.map((d, i) => (
-                  <p key={i} className="text-sm text-slate-600 truncate flex items-center gap-2">
-                    <Icon icon="lucide:file-text" className="text-slate-300 shrink-0" />
-                    {(d as { name?: string }).name ?? '-'}
-                  </p>
-                ))}
+                {snap.documents.map((d, i) => {
+                  const r = d as { name?: string; storage_path?: string }
+                  return (
+                    <div key={i} className="flex items-center gap-2 group">
+                      <Icon icon="lucide:file-text" className="text-slate-300 shrink-0" />
+                      <span className="text-sm text-slate-600 truncate flex-1">{r.name ?? '-'}</span>
+                      <button
+                        onClick={() => void downloadDoc(r.name ?? 'document', r.storage_path)}
+                        className="p-1 text-slate-400 hover:text-emerald-600 transition-colors cursor-pointer shrink-0"
+                        title={t('auditDetail.downloadReport')}
+                      >
+                        <Icon icon="lucide:download" className="text-sm" />
+                      </button>
+                    </div>
+                  )
+                })}
                 {snap.documents.length === 0 && <p className="text-xs text-slate-400">—</p>}
               </div>
             </Card>
@@ -221,10 +258,13 @@ export function ArchivedCycleView({
               </div>
               <div className="p-5 space-y-2 max-h-32 overflow-y-auto hide-scrollbar">
                 {snap.comments.map((c, i) => {
-                  const r = c as { content?: string; created_at?: string }
+                  const r = c as { content?: string; created_at?: string; author_name?: string | null; author_id?: string | null }
                   return (
                     <p key={i} className="text-sm text-slate-600">
-                      <span className="text-[10px] text-slate-400">{r.created_at?.slice(0, 10)}</span> — {r.content ?? ''}
+                      <span className="font-bold text-slate-800">{commentAuthor(r)}</span>{' '}
+                      <span className="text-[10px] text-slate-400">{r.created_at?.slice(0, 10)}</span>
+                      <br />
+                      {r.content ?? ''}
                     </p>
                   )
                 })}

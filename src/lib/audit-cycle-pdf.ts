@@ -43,8 +43,8 @@ export function generateAuditCyclePdf(cycle: AuditCycleDetail, auditTitle: strin
 
   write(`Comments (${snap.comments.length})`, { size: 13, bold: true, gap: 3 })
   for (const c of snap.comments) {
-    const r = c as { content?: string; created_at?: string }
-    write(`• ${r.created_at ? `[${r.created_at.slice(0, 10)}] ` : ''}${r.content ?? ''}`)
+    const r = c as { content?: string; created_at?: string; author_name?: string | null }
+    write(`• ${r.created_at ? `[${r.created_at.slice(0, 10)}] ` : ''}${r.author_name ? `${r.author_name}: ` : ''}${r.content ?? ''}`)
   }
   if (snap.comments.length === 0) write('— none —')
 

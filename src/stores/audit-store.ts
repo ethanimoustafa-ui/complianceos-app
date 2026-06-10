@@ -237,6 +237,7 @@ function mapDocumentRow(row: AuditDocumentApiRow): AuditDocument {
     type: row.type,
     uploadedAt: row.uploaded_at,
     uploadedBy: row.uploaded_by ?? undefined,
+    storagePath: row.storage_path ?? undefined,
   }
 }
 
@@ -575,13 +576,7 @@ export const useAuditStore = create<AuditState>()((set, get) => ({
         updatedAt: r.updated_at,
         isEdited: r.is_edited ?? false,
       }))
-      const documents = unwrapItems<AuditDocumentApiRow>(docsRes).map((r) => ({
-        id: r.id,
-        name: r.name,
-        type: r.type,
-        uploadedAt: r.uploaded_at,
-        uploadedBy: r.uploaded_by ?? undefined,
-      }))
+      const documents = unwrapItems<AuditDocumentApiRow>(docsRes).map(mapDocumentRow)
       const patch = (a: Audit): Audit => (a.id === id ? { ...a, team, comments, documents } : a)
       set((state) => ({
         audits: state.audits.map(patch),
