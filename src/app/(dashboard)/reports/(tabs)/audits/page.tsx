@@ -22,6 +22,7 @@ import { useComplianceScore } from '@/hooks/useComplianceScore'
 import { Gate } from '@/components/auth/gate'
 import { useAuditCategoryStore } from '@/stores/audit-category-store'
 import { useAuthStore } from '@/stores/auth-store'
+import { useTeamStore } from '@/stores/team-store'
 import { LETTER_AUTHORITIES, AUTHORITY_COLORS, getAuthorityFullName } from '@/lib/letter-authority'
 import { dicebearAvatar } from '@/lib/avatar'
 
@@ -149,8 +150,15 @@ export default function ReportsAuditsPage() {
   // Wave-2 Agent E: first-fetch skeleton.
   const auditsLoading = useAuditStore((s) => s.isLoading)
   const auditsLastFetched = useAuditStore((s) => s.lastFetched)
+  // W49: hold the table behind the skeleton until the TEAM directory has
+  // hydrated too — the Responsible column resolved names from it, so rows
+  // briefly rendered "Unknown" and then flipped (worst when navigating back
+  // from the audit detail).
+  const teamMembers = useTeamStore((s) => s.members)
+  const teamLastFetched = useTeamStore((s) => s.lastFetched)
   const showAuditsSkeleton =
-    auditsLoading && storeAudits.length === 0 && auditsLastFetched === null
+    (auditsLoading && storeAudits.length === 0 && auditsLastFetched === null) ||
+    (teamLastFetched === null && storeAudits.length > 0)
 
   // Audit edit/delete state
   const [auditToEdit, setAuditToEdit] = useState<AuditType | null>(null)
@@ -188,6 +196,8 @@ export default function ReportsAuditsPage() {
     fetchAudits()
     // W45: hydrate custom audit categories so they appear as filter options.
     void useAuditCategoryStore.getState().fetchAll()
+    // W49: the Responsible column resolves names from the team directory.
+    void useTeamStore.getState().fetchAll()
   }, [fetchAudits])
 
   // Close audit dropdown when clicking outside
@@ -227,13 +237,20 @@ export default function ReportsAuditsPage() {
         displayStatus = 'pending'
       }
 
+      // W49: render-side name resolution — store-mapped stubs can predate
+      // team hydration; resolving here means names are right the moment the
+      // (team-gated) table renders.
+      const resolvedName =
+        audit.assignee?.name ||
+        (audit.assignee?.id ? teamMembers.find((m) => m.id === audit.assignee?.id)?.name : undefined) ||
+        'Unassigned'
       return {
         id: audit.id,
         name: audit.title,
         description: '',
         responsible: {
-          name: audit.assignee?.name || 'Unassigned',
-          avatar: dicebearAvatar(audit.assignee?.name || 'default'),
+          name: resolvedName,
+          avatar: dicebearAvatar(resolvedName === 'Unassigned' ? 'default' : resolvedName),
           department: audit.assignee?.department || undefined,
         },
         dueDate: new Date(audit.dueDate),
@@ -246,7 +263,7 @@ export default function ReportsAuditsPage() {
         closedOverdue: audit.closedOverdue,
       }
     })
-  }, [storeAudits])
+  }, [storeAudits, teamMembers])
 
   // Filtered audits based on selected filters. W45: a category with no
   // matching filter option (race between row fetch and category hydration)

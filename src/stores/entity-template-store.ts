@@ -24,6 +24,8 @@ interface EntityTemplateState {
   fetchByType: (entityType: string) => Promise<void>
   saveTemplate: (entityType: string, name: string, nameAr: string | undefined, fields: Record<string, unknown>) => Promise<EntityTemplate>
   deleteTemplate: (id: string, entityType: string) => Promise<void>
+  // W49: rename a saved template (policy-template parity).
+  renameTemplate: (id: string, entityType: string, name: string, nameAr?: string) => Promise<void>
 }
 
 export const useEntityTemplateStore = create<EntityTemplateState>()((set, get) => ({
@@ -69,6 +71,19 @@ export const useEntityTemplateStore = create<EntityTemplateState>()((set, get) =
       byType: {
         ...s.byType,
         [entityType]: (s.byType[entityType] ?? []).filter((t) => t.id !== id),
+      },
+    }))
+  },
+
+  renameTemplate: async (id, entityType, name, nameAr) => {
+    const updated = await api.patch<EntityTemplate>(`/entity-templates/${id}`, {
+      name,
+      ...(nameAr ? { name_ar: nameAr } : {}),
+    })
+    set((s) => ({
+      byType: {
+        ...s.byType,
+        [entityType]: (s.byType[entityType] ?? []).map((t) => (t.id === id ? updated : t)),
       },
     }))
   },

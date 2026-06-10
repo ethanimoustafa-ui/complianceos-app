@@ -21,6 +21,8 @@ import { useAuditTaskStore, type AuditTask } from '@/stores/audit-task-store'
 import { useTeamStore } from '@/stores/team-store'
 import { useDepartmentStore } from '@/stores/department-store'
 import { formatAuditAction } from '@/lib/audit-log-format'
+import { useAuditTaskCategoryStore } from '@/stores/audit-task-category-store'
+import { SEED_TASK_CATEGORIES } from '@/lib/audit-task-seed-categories'
 import { useAuthStore } from '@/stores/auth-store'
 import { useFrameworkConfigStore } from '@/stores/framework-config-store'
 import type { RegulatoryBodyId } from '@/types'
@@ -131,6 +133,9 @@ export default function AuditDetailPage() {
   const { members: teamMembers } = useTeamStore()
   // W46: resolve department UUIDs to names in the team-member picker.
   const departments = useDepartmentStore((s) => s.departments)
+  // W49: per-authority user-added task categories.
+  const taskCategoryExtras = useAuditTaskCategoryStore((s) => s.items)
+  const taskCategoryStore = useAuditTaskCategoryStore()
   const currentUser = useAuthStore((state) => state.user)
 
   // Find audit from store
@@ -214,6 +219,12 @@ export default function AuditDetailPage() {
   }, [audit, teamMembers, currentUser])
 
   // Get dynamic categories based on audit type with translations
+  // W49: the authority key user-added task categories scope to.
+  const taskAuthority = useMemo(() => {
+    const rawType = (audit?.type as string) || 'internal'
+    return rawType === 'sharia' ? 'sharia-board' : rawType
+  }, [audit?.type])
+
   const taskCategories = useMemo(() => {
     const taskCategoriesByType: Record<string, Array<{ value: string; label: string; color: 'blue' | 'amber' | 'purple' }>> = {
       internal: [
@@ -247,9 +258,33 @@ export default function AuditDetailPage() {
         { value: 'ssb-reporting', label: t('auditDetail.categorySsbReporting'), color: 'amber' },
       ],
     }
-    const auditType = audit?.type || 'internal'
-    return taskCategoriesByType[auditType] || taskCategoriesByType.internal
-  }, [audit?.type, t])
+    // W49: normalize the authority, fall back to the bilingual seed sets for
+    // authorities without a translated set, and append the USER-ADDED
+    // categories for THIS authority only (no cross-framework bleed). Seeds
+    // are flagged so the picker protects them from edit/delete.
+    const rawType = (audit?.type as string) || 'internal'
+    const auditType = rawType === 'sharia-board' ? 'sharia' : rawType
+    const seeded =
+      taskCategoriesByType[auditType] ??
+      (SEED_TASK_CATEGORIES[auditType] ?? []).map((c) => ({
+        value: c.value,
+        label: isRTL ? c.ar : c.en,
+        color: c.color,
+      }))
+    const base = (seeded.length > 0 ? seeded : taskCategoriesByType.internal).map((c) => ({
+      ...c,
+      isSeed: true,
+    }))
+    const extras = taskCategoryExtras
+      .filter((i) => i.authority === taskAuthority)
+      .map((i) => ({
+        value: i.id,
+        label: isRTL ? i.labelAr || i.label : i.label,
+        color: 'blue' as const,
+        isSeed: false,
+      }))
+    return [...base, ...extras]
+  }, [audit?.type, t, isRTL, taskCategoryExtras, taskAuthority])
 
   // Fetch audit on mount — W45: also hydrate the detail children (team /
   // comments / documents) and the server-backed checklist; without these the
@@ -265,6 +300,11 @@ export default function AuditDetailPage() {
       // local addLog entries are session-only, so a hard refresh wiped the
       // timeline even though every mutation wrote a server row.
       void useAuditLogStore.getState().fetchAll({ auditId, pageSize: 100 })
+      // W49: audit-level categories (the CATEGORY card showed a raw UUID
+      // because nothing hydrated the lookup on this page) + per-authority
+      // task categories.
+      void useAuditCategoryStore.getState().fetchAll()
+      void useAuditTaskCategoryStore.getState().fetchAll()
     }
   }, [auditId, fetchById])
 
@@ -365,6 +405,8 @@ export default function AuditDetailPage() {
   // W48: cap the activity timeline at 10 entries with a Load More (parity
   // with the other activity logs).
   const [visibleTimelineCount, setVisibleTimelineCount] = useState(10)
+  // W49: inline validation for the Add Task modal.
+  const [taskFormErrors, setTaskFormErrors] = useState<Record<string, string>>({})
   const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null)
   const [taskOptionsId, setTaskOptionsId] = useState<string | null>(null)
   const [editingTask, setEditingTask] = useState<AuditTask | null>(null)
@@ -460,10 +502,14 @@ export default function AuditDetailPage() {
 
   // Task handlers
   const handleAddTask = () => {
-    if (!newTaskForm.title || !newTaskForm.assigneeId || !newTaskForm.dueDate) {
-      showToast(t('auditDetail.pleaseFillRequiredFields'))
-      return
-    }
+    // W49: inline validation (red field borders + messages) instead of a
+    // toast the user has to decode.
+    const errs: Record<string, string> = {}
+    if (!newTaskForm.title) errs.title = t('auditDetail.pleaseFillRequiredFields')
+    if (!newTaskForm.assigneeId) errs.assigneeId = t('auditDetail.pleaseFillRequiredFields')
+    if (!newTaskForm.dueDate) errs.dueDate = t('auditDetail.pleaseFillRequiredFields')
+    setTaskFormErrors(errs)
+    if (Object.keys(errs).length > 0) return
 
     // W46: resolve the assignee through every directory we have — audit team
     // (whose rows carry userId post-W45), the current user, and the org-wide
@@ -498,6 +544,7 @@ export default function AuditDetailPage() {
     }
 
     setNewTaskForm({ title: '', category: taskCategories[0]?.value || 'access-control', assigneeId: '', dueDate: '', notes: '' })
+    setTaskFormErrors({})
     setShowAddTaskModal(false)
     showToast(t('auditDetail.newControlTaskCreated'))
   }
@@ -1543,28 +1590,41 @@ export default function AuditDetailPage() {
       <Modal isOpen={showAddTaskModal} onClose={() => setShowAddTaskModal(false)} title={t('auditDetail.addNewControlTaskTitle')} size="md">
         <div className="space-y-5">
           <div>
-            <label className={`block text-sm font-bold text-slate-700 mb-2`}>{t('auditDetail.taskName')}</label>
+            {/* W49: required fields carry a red asterisk + inline error. */}
+            <label className={`block text-sm font-bold text-slate-700 mb-2`}>
+              {t('auditDetail.taskName')} <span className="text-rose-500">*</span>
+            </label>
             <input
               type="text"
               placeholder={t('auditDetail.taskNamePlaceholder')}
               value={newTaskForm.title}
               onChange={(e) => setNewTaskForm(prev => ({ ...prev, title: e.target.value }))}
-              className={`w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500`}
+              className={`w-full px-4 py-2.5 border rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 ${taskFormErrors.title ? 'border-rose-300' : 'border-slate-200'}`}
             />
+            {taskFormErrors.title && <p className="text-rose-500 text-xs mt-1">{taskFormErrors.title}</p>}
           </div>
           <div>
             <label className={`block text-sm font-bold text-slate-700 mb-2`}>{t('common.category')}</label>
+            {/* W49: per-authority categories — user-added entries are scoped
+                to this audit's framework; seeds are protected. */}
             <EditableSelect
-              locked
               value={newTaskForm.category}
               onChange={(id) => setNewTaskForm(prev => ({ ...prev, category: id }))}
-              items={taskCategories.map((cat) => ({ id: cat.value, label: cat.label }))}
+              items={taskCategories.map((cat) => ({ id: cat.value, label: cat.label, isDefault: cat.isSeed }))}
+              onAdd={async (label, labelAr) => {
+                const id = await taskCategoryStore.add(taskAuthority, label, labelAr)
+                return id
+              }}
+              onEdit={(id, label, labelAr) => taskCategoryStore.update(id, { label, labelAr: labelAr ?? label })}
+              onDelete={(id) => taskCategoryStore.remove(id)}
               isRTL={isRTL}
             />
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className={`block text-sm font-bold text-slate-700 mb-2`}>{t('auditDetail.assignee')}</label>
+              <label className={`block text-sm font-bold text-slate-700 mb-2`}>
+                {t('auditDetail.assignee')} <span className="text-rose-500">*</span>
+              </label>
               <EditableSelect
                 locked
                 value={newTaskForm.assigneeId || null}
@@ -1581,15 +1641,19 @@ export default function AuditDetailPage() {
                 placeholder={t('auditDetail.selectAssignee')}
                 isRTL={isRTL}
               />
+              {taskFormErrors.assigneeId && <p className="text-rose-500 text-xs mt-1">{taskFormErrors.assigneeId}</p>}
             </div>
             <div>
-              <label className={`block text-sm font-bold text-slate-700 mb-2`}>{t('auditDetail.dueDate')}</label>
+              <label className={`block text-sm font-bold text-slate-700 mb-2`}>
+                {t('auditDetail.dueDate')} <span className="text-rose-500">*</span>
+              </label>
               <input
                 type="date"
                 value={newTaskForm.dueDate}
                 onChange={(e) => setNewTaskForm(prev => ({ ...prev, dueDate: e.target.value }))}
-                className={`w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500`}
+                className={`w-full px-4 py-2.5 border rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 ${taskFormErrors.dueDate ? 'border-rose-300' : 'border-slate-200'}`}
               />
+              {taskFormErrors.dueDate && <p className="text-rose-500 text-xs mt-1">{taskFormErrors.dueDate}</p>}
             </div>
           </div>
           <div>

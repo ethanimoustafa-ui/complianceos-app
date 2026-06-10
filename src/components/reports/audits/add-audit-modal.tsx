@@ -63,7 +63,7 @@ export function AddAuditModal({ isOpen, onClose, onSuccess, initialValues }: Add
   const currentUser = useAuthStore((state) => state.user)
   const { templates: auditTemplates, incrementUsage } = useAuditTemplateStore()
   // M2: entity-template store for saving current form as a reusable template.
-  const { fetchByType: fetchAuditEntityTemplates, saveTemplate: saveAuditEntityTemplate } = useEntityTemplateStore()
+  const { fetchByType: fetchAuditEntityTemplates, saveTemplate: saveAuditEntityTemplate, renameTemplate: renameAuditEntityTemplate, deleteTemplate: deleteAuditEntityTemplate } = useEntityTemplateStore()
   // W45: saved entity templates surface IN the Select Template dropdown
   // (policy-modal parity) — previously they were saved but never listed.
   // Select the stable map, derive with useMemo — `?? []` inside the selector
@@ -77,7 +77,12 @@ export function AddAuditModal({ isOpen, onClose, onSuccess, initialValues }: Add
   const [auditTemplateNameInput, setAuditTemplateNameInput] = useState('')
   const [isSavingAuditTemplate, setIsSavingAuditTemplate] = useState(false)
   useEffect(() => {
-    if (isOpen) void fetchAuditEntityTemplates('audit')
+    if (isOpen) {
+      void fetchAuditEntityTemplates('audit')
+      // W49: hydrate categories so a prefilled category (reschedule) renders
+      // its label instead of a raw UUID.
+      void useAuditCategoryStore.getState().fetchAll()
+    }
   }, [isOpen, fetchAuditEntityTemplates])
   // Editable audit categories
   const auditCategoryItems = useAuditCategoryStore((s) => s.categories)
@@ -315,16 +320,26 @@ export function AddAuditModal({ isOpen, onClose, onSuccess, initialValues }: Add
                 {t('settings.selectTemplate')}
               </label>
               <EditableSelect
-                locked
                 value={selectedTemplateId || null}
                 onChange={(id) => handleTemplateSelect(id)}
                 items={[
-                  { id: '', label: t('settings.noTemplate') },
-                  ...auditTemplates.map((tmpl) => ({ id: tmpl.id, label: tmpl.name })),
+                  { id: '', label: t('settings.noTemplate'), isDefault: true },
+                  ...auditTemplates.map((tmpl) => ({ id: tmpl.id, label: tmpl.name, isDefault: true })),
                   // W45: user-saved templates (footer "Save as template")
-                  // appear here immediately after saving.
+                  // appear here immediately after saving. W49: rename/delete
+                  // exposed per saved template (policy parity) — the select's
+                  // built-in per-row spinner covers the async calls.
                   ...auditEntityTemplates.map((et) => ({ id: `et-${et.id}`, label: et.name })),
                 ]}
+                onEdit={async (id, label) => {
+                  if (!id.startsWith('et-')) return
+                  await renameAuditEntityTemplate(id.slice(3), 'audit', label)
+                }}
+                onDelete={async (id) => {
+                  if (!id.startsWith('et-')) return
+                  await deleteAuditEntityTemplate(id.slice(3), 'audit')
+                  if (selectedTemplateId === id) setSelectedTemplateId('')
+                }}
                 isRTL={isRTL}
                 // W48 (owner): "Save as template" lives IN the dropdown
                 // (policy parity), not next to the submit buttons.
@@ -411,7 +426,7 @@ export function AddAuditModal({ isOpen, onClose, onSuccess, initialValues }: Add
             <div className="grid grid-cols-2 gap-6">
               <div className="col-span-2">
                 <label className="text-xs font-black uppercase text-slate-500 tracking-widest mb-2 block">
-                  {t('auditDetail.auditTitleLabel')}
+                  {t('auditDetail.auditTitleLabel')} <span className="text-rose-500">*</span>
                 </label>
                 <Controller
                   name="title"
@@ -519,7 +534,7 @@ export function AddAuditModal({ isOpen, onClose, onSuccess, initialValues }: Add
 
               <div>
                 <label className="text-xs font-black uppercase text-slate-500 tracking-widest mb-2 block">
-                  {t('auditDetail.leadAuthorLabel')}
+                  {t('auditDetail.leadAuthorLabel')} <span className="text-rose-500">*</span>
                 </label>
                 <Controller
                   name="assigneeId"
