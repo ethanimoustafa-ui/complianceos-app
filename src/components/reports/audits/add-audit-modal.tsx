@@ -60,6 +60,15 @@ export function AddAuditModal({ isOpen, onClose, onSuccess, initialValues }: Add
   const { templates: auditTemplates, incrementUsage } = useAuditTemplateStore()
   // M2: entity-template store for saving current form as a reusable template.
   const { fetchByType: fetchAuditEntityTemplates, saveTemplate: saveAuditEntityTemplate } = useEntityTemplateStore()
+  // W45: saved entity templates surface IN the Select Template dropdown
+  // (policy-modal parity) — previously they were saved but never listed.
+  // Select the stable map, derive with useMemo — `?? []` inside the selector
+  // mints a new array every render (getSnapshot infinite-loop signature).
+  const entityTemplatesByType = useEntityTemplateStore((s) => s.byType)
+  const auditEntityTemplates = useMemo(
+    () => entityTemplatesByType['audit'] ?? [],
+    [entityTemplatesByType],
+  )
   const [showSaveAuditTemplateForm, setShowSaveAuditTemplateForm] = useState(false)
   const [auditTemplateNameInput, setAuditTemplateNameInput] = useState('')
   const [isSavingAuditTemplate, setIsSavingAuditTemplate] = useState(false)
@@ -144,6 +153,24 @@ export function AddAuditModal({ isOpen, onClose, onSuccess, initialValues }: Add
   const handleTemplateSelect = (templateId: string) => {
     setSelectedTemplateId(templateId)
     if (!templateId) return
+    // W45: user-saved entity templates (prefixed ids) apply their saved fields.
+    if (templateId.startsWith('et-')) {
+      const et = auditEntityTemplates.find((x) => `et-${x.id}` === templateId)
+      if (!et) return
+      const f = et.fields as Partial<{
+        title: string; type: string; category: string; priority: string; frequency: string; description: string
+      }>
+      if (f.title) setValue('title', f.title)
+      if (f.description !== undefined) setValue('description', f.description ?? '')
+      if (f.category) setValue('category', f.category as AuditCategory)
+      if (f.priority) setValue('priority', f.priority as AuditFormData['priority'])
+      if (f.frequency) setValue('frequency', f.frequency as AuditFormData['frequency'])
+      if (f.type) {
+        setSelectedType(f.type)
+        setValue('type', f.type)
+      }
+      return
+    }
     const tmpl = auditTemplates.find((t) => t.id === templateId)
     if (!tmpl) return
     setValue('title', tmpl.defaultTitle)
@@ -172,6 +199,15 @@ export function AddAuditModal({ isOpen, onClose, onSuccess, initialValues }: Add
         }
       }
 
+      // W45: the form has no separate frequency control — derive it from the
+      // review-schedule cadence so the detail page's Frequency field sticks.
+      const cadenceToFrequency: Record<string, AuditFormData['frequency']> = {
+        yearly: 'annual',
+        'semi-annual': 'semi_annual',
+        quarterly: 'quarterly',
+        monthly: 'monthly',
+        adhoc: 'ad_hoc',
+      }
       const auditData = {
         title: data.title,
         type: data.type as AuditAuthority,
@@ -180,7 +216,7 @@ export function AddAuditModal({ isOpen, onClose, onSuccess, initialValues }: Add
         progress: 0,
         description: data.description,
         category: data.category,
-        frequency: data.frequency,
+        frequency: data.frequency ?? cadenceToFrequency[schedule.cadence],
         priority: data.priority,
         reviewSchedule: schedule,
         frameworkIds,
@@ -204,7 +240,9 @@ export function AddAuditModal({ isOpen, onClose, onSuccess, initialValues }: Add
       }
 
       const newAudit = await create(auditData)
-      if (selectedTemplateId) incrementUsage(selectedTemplateId)
+      // W45: usage tracking only applies to legacy seeded templates —
+      // entity-template ids carry the `et-` prefix.
+      if (selectedTemplateId && !selectedTemplateId.startsWith('et-')) incrementUsage(selectedTemplateId)
       onSuccess?.(newAudit)
       handleClose()
     } catch (error) {
@@ -274,6 +312,9 @@ export function AddAuditModal({ isOpen, onClose, onSuccess, initialValues }: Add
                 items={[
                   { id: '', label: t('settings.noTemplate') },
                   ...auditTemplates.map((tmpl) => ({ id: tmpl.id, label: tmpl.name })),
+                  // W45: user-saved templates (footer "Save as template")
+                  // appear here immediately after saving.
+                  ...auditEntityTemplates.map((et) => ({ id: `et-${et.id}`, label: et.name })),
                 ]}
                 isRTL={isRTL}
               />

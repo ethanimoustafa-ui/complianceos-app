@@ -211,7 +211,18 @@ export function EditableSelect({
       }
     }
     document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
+    // W45: Escape closes the LISTBOX (one layer) — the Modal's global Escape
+    // now defers to an open listbox, so the select must dismiss itself.
+    const keyHandler = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return
+      setOpen(false)
+      setView('list')
+    }
+    document.addEventListener('keydown', keyHandler)
+    return () => {
+      document.removeEventListener('mousedown', handler)
+      document.removeEventListener('keydown', keyHandler)
+    }
   }, [open])
 
   const selected = items.find((i) => i.id === value)

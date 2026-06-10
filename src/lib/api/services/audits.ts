@@ -17,8 +17,10 @@ import { getAdminClient, hasServiceRole } from '../admin'
  * Columns returned on the audit list endpoint. `updated_at` is included so
  * the store can thread `If-Match` / ETag for optimistic locking (PORTING §2.12).
  */
+// W45: + frequency — the schedule column rendered blank because list rows
+// never carried it (it was detail-only).
 export const AUDIT_LIST_COLUMNS =
-  'id, title, description, type, status, priority, due_date, completed_at, closed_overdue, assignee_id, progress, category, framework_ids, created_at, updated_at'
+  'id, title, description, type, status, priority, due_date, completed_at, closed_overdue, assignee_id, progress, category, frequency, framework_ids, created_at, updated_at'
 
 /** Detail columns include everything except soft-delete bookkeeping. */
 export const AUDIT_DETAIL_COLUMNS =

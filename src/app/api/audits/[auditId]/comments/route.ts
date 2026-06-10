@@ -34,7 +34,8 @@ export async function GET(_req: NextRequest, { params }: Params) {
     if (error) throw error
 
     return ok(data ?? [], {
-      cache: { sMaxAge: 60, staleWhileRevalidate: 300, tags: [cacheTags.audits(auditId)] },
+      // FORENSIC §4 / W45: no-store — sMaxAge served stale children post-write.
+      cache: 'no-store',
     })
   } catch (e) {
     return handle(e)

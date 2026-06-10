@@ -40,7 +40,9 @@ export async function GET(req: NextRequest, { params }: Params) {
     if (error) throw error
 
     return ok(paginate(data ?? [], page, pageSize, count ?? 0), {
-      cache: { sMaxAge: 60, staleWhileRevalidate: 300, tags: [cacheTags.auditTasks(auditId)] },
+      // FORENSIC §4 / W45: entity GETs MUST be no-store — the 60s sMaxAge served
+      // stale (pre-write) checklists right after a task POST.
+      cache: 'no-store',
     })
   } catch (e) {
     return handle(e)

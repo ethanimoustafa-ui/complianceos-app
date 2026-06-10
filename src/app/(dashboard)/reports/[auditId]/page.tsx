@@ -15,6 +15,7 @@ import { useTranslation } from '@/i18n'
 import { formatRelativeTime, formatLocalizedDateShort, calculateNextOccurrence, formatFutureCountdown } from '@/lib/time-utils'
 import { formatTimelineDate } from '@/lib/format-date'
 import { useAuditStore } from '@/stores/audit-store'
+import { useAuditCategoryStore } from '@/stores/audit-category-store'
 import { useAuditLogStore, type AuditLog } from '@/stores/audit-log-store'
 import { useAuditTaskStore, type AuditTask } from '@/stores/audit-task-store'
 import { useTeamStore } from '@/stores/team-store'
@@ -72,6 +73,15 @@ export default function AuditDetailPage() {
     operational_compliance: t('auditDetail.categoryOperationalCompliance'),
     hr_compliance: t('auditDetail.categoryHrCompliance'),
     sharia_compliance: t('auditDetail.categoryShariahCompliance'),
+  }
+  // W45: user-added categories (useAuditCategoryStore) resolve to their own
+  // labels; previously anything non-canonical rendered blank/fallback.
+  const customCategories = useAuditCategoryStore((s) => s.categories)
+  const categoryLabel = (id: string | undefined): string => {
+    if (!id) return '-'
+    if (auditCategoryLabels[id]) return auditCategoryLabels[id]
+    const custom = customCategories.find((c) => c.id === id)
+    return custom ? (isRTL ? custom.labelAr || custom.label : custom.label) : id
   }
 
   const auditFrequencyLabels: Record<string, string> = {
@@ -224,10 +234,14 @@ export default function AuditDetailPage() {
     return taskCategoriesByType[auditType] || taskCategoriesByType.internal
   }, [audit?.type, t])
 
-  // Fetch audit on mount
+  // Fetch audit on mount — W45: also hydrate the detail children (team /
+  // comments / documents) and the server-backed checklist; without these the
+  // sections skeletoned forever (nothing ever fetched them).
   useEffect(() => {
     if (auditId) {
       fetchById(auditId)
+      void useAuditStore.getState().fetchDetailChildren(auditId)
+      void useAuditTaskStore.getState().fetchByAudit(auditId)
     }
   }, [auditId, fetchById])
 
@@ -636,7 +650,7 @@ export default function AuditDetailPage() {
           </div>
           <h2 className="text-xl font-bold text-slate-900 mb-2">{t('auditDetail.notFound')}</h2>
           <p className="text-sm text-slate-500 mb-6">{t('auditDetail.notFoundDescription')}</p>
-          <Link href="/reports">
+          <Link href="/reports/audits">
             <Button variant="primary">
               <Icon icon="lucide:arrow-left" />
               {t('auditDetail.backToAudits')}
@@ -654,13 +668,24 @@ export default function AuditDetailPage() {
     <div dir={isRTL ? 'rtl' : 'ltr'}>
       {/* Header */}
       <header className="h-20 bg-white border-b border-slate-200 px-8 flex items-center justify-between shrink-0">
-        <div className={isRTL ? 'text-right' : ''}>
-          <div className={`flex items-center gap-2 text-xs font-bold text-slate-400 uppercase tracking-widest mb-0.5`}>
-            <Link href="/reports" className="hover:text-emerald-600 transition-colors cursor-pointer">{t('auditDetail.audits')}</Link>
-            <Icon icon={isRTL ? "lucide:chevron-left" : "lucide:chevron-right"} />
-            <span className="text-emerald-600">{t('auditDetail.details')}</span>
+        <div className={`flex items-center gap-3 ${isRTL ? 'text-right' : ''}`}>
+          {/* W45: explicit back button (letters parity) + the crumb now lands
+              on the AUDITS tab, not the default compliance-review tab. */}
+          <Link
+            href="/reports/audits"
+            className="w-9 h-9 bg-white border border-slate-200 rounded-full flex items-center justify-center text-slate-500 hover:text-slate-900 hover:border-slate-300 transition-colors shrink-0"
+            aria-label={t('auditDetail.backToAudits')}
+          >
+            <Icon icon={isRTL ? 'lucide:arrow-right' : 'lucide:arrow-left'} />
+          </Link>
+          <div>
+            <div className={`flex items-center gap-2 text-xs font-bold text-slate-400 uppercase tracking-widest mb-0.5`}>
+              <Link href="/reports/audits" className="hover:text-emerald-600 transition-colors cursor-pointer">{t('auditDetail.audits')}</Link>
+              <Icon icon={isRTL ? "lucide:chevron-left" : "lucide:chevron-right"} />
+              <span className="text-emerald-600">{t('auditDetail.details')}</span>
+            </div>
+            <h1 className="text-xl font-bold font-display text-slate-900">{audit?.title || ''}</h1>
           </div>
-          <h1 className="text-xl font-bold font-display text-slate-900">{audit?.title || ''}</h1>
         </div>
 
         <div className={`flex items-center gap-4`}>
@@ -1117,7 +1142,7 @@ export default function AuditDetailPage() {
                   </div>
                   <div className={`flex justify-between items-center`}>
                     <span className="text-xs text-slate-500 uppercase font-bold tracking-wider">{t('auditDetail.categoryLabel')}</span>
-                    <span className="text-sm font-bold text-slate-900">{audit?.category ? auditCategoryLabels[audit.category] : '-'}</span>
+                    <span className="text-sm font-bold text-slate-900">{categoryLabel(audit?.category)}</span>
                   </div>
                   <div className={`flex justify-between items-center`}>
                     <span className="text-xs text-slate-500 uppercase font-bold tracking-wider">{t('auditDetail.frequencyLabel')}</span>

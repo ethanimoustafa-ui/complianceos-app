@@ -20,6 +20,7 @@ import type { TranslationKey } from '@/i18n'
 import { useFormattedDate } from '@/hooks/useFormattedDate'
 import { useComplianceScore } from '@/hooks/useComplianceScore'
 import { Gate } from '@/components/auth/gate'
+import { useAuditCategoryStore } from '@/stores/audit-category-store'
 import { dicebearAvatar } from '@/lib/avatar'
 
 // Audit type definitions
@@ -119,7 +120,12 @@ export default function ReportsAuditsPage() {
   const [auditToEdit, setAuditToEdit] = useState<AuditType | null>(null)
   const [auditToDelete, setAuditToDelete] = useState<AuditType | null>(null)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
-  const [auditDropdownOpen, setAuditDropdownOpen] = useState<string | null>(null)
+  // W45: the row menu renders position:fixed (anchored to the trigger's rect)
+  // so the table's overflow container can't clip it.
+  const [auditDropdownOpen, setAuditDropdownOpen] = useState<{ id: string; x: number; y: number } | null>(null)
+  // W45: user-added categories (hydrated on mount) — feeds the filter options
+  // and the unknown-category passthrough below.
+  const customAuditCategories = useAuditCategoryStore((s) => s.categories)
 
   const [showScheduleAuditModal, setShowScheduleAuditModal] = useState(false)
   const [auditSearchTerm, setAuditSearchTerm] = useState('')
@@ -144,6 +150,8 @@ export default function ReportsAuditsPage() {
   // Fetch audits on mount
   useEffect(() => {
     fetchAudits()
+    // W45: hydrate custom audit categories so they appear as filter options.
+    void useAuditCategoryStore.getState().fetchAll()
   }, [fetchAudits])
 
   // Close audit dropdown when clicking outside
@@ -210,16 +218,27 @@ export default function ReportsAuditsPage() {
     })
   }, [storeAudits])
 
-  // Filtered audits based on selected filters
+  // Filtered audits based on selected filters. W45: a category with no
+  // matching filter option (race between row fetch and category hydration)
+  // must remain VISIBLE — previously such rows silently vanished.
+  const knownCategoryValues = useMemo(
+    () =>
+      new Set<string>([
+        'security_compliance', 'financial_compliance', 'regulatory_compliance',
+        'operational_compliance', 'hr_compliance', 'sharia_compliance',
+        ...customAuditCategories.map((c) => c.id),
+      ]),
+    [customAuditCategories],
+  )
   const filteredAudits = useMemo(() => {
     return pageAudits.filter(audit =>
       selectedSources.has(audit.source) &&
       selectedFrequencies.has(audit.frequency) &&
-      selectedCategories.has(audit.category) &&
+      (selectedCategories.has(audit.category) || !knownCategoryValues.has(audit.category)) &&
       selectedStatuses.has(audit.status) &&
       selectedPriorities.has(audit.priority)
     )
-  }, [pageAudits, selectedSources, selectedFrequencies, selectedCategories, selectedStatuses, selectedPriorities])
+  }, [pageAudits, selectedSources, selectedFrequencies, selectedCategories, selectedStatuses, selectedPriorities, knownCategoryValues])
 
   // Audit sort state
   type AuditSortField = 'auditName' | 'dueDate' | 'status' | 'priority' | 'progress'
@@ -309,6 +328,8 @@ export default function ReportsAuditsPage() {
     { value: 'ad_hoc' as AuditFrequency, label: t('reports.adHoc'), color: auditFrequencyColors.ad_hoc },
   ], [t])
 
+  // W45: append user-added categories (useAuditCategoryStore) so custom
+  // categories are filterable instead of being silently dropped.
   const auditCategoryOptions: FilterOption<AuditCategory>[] = useMemo(() => [
     { value: 'security_compliance' as AuditCategory, label: t('reports.security'), color: auditCategoryColors.security_compliance },
     { value: 'financial_compliance' as AuditCategory, label: t('reports.financial'), color: auditCategoryColors.financial_compliance },
@@ -316,7 +337,28 @@ export default function ReportsAuditsPage() {
     { value: 'operational_compliance' as AuditCategory, label: t('reports.operational'), color: auditCategoryColors.operational_compliance },
     { value: 'hr_compliance' as AuditCategory, label: t('reports.hr'), color: auditCategoryColors.hr_compliance },
     { value: 'sharia_compliance' as AuditCategory, label: t('reports.sharia'), color: auditCategoryColors.sharia_compliance },
-  ], [t])
+    ...customAuditCategories
+      .filter((c) => !['security_compliance', 'financial_compliance', 'regulatory_compliance', 'operational_compliance', 'hr_compliance', 'sharia_compliance'].includes(c.id))
+      .map((c) => ({
+        value: c.id as AuditCategory,
+        label: isRTL ? c.labelAr || c.label : c.label,
+        color: { dot: 'bg-slate-400', bg: 'bg-slate-50', text: 'text-slate-600', border: 'border-slate-200' },
+      })),
+  ], [t, customAuditCategories, isRTL])
+
+  // W45: newly-appearing category options (async store hydration or inline
+  // adds) join the selected set so their rows don't vanish from the list.
+  useEffect(() => {
+    setSelectedCategories((prev) => {
+      const next = new Set(prev)
+      let changed = false
+      for (const opt of auditCategoryOptions) {
+        if (!next.has(opt.value)) { next.add(opt.value); changed = true }
+      }
+      return changed ? next : prev
+    })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [auditCategoryOptions.length])
 
   const auditStatusOptions: FilterOption<AuditStatus>[] = useMemo(() => [
     { value: 'pending' as AuditStatus, label: t('reports.pending'), color: auditStatusColors.pending },
@@ -541,54 +583,24 @@ export default function ReportsAuditsPage() {
                             </div>
                           </td>
                           <td className={`px-6 py-4 ${isRTL ? 'text-left' : 'text-right'}`}>
-                            <div className="relative">
-                              <button
-                                className="p-1.5 text-slate-300 hover:text-slate-600 transition-colors cursor-pointer"
-                                onClick={(e) => {
-                                  e.preventDefault()
-                                  e.stopPropagation()
-                                  setAuditDropdownOpen(auditDropdownOpen === audit.id ? null : audit.id)
-                                }}
-                              >
-                                <Icon icon="lucide:more-horizontal" />
-                              </button>
-                              {auditDropdownOpen === audit.id && (
-                                <div
-                                  className={`absolute ${isRTL ? 'left-0' : 'right-0'} mt-1 w-36 bg-white border border-slate-200 rounded-xl shadow-xl z-50 overflow-hidden`}
-                                  onClick={(e) => e.stopPropagation()}
-                                >
-                                  <Gate perm="Manage Audit Findings">
-                                    <button
-                                      onClick={() => {
-                                        const storeAudit = storeAudits.find(a => a.id === audit.id)
-                                        if (storeAudit) setAuditToEdit(storeAudit)
-                                        setAuditDropdownOpen(null)
-                                      }}
-                                      className={`w-full ${isRTL ? 'text-right' : 'text-left'} px-4 py-2.5 text-sm hover:bg-slate-50 font-medium border-b border-slate-100 transition-colors cursor-pointer flex items-center gap-2`}
-                                    >
-                                      <Icon icon="lucide:edit-3" className="text-slate-400" />
-                                      {t('common.edit')}
-                                    </button>
-                                  </Gate>
-                                  <Gate perm="Manage Audit Findings">
-                                    <button
-                                      onClick={() => {
-                                        const storeAudit = storeAudits.find(a => a.id === audit.id)
-                                        if (storeAudit) {
-                                          setAuditToDelete(storeAudit)
-                                          setShowDeleteConfirm(true)
-                                        }
-                                        setAuditDropdownOpen(null)
-                                      }}
-                                      className={`w-full ${isRTL ? 'text-right' : 'text-left'} px-4 py-2.5 text-sm hover:bg-rose-50 font-medium text-rose-600 transition-colors cursor-pointer flex items-center gap-2`}
-                                    >
-                                      <Icon icon="lucide:trash-2" className="text-rose-400" />
-                                      {t('common.delete')}
-                                    </button>
-                                  </Gate>
-                                </div>
-                              )}
-                            </div>
+                            {/* W45: capture the trigger rect; the menu itself
+                                renders fixed-position OUTSIDE the table so the
+                                overflow container can't clip it. */}
+                            <button
+                              className="p-1.5 text-slate-300 hover:text-slate-600 transition-colors cursor-pointer"
+                              onClick={(e) => {
+                                e.preventDefault()
+                                e.stopPropagation()
+                                if (auditDropdownOpen?.id === audit.id) {
+                                  setAuditDropdownOpen(null)
+                                } else {
+                                  const rect = e.currentTarget.getBoundingClientRect()
+                                  setAuditDropdownOpen({ id: audit.id, x: isRTL ? rect.left : rect.right, y: rect.bottom })
+                                }
+                              }}
+                            >
+                              <Icon icon="lucide:more-horizontal" />
+                            </button>
                           </td>
                         </tr>
                       )
@@ -615,6 +627,51 @@ export default function ReportsAuditsPage() {
           </Card>
         </div>
       </div>
+
+      {/* W45: row actions menu — fixed-position so the table's overflow
+          container can't clip it (the user had to scroll to see it). */}
+      {auditDropdownOpen && (
+        <div
+          className="fixed w-36 bg-white border border-slate-200 rounded-xl shadow-xl z-[100] overflow-hidden"
+          style={{
+            top: Math.min(auditDropdownOpen.y + 4, window.innerHeight - 110),
+            ...(isRTL
+              ? { left: auditDropdownOpen.x }
+              : { left: Math.max(8, auditDropdownOpen.x - 144) }),
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <Gate perm="Manage Audit Findings">
+            <button
+              onClick={() => {
+                const storeAudit = storeAudits.find(a => a.id === auditDropdownOpen.id)
+                if (storeAudit) setAuditToEdit(storeAudit)
+                setAuditDropdownOpen(null)
+              }}
+              className={`w-full ${isRTL ? 'text-right' : 'text-left'} px-4 py-2.5 text-sm hover:bg-slate-50 font-medium border-b border-slate-100 transition-colors cursor-pointer flex items-center gap-2`}
+            >
+              <Icon icon="lucide:edit-3" className="text-slate-400" />
+              {t('common.edit')}
+            </button>
+          </Gate>
+          <Gate perm="Manage Audit Findings">
+            <button
+              onClick={() => {
+                const storeAudit = storeAudits.find(a => a.id === auditDropdownOpen.id)
+                if (storeAudit) {
+                  setAuditToDelete(storeAudit)
+                  setShowDeleteConfirm(true)
+                }
+                setAuditDropdownOpen(null)
+              }}
+              className={`w-full ${isRTL ? 'text-right' : 'text-left'} px-4 py-2.5 text-sm hover:bg-rose-50 font-medium text-rose-600 transition-colors cursor-pointer flex items-center gap-2`}
+            >
+              <Icon icon="lucide:trash-2" className="text-rose-400" />
+              {t('common.delete')}
+            </button>
+          </Gate>
+        </div>
+      )}
 
       {/* Modals */}
       <AddAuditModal

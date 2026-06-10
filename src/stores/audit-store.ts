@@ -32,6 +32,7 @@ import type {
 import { api, ApiClientError } from '@/lib/api-client'
 import { useAuditLogStore } from './audit-log-store'
 import { useAuthStore } from './auth-store'
+import { useTeamStore } from './team-store'
 import { requirePermission } from '@/lib/rbac-store-gate'
 import { newTempId } from '@/lib/optimistic'
 
@@ -67,6 +68,41 @@ interface AuditDocumentApiRow {
   storage_path: string
   uploaded_at: string
   uploaded_by: string | null
+}
+
+// W45: child rows for the detail page (team / comments). These were never
+// fetched — the detail sections skeletoned forever because `audit.team`
+// stayed undefined.
+interface AuditTeamMemberApiRow {
+  id: string
+  audit_id: string
+  user_id: string
+  role: string | null
+  is_owner: boolean | null
+  added_at: string
+}
+
+interface AuditCommentApiRow {
+  id: string
+  audit_id: string
+  content: string
+  author_id: string | null
+  is_edited: boolean | null
+  created_at: string
+  updated_at: string
+}
+
+/** Child GETs return either a bare array or a paginated `{ items }`. */
+function unwrapItems<T>(r: unknown): T[] {
+  if (Array.isArray(r)) return r as T[]
+  const items = (r as { items?: T[] } | null)?.items
+  return Array.isArray(items) ? items : []
+}
+
+/** Resolve a profile id to display name/avatar via the team store. */
+function resolveProfile(userId: string | null): { id: string; name: string; avatar: string } {
+  const m = userId ? useTeamStore.getState().members.find((x) => x.id === userId) : undefined
+  return { id: userId ?? '', name: m?.name ?? '', avatar: m?.avatar ?? '' }
 }
 
 // ---------- mappers ---------------------------------------------------------
@@ -113,7 +149,10 @@ function normalizeAuditCategory(raw: string | null | undefined): AuditCategory |
   if (v.includes('sharia')) return 'sharia_compliance' as AuditCategory
   if (v.includes('hr') || v.includes('human')) return 'hr_compliance' as AuditCategory
   if (v.includes('operational') || v.includes('operations')) return 'operational_compliance' as AuditCategory
-  return 'regulatory_compliance' as AuditCategory
+  // W45: categories are user-configurable (useAuditCategoryStore) — keep the
+  // raw id instead of force-bucketing into 'regulatory_compliance'. The
+  // audits page surfaces custom ids as filter options dynamically.
+  return raw as AuditCategory
 }
 
 function mapAuditRow(row: AuditApiRow, previous?: Audit): Audit {
@@ -231,6 +270,11 @@ interface AuditState {
     force?: boolean
   }) => Promise<void>
   fetchById: (id: string) => Promise<Audit | null>
+  // W45: hydrate team/comments/documents from their server endpoints and flag
+  // the audit's detail children as loaded (drives the detail-page skeletons).
+  fetchDetailChildren: (id: string) => Promise<void>
+  detailChildrenLoaded: Record<string, boolean>
+  isDetailLoaded: (id: string) => boolean
   create: (data: Omit<Audit, 'id' | 'createdAt' | 'updatedAt'>) => Promise<Audit>
   update: (id: string, data: Partial<Audit>) => Promise<Audit>
   delete: (id: string) => Promise<void>
@@ -396,6 +440,61 @@ export const useAuditStore = create<AuditState>()((set, get) => ({
       set({ error: errorMessage(e, 'Failed to fetch audit'), isLoading: false })
       if (e instanceof ApiClientError && e.code === 'not_found') return null
       return null
+    }
+  },
+
+  detailChildrenLoaded: {},
+
+  isDetailLoaded: (id) => get().detailChildrenLoaded[id] === true,
+
+  fetchDetailChildren: async (id) => {
+    try {
+      const [teamRes, commentsRes, docsRes] = await Promise.all([
+        api.get<unknown>(`/audits/${id}/team`),
+        api.get<unknown>(`/audits/${id}/comments`),
+        api.get<unknown>(`/audits/${id}/documents`),
+      ])
+      const team: AuditTeamMember[] = unwrapItems<AuditTeamMemberApiRow>(teamRes).map((r) => {
+        const p = resolveProfile(r.user_id)
+        return {
+          id: r.id,
+          name: p.name,
+          avatar: p.avatar,
+          role: r.role ?? '',
+          isOwner: r.is_owner ?? false,
+          addedAt: r.added_at,
+        }
+      })
+      const comments: AuditComment[] = unwrapItems<AuditCommentApiRow>(commentsRes).map((r) => ({
+        id: r.id,
+        auditId: id,
+        content: r.content,
+        author: resolveProfile(r.author_id),
+        createdAt: r.created_at,
+        updatedAt: r.updated_at,
+        isEdited: r.is_edited ?? false,
+      }))
+      const documents = unwrapItems<AuditDocumentApiRow>(docsRes).map((r) => ({
+        id: r.id,
+        name: r.name,
+        type: r.type,
+        uploadedAt: r.uploaded_at,
+        uploadedBy: r.uploaded_by ?? undefined,
+      }))
+      const patch = (a: Audit): Audit => (a.id === id ? { ...a, team, comments, documents } : a)
+      set((state) => ({
+        audits: state.audits.map(patch),
+        byId: state.byId[id] ? { ...state.byId, [id]: patch(state.byId[id]) } : state.byId,
+        selectedAudit: state.selectedAudit?.id === id ? patch(state.selectedAudit) : state.selectedAudit,
+        detailChildrenLoaded: { ...state.detailChildrenLoaded, [id]: true },
+      }))
+    } catch (e) {
+      // Mark loaded anyway — sections render their empty states instead of
+      // skeleton-ing forever; the error is surfaced on the store.
+      set((state) => ({
+        detailChildrenLoaded: { ...state.detailChildrenLoaded, [id]: true },
+        error: errorMessage(e, 'Failed to load audit details'),
+      }))
     }
   },
 
@@ -707,7 +806,7 @@ export const useAuditStore = create<AuditState>()((set, get) => ({
     }))
   },
 
-  // ---- team (local-only; backend endpoint not yet implemented) ---------
+  // ---- team (W45: optimistic local + server persistence) ----------------
 
   addTeamMember: (auditId, memberData) => {
     const existing = get().byId[auditId]
@@ -740,10 +839,39 @@ export const useAuditStore = create<AuditState>()((set, get) => ({
           : state.selectedAudit,
     }))
 
+    // W45: persist (these used to be local-only and vanished on reload). The
+    // optimistic entry keys on the USER id; swap to the server row id so a
+    // follow-up remove targets the right resource.
+    void api
+      .post<AuditTeamMemberApiRow>(`/audits/${auditId}/team`, {
+        user_id: memberData.id,
+        role: memberData.role || undefined,
+        is_owner: memberData.isOwner ?? false,
+      })
+      .then((row) => {
+        const swap = (a: Audit): Audit =>
+          a.id === auditId
+            ? { ...a, team: (a.team ?? []).map((m) => (m.id === memberData.id ? { ...m, id: row.id } : m)) }
+            : a
+        set((state) => ({
+          audits: state.audits.map(swap),
+          byId: state.byId[auditId] ? { ...state.byId, [auditId]: swap(state.byId[auditId]) } : state.byId,
+          selectedAudit: state.selectedAudit?.id === auditId ? swap(state.selectedAudit) : state.selectedAudit,
+        }))
+      })
+      .catch((e) => {
+        set({ error: errorMessage(e, 'Failed to add team member') })
+        void get().fetchDetailChildren(auditId)
+      })
+
     return newMember
   },
 
   removeTeamMember: (auditId, memberId) => {
+    void api.delete(`/audits/${auditId}/team/${memberId}`).catch((e) => {
+      set({ error: errorMessage(e, 'Failed to remove team member') })
+      void get().fetchDetailChildren(auditId)
+    })
     set((state) => ({
       audits: state.audits.map((a) =>
         a.id === auditId
@@ -775,7 +903,7 @@ export const useAuditStore = create<AuditState>()((set, get) => ({
     }))
   },
 
-  // ---- comments (local-only; backend endpoint not yet implemented) -----
+  // ---- comments (W45: optimistic local + server persistence) ------------
 
   addComment: (auditId, content, author) => {
     const newComment: AuditComment = {
@@ -830,6 +958,26 @@ export const useAuditStore = create<AuditState>()((set, get) => ({
       status: 'completed',
     })
 
+    // W45: persist + swap the optimistic id for the server row id so
+    // edit/delete target the right resource after reload-free flows.
+    void api
+      .post<AuditCommentApiRow>(`/audits/${auditId}/comments`, { content })
+      .then((row) => {
+        const swap = (a: Audit): Audit =>
+          a.id === auditId
+            ? { ...a, comments: (a.comments ?? []).map((c) => (c.id === newComment.id ? { ...c, id: row.id } : c)) }
+            : a
+        set((state) => ({
+          audits: state.audits.map(swap),
+          byId: state.byId[auditId] ? { ...state.byId, [auditId]: swap(state.byId[auditId]) } : state.byId,
+          selectedAudit: state.selectedAudit?.id === auditId ? swap(state.selectedAudit) : state.selectedAudit,
+        }))
+      })
+      .catch((e) => {
+        set({ error: errorMessage(e, 'Failed to add comment') })
+        void get().fetchDetailChildren(auditId)
+      })
+
     return newComment
   },
 
@@ -839,6 +987,12 @@ export const useAuditStore = create<AuditState>()((set, get) => ({
       c.id === commentId
         ? { ...c, content: newContent, updatedAt: now, isEdited: true }
         : c
+
+    // W45: persist (resync from server on failure).
+    void api.patch(`/audits/${auditId}/comments/${commentId}`, { content: newContent }).catch((e) => {
+      set({ error: errorMessage(e, 'Failed to edit comment') })
+      void get().fetchDetailChildren(auditId)
+    })
 
     set((state) => ({
       audits: state.audits.map((a) =>
@@ -885,6 +1039,12 @@ export const useAuditStore = create<AuditState>()((set, get) => ({
     const audit = get().byId[auditId]
     const comment = audit?.comments?.find((c) => c.id === commentId)
     const now = new Date().toISOString()
+
+    // W45: persist (resync from server on failure).
+    void api.delete(`/audits/${auditId}/comments/${commentId}`).catch((e) => {
+      set({ error: errorMessage(e, 'Failed to delete comment') })
+      void get().fetchDetailChildren(auditId)
+    })
 
     set((state) => ({
       audits: state.audits.map((a) =>

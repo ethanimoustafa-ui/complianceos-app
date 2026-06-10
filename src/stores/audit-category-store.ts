@@ -56,7 +56,8 @@ interface AuditCategoryState {
 
   fetchAll(): Promise<void>
   /** Optimistic add — returns tentative id synchronously. */
-  add(label: string, labelAr?: string): string
+  // W45: async — resolves to the SERVER id (callers persist it on audits).
+  add(label: string, labelAr?: string): Promise<string>
   update(id: string, patch: Partial<Omit<AuditCategoryItem, 'id'>>): Promise<void>
   remove(id: string): Promise<void>
   resetToDefaults(): void
@@ -85,7 +86,10 @@ export const useAuditCategoryStore = create<AuditCategoryState>()((set) => ({
     }
   },
 
-  add: (label, labelAr) => {
+  // W45: AWAIT the server id. The previous fire-and-forget returned the
+  // `tmp-…` id, which callers (the audit create modal) then PERSISTED on the
+  // audit row — orphaning the category reference forever.
+  add: async (label, labelAr) => {
     const tempId = `tmp-${slugify(label) || Date.now()}`
     const optimistic: AuditCategoryItem = {
       id: tempId,
@@ -99,7 +103,7 @@ export const useAuditCategoryStore = create<AuditCategoryState>()((set) => ({
       isMutating: true,
       error: null,
     }))
-    ;(async () => {
+    {
       try {
         const row = await api.post<AuditCategoryApiRow>('/audit-categories', {
           key: slugify(label) || `cat_${Date.now()}`,
@@ -115,6 +119,7 @@ export const useAuditCategoryStore = create<AuditCategoryState>()((set) => ({
             isMutating: false,
           }
         })
+        return created.id
       } catch (e) {
         set((s) => {
           const { [tempId]: _drop, ...rest } = s.byId
@@ -125,9 +130,9 @@ export const useAuditCategoryStore = create<AuditCategoryState>()((set) => ({
             isMutating: false,
           }
         })
+        throw e
       }
-    })()
-    return tempId
+    }
   },
 
   update: async (id, patch) => {

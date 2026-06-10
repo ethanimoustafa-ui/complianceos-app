@@ -24,7 +24,12 @@ const sizeClasses = {
 export function Modal({ isOpen, onClose, title, subtitle, children, size = 'md' }: ModalProps) {
   const handleEscape = useCallback(
     (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
+      if (e.key !== 'Escape') return
+      // W45: when a portaled dropdown (EditableSelect listbox) or an inline
+      // editor inside the modal owns the Escape, don't tear the modal down —
+      // Escape should peel ONE layer, not the whole stack.
+      if (document.querySelector('[role="listbox"]')) return
+      onClose()
     },
     [onClose]
   )
