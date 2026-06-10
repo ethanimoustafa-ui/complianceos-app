@@ -29,7 +29,12 @@ export async function GET(req: NextRequest) {
     if (q.actor_id) query = query.eq('user_id', q.actor_id)
     if (q.action) query = query.eq('action', q.action)
     if (q.entity_type) query = query.eq('target_type', q.entity_type)
-    if (q.entity_id) query = query.eq('target_id', q.entity_id)
+    // W47: an audit's timeline includes child-entity events (tasks, comments,
+    // team) whose target_id is the CHILD id — those carry the parent in
+    // metadata.audit_id, so match either.
+    if (q.entity_id) {
+      query = query.or(`target_id.eq.${q.entity_id},metadata->>audit_id.eq.${q.entity_id}`)
+    }
     if (q.status) query = query.eq('status', q.status)
     if (q.date_from) query = query.gte('timestamp', q.date_from)
     if (q.date_to) query = query.lte('timestamp', q.date_to)

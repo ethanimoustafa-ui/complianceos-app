@@ -216,7 +216,9 @@ export function AddAuditModal({ isOpen, onClose, onSuccess, initialValues }: Add
         progress: 0,
         description: data.description,
         category: data.category,
-        frequency: data.frequency ?? cadenceToFrequency[schedule.cadence],
+        // W47: the cadence picker is the AUTHORITATIVE frequency input — a
+        // template-prefilled form value must not override the user's cadence.
+        frequency: cadenceToFrequency[schedule.cadence] ?? data.frequency,
         priority: data.priority,
         reviewSchedule: schedule,
         frameworkIds,

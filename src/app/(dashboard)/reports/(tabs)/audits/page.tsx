@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useMemo, useEffect, useCallback } from 'react'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Icon } from '@iconify/react'
 import { Button } from '@/components/ui/button'
@@ -137,6 +137,7 @@ const auditPriorityColors: Record<AuditPriority, { dot: string; bg: string; text
 export default function ReportsAuditsPage() {
   const { t, isRTL } = useTranslation()
   const pathname = usePathname()
+  const router = useRouter()
   const { formatDate } = useFormattedDate()
 
   // Compliance score
@@ -631,9 +632,15 @@ export default function ReportsAuditsPage() {
                       const statusStyle = auditStatusConfig[audit.status]
                       const priorityStyle = auditPriorityConfig[audit.priority]
                       return (
-                        <tr key={audit.id} className="hover:bg-slate-50/50 transition-colors group">
+                        // W47: the WHOLE row navigates (UX) — inner action
+                        // buttons stopPropagation.
+                        <tr
+                          key={audit.id}
+                          onClick={() => router.push(`/reports/${audit.id}`)}
+                          className="hover:bg-slate-50/50 transition-colors group cursor-pointer"
+                        >
                           <td className="px-6 py-4">
-                            <Link href={`/reports/${audit.id}`} className="block">
+                            <Link href={`/reports/${audit.id}`} className="block" onClick={(e) => e.stopPropagation()}>
                               <p className="text-sm font-bold text-slate-900 group-hover:text-emerald-600 transition-colors">{audit.name}</p>
                               <p className="text-[11px] text-slate-400">{audit.description}</p>
                             </Link>

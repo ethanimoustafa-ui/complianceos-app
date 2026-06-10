@@ -157,6 +157,14 @@ export function EditAuditModal({ isOpen, onClose, audit, onSuccess, calculatedPr
         }
       }
 
+      // W47: cadence is the authoritative frequency input (same as create).
+      const cadenceToFrequency: Record<string, AuditFormData['frequency']> = {
+        yearly: 'annual',
+        'semi-annual': 'semi_annual',
+        quarterly: 'quarterly',
+        monthly: 'monthly',
+        adhoc: 'ad_hoc',
+      }
       const updatedAudit = await update(audit.id, {
         title: data.title,
         type: data.type as AuditAuthority,
@@ -164,7 +172,7 @@ export function EditAuditModal({ isOpen, onClose, audit, onSuccess, calculatedPr
         dueDate: computeNextReview(schedule),
         description: data.description,
         category: data.category,
-        frequency: data.frequency,
+        frequency: cadenceToFrequency[schedule.cadence] ?? data.frequency,
         priority: data.priority,
         reviewSchedule: schedule,
         frameworkIds,

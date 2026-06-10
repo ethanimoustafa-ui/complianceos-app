@@ -256,6 +256,10 @@ export default function AuditDetailPage() {
       void useAuditTaskStore.getState().fetchByAudit(auditId)
       // W46: departments hydrate the team-member picker's labels.
       void useDepartmentStore.getState().fetchAll()
+      // W47: hydrate the activity timeline from audit_activity_logs — the
+      // local addLog entries are session-only, so a hard refresh wiped the
+      // timeline even though every mutation wrote a server row.
+      void useAuditLogStore.getState().fetchAll({ auditId, pageSize: 100 })
     }
   }, [auditId, fetchById])
 
