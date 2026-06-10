@@ -31,7 +31,11 @@ const securityHeaders = [
       "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
       "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
       "font-src 'self' https://fonts.gstatic.com data:",
-      "img-src 'self' data: blob: https://api.dicebear.com",
+      // W41: *.supabase.co — signature images (and any storage-served media)
+      // load via public/signed storage URLs; without this img-src entry the
+      // browser CSP-blocked them, which was the real root cause of the
+      // "Couldn't load the signature image" state.
+      "img-src 'self' data: blob: https://api.dicebear.com https://*.supabase.co",
       "connect-src 'self' https://*.supabase.co https://api.iconify.design https://api.simplesvg.com https://api.unisvg.com",
       "frame-ancestors 'none'",
     ].join("; "),

@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react'
 import { Icon } from '@iconify/react'
 import { useTranslation } from '@/i18n'
 import { useLetterTypeStore } from '@/stores/letter-type-store'
+import { useFrameworkSubCategoryStore } from '@/stores/framework-sub-category-store'
 import { EditableSelect } from '@/components/ui/editable-select'
 import { PlaceholderDefEditor } from '@/components/correspondence/letter-placeholders/PlaceholderDefEditor'
 import { getDefaultDepartmentId } from '@/lib/letter-authority'
@@ -19,8 +20,11 @@ import { DynamicAuthoritySelect } from './DynamicAuthoritySelect'
 import { EditableAuthorityDeptField } from './EditableAuthorityDeptField'
 import { getRecipientDefaults } from './letter-helpers'
 
-// L5: Bucket used for signature images (same bucket as letter attachments).
-const SIGNATURE_BUCKET = 'sama_letter_attachments'
+// W41: dedicated PUBLIC bucket for signatures (migration 091). Public URLs are
+// stable — the previous 1-year signed URLs against the private attachments
+// bucket expired/re-minted unpredictably, which is what produced the broken
+// "Couldn't load the signature image" state.
+const SIGNATURE_BUCKET = 'letter_signatures'
 
 // Template Edit Form Component
 export function TemplateEditForm({
@@ -67,6 +71,11 @@ export function TemplateEditForm({
   const [defaultRecipientOrgAr, setDefaultRecipientOrgAr]   = useState(template?.defaultRecipientOrgAr || '')
   const [defaultRecipientCityAr, setDefaultRecipientCityAr] = useState(template?.defaultRecipientCityAr || '')
   const [placeholderDefs, setPlaceholderDefs] = useState<PlaceholderDef[]>(template?.placeholderDefs ?? [])
+  // W41: quick-strip pinning + per-template default sub-category.
+  const [pinned, setPinned] = useState<boolean>(template?.pinned ?? false)
+  const [defaultSubCategory, setDefaultSubCategory] = useState<string>(template?.defaultSubCategory ?? '')
+  const subCategoryStore = useFrameworkSubCategoryStore()
+  useEffect(() => { void subCategoryStore.fetchAll() }, []) // eslint-disable-line react-hooks/exhaustive-deps
   const sigImgRef = useRef<HTMLInputElement>(null)
   const [isSaving, setIsSaving] = useState(false)
 
@@ -148,11 +157,12 @@ export function TemplateEditForm({
           contentType: file.type || 'image/png',
         })
       if (uploadError) throw uploadError
-      // Create a signed URL valid for 1 year (templates have long lifetimes).
-      const { data: signedData, error: signError } = await supabaseClient.storage
+      // W41: PUBLIC bucket → stable public URL (never expires; renders in the
+      // letter view and the PDF without re-minting).
+      const { data: publicData } = supabaseClient.storage
         .from(SIGNATURE_BUCKET)
-        .createSignedUrl(storagePath, 60 * 60 * 24 * 365)
-      if (signError || !signedData?.signedUrl) throw signError ?? new Error('No signed URL')
+        .getPublicUrl(storagePath)
+      if (!publicData?.publicUrl) throw new Error('No public URL')
       // Build the local data-URL preview BEFORE touching state, then set the
       // preview and the saved URL together (one batched render). A just-minted
       // signed URL is briefly un-servable, so if the <img> pointed at it for even
@@ -166,7 +176,7 @@ export function TemplateEditForm({
         r.readAsDataURL(file)
       })
       setSignaturePreviewSrc(previewDataUrl)
-      setDefaultSignatureImageUrl(signedData.signedUrl)
+      setDefaultSignatureImageUrl(publicData.publicUrl)
     } catch (err) {
       console.error('[TemplateEditForm] signature upload failed:', err)
       // L3 (code-only): do NOT fall back to a base64 data: URL. The HttpUrl
@@ -200,6 +210,8 @@ export function TemplateEditForm({
         defaultSignerNameAr:   defaultSignerNameAr || undefined,
         defaultSignerTitleAr:  defaultSignerTitleAr || undefined,
         defaultSignatureImageUrl: defaultSignatureImageUrl || undefined,
+        pinned,
+        defaultSubCategory: defaultSubCategory || undefined,
         defaultAuthority,
         defaultSamaDepartment: defaultSamaDepartment as import('@/types').SAMADepartment,
         defaultRecipientName:  defaultRecipientName || undefined,
@@ -301,6 +313,34 @@ export function TemplateEditForm({
             />
           </div>
 
+          {/* W41: per-template default sub-category — scoped to the template's
+              authority; flows into letters created from this template. */}
+          <div>
+            <label className={`text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-2`}>
+              {t('letters.subCategory')}
+            </label>
+            <EditableSelect
+              value={defaultSubCategory || null}
+              onChange={(id) => setDefaultSubCategory(id)}
+              items={subCategoryStore.list(defaultAuthority).map((sc) => ({
+                id: sc.id,
+                label: sc.label,
+                labelAr: sc.labelAr,
+                isDefault: sc.isDefault,
+              }))}
+              placeholder={t('letters.subCategory')}
+              onAdd={async (label, labelAr) => {
+                const created = await subCategoryStore.add(defaultAuthority, label, labelAr)
+                return created.id
+              }}
+              onEdit={(id, label, labelAr) =>
+                subCategoryStore.update(id, { label, labelAr: labelAr ?? label })
+              }
+              onDelete={(id) => subCategoryStore.remove(id)}
+              isRTL={isRTL}
+            />
+          </div>
+
           <div>
             <label className={`text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-2`}>
               {t('common.description')}
@@ -313,6 +353,21 @@ export function TemplateEditForm({
               className={`w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-sm font-medium focus:ring-2 focus:ring-emerald-500 outline-none resize-none`}
             />
           </div>
+
+          {/* W41: quick-strip pin — pinned templates surface on the letters
+              page as one-click starting points. */}
+          <button
+            type="button"
+            onClick={() => setPinned((p) => !p)}
+            className={`w-full py-3 px-4 rounded-xl text-sm font-bold transition-all flex items-center justify-center gap-2 ${
+              pinned
+                ? 'bg-amber-50 border-2 border-amber-400 text-amber-700'
+                : 'bg-slate-50 border-2 border-transparent text-slate-500 hover:bg-slate-100'
+            }`}
+          >
+            <Icon icon={pinned ? 'lucide:pin' : 'lucide:pin-off'} className="text-sm" />
+            {pinned ? t('letters.pinnedToQuickBar') : t('letters.pinToQuickBar')}
+          </button>
 
           <div>
             <label className={`text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-2`}>

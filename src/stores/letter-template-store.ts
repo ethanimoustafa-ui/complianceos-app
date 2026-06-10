@@ -65,6 +65,9 @@ interface LetterTemplateApiRow {
   default_recipient_org_ar: string | null
   default_recipient_city_ar: string | null
   placeholder_defs: LetterTemplate['placeholderDefs']
+  // W41: quick-strip pinning + per-template sub-category default.
+  pinned?: boolean
+  default_sub_category?: string | null
   usage_count: number
   created_at: string
   updated_at: string
@@ -99,6 +102,8 @@ function mapRow(row: LetterTemplateApiRow): LetterTemplate {
     defaultRecipientOrgAr: row.default_recipient_org_ar ?? undefined,
     defaultRecipientCityAr: row.default_recipient_city_ar ?? undefined,
     placeholderDefs: row.placeholder_defs ?? undefined,
+    pinned: row.pinned ?? false,
+    defaultSubCategory: row.default_sub_category ?? undefined,
   }
 }
 
@@ -132,6 +137,8 @@ function toCreatePayload(
     default_recipient_org_ar: data.defaultRecipientOrgAr ?? undefined,
     default_recipient_city_ar: data.defaultRecipientCityAr ?? undefined,
     placeholder_defs: data.placeholderDefs ?? [],
+    pinned: data.pinned ?? undefined,
+    default_sub_category: data.defaultSubCategory ?? undefined,
   }
 }
 
@@ -163,6 +170,8 @@ function toUpdatePayload(patch: Partial<LetterTemplate>): Record<string, unknown
   if (patch.defaultRecipientOrgAr !== undefined) out.default_recipient_org_ar = patch.defaultRecipientOrgAr
   if (patch.defaultRecipientCityAr !== undefined) out.default_recipient_city_ar = patch.defaultRecipientCityAr
   if (patch.placeholderDefs !== undefined) out.placeholder_defs = patch.placeholderDefs
+  if (patch.pinned !== undefined) out.pinned = patch.pinned
+  if (patch.defaultSubCategory !== undefined) out.default_sub_category = patch.defaultSubCategory ?? null
   return out
 }
 

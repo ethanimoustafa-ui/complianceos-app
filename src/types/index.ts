@@ -489,6 +489,9 @@ export interface LetterTemplate {
   defaultRecipientCityAr?: string
   // Smart placeholders configured at template-author time.
   placeholderDefs?: PlaceholderDef[]
+  // W41: quick-strip pinning + per-template sub-category default.
+  pinned?: boolean
+  defaultSubCategory?: string
 }
 
 // SAMA Letters
@@ -515,8 +518,9 @@ export type SAMADepartment = string
 export type SAMASubCategory = string
 
 export interface LetterApprovalStep {
-  step: 1 | 2 | 3
-  role: 'Compliance Officer' | 'Department Head' | 'CEO'
+  // W41: chains are configurable (1..10 steps, free-text roles).
+  step: number
+  role: string
   status: 'pending' | 'approved' | 'rejected'
   assignedTo?: string
   approvedAt?: string
@@ -569,6 +573,9 @@ export interface Letter {
   responseNote?: string | null
   // W40: reviewer's reason when status === 'rejected' (cleared on resubmit).
   rejectionReason?: string | null
+  // W41: list decorations (GET /api/letters) for the row badges.
+  attachmentCount?: number
+  hasPdf?: boolean
   recipientName?: string
   recipientOrg?: string
   recipientCity?: string

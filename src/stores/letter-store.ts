@@ -92,6 +92,9 @@ interface LetterApiRow {
   response_received_date: string | null
   response_note?: string | null
   rejection_reason?: string | null
+  // W41: list decorations computed server-side in GET /api/letters.
+  attachment_count?: number
+  has_pdf?: boolean
   recipient_name?: string | null
   recipient_org?: string | null
   recipient_city?: string | null
@@ -252,6 +255,8 @@ function mapRow(row: LetterApiRow, previous?: Letter): Letter {
       row.response_received_date ?? previous?.responseReceivedDate ?? undefined,
     responseNote: row.response_note !== undefined ? row.response_note : previous?.responseNote,
     rejectionReason: row.rejection_reason !== undefined ? row.rejection_reason : previous?.rejectionReason,
+    attachmentCount: row.attachment_count ?? previous?.attachmentCount,
+    hasPdf: row.has_pdf ?? previous?.hasPdf,
     recipientName: row.recipient_name ?? previous?.recipientName ?? undefined,
     recipientOrg: row.recipient_org ?? previous?.recipientOrg ?? undefined,
     recipientCity: row.recipient_city ?? previous?.recipientCity ?? undefined,
@@ -392,8 +397,9 @@ interface LetterState {
   submitForApproval: (id: string) => Promise<void>
   approve: (id: string, comment?: string) => Promise<void>
   reject: (id: string, comment: string) => Promise<void>
-  approveStep: (id: string, step: 1 | 2 | 3, notes?: string) => Promise<void>
-  rejectStep: (id: string, step: 1 | 2 | 3, notes: string) => Promise<void>
+  // W41: chains are configurable (1..10 steps) — step is a plain number.
+  approveStep: (id: string, step: number, notes?: string) => Promise<void>
+  rejectStep: (id: string, step: number, notes: string) => Promise<void>
   send: (id: string) => Promise<void>
   markResponseReceived: (id: string, responseNote?: string | null) => Promise<void>
 

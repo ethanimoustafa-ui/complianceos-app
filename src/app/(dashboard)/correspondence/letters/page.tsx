@@ -48,6 +48,7 @@ import {
   TemplateCard,
   CreateLetterForm,
   ApprovalStepActions,
+  ApprovalChainConfigModal,
   TemplateEditForm,
   getEmailSubjectFor,
   buildLetterEmailBody,
@@ -87,12 +88,8 @@ export default function LettersPage() {
   const isMutating = useLetterStore((s) => s.isMutating)
   const [confirmDeleteLetterId, setConfirmDeleteLetterId] = useState<string | null>(null)
   const [submitBusy, setSubmitBusy] = useState(false)
-  const [approveBusy, setApproveBusy] = useState(false)
-  // W40: Reject (required reason) — lands in 'rejected', which stays revisable
-  // and resubmittable instead of dead-ending the letter.
-  const [rejectBusy, setRejectBusy] = useState(false)
-  const [rejectModalLetterId, setRejectModalLetterId] = useState<string | null>(null)
-  const [rejectReasonText, setRejectReasonText] = useState('')
+  // W41: approval-chain configure modal (per-letter or per-authority scope).
+  const [chainConfigOpen, setChainConfigOpen] = useState(false)
   // L4: spinner state for the Print/Download PDF button (slow job-queue pipeline).
   const [pdfBusy, setPdfBusy] = useState(false)
   const [sendBusy, setSendBusy] = useState(false)
@@ -1332,37 +1329,55 @@ export default function LettersPage() {
                   </button>
                 </Gate>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                {templateTypeCards.map((template) => {
-                  const translatedDesc = template.type === 'non-objection' ? t('letters.hiringKeyPositions') :
-                                         template.type === 'inquiry' ? t('letters.seekingClarification') :
-                                         template.type === 'submission' ? t('letters.filingPeriodicReports') :
-                                         t('letters.reportingOutages')
-                  const translatedType = template.type === 'non-objection' ? t('letters.nonObjection') :
-                                         template.type === 'inquiry' ? t('letters.inquiry') :
-                                         template.type === 'submission' ? t('letters.submission') :
-                                         t('letters.notification')
+              {/* W41: the quick strip shows PINNED templates (user-chosen via
+                  the template editor's pin toggle) — clicking starts a letter
+                  prefilled FROM that exact template. Falls back to the most
+                  used templates, then to the legacy type cards on a fresh
+                  tenant. Authority-agnostic: SAMA / CMA / ZATCA / anything. */}
+              {(() => {
+                const active = templateStore.templates.filter((tp) => tp.status === 'Active')
+                const pinnedTemplates = active.filter((tp) => tp.pinned)
+                const quickTemplates = (pinnedTemplates.length > 0 ? pinnedTemplates : active)
+                  .slice()
+                  .sort((a, b) => b.usageCount - a.usageCount)
+                  .slice(0, 4)
+                if (quickTemplates.length === 0) {
                   return (
-                    <TemplateCard
-                      key={template.type}
-                      type={translatedType}
-                      icon={template.icon}
-                      color={template.color}
-                      description={translatedDesc}
-                      onClick={() => {
-                        const defaultTemplate = templateStore.templates
-                          .filter(tmpl => tmpl.type === template.type && tmpl.status === 'Active')
-                          .sort((a, b) => b.usageCount - a.usageCount)[0]
-                        if (defaultTemplate) {
-                          handleUseTemplate(defaultTemplate)
-                        } else {
-                          handleOpenCreateModal(template.type)
-                        }
-                      }}
-                    />
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                      {templateTypeCards.map((template) => {
+                        const translatedType = template.type === 'non-objection' ? t('letters.nonObjection') :
+                                               template.type === 'inquiry' ? t('letters.inquiry') :
+                                               template.type === 'submission' ? t('letters.submission') :
+                                               t('letters.notification')
+                        return (
+                          <TemplateCard
+                            key={template.type}
+                            type={translatedType}
+                            icon={template.icon}
+                            color={template.color}
+                            description={t('letters.startFromScratch')}
+                            onClick={() => handleOpenCreateModal(template.type)}
+                          />
+                        )
+                      })}
+                    </div>
                   )
-                })}
-              </div>
+                }
+                return (
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    {quickTemplates.map((tpl) => (
+                      <TemplateCard
+                        key={tpl.id}
+                        type={tpl.name}
+                        icon={tpl.icon}
+                        color={tpl.color}
+                        description={`${(tpl.defaultAuthority ?? 'sama').toUpperCase()} · ${getTypeLabel(tpl.type)}`}
+                        onClick={() => handleUseTemplate(tpl)}
+                      />
+                    ))}
+                  </div>
+                )
+              })()}
             </div>
 
             {/* Recent Letters Table */}
@@ -1505,8 +1520,20 @@ export default function LettersPage() {
                             </span>
                           </td>
                           <td className="px-6 py-4 max-w-xs">
-                            <p className="text-sm text-slate-600 font-medium truncate">
-                              {isRTL && letter.subjectAr ? letter.subjectAr : letter.subject}
+                            <p className="text-sm text-slate-600 font-medium truncate flex items-center gap-1.5">
+                              <span className="truncate">{isRTL && letter.subjectAr ? letter.subjectAr : letter.subject}</span>
+                              {/* W41 (story 2): attachment + PDF indicators. */}
+                              {(letter.attachmentCount ?? 0) > 0 && (
+                                <span className="inline-flex items-center gap-0.5 text-[10px] font-bold text-slate-400 shrink-0">
+                                  <Icon icon="lucide:paperclip" className="text-[11px]" />
+                                  {letter.attachmentCount}
+                                </span>
+                              )}
+                              {letter.hasPdf && (
+                                <span className="px-1 py-0.5 bg-rose-50 text-rose-500 text-[9px] font-black rounded shrink-0">
+                                  PDF
+                                </span>
+                              )}
                             </p>
                             {letter.body && (
                               <p className="text-[10px] text-slate-400 truncate mt-0.5">
@@ -1649,42 +1676,10 @@ export default function LettersPage() {
                     goes through the per-step Reject in the Approval Chain card
                     (ApprovalStepActions → /reject-step), which returns the letter to
                     'draft' so the author can refine and resubmit instead of killing it. */}
-                {selectedLetter?.status === 'pending-approval' && (
-                  <>
-                    {/* W40: Reject restored — no longer terminal (the letter
-                        stays revisable + resubmittable in 'rejected'). */}
-                    <button
-                      onClick={() => {
-                        if (!selectedLetter) return
-                        setRejectReasonText('')
-                        setRejectModalLetterId(selectedLetter.id)
-                      }}
-                      disabled={rejectBusy || approveBusy}
-                      className={`px-4 py-2 bg-white border border-rose-200 text-rose-600 rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-rose-50 transition-colors cursor-pointer disabled:opacity-60`}
-                    >
-                      <Icon icon="lucide:x-circle" />
-                      {t('letters.reject')}
-                    </button>
-                    <button
-                      onClick={async () => {
-                        if (!selectedLetter) return
-                        setApproveBusy(true)
-                        try {
-                          await store.approve(selectedLetter.id)
-                          showToast(t('letters.approveSuccess'))
-                        } finally {
-                          setApproveBusy(false)
-                        }
-                      }}
-                      disabled={approveBusy || rejectBusy}
-                      aria-busy={approveBusy || undefined}
-                      className={`px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-emerald-700 transition-colors shadow-lg shadow-emerald-100 cursor-pointer disabled:opacity-60`}
-                    >
-                      <Icon icon={approveBusy ? 'lucide:loader-2' : 'lucide:check-circle'} className={approveBusy ? 'animate-spin' : ''} />
-                      {t('letters.approve')}
-                    </button>
-                  </>
-                )}
+                {/* W41: the top-level direct Approve/Reject buttons were
+                    removed — approval verdicts flow through the per-step
+                    actions in the Approval Chain card (chains now seed on
+                    every submission and are configurable). */}
                 {selectedLetter?.status === 'approved' && (
                   <button
                     onClick={async () => {
@@ -2232,20 +2227,38 @@ export default function LettersPage() {
                     <Skeleton className="h-6 w-full" />
                   </section>
                 )}
-                {selectedLetter && selectedLetter.approvalChain.length > 0 && (
+                {selectedLetter &&
+                  (selectedLetter.approvalChain.length > 0 ||
+                    ['draft', 'rejected', 'pending-approval'].includes(selectedLetter.status)) && (
                   <section className={`glass-card p-6 rounded-2xl`}>
-                    <h4 className="text-xs font-black text-slate-500 uppercase tracking-widest mb-4">
-                      {t('letters.approvalChain')}
-                    </h4>
+                    <div className="flex items-center justify-between mb-4">
+                      <h4 className="text-xs font-black text-slate-500 uppercase tracking-widest">
+                        {t('letters.approvalChain')}
+                      </h4>
+                      {/* W41: configure the chain (this letter / authority-wide). */}
+                      <Gate perm="Approve SAMA Letters">
+                        <button
+                          onClick={() => setChainConfigOpen(true)}
+                          className="flex items-center gap-1 text-[11px] font-bold text-emerald-600 hover:text-emerald-700 cursor-pointer"
+                        >
+                          <Icon icon="lucide:settings-2" className="text-xs" />
+                          {t('letters.configureChain')}
+                        </button>
+                      </Gate>
+                    </div>
                     <div className="space-y-4">
                       {(() => {
                         const hasRejection = selectedLetter.approvalChain.some(s => s.status === 'rejected')
                         return selectedLetter.approvalChain.map((step) => {
+                          // W41: chains carry free-text roles — translate the
+                          // three legacy roles, render anything else verbatim.
                           const roleLabel = step.role === 'Compliance Officer'
                             ? t('letters.step1ComplianceOfficer')
                             : step.role === 'Department Head'
                             ? t('letters.step2DepartmentHead')
-                            : t('letters.step3CEO')
+                            : step.role === 'CEO'
+                            ? t('letters.step3CEO')
+                            : step.role
                           const isFirstPending = selectedLetter.approvalChain.find(s => s.status === 'pending')?.step === step.step
                           // Downstream steps stay neutral when any rejection exists
                           const isActive = !hasRejection && step.status === 'pending' && isFirstPending
@@ -2731,55 +2744,21 @@ export default function LettersPage() {
         )
       })()}
 
-      {/* W40: Reject with a required reason. NOT terminal — the letter lands in
-          'rejected' (revisable + resubmittable; submit resets the chain). */}
-      <Modal
-        isOpen={rejectModalLetterId !== null}
-        onClose={() => { if (!rejectBusy) { setRejectModalLetterId(null); setRejectReasonText('') } }}
-        size="sm"
-      >
-        <div className="p-8">
-          <h2 className="text-xl font-bold text-slate-900 mb-2">{t('letters.rejectLetter')}</h2>
-          <p className="text-sm text-slate-500 mb-4">{t('letters.rejectReasonRequired')}</p>
-          <textarea
-            value={rejectReasonText}
-            onChange={(e) => setRejectReasonText(e.target.value)}
-            placeholder={t('letters.rejectReasonPlaceholder')}
-            rows={4}
-            className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-rose-500 outline-none resize-none mb-4"
-          />
-          <div className="flex gap-3">
-            <button
-              onClick={() => { setRejectModalLetterId(null); setRejectReasonText('') }}
-              disabled={rejectBusy}
-              className="flex-1 px-4 py-2.5 bg-slate-100 text-slate-600 rounded-xl text-sm font-bold hover:bg-slate-200 transition-colors cursor-pointer disabled:opacity-50"
-            >
-              {t('common.cancel')}
-            </button>
-            <button
-              onClick={async () => {
-                if (!rejectModalLetterId || !rejectReasonText.trim()) return
-                const id = rejectModalLetterId
-                setRejectBusy(true)
-                try {
-                  await store.reject(id, rejectReasonText.trim())
-                  setRejectModalLetterId(null)
-                  setRejectReasonText('')
-                  showToast(t('letters.rejectSuccess'))
-                } finally {
-                  setRejectBusy(false)
-                }
-              }}
-              disabled={rejectBusy || !rejectReasonText.trim()}
-              aria-busy={rejectBusy || undefined}
-              className="flex-1 px-4 py-2.5 bg-rose-600 text-white rounded-xl text-sm font-bold hover:bg-rose-700 transition-colors cursor-pointer disabled:opacity-60 inline-flex items-center justify-center gap-2"
-            >
-              {rejectBusy && <Icon icon="lucide:loader-2" className="animate-spin" />}
-              {t('letters.confirmReject')}
-            </button>
-          </div>
-        </div>
-      </Modal>
+      {/* W41: configurable approval chain — per-letter or per-authority. */}
+      {selectedLetter && (
+        <ApprovalChainConfigModal
+          isOpen={chainConfigOpen}
+          onClose={() => setChainConfigOpen(false)}
+          letterId={selectedLetter.id}
+          letterStatus={selectedLetter.status}
+          authority={selectedLetter.authority}
+          currentSteps={selectedLetter.approvalChain}
+          onApplied={() => {
+            store.fetchById(selectedLetter.id)
+            showToast(t('letters.chainSaved'))
+          }}
+        />
+      )}
 
       {/* W29-L2: Mark Response Received — optional note modal */}
       <Modal

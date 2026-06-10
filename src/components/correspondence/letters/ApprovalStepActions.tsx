@@ -13,7 +13,7 @@ export function ApprovalStepActions({
   approverName,
 }: {
   letterId: string
-  step: 1 | 2 | 3
+  step: number
   approverName: string
 }) {
   const { t, isRTL } = useTranslation()

@@ -37,7 +37,34 @@ export const LETTER_DETAIL_COLUMNS =
   'id, reference, authority, type, sub_category, sama_department, subject, subject_ar, body, body_ar, status, priority, created_by, creator:profiles!sama_letters_created_by_fkey(name), assigned_to, sent_date, response_deadline, response_received_date, response_note, rejection_reason, recipient_name, recipient_org, recipient_city, recipient_name_ar, recipient_org_ar, recipient_city_ar, signer_name, signer_title, signer_name_ar, signer_title_ar, signature_image_url, framework_ids, placeholder_defs, placeholder_values, created_at, updated_at'
 
 export const LETTER_TEMPLATE_COLUMNS =
-  'id, name, type, icon, color, description, status, default_subject_en, default_subject_ar, default_body_en, default_body_ar, default_signer_name, default_signer_title, default_signer_name_ar, default_signer_title_ar, default_signature_image_url, default_sama_department, default_recipient_name, default_recipient_org, default_recipient_city, default_recipient_name_ar, default_recipient_org_ar, default_recipient_city_ar, placeholder_defs, usage_count, created_at, updated_at'
+  'id, name, type, icon, color, description, status, default_subject_en, default_subject_ar, default_body_en, default_body_ar, default_signer_name, default_signer_title, default_signer_name_ar, default_signer_title_ar, default_signature_image_url, default_sama_department, default_recipient_name, default_recipient_org, default_recipient_city, default_recipient_name_ar, default_recipient_org_ar, default_recipient_city_ar, default_sub_category, pinned, placeholder_defs, usage_count, created_at, updated_at'
+
+// W41: default approval chain — used when an authority has no configured
+// chain in `letter_approval_chains`. Step 2 must stay 'Department Head'
+// (the Team Directory PendingApprovalsCard matches that role).
+export const DEFAULT_LETTER_APPROVAL_CHAIN: Array<{ step: number; role: string }> = [
+  { step: 1, role: 'Compliance Officer' },
+  { step: 2, role: 'Department Head' },
+  { step: 3, role: 'Compliance Director' },
+]
+
+/** Resolve the configured chain for an authority (falls back to the default). */
+export async function resolveApprovalChain(
+  supabase: SupabaseClient,
+  authority: string | null | undefined,
+): Promise<Array<{ step: number; role: string }>> {
+  if (authority) {
+    const { data } = await supabase
+      .from('letter_approval_chains')
+      .select('steps')
+      .eq('authority', authority.toLowerCase())
+      .maybeSingle<{ steps: Array<{ step: number; role: string }> }>()
+    if (Array.isArray(data?.steps) && data.steps.length > 0) {
+      return [...data.steps].sort((a, b) => a.step - b.step)
+    }
+  }
+  return DEFAULT_LETTER_APPROVAL_CHAIN
+}
 
 // ---------- type → reference prefix + response window -----------------------
 

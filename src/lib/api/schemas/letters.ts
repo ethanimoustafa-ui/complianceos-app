@@ -240,7 +240,7 @@ export type RegisterLetterAttachmentInput = z.infer<typeof RegisterLetterAttachm
 
 export const ApproveStepSchema = z
   .object({
-    step_index: z.coerce.number().int().min(1).max(3),
+    step_index: z.coerce.number().int().min(1).max(10),
     notes: PlainText(5_000).optional(),
   })
   .strict()
@@ -248,7 +248,7 @@ export type ApproveStepInput = z.infer<typeof ApproveStepSchema>
 
 export const RejectStepSchema = z
   .object({
-    step_index: z.coerce.number().int().min(1).max(3),
+    step_index: z.coerce.number().int().min(1).max(10),
     reason: PlainTextMin(5_000),
   })
   .strict()
@@ -290,6 +290,9 @@ export const CreateLetterTemplateSchema = z
     default_recipient_org_ar: PlainText(200).optional(),
     default_recipient_city_ar: PlainText(200).optional(),
     placeholder_defs: z.array(PlaceholderDef),
+    // W41: quick-strip pinning + per-template sub-category default.
+    pinned: z.boolean().optional(),
+    default_sub_category: PlainText(100).optional(),
   })
   .strict()
 export type CreateLetterTemplateInput = z.infer<typeof CreateLetterTemplateSchema>
@@ -320,9 +323,38 @@ export const UpdateLetterTemplateSchema = z
     default_recipient_org_ar: PlainText(200).nullable().optional(),
     default_recipient_city_ar: PlainText(200).nullable().optional(),
     placeholder_defs: z.array(PlaceholderDef).optional(),
+    // W41: quick-strip pinning + per-template sub-category default.
+    pinned: z.boolean().optional(),
+    default_sub_category: PlainText(100).nullable().optional(),
   })
   .strict()
 export type UpdateLetterTemplateInput = z.infer<typeof UpdateLetterTemplateSchema>
+
+// ---------- approval chains (W41) -------------------------------------------
+
+const ApprovalChainStep = z
+  .object({
+    step: z.number().int().min(1).max(10),
+    role: PlainTextMin(100),
+  })
+  .strict()
+
+/** Upsert the default approval chain for an authority. */
+export const UpsertApprovalChainSchema = z
+  .object({
+    authority: z.string().min(1).max(50),
+    steps: z.array(ApprovalChainStep).min(1).max(10),
+  })
+  .strict()
+export type UpsertApprovalChainInput = z.infer<typeof UpsertApprovalChainSchema>
+
+/** Replace a single letter's approval chain. */
+export const ApplyLetterChainSchema = z
+  .object({
+    steps: z.array(ApprovalChainStep).min(1).max(10),
+  })
+  .strict()
+export type ApplyLetterChainInput = z.infer<typeof ApplyLetterChainSchema>
 
 // ---------- letter types lookup --------------------------------------------
 

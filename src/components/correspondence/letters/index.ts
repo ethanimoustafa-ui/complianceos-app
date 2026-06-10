@@ -9,6 +9,7 @@ export { LetterBodyEditor } from './LetterBodyEditor'
 export { LetterSubjectEditor } from './LetterSubjectEditor'
 export { CreateLetterForm } from './CreateLetterForm'
 export { ApprovalStepActions } from './ApprovalStepActions'
+export { ApprovalChainConfigModal } from './ApprovalChainConfigModal'
 export { TemplateEditForm } from './TemplateEditForm'
 export {
   LETTER_EMAIL_SUBJECTS,

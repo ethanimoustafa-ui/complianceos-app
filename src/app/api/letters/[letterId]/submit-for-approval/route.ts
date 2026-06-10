@@ -20,15 +20,8 @@ import {
   computeResponseDeadline,
   getApprovalSteps,
   insertLetterTimeline,
+  resolveApprovalChain,
 } from '@/lib/api/services/letters'
-
-// Default chain roles. Step 2 MUST stay 'Department Head' — the Team
-// Directory PendingApprovalsCard surfaces letters by matching that role.
-const DEFAULT_APPROVAL_CHAIN: Array<{ step: 1 | 2 | 3; role: string }> = [
-  { step: 1, role: 'Compliance Officer' },
-  { step: 2, role: 'Department Head' },
-  { step: 3, role: 'Compliance Director' },
-]
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -44,13 +37,14 @@ export async function POST(_req: NextRequest, { params }: Params) {
 
     const { data: current, error: readErr } = await supabase
       .from('letters')
-      .select('id, status, type, subject, body, response_deadline')
+      .select('id, status, type, authority, subject, body, response_deadline')
       .eq('id', letterId)
       .is('deleted_at', null)
       .maybeSingle<{
         id: string
         status: string
         type: string
+        authority: string | null
         subject: string | null
         body: string | null
         response_deadline: string | null
@@ -71,13 +65,15 @@ export async function POST(_req: NextRequest, { params }: Params) {
 
     const isResubmission = current.status === 'rejected'
 
-    // W40: fresh approval chain on every submission — seed the default 3-step
-    // chain when none exists; otherwise reset every step to pending so a
-    // resubmitted letter is reviewed from step 1 (no stale verdicts linger).
+    // W40: fresh approval chain on every submission — seed from the authority's
+    // configured chain (W41: letter_approval_chains, falling back to the
+    // default 3-step chain) when none exists; otherwise reset every step to
+    // pending so a resubmitted letter is reviewed from step 1.
     const steps = await getApprovalSteps(supabase, letterId)
     if (steps.length === 0) {
+      const chain = await resolveApprovalChain(supabase, current.authority)
       const { error: seedErr } = await supabase.from('letter_approval_steps').insert(
-        DEFAULT_APPROVAL_CHAIN.map((s) => ({
+        chain.map((s) => ({
           letter_id: letterId,
           step: s.step,
           role: s.role,

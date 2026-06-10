@@ -3,7 +3,7 @@
 
 import type { NextRequest } from 'next/server'
 import { requirePerm, requireUser } from '@/lib/api/auth'
-import { handle, NotFound } from '@/lib/api/errors'
+import { Conflict, handle, NotFound } from '@/lib/api/errors'
 import { ok } from '@/lib/api/response'
 import { parseJson } from '@/lib/api/validate'
 import { cacheTags, revalidate } from '@/lib/api/cache'
@@ -43,7 +43,9 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    const { supabase, user, profile } = await requirePerm('settings:edit')
+    // W41: 'edit' (not org_admin-only settings:edit) — sub-categories are
+    // added inline from the letter create form's EditableSelect by officers.
+    const { supabase, user, profile } = await requirePerm('edit')
     const input = await parseJson(req, CreateLetterSubCategorySchema)
 
     const { data, error } = await supabase
@@ -51,7 +53,19 @@ export async function POST(req: NextRequest) {
       .insert(input)
       .select(COLS)
       .single()
-    if (error || !data) throw error ?? NotFound('Insert returned no row')
+    if (error) {
+      // W41: translate DB violations into actionable envelopes — these used to
+      // surface as opaque 500s ("internal server error" on duplicate names).
+      const code = (error as { code?: string }).code
+      if (code === '23505') {
+        throw Conflict('A sub-category with this name already exists for this authority.')
+      }
+      if (code === '23503') {
+        throw Conflict(`Unknown authority/framework '${input.framework_id}' — configure it in Settings first.`)
+      }
+      throw error
+    }
+    if (!data) throw NotFound('Insert returned no row')
     const created = data as { id: string }
 
     await writeAudit({

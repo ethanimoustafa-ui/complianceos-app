@@ -109,8 +109,17 @@ export function CreateLetterForm({
     if (t.defaultBodyAr)     setBodyAr(t.defaultBodyAr)
     if (t.defaultAuthority)  setAuthority(t.defaultAuthority)
     if (t.defaultSamaDepartment) setSamaDepartment(t.defaultSamaDepartment)
+    // W41: templates carry a default sub-category.
+    if (t.defaultSubCategory) setSubCategory(t.defaultSubCategory)
     // Reset placeholder values — they belong to the previous template.
     setPlaceholderValues({})
+  }, [])
+
+  // W41: hydrate the sub-category lookup — the dropdown rendered empty (and
+  // the client-side key dedup never worked) because nothing ever fetched it.
+  useEffect(() => {
+    void subCategoryStore.fetchAll()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // Templates filtered by the currently-selected letter type so picking
@@ -566,6 +575,20 @@ export function CreateLetterForm({
         </div>
       </div>
 
+      {/* W41 (story 1): enumerate what's missing before submission is possible. */}
+      {(!subjectEn.trim() || !bodyEn.trim() || !samaDepartment) && (
+        <p className="text-xs text-rose-500 font-medium mb-3" role="status">
+          {t('letters.missingRequired')}{' '}
+          {[
+            !subjectEn.trim() ? t('letters.subject') : null,
+            !bodyEn.trim() ? t('letters.letterBody') : null,
+            !samaDepartment ? t('letters.recipientDept') : null,
+          ]
+            .filter(Boolean)
+            .join(' · ')}
+        </p>
+      )}
+
       <div className={`flex justify-between items-center`}>
         <input ref={createAttachFileRef} type="file" multiple className="hidden" onChange={handleDraftAttach} />
         <button onClick={() => createAttachFileRef.current?.click()} className={`flex items-center gap-2 text-sm font-bold text-slate-500 hover:text-slate-900 transition-colors cursor-pointer`}>
@@ -584,7 +607,7 @@ export function CreateLetterForm({
           </button>
           <button
             onClick={handleSubmit}
-            disabled={isSubmitting || isSavingDraft || !subjectEn.trim()}
+            disabled={isSubmitting || isSavingDraft || !subjectEn.trim() || !bodyEn.trim() || !samaDepartment}
             aria-busy={isSubmitting || undefined}
             className={`px-8 py-3 bg-emerald-600 text-white rounded-xl text-sm font-bold hover:bg-emerald-700 transition-colors shadow-lg shadow-emerald-100 disabled:opacity-50 flex items-center gap-2 cursor-pointer`}
           >
