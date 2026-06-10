@@ -13,6 +13,7 @@ import { Modal } from '@/components/ui/modal'
 import { DeleteConfirmationDialog } from '@/components/ui/delete-confirmation-dialog'
 import { useTranslation } from '@/i18n'
 import { formatRelativeTime, formatLocalizedDateShort, calculateNextOccurrence, formatFutureCountdown } from '@/lib/time-utils'
+import { computeNextReview } from '@/lib/review-schedule'
 import { formatTimelineDate } from '@/lib/format-date'
 import { useAuditStore } from '@/stores/audit-store'
 import { useAuditCategoryStore } from '@/stores/audit-category-store'
@@ -27,7 +28,8 @@ import { useAuthStore } from '@/stores/auth-store'
 import { useFrameworkConfigStore } from '@/stores/framework-config-store'
 import type { RegulatoryBodyId } from '@/types'
 import { EditAuditModal } from '@/components/reports/audits/edit-audit-modal'
-import { AuditHistoryCard } from '@/components/reports/audits/AuditHistoryCard'
+import { AuditHistoryCard, ArchivedCycleView } from '@/components/reports/audits/AuditHistoryCard'
+import type { AuditCycleDetail } from '@/stores/audit-store'
 import { EditableSelect } from '@/components/ui/editable-select'
 import type { Audit, AuditComment } from '@/types'
 import { canEditComment, canDeleteComment } from '@/lib/permissions'
@@ -161,11 +163,18 @@ export default function AuditDetailPage() {
     return dueDate < today
   }, [audit?.dueDate, audit?.status])
 
-  // Next occurrence for recurring audits
+  // Next occurrence for recurring audits — W51: the review SCHEDULE (cadence
+  // + day-of-month) is the source of truth; `frequency` can drift on legacy
+  // or template-prefilled rows, which made the next occurrence ignore the
+  // picked cadence interval.
   const nextOccurrence = useMemo(() => {
     if (!audit?.dueDate) return null
+    if (audit.reviewSchedule && audit.reviewSchedule.cadence !== 'adhoc') {
+      const d = new Date(computeNextReview(audit.reviewSchedule, new Date(audit.dueDate)))
+      return isNaN(d.getTime()) ? null : d
+    }
     return calculateNextOccurrence(audit.dueDate, audit.frequency)
-  }, [audit?.dueDate, audit?.frequency])
+  }, [audit?.dueDate, audit?.frequency, audit?.reviewSchedule])
 
   // W50: "schedule next" no longer creates a new audit — it rolls THIS audit
   // into its next cycle (see the reschedule modal + AuditHistoryCard).
@@ -370,16 +379,22 @@ export default function AuditDetailPage() {
       uploaded: t('auditDetail.actionUploaded'),
       commented: t('auditDetail.actionCommented'),
     }
-    const items: TimelineItem[] = auditLogs.map((log, index) => ({
-      id: index + 1,
-      user: log.user.name,
-      avatar: log.user.name.split(' ')[0] || 'User',
-      action: actionTranslations[log.action] || log.action,
-      detail: translateLogDescription(log),
-      timestamp: new Date(log.timestamp),
-      type: log.action === 'created' || log.action === 'updated' || log.action === 'closed' ? 'completed' as const :
-            log.action === 'uploaded' ? 'upload' as const : 'comment' as const,
-    }))
+    const items: TimelineItem[] = auditLogs.map((log, index) => {
+      // W51: server rows carry only the raw action key — formatAuditAction
+      // turns it into a full phrase ("Added a comment"), so the generic
+      // bucket prefix ("updated") would read doubled. Drop it for those.
+      const keyShaped = /^[a-z0-9_]+(\.[a-z0-9_]+)+$/i.test((log.description ?? '').trim())
+      return {
+        id: index + 1,
+        user: log.user.name,
+        avatar: log.user.name.split(' ')[0] || 'User',
+        action: keyShaped ? '' : (actionTranslations[log.action] || log.action),
+        detail: translateLogDescription(log),
+        timestamp: new Date(log.timestamp),
+        type: log.action === 'created' || log.action === 'updated' || log.action === 'closed' ? 'completed' as const :
+              log.action === 'uploaded' ? 'upload' as const : 'comment' as const,
+      }
+    })
     // Sort newest-first by timestamp (mirrors the regulatory/policy timeline).
     items.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())
     return items
@@ -406,6 +421,8 @@ export default function AuditDetailPage() {
   const [showScheduleNextModal, setShowScheduleNextModal] = useState(false)
   // W50: next-cycle due date for the reschedule modal.
   const [rescheduleDate, setRescheduleDate] = useState('')
+  // W51: when set, the WHOLE page shows the archived cycle (read-only).
+  const [viewingCycle, setViewingCycle] = useState<AuditCycleDetail | null>(null)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [selectedTimeline, setSelectedTimeline] = useState<TimelineItem | null>(null)
 
@@ -750,6 +767,18 @@ export default function AuditDetailPage() {
           </Link>
         </div>
       </div>
+    )
+  }
+
+  // W51: archived-cycle rollback — the whole page becomes the old audit
+  // (read-only) with Back to Current + Download Report.
+  if (viewingCycle) {
+    return (
+      <ArchivedCycleView
+        cycle={viewingCycle}
+        auditTitle={audit?.title || ''}
+        onBack={() => setViewingCycle(null)}
+      />
     )
   }
 
@@ -1283,8 +1312,9 @@ export default function AuditDetailPage() {
                 </div>
               </Card>
 
-              {/* W50: archived cycles (previous audits) */}
-              <AuditHistoryCard auditId={auditId} auditTitle={audit?.title || ''} />
+              {/* W50: archived cycles (previous audits) — selecting one takes
+                  over the whole page (read-only). */}
+              <AuditHistoryCard auditId={auditId} onSelect={setViewingCycle} />
 
               {/* Team Members */}
               <Card>

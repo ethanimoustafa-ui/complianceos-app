@@ -25,12 +25,22 @@ function getNestedValue(obj: Record<string, unknown>, path: string): string {
   const keys = path.split('.')
   let current: unknown = obj
 
-  for (const key of keys) {
-    if (current && typeof current === 'object' && key in current) {
-      current = (current as Record<string, unknown>)[key]
-    } else {
-      return path // Return the key itself if not found
+  for (let i = 0; i < keys.length; i++) {
+    if (!current || typeof current !== 'object') return path
+    const node = current as Record<string, unknown>
+    if (keys[i] in node) {
+      current = node[keys[i]]
+      continue
     }
+    // W51: some sections (auditLog.action) store LITERAL dotted keys
+    // ("audit.task.create") — try the remaining path as one key before
+    // giving up, otherwise those entries can never resolve.
+    const rest = keys.slice(i).join('.')
+    if (rest in node) {
+      const v = node[rest]
+      return typeof v === 'string' ? v : path
+    }
+    return path // Return the key itself if not found
   }
 
   return typeof current === 'string' ? current : path
