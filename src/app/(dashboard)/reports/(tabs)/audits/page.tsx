@@ -803,7 +803,8 @@ export default function ReportsAuditsPage() {
       <AddAuditModal
         isOpen={showScheduleAuditModal}
         onClose={() => setShowScheduleAuditModal(false)}
-        onSuccess={() => { fetchAudits() }}
+        // W54: return the refetch promise — the modal's spinner awaits it.
+        onSuccess={() => fetchAudits()}
       />
       <EditAuditModal
         isOpen={!!auditToEdit}
@@ -817,7 +818,9 @@ export default function ReportsAuditsPage() {
         onConfirm={async () => {
           if (auditToDelete) {
             await deleteAudit(auditToDelete.id)
-            fetchAudits()
+            // W54: await — the dialog's spinner should cover the refetch so
+            // the list doesn't shift a beat after it closes.
+            await fetchAudits()
           }
         }}
         itemType={t('reports.audit')}

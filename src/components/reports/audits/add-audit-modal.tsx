@@ -43,7 +43,8 @@ type AuditFormData = z.infer<typeof auditSchema>
 interface AddAuditModalProps {
   isOpen: boolean
   onClose: () => void
-  onSuccess?: (audit: Audit) => void
+  // W54: may return a promise (list refetch) — the submit spinner awaits it.
+  onSuccess?: (audit: Audit) => void | Promise<unknown>
   initialValues?: Partial<AuditFormData> & {
     // W48: reschedule carries the full picture forward.
     reviewSchedule?: ReviewSchedule
@@ -115,6 +116,8 @@ export function AddAuditModal({ isOpen, onClose, onSuccess, initialValues }: Add
     [enabledCorrespondence, t, isRTL]
   )
   const [selectedType, setSelectedType] = useState<string>('internal')
+  // W54: spans create + usage tracking + the caller's refetch.
+  const [submitBusy, setSubmitBusy] = useState(false)
   const [schedule, setSchedule] = useState<ReviewSchedule>({ cadence: 'yearly', dayOfMonth: 1 })
   const [frameworkIds, setFrameworkIds] = useState<RegulatoryBodyId[]>([])
 
@@ -200,6 +203,10 @@ export function AddAuditModal({ isOpen, onClose, onSuccess, initialValues }: Add
   }
 
   const onSubmit = async (data: AuditFormData) => {
+    // W54: one busy flag spans the WHOLE sequence (create + usage tracking +
+    // the caller's refetch) — the store's isMutating drops as soon as the
+    // POST resolves, leaving a visible spinner-less gap before close.
+    setSubmitBusy(true)
     try {
       // Find the selected assignee from team members or current user
       let selectedAssignee = members.find((m) => m.id === data.assigneeId)
@@ -257,10 +264,14 @@ export function AddAuditModal({ isOpen, onClose, onSuccess, initialValues }: Add
       // W45: usage tracking only applies to legacy seeded templates —
       // entity-template ids carry the `et-` prefix.
       if (selectedTemplateId && !selectedTemplateId.startsWith('et-')) incrementUsage(selectedTemplateId)
-      onSuccess?.(newAudit)
+      // W54: await the caller's follow-up (list refetch) so the spinner
+      // covers it instead of the UI shifting a beat after close.
+      await Promise.resolve(onSuccess?.(newAudit))
       handleClose()
     } catch (error) {
       console.error('Failed to create audit:', error)
+    } finally {
+      setSubmitBusy(false)
     }
   }
 
@@ -601,7 +612,7 @@ export function AddAuditModal({ isOpen, onClose, onSuccess, initialValues }: Add
           </Button>
           <LoadingButton
             variant="primary"
-            loading={isMutating}
+            loading={submitBusy || isMutating}
             loadingLabel={t('auditDetail.creating')}
             onClick={handleSubmit(onSubmit)}
           >

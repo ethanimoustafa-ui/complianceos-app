@@ -422,6 +422,8 @@ export default function AuditDetailPage() {
   const [showScheduleNextModal, setShowScheduleNextModal] = useState(false)
   // W50: next-cycle due date for the reschedule modal.
   const [rescheduleDate, setRescheduleDate] = useState('')
+  // W54: spans the whole reschedule sequence (archive + reset + refetches).
+  const [rescheduleBusy, setRescheduleBusy] = useState(false)
   // W51: when set, the WHOLE page shows the archived cycle (read-only).
   const [viewingCycle, setViewingCycle] = useState<AuditCycleDetail | null>(null)
   // W53: archived-cycle count feeds the delete-confirmation warning.
@@ -1631,7 +1633,7 @@ export default function AuditDetailPage() {
           reset. No new audit row is created. */}
       <Modal
         isOpen={showScheduleNextModal}
-        onClose={() => { if (!isMutating) setShowScheduleNextModal(false) }}
+        onClose={() => { if (!rescheduleBusy) setShowScheduleNextModal(false) }}
         title={t('auditDetail.scheduleNextAudit')}
         size="sm"
       >
@@ -1651,22 +1653,27 @@ export default function AuditDetailPage() {
             />
           </div>
           <div className={`pt-2 flex justify-end gap-3`}>
-            <Button variant="outline" onClick={() => setShowScheduleNextModal(false)} disabled={isMutating}>
+            <Button variant="outline" onClick={() => setShowScheduleNextModal(false)} disabled={rescheduleBusy}>
               {t('common.cancel')}
             </Button>
             <LoadingButton
               variant="primary"
-              loading={isMutating}
+              loading={rescheduleBusy}
               disabled={!rescheduleDate}
               onClick={async () => {
+                // W54: one busy flag spans archive + reset + the checklist
+                // and timeline refetches — isMutating dropped a beat early.
+                setRescheduleBusy(true)
                 try {
                   await useAuditStore.getState().rescheduleAudit(auditId, rescheduleDate)
                   await useAuditTaskStore.getState().fetchByAudit(auditId)
-                  void useAuditLogStore.getState().fetchAll({ auditId, pageSize: 100 })
+                  await useAuditLogStore.getState().fetchAll({ auditId, pageSize: 100 })
                   setShowScheduleNextModal(false)
                   showToast(t('auditDetail.rescheduled'))
                 } catch {
                   /* error surfaced on the store */
+                } finally {
+                  setRescheduleBusy(false)
                 }
               }}
             >
