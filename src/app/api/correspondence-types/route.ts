@@ -33,7 +33,9 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    const { supabase, user, profile } = await requirePerm('settings:edit')
+    // W42: 'edit' (not org_admin-only settings:edit) — types are added inline
+    // from the feed's EditableSelect by officers/managers.
+    const { supabase, user, profile } = await requirePerm('edit')
     const input = await parseJson(req, CreateCorrespondenceTypeSchema)
 
     const { data, error } = await supabase

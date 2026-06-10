@@ -29,19 +29,21 @@ const ADMIN = { email: 'admin@complianceos.local', password: 'ComplianceOS!2026'
 
 /** Robust sign-in with retry — handles slow server cold starts. */
 async function robustSignIn(page: Page): Promise<void> {
-  for (let attempt = 1; attempt <= 3; attempt++) {
+  // W42: short per-attempt waits + more retries — the dev-mode hydration race
+  // means a submit can land before React attaches handlers (nothing happens);
+  // long 30s waits per attempt blew the 60s test budget before retrying.
+  await page.goto('/sign-in', { waitUntil: 'domcontentloaded', timeout: 30_000 })
+  await page.locator('input[type="email"]').waitFor({ state: 'visible', timeout: 15_000 })
+  await page.locator('input[type="email"]').fill(ADMIN.email)
+  await page.locator('input[type="password"]').fill(ADMIN.password)
+  for (let attempt = 1; attempt <= 6; attempt++) {
     try {
-      await page.goto('/sign-in', { waitUntil: 'domcontentloaded', timeout: 30_000 })
-      await page.locator('input[type="email"]').waitFor({ state: 'visible', timeout: 15_000 })
-      await page.locator('input[type="email"]').fill(ADMIN.email)
-      await page.locator('input[type="password"]').fill(ADMIN.password)
-      await page.waitForTimeout(300)
       await page.locator('input[type="password"]').press('Enter')
-      await page.waitForURL((u) => !u.pathname.startsWith('/sign-in'), { timeout: 30_000 })
+      await page.waitForURL((u) => !u.pathname.startsWith('/sign-in'), { timeout: 6_000 })
       return
     } catch (e) {
-      if (attempt === 3) throw e
-      await page.waitForTimeout(1500)
+      if (attempt === 6) throw e
+      await page.waitForTimeout(800)
     }
   }
 }
@@ -110,6 +112,9 @@ test.describe.serial('Wave-23 Advisory', () => {
     })
 
     await robustSignIn(page)
+    // W42: drop console noise captured DURING sign-in (the dev-mode auth fetch
+    // can abort on navigation) — this test certifies the ADVISORY page only.
+    consoleErrors.length = 0
     await page.goto(ADVISORY_URL)
     await page.waitForLoadState('networkidle')
     await screenshotStep(page, '01-list-en')

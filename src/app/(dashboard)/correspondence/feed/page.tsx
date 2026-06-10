@@ -26,6 +26,7 @@ import { formatLocalizedQuarter } from '@/lib/format-date'
 import { useUserPreferencesStore } from '@/stores/user-preferences-store'
 import { dicebearAvatar } from '@/lib/avatar'
 import { Gate } from '@/components/auth/gate'
+import { useCan } from '@/lib/permissions'
 import { useTeamWorkloads } from '@/hooks/useWorkload'
 import { useFrameworkConfigStore } from '@/stores/framework-config-store'
 import { resolveAuthorityCode } from '@/lib/authority-display'
@@ -156,6 +157,11 @@ export default function CorrespondenceFeedPage() {
   // Correspondence feed filter
   const [correspondenceFilter, setCorrespondenceFilter] = useState<'active' | 'archived' | 'all'>('active')
   const [typeFilter, setTypeFilter] = useState<Correspondence['type'] | 'all'>('all')
+  // W42 (story 11): live feed search (subject / reference / from / body).
+  const [feedSearch, setFeedSearch] = useState('')
+  // W42 (story 12): type-vocabulary management is officer+ only — viewers get
+  // a read-only dropdown (the API rejects them anyway; don't show dead UI).
+  const canManageTypes = useCan('Manage Audit Findings')
 
   // W28 BUG A2/A3 — re-fetch correspondence whenever the archive filter
   // changes. The server defaults `archived=false`, so without threading the
@@ -364,18 +370,37 @@ export default function CorrespondenceFeedPage() {
       .slice(0, 5)
   }, [policyStore.policies])
 
-  // Deep-link: auto-open correspondence when ?id= is present
+  // Deep-link: auto-open correspondence when ?id= is present.
+  // W42: only while the modal is CLOSED — without the guard, any list refetch
+  // (new array identity) re-ran this effect and reopened a just-closed modal.
   useEffect(() => {
     const id = searchParams.get('id')
-    if (!id) return
+    if (!id || isLetterDetailOpen) return
     const letter = correspondenceStore.correspondence.find(l => l.id === id)
     if (letter) handleViewLetter(letter)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams, correspondenceStore.correspondence])
 
+  // W42: unknown / deleted deep-link target — surface a "Not found" panel.
+  const deepLinkId = searchParams.get('id')
+  const deepLinkNotFound =
+    !!deepLinkId &&
+    correspondenceStore.lastFetched !== null &&
+    !correspondenceStore.correspondence.some((l) => l.id === deepLinkId)
+
   const handleViewLetter = (letter: Correspondence) => {
     setSelectedLetter(letter)
     setIsLetterDetailOpen(true)
+    // W42 (story 3): reflect the open detail in the URL so the state is
+    // shareable and survives reload.
+    router.replace(`${pathname}?id=${letter.id}`)
+  }
+
+  // W42: single close path — also drops the ?id= param so the deep-link
+  // effect can't resurrect the modal on the next refetch.
+  const closeLetterDetail = () => {
+    setIsLetterDetailOpen(false)
+    if (searchParams.get('id')) router.replace(pathname)
   }
 
   // Defensive read pattern: the byId map wins, falling back to the array
@@ -398,7 +423,7 @@ export default function CorrespondenceFeedPage() {
         setArchiveBusy(false)
       }
     }
-    setIsLetterDetailOpen(false)
+    closeLetterDetail()
   }
 
   // F1 (feed send): flip a draft correspondence to 'sent' via the existing
@@ -422,7 +447,7 @@ export default function CorrespondenceFeedPage() {
     try {
       await correspondenceStore.delete(letterId)
       showToast(t('correspondence.correspondenceDeleted' as TranslationKey))
-      setIsLetterDetailOpen(false)
+      closeLetterDetail()
       setDeleteConfirmId(null)
     } catch {
       showToast(t('correspondence.deleteFailed' as TranslationKey))
@@ -620,7 +645,7 @@ export default function CorrespondenceFeedPage() {
                       circular={circ}
                       isRTL={isRTL}
                       t={t}
-                      onClick={() => router.push(`/correspondence/regulatory-updates/rules`)}
+                      onClick={() => router.push(`/correspondence/regulatory-updates/rules?id=${circ.id}`)}
                     />
                   ))}
                   {/* F3: always show policies alongside circulars (not just as
@@ -688,9 +713,9 @@ export default function CorrespondenceFeedPage() {
                             { id: 'all', label: t('correspondence.allTypes' as TranslationKey) },
                             ...correspondenceTypes.map((tt) => ({ id: tt.id, label: tt.label, labelAr: tt.labelAr, isDefault: tt.isDefault })),
                           ]}
-                          onAdd={(label, labelAr) => addCorrespondenceType(label, labelAr)}
-                          onEdit={(id, label, labelAr) => updateCorrespondenceType(id, { label, labelAr })}
-                          onDelete={(id) => removeCorrespondenceType(id)}
+                          onAdd={canManageTypes ? (label, labelAr) => addCorrespondenceType(label, labelAr) : undefined}
+                          onEdit={canManageTypes ? (id, label, labelAr) => updateCorrespondenceType(id, { label, labelAr }) : undefined}
+                          onDelete={canManageTypes ? (id) => removeCorrespondenceType(id) : undefined}
                           size="sm"
                           isRTL={isRTL}
                         />
@@ -708,6 +733,37 @@ export default function CorrespondenceFeedPage() {
                       )}
                     </div>
                   </div>
+                  {/* W42: deep-link target missing (deleted or bad link). */}
+                  {deepLinkNotFound && (
+                    <div className="mb-3 flex items-start gap-2 p-3 bg-rose-50 border border-rose-100 rounded-xl">
+                      <Icon icon="lucide:file-x" className="text-rose-500 mt-0.5 shrink-0" />
+                      <div className="min-w-0">
+                        <p className="text-xs font-bold text-rose-700">{t('correspondence.notFoundTitle' as TranslationKey)}</p>
+                        <button onClick={() => router.replace(pathname)} className="text-[11px] font-bold text-rose-500 hover:underline cursor-pointer">
+                          {t('correspondence.backToFeed' as TranslationKey)}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                  {/* W42 (story 11): live search over the loaded feed. */}
+                  <div className="relative mb-3">
+                    <Icon icon="lucide:search" className={`absolute ${isRTL ? 'right-3' : 'left-3'} top-1/2 -translate-y-1/2 text-slate-400 text-sm`} />
+                    <input
+                      type="text"
+                      value={feedSearch}
+                      onChange={(e) => setFeedSearch(e.target.value)}
+                      placeholder={t('correspondence.searchPlaceholder')}
+                      className={`w-full ${isRTL ? 'pr-9 pl-8' : 'pl-9 pr-8'} py-2 bg-slate-50 border border-slate-100 rounded-lg text-xs focus:ring-2 focus:ring-emerald-500 outline-none`}
+                    />
+                    {feedSearch && (
+                      <button
+                        onClick={() => setFeedSearch('')}
+                        className={`absolute ${isRTL ? 'left-2' : 'right-2'} top-1/2 -translate-y-1/2 text-slate-300 hover:text-slate-500 cursor-pointer`}
+                      >
+                        <Icon icon="lucide:x" className="text-sm" />
+                      </button>
+                    )}
+                  </div>
                   {isFeedLoading ? (
                     /* F3: shimmer while correspondence list is first-loading */
                     <div className="space-y-4 max-h-[380px] overflow-y-auto pr-1 hide-scrollbar">
@@ -724,9 +780,16 @@ export default function CorrespondenceFeedPage() {
                     </div>
                   ) : (
                   (() => {
+                    const q = feedSearch.trim().toLowerCase()
                     const filtered = correspondenceStore.correspondence
                       .filter(l => correspondenceFilter === 'all' ? true : correspondenceFilter === 'archived' ? l.archived : !l.archived)
                       .filter(l => typeFilter === 'all' ? true : l.type === typeFilter)
+                      // W42 (story 11): subject / reference / from / body match.
+                      .filter(l => !q ||
+                        (l.subject ?? '').toLowerCase().includes(q) ||
+                        (l.reference ?? '').toLowerCase().includes(q) ||
+                        (l.from ?? '').toLowerCase().includes(q) ||
+                        (l.body ?? '').toLowerCase().includes(q))
                     return (
                       <>
                         <div className="space-y-4 max-h-[380px] overflow-y-auto pr-1 hide-scrollbar">
@@ -998,9 +1061,9 @@ export default function CorrespondenceFeedPage() {
               value={newCorrespondenceType}
               onChange={(id) => setNewCorrespondenceType(id)}
               items={correspondenceTypes.map((tt) => ({ id: tt.id, label: tt.label, labelAr: tt.labelAr, isDefault: tt.isDefault }))}
-              onAdd={(label, labelAr) => addCorrespondenceType(label, labelAr)}
-              onEdit={(id, label, labelAr) => updateCorrespondenceType(id, { label, labelAr })}
-              onDelete={(id) => removeCorrespondenceType(id)}
+              onAdd={canManageTypes ? (label, labelAr) => addCorrespondenceType(label, labelAr) : undefined}
+              onEdit={canManageTypes ? (id, label, labelAr) => updateCorrespondenceType(id, { label, labelAr }) : undefined}
+              onDelete={canManageTypes ? (id) => removeCorrespondenceType(id) : undefined}
               isRTL={isRTL}
             />
           </div>
@@ -1292,7 +1355,7 @@ export default function CorrespondenceFeedPage() {
       {/* Letter Detail Modal */}
       <Modal
         isOpen={isLetterDetailOpen}
-        onClose={() => setIsLetterDetailOpen(false)}
+        onClose={closeLetterDetail}
         title={detailLetter?.subject || t('correspondence.letterDetails')}
         subtitle={detailLetter ? `REF: ${detailLetter.reference || detailLetter.id}` : undefined}
         size="lg"
@@ -1424,9 +1487,9 @@ export default function CorrespondenceFeedPage() {
                         { id: 'all', label: t('correspondence.allTypes' as TranslationKey) },
                         ...correspondenceTypes.map((tt) => ({ id: tt.id, label: tt.label, labelAr: tt.labelAr, isDefault: tt.isDefault })),
                       ]}
-                      onAdd={(label, labelAr) => addCorrespondenceType(label, labelAr)}
-                      onEdit={(id, label, labelAr) => updateCorrespondenceType(id, { label, labelAr })}
-                      onDelete={(id) => removeCorrespondenceType(id)}
+                      onAdd={canManageTypes ? (label, labelAr) => addCorrespondenceType(label, labelAr) : undefined}
+                      onEdit={canManageTypes ? (id, label, labelAr) => updateCorrespondenceType(id, { label, labelAr }) : undefined}
+                      onDelete={canManageTypes ? (id) => removeCorrespondenceType(id) : undefined}
                       size="sm"
                       isRTL={isRTL}
                     />

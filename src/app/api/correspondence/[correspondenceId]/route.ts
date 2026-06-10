@@ -95,6 +95,10 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     // §2.12 — read the client's If-Match token (weak ETag = W/"<updated_at>").
     const ifMatch = readIfMatch(req)
 
+    // SEC-8 / W42: validate the body at the boundary BEFORE any DB I/O — an
+    // unknown key must 400 regardless of whether the row exists.
+    const patch = await parseJson(req, UpdateCorrespondenceSchema)
+
     // Snapshot the row so we can (a) assertNotStale, (b) pass updated_at to
     // the atomic conditional UPDATE, (c) generate a per-field diff in the audit.
     const { data: before, error: fetchErr } = await supabase
@@ -109,8 +113,6 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     const b = before as Record<string, unknown>
     // §2.12 — 412 if client's token doesn't match current updated_at.
     assertNotStale(ifMatch, b.updated_at as string | null | undefined)
-
-    const patch = await parseJson(req, UpdateCorrespondenceSchema)
     const update: Record<string, unknown> = {}
     for (const [k, v] of Object.entries(patch)) if (v !== undefined) update[k] = v
 

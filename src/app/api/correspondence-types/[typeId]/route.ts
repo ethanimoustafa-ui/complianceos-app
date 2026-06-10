@@ -19,7 +19,8 @@ type Params = { params: Promise<{ typeId: string }> }
 export async function PATCH(req: NextRequest, { params }: Params) {
   try {
     const { typeId } = await params
-    const { supabase, user, profile } = await requirePerm('settings:edit')
+    // W42: 'edit' — inline rename from the feed's EditableSelect.
+    const { supabase, user, profile } = await requirePerm('edit')
     const patch = await parseJson(req, UpdateCorrespondenceTypeSchema)
     const update: Record<string, unknown> = {}
     for (const [k, v] of Object.entries(patch)) if (v !== undefined) update[k] = v

@@ -98,7 +98,9 @@ test('W22-2: KPI metric cards show valid numbers (no NaN/undefined)', async ({ p
 
   // The metric strip renders 4 cards. Each has a big value (text like "0", "0%", etc.)
   // We just assert none of them contain "NaN" or "undefined".
-  const pageText = await page.textContent('body')
+  // W42: use innerText (visible text only) — textContent includes the Next dev
+  // RSC flight <script> payload, which legitimately contains "$undefined".
+  const pageText = await page.evaluate(() => document.body.innerText)
   expect(pageText).not.toContain('NaN')
   expect(pageText).not.toContain('undefined')
 
@@ -143,8 +145,10 @@ test('W22-4: hub renders in AR — no console errors, RTL layout', async ({ page
 
   // Try locale-switching via URL param or settings. Many apps toggle via a
   // button. We check if one exists; if not, test is marked as informational.
+  // W42: exact-match only — the old /ar|arabic/i regex substring-matched
+  // unrelated buttons ("Archive") and clicked them, so dir never flipped.
   const langBtn = page
-    .getByRole('button', { name: /عربي|العربية|ar|arabic/i })
+    .getByRole('button', { name: /^(عربي|العربية|AR|Arabic)$/ })
     .or(page.locator('[data-locale="ar"]'))
     .first()
 
@@ -160,10 +164,16 @@ test('W22-4: hub renders in AR — no console errors, RTL layout', async ({ page
     )
     expect(arErrors, 'No critical errors in AR mode').toHaveLength(0)
 
-    // Page should have some RTL indicator.
+    // Page should have some RTL indicator. W42: the dir flips asynchronously
+    // after the language provider updates — wait for it (and retry the click
+    // once; in dev the first click can land pre-hydration and no-op).
     const html = page.locator('html')
-    const dir = await html.getAttribute('dir')
-    expect(dir).toBe('rtl')
+    try {
+      await expect(html).toHaveAttribute('dir', 'rtl', { timeout: 4_000 })
+    } catch {
+      await langBtn.click()
+      await expect(html).toHaveAttribute('dir', 'rtl', { timeout: 6_000 })
+    }
 
     // Verify no raw i18n keys rendered (pattern: "correspondence.XXX").
     const pageText = (await page.textContent('body')) ?? ''

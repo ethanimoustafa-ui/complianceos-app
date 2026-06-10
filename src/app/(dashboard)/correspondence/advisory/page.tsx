@@ -61,6 +61,8 @@ export default function AdvisoryPage() {
   // Wave-2 Agent E: first-fetch skeleton.
   const advisoryLoading = useAdvisoryStore((s) => s.isLoading)
   const advisoryLastFetched = useAdvisoryStore((s) => s.lastFetched)
+  // W42: gate mutating buttons (Mark Complete / Delete) against double-fire.
+  const advisoryMutating = useAdvisoryStore((s) => s.isMutating)
   const showAdvisorySkeleton =
     advisoryLoading && advisoryStore.advisoryRequests.length === 0 && advisoryLastFetched === null
 
@@ -177,6 +179,14 @@ export default function AdvisoryPage() {
   useEffect(() => {
     setAdvisoryPage(1)
   }, [advisorySearchTerm, advisoryStatusFilter, advisoryPriorityFilter, advisoryBusinessUnitFilter, advisoryFrequencyFilter])
+
+  // W42: clamp the page when the filtered result shrinks beneath it (e.g. a
+  // delete on the last page) — previously the user landed on a blank page.
+  useEffect(() => {
+    if (advisoryPage > advisoryTotalPages && advisoryTotalPages >= 1) {
+      setAdvisoryPage(advisoryTotalPages)
+    }
+  }, [advisoryPage, advisoryTotalPages])
 
   // Deep-link: auto-open advisory when ?id= is present.
   // J1 fix: guard with isAdvisoryDetailOpen so the effect does NOT refire
@@ -861,7 +871,7 @@ export default function AdvisoryPage() {
                         prev ? { ...prev, notes: prev.notes.filter((n) => n.id !== tempId) } : prev,
                       )
                       setPendingNoteId(null)
-                      showToast(t('correspondence.deleteFailed' as TranslationKey))
+                      showToast(t('advisory.noteAddFailed' as TranslationKey))
                     } finally {
                       setAddNoteBusy(false)
                     }
@@ -885,9 +895,11 @@ export default function AdvisoryPage() {
                       handleCloseAdvisoryDetail()
                       showToast(t('advisory.statusUpdated'))
                     }}
-                    className={`flex-1 bg-emerald-600 text-white py-3 rounded-lg font-bold hover:bg-emerald-700 transition-colors flex items-center justify-center gap-2 cursor-pointer`}
+                    disabled={advisoryMutating}
+                    aria-busy={advisoryMutating || undefined}
+                    className={`flex-1 bg-emerald-600 text-white py-3 rounded-lg font-bold hover:bg-emerald-700 transition-colors flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60`}
                   >
-                    <Icon icon="lucide:check-circle" className="text-lg" />
+                    <Icon icon={advisoryMutating ? 'lucide:loader-2' : 'lucide:check-circle'} className={`text-lg ${advisoryMutating ? 'animate-spin' : ''}`} />
                     {t('advisory.markComplete')}
                   </button>
                   <div className={`flex items-center gap-2 min-w-[200px]`}>
@@ -908,12 +920,17 @@ export default function AdvisoryPage() {
                   </div>
                 </Gate>
               )}
-              <button
-                onClick={() => setIsDeleteAdvisoryOpen(true)}
-                className="px-6 bg-rose-100 text-rose-700 py-3 rounded-lg font-bold hover:bg-rose-200 transition-colors cursor-pointer"
-              >
-                {t('common.delete')}
-              </button>
+              {/* W42: gated client-side too — the API enforces 'delete'
+                  server-side, so don't render a button that can only 403. */}
+              <Gate perm="Manage Audit Findings">
+                <button
+                  onClick={() => setIsDeleteAdvisoryOpen(true)}
+                  disabled={advisoryMutating}
+                  className="px-6 bg-rose-100 text-rose-700 py-3 rounded-lg font-bold hover:bg-rose-200 transition-colors cursor-pointer disabled:opacity-60"
+                >
+                  {t('common.delete')}
+                </button>
+              </Gate>
               <button
                 onClick={handleCloseAdvisoryDetail}
                 className="px-6 bg-slate-100 text-slate-700 py-3 rounded-lg font-bold hover:bg-slate-200 transition-colors cursor-pointer"
