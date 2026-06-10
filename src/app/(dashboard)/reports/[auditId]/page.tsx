@@ -19,6 +19,7 @@ import { useAuditCategoryStore } from '@/stores/audit-category-store'
 import { useAuditLogStore, type AuditLog } from '@/stores/audit-log-store'
 import { useAuditTaskStore, type AuditTask } from '@/stores/audit-task-store'
 import { useTeamStore } from '@/stores/team-store'
+import { useDepartmentStore } from '@/stores/department-store'
 import { useAuthStore } from '@/stores/auth-store'
 import { useFrameworkConfigStore } from '@/stores/framework-config-store'
 import type { RegulatoryBodyId } from '@/types'
@@ -127,6 +128,8 @@ export default function AuditDetailPage() {
   const { getLogsByAuditId } = useAuditLogStore()
   const auditTaskStore = useAuditTaskStore()
   const { members: teamMembers } = useTeamStore()
+  // W46: resolve department UUIDs to names in the team-member picker.
+  const departments = useDepartmentStore((s) => s.departments)
   const currentUser = useAuthStore((state) => state.user)
 
   // Find audit from store
@@ -181,11 +184,20 @@ export default function AuditDetailPage() {
   const auditTeam = useMemo(() => {
     // Start with assignee as owner if no team exists
     if (!audit?.team || audit.team.length === 0) {
-      if (audit?.assignee) {
+      if (audit?.assignee?.id) {
+        // W46: the API only carries assignee_id — resolve the display name
+        // through the org directory (and the signed-in user) so the lead
+        // author actually SHOWS instead of rendering blank.
+        const profile = teamMembers.find((m) => m.id === audit.assignee.id)
+        const name =
+          audit.assignee.name ||
+          profile?.name ||
+          (currentUser?.id === audit.assignee.id ? currentUser.name : '')
         return [{
           id: audit.assignee.id,
-          name: audit.assignee.name,
-          avatar: audit.assignee.name.split(' ')[0] || 'User',
+          userId: audit.assignee.id,
+          name: name || 'Unknown',
+          avatar: profile?.avatar || name.split(' ')[0] || 'User',
           role: audit.assignee.role || 'Lead Author',
           isOwner: true,
           addedAt: audit.createdAt,
@@ -194,7 +206,7 @@ export default function AuditDetailPage() {
       return []
     }
     return audit.team
-  }, [audit])
+  }, [audit, teamMembers, currentUser])
 
   // Get dynamic categories based on audit type with translations
   const taskCategories = useMemo(() => {
@@ -242,6 +254,8 @@ export default function AuditDetailPage() {
       fetchById(auditId)
       void useAuditStore.getState().fetchDetailChildren(auditId)
       void useAuditTaskStore.getState().fetchByAudit(auditId)
+      // W46: departments hydrate the team-member picker's labels.
+      void useDepartmentStore.getState().fetchAll()
     }
   }, [auditId, fetchById])
 
@@ -371,7 +385,8 @@ export default function AuditDetailPage() {
   const [memberRole, setMemberRole] = useState('Auditor')
 
   // File upload state
-  const [uploadFile, setUploadFile] = useState<File | null>(null)
+  // W46: multi-file — uploading artifacts one at a time was needlessly slow.
+  const [uploadFiles, setUploadFiles] = useState<File[]>([])
 
   // Edit task form state
   const [editTaskForm, setEditTaskForm] = useState({
@@ -431,9 +446,15 @@ export default function AuditDetailPage() {
       return
     }
 
-    // Find assignee from audit team or current user
-    const selectedAssignee = auditTeam.find(m => m.id === newTaskForm.assigneeId) ||
-      (currentUser && currentUser.id === newTaskForm.assigneeId ? currentUser : null)
+    // W46: resolve the assignee through every directory we have — audit team
+    // (whose rows carry userId post-W45), the current user, and the org-wide
+    // team store — so the card never renders "Unknown" for a real person.
+    const teamEntry = auditTeam.find(m => m.id === newTaskForm.assigneeId)
+    const orgEntry = teamMembers.find(m => m.id === newTaskForm.assigneeId)
+    const selfEntry = currentUser && currentUser.id === newTaskForm.assigneeId ? currentUser : null
+    const assigneeName = teamEntry?.name || selfEntry?.name || orgEntry?.name || 'Unknown'
+    // Persist the PROFILE id (audit-team rows have their own row id).
+    const assigneeProfileId = teamEntry?.userId || selfEntry?.id || orgEntry?.id || newTaskForm.assigneeId
     const category = taskCategories.find(c => c.value === newTaskForm.category)
 
     auditTaskStore.addTask({
@@ -443,13 +464,19 @@ export default function AuditDetailPage() {
       category: category?.value || newTaskForm.category, // Store value/key, not label
       categoryColor: category?.color || 'blue',
       assignee: {
-        id: selectedAssignee?.id || newTaskForm.assigneeId,
-        name: selectedAssignee?.name || 'Unknown',
-        avatar: selectedAssignee?.name?.split(' ')[0] || 'User',
+        id: assigneeProfileId,
+        name: assigneeName,
+        avatar: assigneeName.split(' ')[0] || 'User',
       },
       dueDate: newTaskForm.dueDate,
       notes: newTaskForm.notes,
     }, audit?.title)
+
+    // W46 (owner rule): creating the first checklist item moves a pending
+    // audit into In Progress automatically.
+    if (audit?.status === 'pending') {
+      void updateStatus(auditId, 'in_progress', { name: currentUser?.name || 'User' })
+    }
 
     setNewTaskForm({ title: '', category: taskCategories[0]?.value || 'access-control', assigneeId: '', dueDate: '', notes: '' })
     setShowAddTaskModal(false)
@@ -497,20 +524,21 @@ export default function AuditDetailPage() {
 
   // Document handlers
   const handleFileUpload = () => {
-    if (!uploadFile) {
+    if (uploadFiles.length === 0) {
       showToast(t('auditDetail.pleaseSelectFile'))
       return
     }
 
-    const fileType = uploadFile.type.includes('pdf') ? 'pdf' :
-                     uploadFile.type.includes('image') ? 'image' : 'doc'
+    for (const file of uploadFiles) {
+      const fileType = file.type.includes('pdf') ? 'pdf' :
+                       file.type.includes('image') ? 'image' : 'doc'
+      addDocument(auditId, {
+        name: file.name,
+        type: fileType,
+      }, { name: currentUser?.name || 'User' })
+    }
 
-    addDocument(auditId, {
-      name: uploadFile.name,
-      type: fileType,
-    }, { name: currentUser?.name || 'User' })
-
-    setUploadFile(null)
+    setUploadFiles([])
     setShowUploadModal(false)
     showToast(t('auditDetail.documentUploaded'))
   }
@@ -1670,10 +1698,14 @@ export default function AuditDetailPage() {
               locked
               value={selectedMemberId || null}
               onChange={(id) => setSelectedMemberId(id)}
-              items={availableTeamMembers.map((member) => ({
-                id: member.id,
-                label: `${member.name} - ${member.department}`,
-              }))}
+              items={availableTeamMembers.map((member) => {
+                // W46: member.department is a UUID — resolve to a name.
+                const dept = departments.find((d) => d.id === member.department)?.name
+                return {
+                  id: member.id,
+                  label: dept ? `${member.name} — ${dept}` : member.name,
+                }
+              })}
               placeholder={t('auditDetail.selectTeamMember')}
               isRTL={isRTL}
             />
@@ -1713,13 +1745,18 @@ export default function AuditDetailPage() {
             <input
               id="file-input"
               type="file"
+              multiple
               className="hidden"
               accept=".pdf,.doc,.docx,.png,.jpg,.jpeg"
-              onChange={(e) => setUploadFile(e.target.files?.[0] || null)}
+              onChange={(e) => setUploadFiles(Array.from(e.target.files ?? []))}
             />
             <Icon icon="lucide:upload-cloud" className="text-4xl text-slate-400 mx-auto mb-3" />
-            {uploadFile ? (
-              <p className="text-sm font-medium text-slate-900">{uploadFile.name}</p>
+            {uploadFiles.length > 0 ? (
+              <div className="space-y-1">
+                {uploadFiles.map((f) => (
+                  <p key={f.name} className="text-sm font-medium text-slate-900 truncate">{f.name}</p>
+                ))}
+              </div>
             ) : (
               <>
                 <p className="text-sm font-bold text-slate-700 mb-1">{t('auditDetail.clickToUpload')}</p>
@@ -1729,8 +1766,8 @@ export default function AuditDetailPage() {
           </div>
         </div>
         <div className={`mt-6 pt-6 border-t border-slate-100 flex justify-end gap-3`}>
-          <Button variant="outline" onClick={() => { setUploadFile(null); setShowUploadModal(false) }} disabled={isMutating}>{t('common.cancel')}</Button>
-          <LoadingButton variant="primary" loading={isMutating} onClick={handleFileUpload} disabled={!uploadFile}>
+          <Button variant="outline" onClick={() => { setUploadFiles([]); setShowUploadModal(false) }} disabled={isMutating}>{t('common.cancel')}</Button>
+          <LoadingButton variant="primary" loading={isMutating} onClick={handleFileUpload} disabled={uploadFiles.length === 0}>
             <Icon icon="lucide:upload" />
             {t('auditDetail.upload')}
           </LoadingButton>

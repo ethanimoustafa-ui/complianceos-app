@@ -85,6 +85,9 @@ export interface AuditDocument {
 
 export interface AuditTeamMember {
   id: string
+  // W46: the PROFILE id behind this team row (audit_team_members.user_id) —
+  // `id` is the row id post-persist; tasks key assignees by profile id.
+  userId?: string
   name: string
   avatar: string
   role: string

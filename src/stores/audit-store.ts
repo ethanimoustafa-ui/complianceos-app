@@ -162,7 +162,12 @@ function mapAuditRow(row: AuditApiRow, previous?: Audit): Audit {
     type: row.type as AuditAuthority,
     status: row.status as Audit['status'],
     dueDate: row.due_date,
-    assignee: previous?.assignee ?? stubAssignee(row.assignee_id),
+    // W46: resolve the lead author's display name/avatar from the team store
+    // — the bare stub left the detail page showing an empty assignee.
+    assignee:
+      previous?.assignee?.name
+        ? previous.assignee
+        : { ...stubAssignee(row.assignee_id), ...resolveProfile(row.assignee_id) },
     progress: row.progress ?? 0,
     documents: previous?.documents,
     team: previous?.team,
@@ -458,6 +463,7 @@ export const useAuditStore = create<AuditState>()((set, get) => ({
         const p = resolveProfile(r.user_id)
         return {
           id: r.id,
+          userId: r.user_id,
           name: p.name,
           avatar: p.avatar,
           role: r.role ?? '',
@@ -810,8 +816,10 @@ export const useAuditStore = create<AuditState>()((set, get) => ({
 
   addTeamMember: (auditId, memberData) => {
     const existing = get().byId[auditId]
-    if (existing?.team?.some((m) => m.id === memberData.id)) return null
-    const newMember: AuditTeamMember = { ...memberData, addedAt: new Date().toISOString() }
+    if (existing?.team?.some((m) => m.id === memberData.id || m.userId === memberData.id)) return null
+    // W46: the incoming id IS the profile id — keep it as userId so the row
+    // survives the id-swap to the server row id.
+    const newMember: AuditTeamMember = { ...memberData, userId: memberData.userId ?? memberData.id, addedAt: new Date().toISOString() }
 
     set((state) => ({
       audits: state.audits.map((a) =>

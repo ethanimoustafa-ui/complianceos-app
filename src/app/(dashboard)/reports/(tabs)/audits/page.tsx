@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useMemo, useEffect } from 'react'
+import React, { useState, useMemo, useEffect, useCallback } from 'react'
 import { usePathname } from 'next/navigation'
 import Link from 'next/link'
 import { Icon } from '@iconify/react'
@@ -21,10 +21,15 @@ import { useFormattedDate } from '@/hooks/useFormattedDate'
 import { useComplianceScore } from '@/hooks/useComplianceScore'
 import { Gate } from '@/components/auth/gate'
 import { useAuditCategoryStore } from '@/stores/audit-category-store'
+import { useAuthStore } from '@/stores/auth-store'
+import { LETTER_AUTHORITIES, AUTHORITY_COLORS, getAuthorityFullName } from '@/lib/letter-authority'
 import { dicebearAvatar } from '@/lib/avatar'
 
 // Audit type definitions
-type AuditSource = 'sama_inspection' | 'internal_audit' | 'sharia_audit'
+// W46: sources ARE the correspondence authorities (sama / cma / zatca / … /
+// internal) — the old 3-bucket union collapsed every regulator into
+// 'sama_inspection'.
+type AuditSource = string
 type AuditFrequency = 'annual' | 'semi_annual' | 'quarterly' | 'monthly' | 'ad_hoc'
 type AuditCategory = string  // widened — see useAuditCategoryStore
 type AuditStatus = 'in_progress' | 'pending' | 'in_review' | 'completed' | 'overdue'
@@ -61,10 +66,40 @@ const auditPriorityConfig: Record<AuditPriority, { label: string; bgColor: strin
   low: { label: 'Low', bgColor: 'bg-slate-50', textColor: 'text-slate-500', borderColor: 'border-slate-200' },
 }
 
-const auditSourceColors: Record<AuditSource, { dot: string; bg: string; text: string; border: string }> = {
-  sama_inspection: { dot: 'bg-red-500', bg: 'bg-red-50', text: 'text-red-600', border: 'border-red-200' },
-  internal_audit: { dot: 'bg-blue-500', bg: 'bg-blue-50', text: 'text-blue-600', border: 'border-blue-200' },
-  sharia_audit: { dot: 'bg-purple-500', bg: 'bg-purple-50', text: 'text-purple-600', border: 'border-purple-200' },
+// W46: 'internal' source color (regulator authorities use AUTHORITY_COLORS
+// from lib/letter-authority — the same palette the correspondence pages use).
+const INTERNAL_SOURCE_COLOR = { dot: 'bg-blue-500', bg: 'bg-blue-50', text: 'text-blue-600', border: 'border-blue-200' }
+const GRAY_FILTER_COLOR = { dot: 'bg-slate-400', bg: 'bg-slate-50', text: 'text-slate-600', border: 'border-slate-200' }
+
+// W46: per-user palette for customizable filter chip colors.
+export const FILTER_PALETTE: Record<string, { dot: string; bg: string; text: string; border: string }> = {
+  emerald: { dot: 'bg-emerald-500', bg: 'bg-emerald-50', text: 'text-emerald-600', border: 'border-emerald-200' },
+  green:   { dot: 'bg-green-500',   bg: 'bg-green-50',   text: 'text-green-600',   border: 'border-green-200' },
+  teal:    { dot: 'bg-teal-500',    bg: 'bg-teal-50',    text: 'text-teal-600',    border: 'border-teal-200' },
+  cyan:    { dot: 'bg-cyan-500',    bg: 'bg-cyan-50',    text: 'text-cyan-600',    border: 'border-cyan-200' },
+  blue:    { dot: 'bg-blue-500',    bg: 'bg-blue-50',    text: 'text-blue-600',    border: 'border-blue-200' },
+  indigo:  { dot: 'bg-indigo-500',  bg: 'bg-indigo-50',  text: 'text-indigo-600',  border: 'border-indigo-200' },
+  violet:  { dot: 'bg-violet-500',  bg: 'bg-violet-50',  text: 'text-violet-600',  border: 'border-violet-200' },
+  pink:    { dot: 'bg-pink-500',    bg: 'bg-pink-50',    text: 'text-pink-600',    border: 'border-pink-200' },
+  rose:    { dot: 'bg-rose-500',    bg: 'bg-rose-50',    text: 'text-rose-600',    border: 'border-rose-200' },
+  orange:  { dot: 'bg-orange-500',  bg: 'bg-orange-50',  text: 'text-orange-600',  border: 'border-orange-200' },
+  amber:   { dot: 'bg-amber-500',   bg: 'bg-amber-50',   text: 'text-amber-600',   border: 'border-amber-200' },
+  slate:   { dot: 'bg-slate-400',   bg: 'bg-slate-50',   text: 'text-slate-600',   border: 'border-slate-200' },
+}
+
+// W46: default colors for COMMON category keywords — user-made uncommon
+// categories fall back to gray (and can be recolored per-user).
+function categoryKeywordColor(id: string): { dot: string; bg: string; text: string; border: string } {
+  const v = id.toLowerCase()
+  if (v.includes('security') || v.includes('cyber') || v.includes('it')) return FILTER_PALETTE.indigo
+  if (v.includes('financial') || v.includes('finance')) return FILTER_PALETTE.green
+  if (v.includes('regulatory')) return FILTER_PALETTE.orange
+  if (v.includes('operational') || v.includes('operations')) return FILTER_PALETTE.amber
+  if (v.includes('hr') || v.includes('human')) return FILTER_PALETTE.pink
+  if (v.includes('sharia')) return FILTER_PALETTE.violet
+  if (v.includes('internal')) return FILTER_PALETTE.cyan
+  if (v.includes('external')) return FILTER_PALETTE.teal
+  return GRAY_FILTER_COLOR
 }
 
 const auditFrequencyColors: Record<AuditFrequency, { dot: string; bg: string; text: string; border: string }> = {
@@ -130,9 +165,9 @@ export default function ReportsAuditsPage() {
   const [showScheduleAuditModal, setShowScheduleAuditModal] = useState(false)
   const [auditSearchTerm, setAuditSearchTerm] = useState('')
 
-  // Audit filter state
+  // Audit filter state — W46: every KSA correspondence authority + internal.
   const [selectedSources, setSelectedSources] = useState<Set<AuditSource>>(
-    new Set(['sama_inspection', 'internal_audit', 'sharia_audit'])
+    new Set(['internal', ...LETTER_AUTHORITIES])
   )
   const [selectedFrequencies, setSelectedFrequencies] = useState<Set<AuditFrequency>>(
     new Set(['annual', 'semi_annual', 'quarterly', 'monthly', 'ad_hoc'])
@@ -172,13 +207,7 @@ export default function ReportsAuditsPage() {
 
     return storeAudits.map((audit) => {
       // Presentational source buckets for the filter pills.
-      // Correspondence-based authorities all render as 'sama_inspection'
-      // (external regulator inspection). Internal/Sharia get their own buckets.
-      const sourceMap: Record<string, AuditSource> = {
-        internal: 'internal_audit',
-        'sharia-board': 'sharia_audit',
-        sharia: 'sharia_audit',
-      }
+      // W46: keep the authority AS the source (legacy 'sharia' → 'sharia-board').
 
       const dueDate = new Date(audit.dueDate)
       dueDate.setHours(0, 0, 0, 0)
@@ -210,7 +239,7 @@ export default function ReportsAuditsPage() {
         status: displayStatus,
         priority: (audit.priority || 'medium') as AuditPriority,
         progress: audit.progress,
-        source: sourceMap[audit.type] ?? 'sama_inspection',
+        source: String(audit.type) === 'sharia' ? 'sharia-board' : (audit.type || 'internal'),
         frequency: (audit.frequency || 'annual') as AuditFrequency,
         category: (audit.category || 'regulatory_compliance') as AuditCategory,
         closedOverdue: audit.closedOverdue,
@@ -314,11 +343,53 @@ export default function ReportsAuditsPage() {
   }
 
   // Localized filter options
-  const auditSourceOptions: FilterOption<AuditSource>[] = useMemo(() => [
-    { value: 'sama_inspection' as AuditSource, label: t('reports.samaInspection'), color: auditSourceColors.sama_inspection },
-    { value: 'internal_audit' as AuditSource, label: t('reports.internalAudit'), color: auditSourceColors.internal_audit },
-    { value: 'sharia_audit' as AuditSource, label: t('reports.shariaAudit'), color: auditSourceColors.sharia_audit },
-  ], [t])
+  // W46: per-user chip color overrides (client-side, keyed by user id —
+  // every officer can have their own palette).
+  const currentUserId = useAuthStore((s) => s.user?.id) ?? 'anon'
+  const overridesKey = `audit-filter-colors:${currentUserId}`
+  const [colorOverrides, setColorOverrides] = useState<Record<string, string>>({})
+  useEffect(() => {
+    try {
+      setColorOverrides(JSON.parse(localStorage.getItem(overridesKey) ?? '{}'))
+    } catch { setColorOverrides({}) }
+  }, [overridesKey])
+  const overrideColor = useCallback(
+    (group: 'source' | 'category', value: string, fallback: { dot: string; bg: string; text: string; border: string }) =>
+      FILTER_PALETTE[colorOverrides[`${group}:${value}`] ?? ''] ?? fallback,
+    [colorOverrides],
+  )
+  const handleColorChange = useCallback(
+    (group: 'source' | 'category') => (value: string, paletteKey: string) => {
+      setColorOverrides((prev) => {
+        const next = { ...prev, [`${group}:${value}`]: paletteKey }
+        try { localStorage.setItem(overridesKey, JSON.stringify(next)) } catch { /* quota */ }
+        return next
+      })
+    },
+    [overridesKey],
+  )
+
+  // W46: source options = every KSA correspondence authority (always listed,
+  // colored from the shared authority palette) + internal + any user-added
+  // authority found on rows (gray until the user recolors it).
+  const auditSourceOptions: FilterOption<AuditSource>[] = useMemo(() => {
+    const base: FilterOption<AuditSource>[] = [
+      { value: 'internal', label: t('reports.internalAudit'), color: overrideColor('source', 'internal', INTERNAL_SOURCE_COLOR) },
+      ...LETTER_AUTHORITIES.map((id) => ({
+        value: id as AuditSource,
+        label: id === 'sharia-board' ? getAuthorityFullName(id, isRTL ? 'ar' : 'en') : id.toUpperCase(),
+        color: overrideColor('source', id, AUTHORITY_COLORS[id] ?? GRAY_FILTER_COLOR),
+      })),
+    ]
+    const known = new Set(base.map((o) => o.value))
+    for (const a of pageAudits) {
+      if (!known.has(a.source)) {
+        known.add(a.source)
+        base.push({ value: a.source, label: a.source, color: overrideColor('source', a.source, GRAY_FILTER_COLOR) })
+      }
+    }
+    return base
+  }, [t, isRTL, pageAudits, overrideColor])
 
   const auditFrequencyOptions: FilterOption<AuditFrequency>[] = useMemo(() => [
     { value: 'annual' as AuditFrequency, label: t('reports.annual'), color: auditFrequencyColors.annual },
@@ -328,23 +399,35 @@ export default function ReportsAuditsPage() {
     { value: 'ad_hoc' as AuditFrequency, label: t('reports.adHoc'), color: auditFrequencyColors.ad_hoc },
   ], [t])
 
-  // W45: append user-added categories (useAuditCategoryStore) so custom
-  // categories are filterable instead of being silently dropped.
-  const auditCategoryOptions: FilterOption<AuditCategory>[] = useMemo(() => [
-    { value: 'security_compliance' as AuditCategory, label: t('reports.security'), color: auditCategoryColors.security_compliance },
-    { value: 'financial_compliance' as AuditCategory, label: t('reports.financial'), color: auditCategoryColors.financial_compliance },
-    { value: 'regulatory_compliance' as AuditCategory, label: t('reports.regulatory'), color: auditCategoryColors.regulatory_compliance },
-    { value: 'operational_compliance' as AuditCategory, label: t('reports.operational'), color: auditCategoryColors.operational_compliance },
-    { value: 'hr_compliance' as AuditCategory, label: t('reports.hr'), color: auditCategoryColors.hr_compliance },
-    { value: 'sharia_compliance' as AuditCategory, label: t('reports.sharia'), color: auditCategoryColors.sharia_compliance },
-    ...customAuditCategories
-      .filter((c) => !['security_compliance', 'financial_compliance', 'regulatory_compliance', 'operational_compliance', 'hr_compliance', 'sharia_compliance'].includes(c.id))
-      .map((c) => ({
-        value: c.id as AuditCategory,
-        label: isRTL ? c.labelAr || c.label : c.label,
-        color: { dot: 'bg-slate-400', bg: 'bg-slate-50', text: 'text-slate-600', border: 'border-slate-200' },
-      })),
-  ], [t, customAuditCategories, isRTL])
+  // W46: ONE category vocabulary — the configurable audit-category store
+  // (the same list the Schedule Audit dropdown shows), colored by common-
+  // keyword defaults; legacy canonical ids only appear when rows still carry
+  // them. Per-user overrides recolor any chip.
+  const auditCategoryOptions: FilterOption<AuditCategory>[] = useMemo(() => {
+    const canonicalLabels: Record<string, string> = {
+      security_compliance: t('reports.security'),
+      financial_compliance: t('reports.financial'),
+      regulatory_compliance: t('reports.regulatory'),
+      operational_compliance: t('reports.operational'),
+      hr_compliance: t('reports.hr'),
+      sharia_compliance: t('reports.sharia'),
+    }
+    const storeOptions: FilterOption<AuditCategory>[] = customAuditCategories.map((c) => ({
+      value: c.id as AuditCategory,
+      label: isRTL ? c.labelAr || c.label : c.label,
+      color: overrideColor('category', c.id, c.isDefault ? categoryKeywordColor(c.label) : GRAY_FILTER_COLOR),
+    }))
+    const storeIds = new Set(storeOptions.map((o) => o.value))
+    // Legacy canonical values: surface only when an existing row uses them.
+    const legacyOptions: FilterOption<AuditCategory>[] = Object.entries(canonicalLabels)
+      .filter(([id]) => !storeIds.has(id) && pageAudits.some((a) => a.category === id))
+      .map(([id, label]) => ({
+        value: id as AuditCategory,
+        label,
+        color: overrideColor('category', id, categoryKeywordColor(id)),
+      }))
+    return [...storeOptions, ...legacyOptions]
+  }, [t, customAuditCategories, isRTL, pageAudits, overrideColor])
 
   // W45: newly-appearing category options (async store hydration or inline
   // adds) join the selected set so their rows don't vanish from the list.
@@ -359,6 +442,19 @@ export default function ReportsAuditsPage() {
     })
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [auditCategoryOptions.length])
+
+  // W46: same for sources — user-added authorities join the selected set.
+  useEffect(() => {
+    setSelectedSources((prev) => {
+      const next = new Set(prev)
+      let changed = false
+      for (const opt of auditSourceOptions) {
+        if (!next.has(opt.value)) { next.add(opt.value); changed = true }
+      }
+      return changed ? next : prev
+    })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [auditSourceOptions.length])
 
   const auditStatusOptions: FilterOption<AuditStatus>[] = useMemo(() => [
     { value: 'pending' as AuditStatus, label: t('reports.pending'), color: auditStatusColors.pending },
@@ -464,9 +560,9 @@ export default function ReportsAuditsPage() {
             <div className="p-6 border-b border-slate-100 bg-slate-50/30">
               <h3 className="text-sm font-bold text-slate-900 mb-4">{t('reports.filterAudits')}</h3>
               <div className="flex flex-wrap items-start gap-6">
-                <MultiSelectFilter label={t('reports.source')} options={auditSourceOptions} selected={selectedSources} onChange={setSelectedSources} showAllOption allLabel={t('common.all')} />
+                <MultiSelectFilter label={t('reports.source')} options={auditSourceOptions} selected={selectedSources} onChange={setSelectedSources} showAllOption allLabel={t('common.all')} colorPalette={FILTER_PALETTE} onColorChange={handleColorChange('source')} />
                 <MultiSelectFilter label={t('reports.frequency')} options={auditFrequencyOptions} selected={selectedFrequencies} onChange={setSelectedFrequencies} showAllOption allLabel={t('common.all')} />
-                <MultiSelectFilter label={t('common.category')} options={auditCategoryOptions} selected={selectedCategories} onChange={setSelectedCategories} showAllOption allLabel={t('common.all')} />
+                <MultiSelectFilter label={t('common.category')} options={auditCategoryOptions} selected={selectedCategories} onChange={setSelectedCategories} showAllOption allLabel={t('common.all')} colorPalette={FILTER_PALETTE} onColorChange={handleColorChange('category')} />
                 <MultiSelectFilter label={t('reports.status')} options={auditStatusOptions} selected={selectedStatuses} onChange={setSelectedStatuses} showAllOption allLabel={t('common.all')} />
                 <MultiSelectFilter label={t('reports.priority')} options={auditPriorityOptions} selected={selectedPriorities} onChange={setSelectedPriorities} showAllOption allLabel={t('common.all')} />
               </div>
