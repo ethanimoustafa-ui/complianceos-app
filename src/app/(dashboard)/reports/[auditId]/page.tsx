@@ -27,7 +27,7 @@ import { useAuthStore } from '@/stores/auth-store'
 import { useFrameworkConfigStore } from '@/stores/framework-config-store'
 import type { RegulatoryBodyId } from '@/types'
 import { EditAuditModal } from '@/components/reports/audits/edit-audit-modal'
-import { AddAuditModal } from '@/components/reports/audits/add-audit-modal'
+import { AuditHistoryCard } from '@/components/reports/audits/AuditHistoryCard'
 import { EditableSelect } from '@/components/ui/editable-select'
 import type { Audit, AuditComment } from '@/types'
 import { canEditComment, canDeleteComment } from '@/lib/permissions'
@@ -167,25 +167,8 @@ export default function AuditDetailPage() {
     return calculateNextOccurrence(audit.dueDate, audit.frequency)
   }, [audit?.dueDate, audit?.frequency])
 
-  // Pre-fill values for scheduling next audit — W48: carry EVERYTHING forward
-  // (title, cadence/schedule, frameworks were missing; the owner had to
-  // retype them on every reschedule).
-  const scheduleNextInitialValues = useMemo(() => {
-    if (!audit || !nextOccurrence) return undefined
-    return {
-      type: audit.type,
-      category: audit.category,
-      frequency: audit.frequency,
-      priority: audit.priority,
-      dueDate: nextOccurrence.toISOString().split('T')[0],
-      assigneeId: audit.assignee?.id || '',
-      title: audit.title,
-      description: audit.description || '',
-      status: 'pending' as const,
-      reviewSchedule: audit.reviewSchedule,
-      frameworkIds: audit.frameworkIds,
-    }
-  }, [audit, nextOccurrence])
+  // W50: "schedule next" no longer creates a new audit — it rolls THIS audit
+  // into its next cycle (see the reschedule modal + AuditHistoryCard).
 
   // Get documents from audit
   const documents = audit?.documents || []
@@ -421,6 +404,8 @@ export default function AuditDetailPage() {
   const [showTimelineModal, setShowTimelineModal] = useState(false)
   const [showUploadModal, setShowUploadModal] = useState(false)
   const [showScheduleNextModal, setShowScheduleNextModal] = useState(false)
+  // W50: next-cycle due date for the reschedule modal.
+  const [rescheduleDate, setRescheduleDate] = useState('')
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [selectedTimeline, setSelectedTimeline] = useState<TimelineItem | null>(null)
 
@@ -550,6 +535,11 @@ export default function AuditDetailPage() {
   }
 
   const toggleTaskCompletion = (taskId: string) => {
+    // W50: locked once the audit is completed.
+    if (audit?.status === 'completed') {
+      showToast(t('auditDetail.checklistLocked'))
+      return
+    }
     const task = tasks.find(t => t.id === taskId)
     if (task) {
       const newCompleted = !task.completed
@@ -697,9 +687,17 @@ export default function AuditDetailPage() {
   }
 
   const handleStatusChange = async (newStatus: Audit['status']) => {
+    // W50 (owner rule): an audit can't complete with an unfinished checklist.
+    if (newStatus === 'completed' && tasks.length > 0 && calculatedProgress < 100) {
+      showToast(t('auditDetail.completeBlocked'))
+      return
+    }
     await updateStatus(auditId, newStatus, { name: currentUser?.name || 'User' })
     showToast(t('auditDetail.statusChangedTo').replace('{{status}}', statusLabels[newStatus]))
   }
+
+  // W50: a completed audit's checklist is frozen until the next cycle.
+  const checklistLocked = audit?.status === 'completed'
 
   const categoryColors = {
     blue: 'bg-blue-50 text-blue-600',
@@ -851,13 +849,21 @@ export default function AuditDetailPage() {
                     <button className="p-1.5 text-slate-400 hover:text-emerald-600 transition-colors cursor-pointer" title={t('auditDetail.filterTasks')}>
                       <Icon icon="lucide:filter" />
                     </button>
-                    <button
-                      className="p-1.5 text-slate-400 hover:text-emerald-600 transition-colors cursor-pointer"
-                      title={t('auditDetail.addNewControlTask')}
-                      onClick={() => setShowAddTaskModal(true)}
-                    >
-                      <Icon icon="lucide:plus-circle" />
-                    </button>
+                    {/* W50: no checklist edits once the audit is completed. */}
+                    {!checklistLocked && (
+                      <button
+                        className="p-1.5 text-slate-400 hover:text-emerald-600 transition-colors cursor-pointer"
+                        title={t('auditDetail.addNewControlTask')}
+                        onClick={() => setShowAddTaskModal(true)}
+                      >
+                        <Icon icon="lucide:plus-circle" />
+                      </button>
+                    )}
+                    {checklistLocked && (
+                      <span className="p-1.5 text-slate-300" title={t('auditDetail.checklistLocked')}>
+                        <Icon icon="lucide:lock" />
+                      </span>
+                    )}
                   </div>
                 </div>
                 <div className="divide-y divide-slate-100">
@@ -923,6 +929,8 @@ export default function AuditDetailPage() {
                             alt={task.assignee.name}
                           />
                           <div className="relative">
+                            {/* W50: task menu hidden while the audit is completed. */}
+                            {!checklistLocked && (
                             <button
                               className="p-1 opacity-0 group-hover:opacity-100 transition-opacity text-slate-300 hover:text-slate-600 cursor-pointer"
                               onClick={(e) => {
@@ -932,6 +940,7 @@ export default function AuditDetailPage() {
                             >
                               <Icon icon="lucide:more-vertical" />
                             </button>
+                            )}
                             {taskOptionsId === task.id && (
                               <div className={`absolute ${isRTL ? 'left-0' : 'right-0'} top-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg py-1 min-w-[120px] z-50`}>
                                 <button
@@ -1217,7 +1226,11 @@ export default function AuditDetailPage() {
                         variant="outline"
                         size="sm"
                         className="w-full mt-2"
-                        onClick={() => setShowScheduleNextModal(true)}
+                        onClick={() => {
+                          // W50: prefill the computed next occurrence.
+                          setRescheduleDate(nextOccurrence.toISOString().split('T')[0])
+                          setShowScheduleNextModal(true)
+                        }}
                       >
                         <Icon icon="lucide:calendar-plus" />
                         {t('auditDetail.scheduleNextAudit')}
@@ -1269,6 +1282,9 @@ export default function AuditDetailPage() {
                   )}
                 </div>
               </Card>
+
+              {/* W50: archived cycles (previous audits) */}
+              <AuditHistoryCard auditId={auditId} auditTitle={audit?.title || ''} />
 
               {/* Team Members */}
               <Card>
@@ -1526,11 +1542,57 @@ export default function AuditDetailPage() {
         onSuccess={() => showToast(t('auditDetail.auditDetailsUpdated'))}
       />
 
-      <AddAuditModal
+      {/* W50: scheduling the next audit ROLLS THE SAME AUDIT OVER — the
+          finished cycle (files, comments, activity, checklist state) is
+          archived into the history card; the checklist carries forward
+          reset. No new audit row is created. */}
+      <Modal
         isOpen={showScheduleNextModal}
-        onClose={() => setShowScheduleNextModal(false)}
-        initialValues={scheduleNextInitialValues}
-      />
+        onClose={() => { if (!isMutating) setShowScheduleNextModal(false) }}
+        title={t('auditDetail.scheduleNextAudit')}
+        size="sm"
+      >
+        <div className="space-y-5">
+          <p className="text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
+            {t('auditDetail.rescheduleWarning')}
+          </p>
+          <div>
+            <label className={`block text-sm font-bold text-slate-700 mb-2`}>
+              {t('auditDetail.nextDueDate')} <span className="text-rose-500">*</span>
+            </label>
+            <input
+              type="date"
+              value={rescheduleDate}
+              onChange={(e) => setRescheduleDate(e.target.value)}
+              className={`w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500`}
+            />
+          </div>
+          <div className={`pt-2 flex justify-end gap-3`}>
+            <Button variant="outline" onClick={() => setShowScheduleNextModal(false)} disabled={isMutating}>
+              {t('common.cancel')}
+            </Button>
+            <LoadingButton
+              variant="primary"
+              loading={isMutating}
+              disabled={!rescheduleDate}
+              onClick={async () => {
+                try {
+                  await useAuditStore.getState().rescheduleAudit(auditId, rescheduleDate)
+                  await useAuditTaskStore.getState().fetchByAudit(auditId)
+                  void useAuditLogStore.getState().fetchAll({ auditId, pageSize: 100 })
+                  setShowScheduleNextModal(false)
+                  showToast(t('auditDetail.rescheduled'))
+                } catch {
+                  /* error surfaced on the store */
+                }
+              }}
+            >
+              <Icon icon="lucide:calendar-plus" />
+              {t('auditDetail.confirmReschedule')}
+            </LoadingButton>
+          </div>
+        </div>
+      </Modal>
 
       {/* Share Progress Modal */}
       <Modal isOpen={showShareModal} onClose={() => setShowShareModal(false)} title={t('auditDetail.shareAuditProgress')} size="md">

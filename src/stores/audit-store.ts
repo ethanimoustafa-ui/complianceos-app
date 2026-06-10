@@ -92,6 +92,51 @@ interface AuditCommentApiRow {
   updated_at: string
 }
 
+// W50: archived cycle snapshots ("schedule next" rolls the SAME audit over).
+export interface AuditCycleSummary {
+  id: string
+  cycleNumber: number
+  closedAt: string
+  dueDate: string | null
+  status: string | null
+  progress: number
+  counts: { tasks: number; documents: number; comments: number }
+}
+
+export interface AuditCycleDetail extends AuditCycleSummary {
+  snapshot: {
+    audit: Record<string, unknown>
+    tasks: Array<Record<string, unknown>>
+    documents: Array<Record<string, unknown>>
+    comments: Array<Record<string, unknown>>
+    team: Array<Record<string, unknown>>
+    logs: Array<Record<string, unknown>>
+  }
+}
+
+interface AuditCycleApiRow {
+  id: string
+  cycle_number: number
+  closed_at: string
+  due_date: string | null
+  status: string | null
+  progress: number | null
+  counts?: { tasks: number; documents: number; comments: number }
+  snapshot?: AuditCycleDetail['snapshot']
+}
+
+function mapCycleRow(r: AuditCycleApiRow): AuditCycleSummary {
+  return {
+    id: r.id,
+    cycleNumber: r.cycle_number,
+    closedAt: r.closed_at,
+    dueDate: r.due_date,
+    status: r.status,
+    progress: r.progress ?? 0,
+    counts: r.counts ?? { tasks: 0, documents: 0, comments: 0 },
+  }
+}
+
 /** Child GETs return either a bare array or a paginated `{ items }`. */
 function unwrapItems<T>(r: unknown): T[] {
   if (Array.isArray(r)) return r as T[]
@@ -280,6 +325,11 @@ interface AuditState {
   fetchDetailChildren: (id: string) => Promise<void>
   detailChildrenLoaded: Record<string, boolean>
   isDetailLoaded: (id: string) => boolean
+  // W50: archived cycles.
+  cyclesByAudit: Record<string, AuditCycleSummary[]>
+  fetchCycles: (auditId: string) => Promise<void>
+  fetchCycleDetail: (auditId: string, cycleId: string) => Promise<AuditCycleDetail | null>
+  rescheduleAudit: (auditId: string, dueDate: string) => Promise<void>
   create: (data: Omit<Audit, 'id' | 'createdAt' | 'updatedAt'>) => Promise<Audit>
   update: (id: string, data: Partial<Audit>) => Promise<Audit>
   delete: (id: string) => Promise<void>
@@ -451,6 +501,51 @@ export const useAuditStore = create<AuditState>()((set, get) => ({
   detailChildrenLoaded: {},
 
   isDetailLoaded: (id) => get().detailChildrenLoaded[id] === true,
+
+  cyclesByAudit: {},
+
+  fetchCycles: async (auditId) => {
+    try {
+      const rows = await api.get<AuditCycleApiRow[]>(`/audits/${auditId}/cycles`)
+      set((s) => ({ cyclesByAudit: { ...s.cyclesByAudit, [auditId]: rows.map(mapCycleRow) } }))
+    } catch (e) {
+      set({ error: errorMessage(e, 'Failed to load audit history') })
+    }
+  },
+
+  fetchCycleDetail: async (auditId, cycleId) => {
+    try {
+      const row = await api.get<AuditCycleApiRow>(`/audits/${auditId}/cycles/${cycleId}`)
+      return { ...mapCycleRow(row), snapshot: row.snapshot! } as AuditCycleDetail
+    } catch (e) {
+      set({ error: errorMessage(e, 'Failed to load the archived cycle') })
+      return null
+    }
+  },
+
+  rescheduleAudit: async (auditId, dueDate) => {
+    set({ isMutating: true, error: null })
+    try {
+      const res = await api.post<{ audit: AuditApiRow; cycle: { id: string; cycle_number: number } }>(
+        `/audits/${auditId}/reschedule`,
+        { due_date: dueDate },
+      )
+      const previous = get().byId[auditId]
+      const audit = mapAuditRow(res.audit, previous)
+      // Cycle-bound children reset server-side — clear the local mirrors too.
+      const cleared = { ...audit, documents: [], comments: [], team: previous?.team }
+      set((state) => ({
+        audits: state.audits.map((a) => (a.id === auditId ? cleared : a)),
+        byId: { ...state.byId, [auditId]: cleared },
+        selectedAudit: state.selectedAudit?.id === auditId ? cleared : state.selectedAudit,
+        isMutating: false,
+      }))
+      await get().fetchCycles(auditId)
+    } catch (e) {
+      set({ error: errorMessage(e, 'Failed to reschedule the audit'), isMutating: false })
+      throw e
+    }
+  },
 
   fetchDetailChildren: async (id) => {
     try {
