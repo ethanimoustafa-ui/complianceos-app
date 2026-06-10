@@ -58,9 +58,11 @@ interface DirectoryStatCardsProps {
   totalMembers: number
   adminCount: number
   assignedTasks: number
+  // W44: live average team capacity (was a hardcoded "82%").
+  capacityPct: number
 }
 
-export function DirectoryStatCards({ totalMembers, adminCount, assignedTasks }: DirectoryStatCardsProps) {
+export function DirectoryStatCards({ totalMembers, adminCount, assignedTasks, capacityPct }: DirectoryStatCardsProps) {
   const { t } = useTranslation()
 
   const now = Date.now()
@@ -109,7 +111,7 @@ export function DirectoryStatCards({ totalMembers, adminCount, assignedTasks }: 
         iconColor="orange"
         value={String(assignedTasks)}
         label={t('team.assignedTasks')}
-        badge={`82% ${t('team.capacity')}`}
+        badge={`${capacityPct}% ${t('team.capacity')}`}
         badgeColor="orange"
       />
       <StatCard

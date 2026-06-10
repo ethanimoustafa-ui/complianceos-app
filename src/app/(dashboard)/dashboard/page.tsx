@@ -35,6 +35,9 @@ const viewConfig: Record<DashboardView, { titleKey: string; subtitleKey: string 
 export default function DashboardPage() {
   const { t } = useTranslation()
   const dashboardView = useUserPreferencesStore(s => s.dashboardView)
+  // W44: in-page persona switcher — the view could previously only be changed
+  // from /settings, which made the three dashboards undiscoverable.
+  const setDashboardView = useUserPreferencesStore(s => s.setDashboardView)
   const metrics = useDashboardMetrics()
 
   // Hydrate every store the dashboard aggregates (Fix-1). Without this, all
@@ -121,6 +124,24 @@ export default function DashboardPage() {
   return (
     <div className={showFadeIn ? 'dashboard-fade-in' : ''}>
       <Header title={t(titleKey as any)} subtitle={t(subtitleKey as any)} onExport={handleExport} exportLabel={t('common.exportPdf' as any)} />
+
+      {/* W44: persona view switcher (persists via user-preferences store). */}
+      <div className="px-8 pt-6 flex items-center gap-2">
+        {(['executive', 'managerial', 'officer'] as DashboardView[]).map((view) => (
+          <button
+            key={view}
+            onClick={() => setDashboardView(view)}
+            aria-pressed={dashboardView === view}
+            className={`px-4 py-2 rounded-full text-xs font-bold transition-colors cursor-pointer ${
+              dashboardView === view
+                ? 'bg-slate-900 text-white shadow-lg'
+                : 'bg-white text-slate-500 border border-slate-200 hover:bg-slate-50'
+            }`}
+          >
+            {t(`dashboard.view${view.charAt(0).toUpperCase()}${view.slice(1)}` as any)}
+          </button>
+        ))}
+      </div>
 
       <div className="flex-1 overflow-auto hide-scrollbar p-8">
         {!anyStoreReady ? (

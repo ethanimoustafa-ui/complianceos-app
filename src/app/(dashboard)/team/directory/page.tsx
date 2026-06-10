@@ -14,7 +14,8 @@ import { useTranslation } from '@/i18n'
 import type { TranslationKey } from '@/i18n'
 import { Gate } from '@/components/auth/gate'
 import { useTeamStore } from '@/stores/team-store'
-import { useWorkload } from '@/hooks/useWorkload'
+import { useWorkload, useTeamWorkloads } from '@/hooks/useWorkload'
+import { formatDate } from '@/lib/utils'
 import { SortHeader, type SortState } from '@/components/ui/sort-header'
 import { EditableSelect } from '@/components/ui/editable-select'
 import type { TeamMember } from '@/types'
@@ -33,7 +34,8 @@ function Toast({ message, onClose }: { message: string; onClose: () => void }) {
   }, [onClose])
 
   return (
-    <div className="fixed bottom-8 right-8 bg-emerald-600 text-white px-6 py-4 rounded-lg shadow-2xl flex items-center gap-3 z-[60] animate-toast">
+    // W44: `end-8` (logical) so the toast lands on the correct side in RTL.
+    <div className="fixed bottom-8 end-8 bg-emerald-600 text-white px-6 py-4 rounded-lg shadow-2xl flex items-center gap-3 z-[60] animate-toast">
       <Icon icon="lucide:check-circle" className="text-2xl" />
       <span className="font-bold">{message}</span>
     </div>
@@ -100,7 +102,7 @@ function StatusIndicator({ status, label }: { status: 'active' | 'inactive' | 'p
 }
 
 export default function TeamDirectoryPage() {
-  const { t } = useTranslation()
+  const { t, isRTL } = useTranslation()
   const pathname = usePathname()
 
   // Store data
@@ -164,6 +166,14 @@ export default function TeamDirectoryPage() {
 
   const adminCount = members.filter((m) => m.role === 'admin').length
   const totalAssignedTasks = members.reduce((sum, m) => sum + (m.assignments?.length || 0), 0)
+  // W44: REAL average capacity from the live workload model (the stat card
+  // badge previously hardcoded "82%").
+  const teamWorkloads = useTeamWorkloads(members)
+  const avgCapacityPct = members.length
+    ? Math.round(
+        members.reduce((sum, m) => sum + (teamWorkloads[m.id]?.percentage ?? 0), 0) / members.length,
+      )
+    : 0
 
   const handleUpdateRole = (memberId: string, newRole: TeamMember['role']) => {
     storeUpdate(memberId, { role: newRole })
@@ -250,6 +260,7 @@ export default function TeamDirectoryPage() {
               totalMembers={members.length}
               adminCount={adminCount}
               assignedTasks={totalAssignedTasks}
+              capacityPct={avgCapacityPct}
             />
 
             {/* Pending Approvals & Burnout Detection */}
@@ -351,7 +362,11 @@ export default function TeamDirectoryPage() {
                         <td className="px-6 py-4">
                           <StatusIndicator status={member.status} label={memberStatusLabels[member.status] || member.status} />
                         </td>
-                        <td className="px-6 py-4 text-xs text-slate-500">{member.joinedAt}</td>
+                        {/* W44: human date — this cell printed the raw ISO
+                            timestamp ("2026-06-09T21:49:28.713877+00:00"). */}
+                        <td className="px-6 py-4 text-xs text-slate-500">
+                          {formatDate(member.joinedAt, isRTL ? 'ar-SA' : 'en-US')}
+                        </td>
                         <td className="px-6 py-4 text-end">
                           <Gate perm="Manage Team & Permissions">
                             <button onClick={(e) => { e.stopPropagation(); setSelectedMemberId(member.id); setIsDrawerOpen(true) }} className="text-slate-400 hover:text-slate-900 transition-colors p-2 cursor-pointer">

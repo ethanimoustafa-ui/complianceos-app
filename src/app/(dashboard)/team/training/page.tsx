@@ -31,7 +31,9 @@ function Toast({ message, onClose }: { message: string; onClose: () => void }) {
   }, [onClose])
 
   return (
-    <div className="fixed bottom-8 right-8 bg-emerald-600 text-white px-6 py-4 rounded-lg shadow-2xl flex items-center gap-3 z-[60] animate-toast">
+    // W44: `end-8` (logical) instead of `right-8` so the toast lands on the
+    // correct side in RTL.
+    <div className="fixed bottom-8 end-8 bg-emerald-600 text-white px-6 py-4 rounded-lg shadow-2xl flex items-center gap-3 z-[60] animate-toast">
       <Icon icon="lucide:check-circle" className="text-2xl" />
       <span className="font-bold">{message}</span>
     </div>
@@ -170,6 +172,9 @@ function TeamTrainingPageContent() {
 
   const handleBulkAssign = (employeeIds: string[], course: CourseProgress) => {
     bulkAssignCourse(employeeIds, course)
+    // W44: keep KPIs in sync — single-assign recalculated, bulk didn't.
+    recalculateDepartmentProgress()
+    useTrainingStore.getState().recalculateOverviewStats()
   }
 
   const handleUploadConfirm = (data: { saudization?: Partial<typeof saudizationMetrics>; overviewStats?: Partial<typeof overviewStats> }) => {

@@ -31,15 +31,11 @@ export default function SettingsPage() {
           </div>
         </div>
 
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-4 me-4 text-slate-400">
-            <span className="text-xs font-bold uppercase tracking-widest">{t('common.autoSaveActive')}</span>
-            <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
-          </div>
-          <Button variant="primary" className="shadow-lg shadow-emerald-100">
-            <Icon icon="lucide:save" />
-            {t('common.saveChanges')}
-          </Button>
+        {/* W44: the "Save Changes" button was dead UI (no onClick — every
+            section auto-saves). The auto-save indicator is the truth. */}
+        <div className="flex items-center gap-4 text-slate-400">
+          <span className="text-xs font-bold uppercase tracking-widest">{t('common.autoSaveActive')}</span>
+          <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
         </div>
       </header>
 

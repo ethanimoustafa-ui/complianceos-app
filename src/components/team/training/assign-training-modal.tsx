@@ -23,17 +23,21 @@ export function AssignTrainingModal({ isOpen, onClose, employee, courses, onAssi
   const [selectedCourseIds, setSelectedCourseIds] = useState<string[]>([])
   const [dueDate, setDueDate] = useState('')
 
+  // W44: dedupe by COURSE ID — name-matching hid distinct courses that
+  // happened to share a name.
   const availableCourses = employee
-    ? courses.filter((course) => !employee.courses.some((c) => c.name === course.name))
+    ? courses.filter((course) => !employee.courses.some((c) => c.id === course.id))
     : []
 
   const handleAssign = () => {
     if (!employee || selectedCourseIds.length === 0 || !dueDate) return
 
+    // W44: keep the REAL course id — a random UUID here meant the enrollment
+    // POST carried a course_id that doesn't exist in training_courses.
     const coursesToAdd: CourseProgress[] = courses
       .filter((c) => selectedCourseIds.includes(c.id))
       .map((c) => ({
-        id: crypto.randomUUID(),
+        id: c.id,
         name: c.name,
         category: c.category,
         status: 'not_started' as const,
@@ -162,15 +166,17 @@ export function BulkAssignModal({ isOpen, onClose, course, employees, onAssign, 
   const [selectedEmployeeIds, setSelectedEmployeeIds] = useState<string[]>([])
   const [dueDate, setDueDate] = useState('')
 
+  // W44: dedupe by COURSE ID (see AssignTrainingModal above).
   const eligibleEmployees = course
-    ? employees.filter((emp) => !emp.courses.some((c) => c.name === course.name))
+    ? employees.filter((emp) => !emp.courses.some((c) => c.id === course.id))
     : []
 
   const handleAssign = () => {
     if (!course || selectedEmployeeIds.length === 0 || !dueDate) return
 
+    // W44: keep the REAL course id (random UUID broke the enrollment POST).
     const newCourseAssignment: CourseProgress = {
-      id: crypto.randomUUID(),
+      id: course.id,
       name: course.name,
       category: course.category,
       status: 'not_started',

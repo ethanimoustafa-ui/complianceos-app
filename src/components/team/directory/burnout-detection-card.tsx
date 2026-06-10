@@ -214,7 +214,7 @@ export function BurnoutDetectionCard() {
                 </div>
 
                 {isExpanded && (allItems.length > 0 || manualTasks.length > 0) && (
-                  <div className="mt-3 ms-13 space-y-1">
+                  <div className="mt-3 ms-12 space-y-1">
                     <p className="text-[10px] font-bold text-slate-500 mb-2">
                       {t('team.currentAssignments' as TranslationKey)}:
                     </p>

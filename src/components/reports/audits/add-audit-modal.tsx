@@ -496,7 +496,13 @@ export function AddAuditModal({ isOpen, onClose, onSuccess, initialValues }: Add
                 onChange={(e) => setAuditTemplateNameInput(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') void handleSaveAuditTemplate()
-                  if (e.key === 'Escape') setShowSaveAuditTemplateForm(false)
+                  if (e.key === 'Escape') {
+                    // W44: only collapse the inline form — without
+                    // stopPropagation the modal's global Escape also fired
+                    // and closed the whole dialog.
+                    e.stopPropagation()
+                    setShowSaveAuditTemplateForm(false)
+                  }
                 }}
               />
               <Button
