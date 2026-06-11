@@ -316,7 +316,12 @@ export interface RiskHistoryEntry {
   id: string
   timestamp: string
   user: string
-  action: 'created' | 'status_changed' | 'score_updated' | 'mitigation_updated' | 'reviewed' | 'assigned' | 'note_added' | 'checklist_added' | 'checklist_toggled' | 'checklist_edited' | 'checklist_removed'
+  // First row: client-minted optimistic entries. Second row: actions the API
+  // routes write to risk_history (see writeRiskHistory call sites) — list rows
+  // hydrate these from the server, so the union must cover both.
+  action:
+    | 'created' | 'status_changed' | 'score_updated' | 'mitigation_updated' | 'reviewed' | 'assigned' | 'note_added' | 'checklist_added' | 'checklist_toggled' | 'checklist_edited' | 'checklist_removed'
+    | 'updated' | 'department_assigned' | 'deadline_set' | 'sent_to_department' | 'plan_submitted' | 'plan_accepted' | 'mitigated'
   previousValue?: string
   newValue?: string
   notes?: string
@@ -325,11 +330,13 @@ export interface RiskHistoryEntry {
 // New mitigation workflow states (officer-driven). Existing `status` stays for the
 // risk register lifecycle; this complements it with the per-department workflow.
 export type RiskMitigationWorkflowStatus =
-  | 'pending-assignment'   // no department/deadline assigned yet
+  | 'pending-assignment'   // client-only alias of 'not-started' (pre-hydration)
+  | 'not-started'          // server default (migration 009) — same meaning as above
   | 'sent-to-department'   // officer has sent the risk
   | 'plan-proposed'        // department has proposed a mitigation plan
   | 'in-progress'          // officer accepted the plan, items being marked off
-  | 'mitigated'            // all items done
+  | 'mitigated'            // client-only alias of 'resolved' (optimistic toggle-all)
+  | 'resolved'             // server terminal value (all checklist items done)
 
 export interface DepartmentProposedPlan {
   id: string
@@ -338,6 +345,16 @@ export interface DepartmentProposedPlan {
   submittedAt: string
   submittedBy: string      // department user
   notes?: string
+}
+
+// A document the department sent with its (received) mitigation plan — bytes
+// live in the `risk_plan_documents` storage bucket; this is the metadata.
+export interface RiskPlanDocument {
+  id: string
+  name: string
+  type: string
+  storagePath: string
+  uploadedAt: string
 }
 
 export interface Risk {
@@ -364,6 +381,7 @@ export interface Risk {
   mitigationDeadline?: string           // YYYY-MM-DD; hard deadline for mitigation
   mitigationWorkflowStatus?: RiskMitigationWorkflowStatus
   departmentProposedPlan?: DepartmentProposedPlan
+  planDocuments?: RiskPlanDocument[]
   sentToDepartmentAt?: string
   createdAt: string
   updatedAt: string
@@ -1426,6 +1444,8 @@ export interface Department {
   name: string
   nameAr: string
   isDefault: boolean
+  /** Optional contact inbox for "inform the department" mailto actions. */
+  email?: string
   /**
    * Stable identifier used as the value in free-text department columns
    * (e.g. `observations.department`). Distinct from the display `name`,

@@ -199,7 +199,7 @@ export function RegisterCircularModal({ isOpen, onClose, onCreated, t }: Props) 
           <div className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1.5">
-                {t('regulatoryUpdates.authority')} <span className="text-rose-500">*</span>
+                {t('regulatoryUpdates.authority')}<span className="text-rose-500" aria-hidden="true"> *</span><span className="sr-only"> ({t('common.required')})</span>
               </label>
               <EditableSelect
                 locked

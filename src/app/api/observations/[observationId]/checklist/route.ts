@@ -67,6 +67,7 @@ export async function POST(req: NextRequest, { params }: Params) {
         observation_id: observationId,
         text: input.text,
         sort_order: nextOrder,
+        deadline: input.deadline ?? null,
       })
       .select(OBSERVATION_CHECKLIST_COLUMNS)
       .single()

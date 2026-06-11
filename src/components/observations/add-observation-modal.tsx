@@ -5,6 +5,7 @@ import { Icon } from '@iconify/react'
 import { Modal } from '@/components/ui/modal'
 import { Button } from '@/components/ui/button'
 import { FileUpload, UploadedFile } from '@/components/ui/file-upload'
+import { FieldLabel } from '@/components/ui/field-label'
 import { ObservationSource, ObservationSeverity } from './observation-types'
 import { useTeamStore } from '@/stores/team-store'
 import { useDepartmentStore } from '@/stores/department-store'
@@ -240,9 +241,9 @@ export const AddObservationModal = memo(function AddObservationModal({ isOpen, o
             {/* Form Fields */}
             <div className="grid grid-cols-2 gap-6">
               <div className="col-span-2">
-                <label className={`text-xs font-black uppercase text-slate-500 tracking-widest mb-2 block`}>
-                  {t('observations.form.findingTitle')} <span className="text-rose-500">*</span>
-                </label>
+                <FieldLabel required className="text-xs font-black uppercase text-slate-500 tracking-widest mb-2 block">
+                  {t('observations.form.findingTitle')}
+                </FieldLabel>
                 <input
                   type="text"
                   placeholder={t('observations.form.findingTitlePlaceholder')}
@@ -265,9 +266,9 @@ export const AddObservationModal = memo(function AddObservationModal({ isOpen, o
               </div>
 
               <div className="col-span-2">
-                <label className={`text-xs font-black uppercase text-slate-500 tracking-widest mb-2 block`}>
+                <FieldLabel optional className="text-xs font-black uppercase text-slate-500 tracking-widest mb-2 block">
                   {t('observations.form.subFindingTitle')}
-                </label>
+                </FieldLabel>
                 <input
                   type="text"
                   placeholder={t('observations.form.subFindingTitlePlaceholder')}
@@ -297,9 +298,9 @@ export const AddObservationModal = memo(function AddObservationModal({ isOpen, o
               />
 
               <div className="col-span-2">
-                <label className={`text-xs font-black uppercase text-slate-500 tracking-widest mb-2 block`}>
-                  {t('observations.form.description')} <span className="text-rose-500">*</span>
-                </label>
+                <FieldLabel required className="text-xs font-black uppercase text-slate-500 tracking-widest mb-2 block">
+                  {t('observations.form.description')}
+                </FieldLabel>
                 <textarea
                   rows={3}
                   placeholder={t('observations.form.descriptionPlaceholder')}
@@ -361,9 +362,9 @@ export const AddObservationModal = memo(function AddObservationModal({ isOpen, o
 
               {/* Remediation Plan Submission Due Date */}
               <div>
-                <label className={`text-xs font-black uppercase text-slate-500 tracking-widest mb-2 block`}>
+                <FieldLabel optional className="text-xs font-black uppercase text-slate-500 tracking-widest mb-2 block">
                   {t('observations.form.remediationSubmissionDueDate')}
-                </label>
+                </FieldLabel>
                 <input
                   type="date"
                   value={formData.remediationSubmissionDueDate}

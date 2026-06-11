@@ -47,8 +47,6 @@ export default function DashboardPage() {
   const fetchRisks = useRiskStore((s) => s.fetchAll)
   const fetchPolicies = usePolicyStore((s) => s.fetchAll)
   const fetchTrainings = useTrainingStore((s) => s.fetchAll)
-  const fetchEmployees = useTrainingStore((s) => s.fetchEmployees)
-  const fetchCourses = useTrainingStore((s) => s.fetchCourses)
   const fetchLetters = useLetterStore((s) => s.fetchAll)
   const fetchCorrespondence = useCorrespondenceStore((s) => s.fetchAll)
   const fetchCirculars = useCircularStore((s) => s.fetchAll)
@@ -58,9 +56,9 @@ export default function DashboardPage() {
     void fetchObservations()
     void fetchRisks()
     void fetchPolicies()
+    // fetchTrainings() already fans out to fetchCourses() + fetchEmployees();
+    // calling those directly here just duplicated both requests on mount.
     void fetchTrainings()
-    void fetchEmployees()
-    void fetchCourses()
     void fetchLetters()
     void fetchCorrespondence()
     void fetchCirculars()
@@ -71,8 +69,6 @@ export default function DashboardPage() {
     fetchRisks,
     fetchPolicies,
     fetchTrainings,
-    fetchEmployees,
-    fetchCourses,
     fetchLetters,
     fetchCorrespondence,
     fetchCirculars,

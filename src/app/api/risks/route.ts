@@ -48,8 +48,11 @@ export async function GET(req: NextRequest) {
       .range(from, to)
     if (error) throw error
 
+    // W26-A §2.2 / FORENSIC §4: entity reads must be no-store. The previous
+    // 60s sMaxAge + stale-while-revalidate let the BROWSER serve a stale list
+    // after workflow writes (assign/send/deadline) and across hard refreshes.
     return ok(paginate(data ?? [], q.page, q.pageSize, count ?? 0), {
-      cache: { sMaxAge: 60, staleWhileRevalidate: 300, tags: [cacheTags.risks()] },
+      cache: 'no-store',
     })
   } catch (e) {
     return handle(e)

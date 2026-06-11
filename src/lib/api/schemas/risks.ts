@@ -11,7 +11,11 @@ const DateString = z
   .min(1)
   .refine((s) => !Number.isNaN(Date.parse(s)), { message: 'Invalid date' })
 
-const RiskCategory = z.enum(['operational', 'financial', 'compliance', 'strategic', 'reputational'])
+// Open string, not z.enum — categories are user-extensible rows in
+// risk_categories (keys like 'cybersecurity-risk'), so a closed enum 400s
+// every non-legacy pick. Mirrors audits.ts §8 + migration 095 (DB CHECK is
+// length-only for the same reason).
+const RiskCategory = z.string().min(1).max(100)
 const RiskStatus = z.enum(['identified', 'mitigating', 'accepted', 'resolved'])
 const RiskMitigationWorkflowStatus = z.enum([
   'not-started',
@@ -44,6 +48,14 @@ export type CreateRiskInput = z.infer<typeof CreateRiskSchema>
 export const UpdateRiskSchema = CreateRiskSchema.partial().extend({
   status: RiskStatus.optional(),
   mitigation_progress: z.number().int().min(0).max(100).optional(),
+  // CRITICAL: re-declare the two create-schema fields that carry `.default()`.
+  // `CreateRiskSchema.partial()` keeps those defaults, so a PATCH that omits
+  // `monitoring_frequency` / `framework_ids` would otherwise re-inject
+  // 'quarterly' / [] and the route would write them — silently resetting a
+  // monthly cadence to quarterly and wiping framework tags on every unrelated
+  // edit (mark-reviewed, status change, checklist toggle, title-only edit).
+  monitoring_frequency: z.string().max(100).optional(),
+  framework_ids: z.array(z.string().min(1)).optional(),
 })
 export type UpdateRiskInput = z.infer<typeof UpdateRiskSchema>
 
@@ -81,6 +93,7 @@ export const SubmitRiskPlanSchema = z.object({
       z.object({
         text: z.string().min(1).max(1_000),
         sort_order: z.number().int().min(0).optional(),
+        deadline: DateString.nullable().optional(),
       }),
     )
     .default([]),
@@ -92,6 +105,7 @@ export type SubmitRiskPlanInput = z.infer<typeof SubmitRiskPlanSchema>
 export const CreateRiskChecklistItemSchema = z.object({
   text: z.string().min(1).max(1_000),
   sort_order: z.number().int().min(0).optional(),
+  deadline: DateString.nullable().optional(),
 })
 export type CreateRiskChecklistItemInput = z.infer<typeof CreateRiskChecklistItemSchema>
 
@@ -99,8 +113,20 @@ export const UpdateRiskChecklistItemSchema = z.object({
   text: z.string().min(1).max(1_000).optional(),
   completed: z.boolean().optional(),
   sort_order: z.number().int().min(0).optional(),
+  // Nullable so the picker can CLEAR a deadline (send null), distinct from
+  // "not provided" (undefined → leave unchanged).
+  deadline: DateString.nullable().optional(),
 })
 export type UpdateRiskChecklistItemInput = z.infer<typeof UpdateRiskChecklistItemSchema>
+
+// ---------- received-plan documents ------------------------------------------
+
+export const RegisterRiskPlanDocumentSchema = z.object({
+  name: z.string().min(1).max(500),
+  type: z.string().max(50).default('doc'),
+  storage_path: z.string().min(1).max(1000),
+})
+export type RegisterRiskPlanDocumentInput = z.infer<typeof RegisterRiskPlanDocumentSchema>
 
 // ---------- risk categories --------------------------------------------------
 

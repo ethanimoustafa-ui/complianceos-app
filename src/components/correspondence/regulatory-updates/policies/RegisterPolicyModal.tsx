@@ -99,7 +99,7 @@ function UploadZone({
   return (
     <div>
       <label className="block text-sm font-medium text-slate-700 mb-1.5">
-        {label}{required && ' *'}
+        {label}{required && <><span className="text-rose-500" aria-hidden="true"> *</span><span className="sr-only"> ({t('common.required')})</span></>}
       </label>
       <input
         ref={fileRef}
@@ -595,7 +595,7 @@ export function RegisterPolicyModal({ isOpen, onClose, onCreated, t, isRTL }: Pr
               onChange={(e) => setFormName(e.target.value)}
             />
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('policies.selectCategory')} *</label>
+              <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('policies.selectCategory')}<span className="text-rose-500" aria-hidden="true"> *</span><span className="sr-only"> ({t('common.required')})</span></label>
               <EditableSelect
                 value={formCategory || null}
                 onChange={(id) => setFormCategory(id as PolicyCategory | '')}
@@ -608,7 +608,7 @@ export function RegisterPolicyModal({ isOpen, onClose, onCreated, t, isRTL }: Pr
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('policies.approvalTier')} *</label>
+              <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('policies.approvalTier')}<span className="text-rose-500" aria-hidden="true"> *</span><span className="sr-only"> ({t('common.required')})</span></label>
               {/* W37: in-dropdown tier management (reverted per request). The
                   footer "+ Add approval tier" and per-row pencil use the
                   EditableSelect external-action props (onAddClick/onEditClick),
@@ -719,7 +719,7 @@ export function RegisterPolicyModal({ isOpen, onClose, onCreated, t, isRTL }: Pr
               )}
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('policies.description')} *</label>
+              <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('policies.description')}<span className="text-rose-500" aria-hidden="true"> *</span><span className="sr-only"> ({t('common.required')})</span></label>
               <textarea
                 className="flex w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm min-h-[120px] resize-none focus:ring-2 focus:ring-emerald-500/20 focus:outline-none"
                 placeholder={t('policies.descriptionPlaceholder')}

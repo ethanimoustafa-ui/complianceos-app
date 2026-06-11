@@ -33,10 +33,21 @@ export const CreateDepartmentSchema = z.object({
   name_en: z.string().min(1).max(200),
   name_ar: z.string().min(1).max(200),
   is_default: z.boolean().default(false),
+  // Optional contact inbox for "inform the department" mailto actions.
+  // Accepts a valid email or null (to clear it). Empty string is coerced to null.
+  email: z
+    .union([z.string().email().max(320), z.literal(''), z.null()])
+    .transform((v) => (v === '' ? null : v))
+    .optional(),
 })
 export type CreateDepartmentInput = z.infer<typeof CreateDepartmentSchema>
 
-export const UpdateDepartmentSchema = CreateDepartmentSchema.partial()
+export const UpdateDepartmentSchema = CreateDepartmentSchema.partial().extend({
+  // Override the create-schema default: CreateDepartmentSchema.partial() keeps
+  // `.default(false)`, so a PATCH omitting is_default would silently re-inject
+  // false and un-default a system department. Plain optional, no default.
+  is_default: z.boolean().optional(),
+})
 export type UpdateDepartmentInput = z.infer<typeof UpdateDepartmentSchema>
 
 // ---------- business units ---------------------------------------------------

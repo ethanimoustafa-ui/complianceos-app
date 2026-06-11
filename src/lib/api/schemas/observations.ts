@@ -144,6 +144,7 @@ export const CreateChecklistItemSchema = z
   .object({
     text: PlainTextMin(1_000),
     sort_order: z.number().int().min(0).optional(),
+    deadline: DateString.nullable().optional(),
   })
   .strict()
 export type CreateChecklistItemInput = z.infer<typeof CreateChecklistItemSchema>
@@ -153,6 +154,8 @@ export const UpdateChecklistItemSchema = z
     text: PlainTextMin(1_000).optional(),
     completed: z.boolean().optional(),
     sort_order: z.number().int().min(0).optional(),
+    // Nullable so the picker can clear it (null) vs leave unchanged (undefined).
+    deadline: DateString.nullable().optional(),
   })
   .strict()
 export type UpdateChecklistItemInput = z.infer<typeof UpdateChecklistItemSchema>

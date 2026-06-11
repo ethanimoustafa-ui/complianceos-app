@@ -1,4 +1,5 @@
-﻿import { useEffect, useMemo } from 'react'
+﻿import { useEffect, useMemo, useState } from 'react'
+import { api } from '@/lib/api-client'
 import { useAuditStore } from '@/stores/audit-store'
 import { useObservationStore } from '@/stores/observation-store'
 import { usePolicyStore } from '@/stores/policy-store'
@@ -43,6 +44,12 @@ export function useCalendarEvents() {
   const fetchAdvisory = useAdvisoryStore((s) => s.fetchAll)
   const fetchRisks = useRiskStore((s) => s.fetchAll)
 
+  // Server-aggregated SUB-ITEM deadlines (checklist items, workflow steps,
+  // audit tasks, remediation plans, circular CAP/remediation) — these live in
+  // detail-only tables the stores above never load, so they're fetched from
+  // /api/calendar/deadlines and merged into the unified item list below.
+  const [derivedDeadlines, setDerivedDeadlines] = useState<UnifiedCalendarItem[]>([])
+
   // Hydrate the user-created `calendar_events` collection and its `event_types`
   // lookup on mount. Without this, freshly-signed-in users (or anyone after a
   // page reload) see an empty list because the store starts cold. Server
@@ -66,6 +73,14 @@ export function useCalendarEvents() {
     void fetchCorrespondence()
     void fetchAdvisory()
     void fetchRisks()
+    void (async () => {
+      try {
+        const rows = await api.get<UnifiedCalendarItem[]>('/calendar/deadlines')
+        setDerivedDeadlines(rows)
+      } catch {
+        // Non-fatal: the calendar still renders top-level deadlines + user events.
+      }
+    })()
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -96,6 +111,24 @@ export function useCalendarEvents() {
         id: `obs-${o.id}`,
         sourceType: 'observation',
         title: o.title,
+        date,
+        status: o.status,
+        priority: 'high',
+        route: `/correspondence/observations?id=${o.id}`,
+        colorKey: 'observation',
+      })
+    }
+
+    // Observation remediation-plan submission deadline (distinct, earlier date
+    // than the observation due date — the regulator's deadline to SUBMIT a plan).
+    for (const o of observations) {
+      const date = extractDate(o.remediationSubmissionDueDate)
+      if (!date) continue
+      result.push({
+        id: `obs-remediation-${o.id}`,
+        sourceType: 'observation',
+        title: o.title,
+        subtitle: 'Remediation plan due',
         date,
         status: o.status,
         priority: 'high',
@@ -224,7 +257,7 @@ export function useCalendarEvents() {
       })
     }
 
-    // Risks
+    // Risks — review cadence date
     for (const r of risks) {
       const date = extractDate(r.nextReviewDate)
       if (!date) continue
@@ -232,11 +265,39 @@ export function useCalendarEvents() {
         id: `risk-${r.id}`,
         sourceType: 'risk',
         title: r.title,
+        subtitle: 'Mitigation review',
         date,
         status: r.status,
         route: `/reports/risks?id=${r.id}`,
         colorKey: 'risk',
       })
+    }
+
+    // Risks — mitigation deadline (the hard date the mitigation work is due,
+    // set when a risk is sent to a department; distinct from the review date).
+    for (const r of risks) {
+      const date = extractDate(r.mitigationDeadline)
+      if (!date) continue
+      result.push({
+        id: `risk-mit-${r.id}`,
+        sourceType: 'risk',
+        title: r.title,
+        subtitle: 'Mitigation deadline',
+        date,
+        status: r.status,
+        priority: 'high',
+        route: `/reports/risks?id=${r.id}`,
+        colorKey: 'risk',
+      })
+    }
+
+    // Server-aggregated sub-item deadlines (checklist items, workflow steps,
+    // audit tasks, remediation plans, circular CAP/remediation). Each already
+    // carries its parent as `subtitle` and a deep-link `route`.
+    for (const d of derivedDeadlines) {
+      const date = extractDate(d.date)
+      if (!date) continue
+      result.push({ ...d, date })
     }
 
     // User-created calendar events
@@ -256,7 +317,7 @@ export function useCalendarEvents() {
     }
 
     return result
-  }, [audits, observations, policies, letters, circulars, employees, correspondence, advisoryRequests, risks, calendarEvents])
+  }, [audits, observations, policies, letters, circulars, employees, correspondence, advisoryRequests, risks, calendarEvents, derivedDeadlines])
 
   const itemsByDate = useMemo(() => {
     const map: Record<string, UnifiedCalendarItem[]> = {}

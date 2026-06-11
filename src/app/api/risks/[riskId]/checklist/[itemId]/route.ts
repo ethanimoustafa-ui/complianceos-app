@@ -24,18 +24,25 @@ export const dynamic = 'force-dynamic'
 
 type Params = { params: Promise<{ riskId: string; itemId: string }> }
 
+// `id` is a uuid column — a non-uuid itemId (e.g. an optimistic 'temp-…' id
+// that reached the wire before the create reconciled) makes Postgres throw
+// 22P02 → a 500. Treat any non-uuid id as "not found" up front.
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
 export async function PATCH(req: NextRequest, { params }: Params) {
   try {
     const { riskId, itemId } = await params
+    if (!UUID_RE.test(itemId)) throw NotFound(`Checklist item ${itemId} not found`)
     const { supabase, user, profile } = await requirePerm('audit:edit')
     await assertRiskExists(supabase, riskId)
     const patch = await parseJson(req, UpdateRiskChecklistItemSchema)
 
-    // Drop `deadline` until the column exists.
     const update: Record<string, unknown> = {}
     if (patch.text !== undefined) update.text = patch.text
     if (patch.completed !== undefined) update.completed = patch.completed
     if (patch.sort_order !== undefined) update.sort_order = patch.sort_order
+    // `deadline` is nullable: undefined = leave unchanged, null = clear it.
+    if (patch.deadline !== undefined) update.deadline = patch.deadline
 
     if (Object.keys(update).length === 0) {
       const { data, error } = await supabase
@@ -49,14 +56,19 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       return ok(data)
     }
 
+    // maybeSingle (not single): if the row was removed out from under us
+    // (e.g. submit-plan replaced the checklist while the client still held the
+    // old id), an update matching 0 rows must surface as a clean 404 — NOT a
+    // PGRST116 "cannot coerce to single object" 500.
     const { data, error } = await supabase
       .from('risk_mitigation_checklist')
       .update(update)
       .eq('id', itemId)
       .eq('risk_id', riskId)
       .select(RISK_CHECKLIST_COLUMNS)
-      .single()
-    if (error || !data) throw error ?? NotFound(`Checklist item ${itemId} not found`)
+      .maybeSingle()
+    if (error) throw error
+    if (!data) throw NotFound(`Checklist item ${itemId} not found`)
 
     // Recompute progress + maybe terminal-transition the risk.
     let allDone = false
@@ -123,6 +135,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 export async function DELETE(_req: NextRequest, { params }: Params) {
   try {
     const { riskId, itemId } = await params
+    if (!UUID_RE.test(itemId)) throw NotFound(`Checklist item ${itemId} not found`)
     const { supabase, user, profile } = await requirePerm('audit:edit')
     await assertRiskExists(supabase, riskId)
 

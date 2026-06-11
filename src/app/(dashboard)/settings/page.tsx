@@ -12,6 +12,7 @@ import { PolicyTemplatesSection } from '@/components/settings/PolicyTemplatesSec
 import { ApprovalTiersSection } from '@/components/settings/ApprovalTiersSection'
 import { SourcesSection } from '@/components/settings/SourcesSection'
 import { ListsAndCategoriesSection } from '@/components/settings/ListsAndCategoriesSection'
+import { DepartmentsSection } from '@/components/settings/DepartmentsSection'
 import { AccessMatrixSection } from '@/components/settings/AccessMatrixSection'
 import { Gate } from '@/components/auth/gate'
 import { ForbiddenPanel } from '@/components/auth/forbidden-panel'
@@ -54,6 +55,7 @@ export default function SettingsPage() {
           <ApprovalTiersSection />
           <SourcesSection />
           <ListsAndCategoriesSection />
+          <DepartmentsSection />
           <AccessMatrixSection />
         </div>
       </div>

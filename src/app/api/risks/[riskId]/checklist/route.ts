@@ -72,6 +72,7 @@ export async function POST(req: NextRequest, { params }: Params) {
         text: input.text,
         completed: false,
         sort_order: sortOrder,
+        deadline: input.deadline ?? null,
       })
       .select(RISK_CHECKLIST_COLUMNS)
       .single()

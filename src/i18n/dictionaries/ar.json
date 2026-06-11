@@ -2,6 +2,8 @@
   "common": {
     "search": "بحث",
     "searchRecords": "البحث في السجلات...",
+    "optional": "اختياري",
+    "required": "مطلوب",
     "save": "حفظ",
     "saveChanges": "حفظ التغييرات",
     "cancel": "إلغاء",
@@ -1777,6 +1779,14 @@
       "deleteConfirmTitle": "حذف مصدر الملاحظة؟",
       "deleteConfirmBody": "إزالة هذا المصدر لن تغيّر الملاحظات الحالية — ستحتفظ بقيمتها المخزنة — لكنه سيختفي من قائمة الفلترة."
     },
+    "departments": {
+      "title": "الإدارات",
+      "description": "حدّد بريدًا إلكترونيًا لكل إدارة. تفتح إجراءات \"الإرسال إلى الإدارة\" رسالة بريد معنونة مسبقًا إلى هذا البريد.",
+      "name": "الإدارة",
+      "email": "البريد الإلكتروني للتواصل",
+      "emailPlaceholder": "department@company.com",
+      "noEmail": "لا يوجد بريد إلكتروني"
+    },
     "title": "الإعدادات",
     "subtitle": "تكوين الحوكمة والامتثال",
     "complianceFrameworks": "أطر الامتثال",
@@ -2290,6 +2300,21 @@
     "checklistToggled": "تم تبديل عنصر قائمة",
     "checklistEdited": "تم تعديل عنصر قائمة",
     "checklistRemoved": "تم حذف عنصر قائمة",
+    "departmentAssigned": "تم تعيين الإدارة",
+    "deadlineSet": "تم تحديد الموعد النهائي",
+    "sentToDepartmentAction": "تم الإرسال إلى الإدارة",
+    "planSubmitted": "تم تقديم خطة المعالجة",
+    "planAccepted": "تم قبول خطة المعالجة",
+    "mitigated": "تمت المعالجة",
+    "unknownUser": "مستخدم غير معروف",
+    "failedToSaveRisk": "فشل حفظ الخطر",
+    "showAll": "عرض الكل",
+    "showLess": "عرض أقل",
+    "reviewDue": "مراجعة مستحقة",
+    "reviewOverdue": "المراجعة متأخرة",
+    "reviewDueSoon": "المراجعة مستحقة قريبًا",
+    "mitigationReviewOverdue": "مراجعة المعالجة متأخرة",
+    "mitigationReviewDueSoon": "مراجعة المعالجة مستحقة قريبًا",
     "complianceHealthCenter": "مركز صحة الامتثال",
     "overallComplianceScore": "درجة الامتثال الإجمالية",
     "rollingWindow": "نافذة متجددة لمدة 12 شهرًا",
@@ -2900,14 +2925,18 @@
     "computedNextReview": "المراجعة القادمة المحتسبة"
   },
   "risks": {
-    "proposeMitigationPlan": "اقتراح خطة تخفيف",
-    "proposeMitigationPlanCta": "اقتراح خطة تخفيف",
-    "planDescription": "وصف الخطة",
+    "proposeMitigationPlan": "خطة المعالجة المستلمة",
+    "proposeMitigationPlanCta": "خطة المعالجة المستلمة",
+    "planDescription": "ملخص / مخطط الخطة المستلمة",
     "checklistItems": "عناصر قائمة المراجعة",
     "addChecklistItem": "إضافة عنصر",
     "itemTextPlaceholder": "صف إجراءً...",
     "cancel": "إلغاء",
-    "submit": "إرسال"
+    "submit": "إرسال",
+    "attachments": "المرفقات",
+    "attachmentsHelp": "أرفق مستند خطة الإدارة أو مخططها (PDF أو Word أو Excel أو صورة)",
+    "mailtoSubject": "مطلوب معالجة: {{risk}}",
+    "mailtoBody": "إلى إدارة {{department}}،\n\nتم إسناد خطر إلى إدارتكم للمعالجة.\n\nالخطر: {{risk}}\nالوصف: {{description}}\n\nيرجى المراجعة وإرسال خطة معالجة مقترحة قبل الموعد النهائي المتفق عليه.\n\nمع التحية،\n{{sender}}"
   },
   "complianceReview": {
     "title": "مراجعة الامتثال",

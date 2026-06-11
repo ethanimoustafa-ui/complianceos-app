@@ -23,6 +23,7 @@ import { useFrameworkConfigStore, frameworkIconTextClass } from '@/stores/framew
 import { FrameworkTagSelector } from '@/components/ui/framework-tag-selector'
 import { useAuditCategoryStore } from '@/stores/audit-category-store'
 import { EditableSelect } from '@/components/ui/editable-select'
+import { FieldLabel } from '@/components/ui/field-label'
 
 const auditSchema = z.object({
   title: z.string().min(3, 'Title must be at least 3 characters'),
@@ -436,9 +437,9 @@ export function AddAuditModal({ isOpen, onClose, onSuccess, initialValues }: Add
             {/* Form Fields */}
             <div className="grid grid-cols-2 gap-6">
               <div className="col-span-2">
-                <label className="text-xs font-black uppercase text-slate-500 tracking-widest mb-2 block">
-                  {t('auditDetail.auditTitleLabel')} <span className="text-rose-500">*</span>
-                </label>
+                <FieldLabel required className="text-xs font-black uppercase text-slate-500 tracking-widest mb-2 block">
+                  {t('auditDetail.auditTitleLabel')}
+                </FieldLabel>
                 <Controller
                   name="title"
                   control={control}
@@ -545,7 +546,7 @@ export function AddAuditModal({ isOpen, onClose, onSuccess, initialValues }: Add
 
               <div>
                 <label className="text-xs font-black uppercase text-slate-500 tracking-widest mb-2 block">
-                  {t('auditDetail.leadAuthorLabel')} <span className="text-rose-500">*</span>
+                  {t('auditDetail.leadAuthorLabel')}<span className="text-rose-500" aria-hidden="true"> *</span><span className="sr-only"> ({t('common.required')})</span>
                 </label>
                 <Controller
                   name="assigneeId"

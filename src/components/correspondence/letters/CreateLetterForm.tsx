@@ -497,7 +497,7 @@ export function CreateLetterForm({
         {/* English Side */}
         <div>
           <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-2">
-            {t('letters.subjectEnglish')} <span className="text-rose-500">*</span>
+            {t('letters.subjectEnglish')}<span className="text-rose-500" aria-hidden="true"> *</span><span className="sr-only"> ({t('common.required')})</span>
           </label>
           <div className="mb-4">
             <LetterSubjectEditor

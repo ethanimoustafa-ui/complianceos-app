@@ -2,6 +2,8 @@
   "common": {
     "search": "Search",
     "searchRecords": "Search records...",
+    "optional": "Optional",
+    "required": "Required",
     "save": "Save",
     "saveChanges": "Save Changes",
     "cancel": "Cancel",
@@ -1777,6 +1779,14 @@
       "deleteConfirmTitle": "Delete observation source?",
       "deleteConfirmBody": "Removing this source won't change existing observations — their stored value stays — but it will disappear from the filter dropdown."
     },
+    "departments": {
+      "title": "Departments",
+      "description": "Set a contact email for each department. \"Send to department\" actions open a pre-addressed email to this inbox.",
+      "name": "Department",
+      "email": "Contact email",
+      "emailPlaceholder": "department@company.com",
+      "noEmail": "No email set"
+    },
     "title": "Settings",
     "subtitle": "Governance & Compliance Configuration",
     "complianceFrameworks": "Compliance Frameworks",
@@ -2290,6 +2300,21 @@
     "checklistToggled": "Checklist item toggled",
     "checklistEdited": "Checklist item edited",
     "checklistRemoved": "Checklist item removed",
+    "departmentAssigned": "Department assigned",
+    "deadlineSet": "Deadline set",
+    "sentToDepartmentAction": "Sent to department",
+    "planSubmitted": "Mitigation plan submitted",
+    "planAccepted": "Mitigation plan accepted",
+    "mitigated": "Mitigated",
+    "unknownUser": "Unknown user",
+    "failedToSaveRisk": "Failed to save risk",
+    "showAll": "Show all",
+    "showLess": "Show less",
+    "reviewDue": "Review Due",
+    "reviewOverdue": "Review overdue",
+    "reviewDueSoon": "Review due soon",
+    "mitigationReviewOverdue": "Mitigation review overdue",
+    "mitigationReviewDueSoon": "Mitigation review due soon",
     "complianceHealthCenter": "Compliance Health Center",
     "overallComplianceScore": "Overall Compliance Score",
     "rollingWindow": "Rolling 12-month window",
@@ -2900,14 +2925,18 @@
     "computedNextReview": "Computed next review"
   },
   "risks": {
-    "proposeMitigationPlan": "Propose mitigation plan",
-    "proposeMitigationPlanCta": "Propose mitigation plan",
-    "planDescription": "Plan description",
+    "proposeMitigationPlan": "Received mitigation plan",
+    "proposeMitigationPlanCta": "Received mitigation plan",
+    "planDescription": "Plan outline / summary received",
     "checklistItems": "Checklist items",
     "addChecklistItem": "Add item",
     "itemTextPlaceholder": "Describe an action item...",
     "cancel": "Cancel",
-    "submit": "Submit"
+    "submit": "Submit",
+    "attachments": "Attachments",
+    "attachmentsHelp": "Attach the department's plan document or outline (PDF, Word, Excel, image)",
+    "mailtoSubject": "Mitigation required: {{risk}}",
+    "mailtoBody": "Dear {{department}},\n\nA risk has been assigned to your department for mitigation.\n\nRisk: {{risk}}\nDescription: {{description}}\n\nKindly review and send back a proposed mitigation plan by the agreed deadline.\n\nRegards,\n{{sender}}"
   },
   "complianceReview": {
     "title": "Compliance Review",

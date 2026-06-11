@@ -70,7 +70,7 @@ export const ObservationDetailModal = memo(function ObservationDetailModal({
   const store = useObservationStore()
   const {
     addComment, editComment, deleteComment,
-    addChecklistItem, editChecklistItem, toggleChecklistItem, removeChecklistItem,
+    addChecklistItem, editChecklistItem, toggleChecklistItem, removeChecklistItem, setChecklistItemDeadline,
     transferLeadership, saveRemediationPlan, reviewRemediationPlan, uploadDocument, getDocumentUrl, removeDocument, requestClosure, reviewClosure, reopen,
     fetchById, selectedObservation: storeObservation,
   } = store
@@ -444,6 +444,8 @@ export const ObservationDetailModal = memo(function ObservationDetailModal({
               onEdit={isClosed || !isMember ? undefined : handleEditChecklistItem}
               onRemove={isClosed || !isMember ? (() => {}) : handleRemoveChecklistItem}
               onToggle={isClosed || !isMember ? (() => {}) : handleChecklistItemToggle}
+              onSetDeadline={isClosed || !isMember ? undefined : (itemId, deadline) => setChecklistItemDeadline(observation.id, itemId, deadline, user || undefined)}
+              parentDeadline={liveObs?.dueDate ?? observation?.dueDate}
               isRTL={isRTL}
               readOnly={isClosed || !isMember}
             />

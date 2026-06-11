@@ -18,10 +18,13 @@ export const RISK_DETAIL_COLUMNS =
   'id, title, description, category, likelihood, impact, risk_score, status, owner_id, mitigation_plan, mitigation_progress, monitoring_frequency, last_review_date, next_review_date, review_schedule, intended_department_id, mitigation_deadline, mitigation_workflow_status, sent_to_department_at, framework_ids, created_at, updated_at'
 
 export const RISK_CHECKLIST_COLUMNS =
-  'id, risk_id, text, completed, sort_order'
+  'id, risk_id, text, completed, sort_order, deadline'
 
 export const RISK_HISTORY_COLUMNS =
   'id, risk_id, user_id, action, previous_value, new_value, notes, created_at'
+
+export const RISK_PLAN_DOCUMENT_COLUMNS =
+  'id, risk_id, name, type, storage_path, uploaded_by, uploaded_at'
 
 // --- assertions --------------------------------------------------------------
 
@@ -64,9 +67,10 @@ export interface RiskDetail {
   framework_ids: string[]
   created_at: string
   updated_at: string
-  mitigation_checklist: Array<{ id: string; text: string; completed: boolean; sort_order: number }>
+  mitigation_checklist: Array<{ id: string; text: string; completed: boolean; sort_order: number; deadline: string | null }>
   proposed_plan: unknown
   history: unknown[]
+  plan_documents: unknown[]
 }
 
 export async function getRiskDetail(
@@ -77,11 +81,11 @@ export async function getRiskDetail(
     .from('risks')
     .select(RISK_DETAIL_COLUMNS)
     .eq('id', riskId)
-    .maybeSingle<Omit<RiskDetail, 'mitigation_checklist' | 'proposed_plan' | 'history'>>()
+    .maybeSingle<Omit<RiskDetail, 'mitigation_checklist' | 'proposed_plan' | 'history' | 'plan_documents'>>()
   if (error) throw error
   if (!risk) throw NotFound(`Risk ${riskId} not found`)
 
-  const [checklist, plan, history] = await Promise.all([
+  const [checklist, plan, history, docs] = await Promise.all([
     supabase
       .from('risk_mitigation_checklist')
       .select(RISK_CHECKLIST_COLUMNS)
@@ -98,6 +102,11 @@ export async function getRiskDetail(
       .eq('risk_id', riskId)
       .order('created_at', { ascending: false })
       .limit(100),
+    supabase
+      .from('risk_plan_documents')
+      .select(RISK_PLAN_DOCUMENT_COLUMNS)
+      .eq('risk_id', riskId)
+      .order('uploaded_at', { ascending: false }),
   ])
 
   return {
@@ -105,6 +114,7 @@ export async function getRiskDetail(
     mitigation_checklist: (checklist.data as RiskDetail['mitigation_checklist']) ?? [],
     proposed_plan: plan.data ?? null,
     history: history.data ?? [],
+    plan_documents: docs.data ?? [],
   }
 }
 

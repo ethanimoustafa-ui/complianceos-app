@@ -25,13 +25,10 @@ export async function GET(_req: NextRequest, { params }: Params) {
     const { riskId } = await params
     const { supabase } = await requireUser()
     const detail = await getRiskDetail(supabase, riskId)
-    return ok(detail, {
-      cache: {
-        sMaxAge: 60,
-        staleWhileRevalidate: 300,
-        tags: [cacheTags.risks(riskId)],
-      },
-    })
+    // W26-A §2.2 / FORENSIC §4: entity reads must be no-store. The previous
+    // 60s sMaxAge + stale-while-revalidate let the BROWSER serve a pre-write
+    // detail body (stale workflow status, missing history) after mutations.
+    return ok(detail, { cache: 'no-store' })
   } catch (e) {
     return handle(e)
   }

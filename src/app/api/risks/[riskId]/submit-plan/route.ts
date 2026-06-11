@@ -63,6 +63,7 @@ export async function POST(req: NextRequest, { params }: Params) {
         text: c.text,
         completed: false,
         sort_order: c.sort_order ?? i,
+        deadline: c.deadline ?? null,
       }))
       const insRes = await supabase.from('risk_mitigation_checklist').insert(rows)
       if (insRes.error) throw insRes.error

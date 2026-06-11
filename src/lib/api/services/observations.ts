@@ -18,7 +18,7 @@ export const OBSERVATION_LIST_COLUMNS =
 export const OBSERVATION_DETAIL_COLUMNS = OBSERVATION_LIST_COLUMNS
 
 export const OBSERVATION_CHECKLIST_COLUMNS =
-  'id, observation_id, text, completed, sort_order, updated_at'
+  'id, observation_id, text, completed, sort_order, deadline, updated_at'
 
 export const OBSERVATION_DOCUMENT_COLUMNS =
   'id, observation_id, name, type, storage_path, uploaded_at, uploaded_by, updated_at, is_remediation'

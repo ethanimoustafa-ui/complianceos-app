@@ -16,6 +16,7 @@ import { useRiskStore } from '@/stores/risk-store'
 import { useTeamStore } from '@/stores/team-store'
 import { useObservationStore } from '@/stores/observation-store'
 import { usePolicyStore } from '@/stores/policy-store'
+import { usePolicyCategoryStore } from '@/stores/policy-category-store'
 import { useTrainingStore } from '@/stores/training-store'
 import { useAuthStore } from '@/stores/auth-store'
 import { exportCorrespondenceLocalized } from '@/lib/export'
@@ -65,8 +66,10 @@ type UpcomingItem = {
   name: string
   subtitle: string
   dueDate: string
-  source: 'registry' | 'sama-letter' | 'observation'
+  source: 'registry' | 'sama-letter' | 'observation' | 'policy'
   authority?: string
+  /** Past-due items stay in the list with an "Overdue" tag instead of vanishing. */
+  overdue?: boolean
 }
 
 export default function CorrespondenceFeedPage() {
@@ -97,6 +100,11 @@ export default function CorrespondenceFeedPage() {
   // we never surface a raw UUID in the Upcoming Submission chip.
   const frameworks = useFrameworkConfigStore((s) => s.frameworks)
 
+  // Policy category labels for the Upcoming Submission subtitle (policy rows
+  // store the category slug; show its display label).
+  const policyCategories = usePolicyCategoryStore((s) => s.categories)
+  const fetchPolicyCategories = usePolicyCategoryStore((s) => s.fetchAll)
+
   // Correspondence type store — seeded with the legacy literal union, but
   // user-added types persist and round-trip via the widened Correspondence.type.
   const correspondenceTypes = useCorrespondenceTypeStore((s) => s.types)
@@ -126,6 +134,7 @@ export default function CorrespondenceFeedPage() {
     void fetchEmployees()
     void fetchCourses()
     void fetchCorrespondenceTypes()
+    void fetchPolicyCategories()
   }, [
     fetchCirculars,
     fetchLetters,
@@ -136,6 +145,7 @@ export default function CorrespondenceFeedPage() {
     fetchEmployees,
     fetchCourses,
     fetchCorrespondenceTypes,
+    fetchPolicyCategories,
   ])
 
   // Modal states
@@ -301,17 +311,23 @@ export default function CorrespondenceFeedPage() {
     }
   }, [circularStore.circulars])
 
+  // Most-urgent open circulars: includes OVERDUE ones (dropping the `> now`
+  // filter that made "OVERDUE 1" still read "No upcoming reviews"), sorted
+  // earliest-first so a past-due item leads. The render tags them Overdue.
+  // Grouped to the single most-urgent day, as before.
   const nextCircularsDue = useMemo(() => {
-    const now = new Date()
-    const upcoming = circularStore.circulars
-      .filter(c => c.status !== 'completed' && c.dueDate && new Date(c.dueDate) > now)
+    const open = circularStore.circulars
+      .filter(c => c.status !== 'completed' && c.dueDate)
       .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime())
-    if (upcoming.length === 0) return []
-    const nearestDay = new Date(upcoming[0].dueDate).setHours(0, 0, 0, 0)
-    return upcoming.filter(c => new Date(c.dueDate).setHours(0, 0, 0, 0) === nearestDay)
+    if (open.length === 0) return []
+    const nearestDay = new Date(open[0].dueDate).setHours(0, 0, 0, 0)
+    return open.filter(c => new Date(c.dueDate).setHours(0, 0, 0, 0) === nearestDay)
   }, [circularStore.circulars])
 
-  // Upcoming items from all sources
+  // Upcoming items from all sources. Overdue items stay IN the list with an
+  // "Overdue" tag instead of silently dropping out the moment their date
+  // passes — sorted by due date ascending, so the most overdue item leads,
+  // then the nearest upcoming; capped to 3 with click-through per row.
   const upcomingItems = useMemo((): UpcomingItem[] => {
     const now = new Date()
     const items: UpcomingItem[] = []
@@ -330,15 +346,16 @@ export default function CorrespondenceFeedPage() {
 
     // Circulars (dueDate)
     circularStore.circulars
-      .filter(c => c.status !== 'completed' && c.dueDate && new Date(c.dueDate) > now)
+      .filter(c => c.status !== 'completed' && c.dueDate)
       .forEach(c => items.push({
         id: c.id, name: c.title, subtitle: sanitize(c.authority),
-        dueDate: c.dueDate, source: 'registry'
+        dueDate: c.dueDate, source: 'registry',
+        overdue: new Date(c.dueDate) < now,
       }))
 
     // Letters (responseDeadline) — kept legacy `source: 'sama-letter'` for routing back-compat.
     letterStore.letters
-      .filter(l => l.responseDeadline && new Date(l.responseDeadline) > now && l.status !== 'response-received')
+      .filter(l => l.responseDeadline && l.status !== 'response-received')
       .forEach(l => {
         const resolved = resolveAuthorityCode(l.authority, frameworks)
         const safeAuthority = resolved && !UUID_RE.test(resolved) ? resolved : undefined
@@ -346,25 +363,42 @@ export default function CorrespondenceFeedPage() {
           id: l.id, name: l.subject, subtitle: sanitize(l.type),
           dueDate: l.responseDeadline!, source: 'sama-letter',
           authority: safeAuthority,
+          overdue: new Date(l.responseDeadline!) < now,
         })
       })
 
     // Observations (dueDate)
     observationStore.observations
-      .filter(o => !['resolved', 'closed'].includes(o.status) && new Date(o.dueDate) > now)
+      .filter(o => !['resolved', 'closed'].includes(o.status) && o.dueDate)
       .forEach(o => items.push({
         id: o.id, name: o.title, subtitle: sanitize(o.source),
-        dueDate: o.dueDate, source: 'observation'
+        dueDate: o.dueDate, source: 'observation',
+        overdue: new Date(o.dueDate) < now,
       }))
 
-    return items.sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime()).slice(0, 3)
-  }, [circularStore.circulars, letterStore.letters, observationStore.observations, frameworks])
+    // Policies (nextReviewDate) — approved, non-archived. The review cycle is
+    // the policy analogue of a circular due date; expired/past-review policies
+    // surface here tagged Overdue.
+    policyStore.policies
+      .filter(p => !p.archivedAt && p.status === 'approved' && p.nextReviewDate)
+      .forEach(p => {
+        const catItem = policyCategories.find(c => c.id === p.category)
+        items.push({
+          id: p.id, name: p.name,
+          subtitle: catItem ? (isRTL && catItem.labelAr ? catItem.labelAr : catItem.label) : sanitize(p.category),
+          dueDate: p.nextReviewDate, source: 'policy',
+          overdue: Boolean(p.isExpired) || new Date(p.nextReviewDate) < now,
+        })
+      })
 
-  // Next policy review
+    return items.sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime()).slice(0, 3)
+  }, [circularStore.circulars, letterStore.letters, observationStore.observations, policyStore.policies, policyCategories, frameworks, isRTL])
+
+  // Next policy review — includes OVERDUE (dropped the `> now` filter). Sorted
+  // earliest-first so a past-due review leads; the render tags it Overdue.
   const nextPolicyReview = useMemo(() => {
-    const now = new Date()
     return policyStore.policies
-      .filter(p => p.status === 'approved' && new Date(p.nextReviewDate) > now)
+      .filter(p => !p.archivedAt && p.status === 'approved' && p.nextReviewDate)
       .sort((a, b) => new Date(a.nextReviewDate).getTime() - new Date(b.nextReviewDate).getTime())[0] || null
   }, [policyStore.policies])
 
@@ -472,12 +506,17 @@ export default function CorrespondenceFeedPage() {
   }
 
   const handleReviewItem = (item: UpcomingItem) => {
+    // Rules deep-link straight to the rules page (it honors ?id= and opens
+    // the circular; the registry table ignores the param). Policies use the
+    // policies page's ?policyId= deep-link (BUG-P04).
     const routes: Record<UpcomingItem['source'], string> = {
-      'registry':    '/correspondence/registry',
+      'registry':    '/correspondence/regulatory-updates/rules',
       'sama-letter': '/correspondence/letters',
       'observation': '/correspondence/observations',
+      'policy':      '/correspondence/regulatory-updates/policies',
     }
-    router.push(`${routes[item.source]}?id=${item.id}`)
+    const param = item.source === 'policy' ? 'policyId' : 'id'
+    router.push(`${routes[item.source]}?${param}=${item.id}`)
   }
 
   // Risk counts for heatmap display
@@ -700,13 +739,17 @@ export default function CorrespondenceFeedPage() {
               <div className="grid grid-cols-2 gap-8">
                 {/* Letter Correspondence */}
                 <section className="glass-card rounded-3xl p-6">
-                  <div className={`flex justify-between items-center mb-4`}>
-                    <h3 className={`text-sm font-bold text-slate-900 flex items-center gap-2`}>
+                  {/* flex-wrap + shrinking selects: the title + two filter
+                      dropdowns + download overflowed this half-width card and
+                      clipped the download icon past the right edge. The controls
+                      now wrap beneath the title when there isn't room. */}
+                  <div className={`flex justify-between items-center mb-4 gap-2 flex-wrap`}>
+                    <h3 className={`text-sm font-bold text-slate-900 flex items-center gap-2 shrink-0`}>
                       <Icon icon="lucide:mail" className="text-slate-400" />
                       {t('correspondence.correspondenceFeed')}
                     </h3>
-                    <div className={`flex items-center gap-2`}>
-                      <div className="min-w-[110px]">
+                    <div className={`flex items-center gap-2 flex-wrap justify-end min-w-0`}>
+                      <div className="min-w-[100px]">
                         <EditableSelect
                           locked
                           value={correspondenceFilter}
@@ -720,7 +763,7 @@ export default function CorrespondenceFeedPage() {
                           isRTL={isRTL}
                         />
                       </div>
-                      <div className="min-w-[140px]">
+                      <div className="min-w-[120px]">
                         <EditableSelect
                           value={typeFilter}
                           onChange={(id) => setTypeFilter(id as Correspondence['type'] | 'all')}
@@ -741,7 +784,8 @@ export default function CorrespondenceFeedPage() {
                             exportCorrespondenceLocalized(correspondenceStore.correspondence, 'correspondence', t, isRTL)
                             showToast(t('correspondence.exportToCsv'))
                           }}
-                          className="text-[10px] font-bold text-slate-500 hover:text-slate-700 cursor-pointer"
+                          className="shrink-0 text-[10px] font-bold text-slate-500 hover:text-slate-700 cursor-pointer p-1"
+                          title={t('correspondence.exportToCsv')}
                         >
                           <Icon icon="lucide:download" className="text-sm" />
                         </button>
@@ -869,14 +913,24 @@ export default function CorrespondenceFeedPage() {
                     </div>
                   </div>
                   <div className={`mt-4 flex items-center justify-between text-[10px] font-bold text-slate-500`}>
-                    {nextPolicyReview ? (
-                      <>
-                        <span>{t('correspondence.nextReview')}: {nextPolicyReview.name}</span>
-                        <span className="text-blue-600">
-                          {formatDate(nextPolicyReview.nextReviewDate)}
-                        </span>
-                      </>
-                    ) : (
+                    {nextPolicyReview ? (() => {
+                      const isOverdue = new Date(nextPolicyReview.nextReviewDate) < new Date()
+                      return (
+                        <>
+                          <span className="flex items-center gap-1.5 min-w-0">
+                            <span className="truncate">{t('correspondence.nextReview')}: {nextPolicyReview.name}</span>
+                            {isOverdue && (
+                              <span className="shrink-0 text-[9px] font-black uppercase tracking-wide px-1.5 py-0.5 rounded bg-rose-100 text-rose-600">
+                                {t('correspondence.overdue' as TranslationKey)}
+                              </span>
+                            )}
+                          </span>
+                          <span className={isOverdue ? 'text-rose-600 shrink-0' : 'text-blue-600 shrink-0'}>
+                            {formatDate(nextPolicyReview.nextReviewDate)}
+                          </span>
+                        </>
+                      )
+                    })() : (
                       <span className="text-slate-400">{t('correspondence.noUpcomingReviews')}</span>
                     )}
                   </div>
@@ -903,21 +957,31 @@ export default function CorrespondenceFeedPage() {
                     </div>
                   </div>
                   <div className={`mt-4 text-[10px] font-bold text-slate-500`}>
-                    {nextCircularsDue.length > 0 ? (
-                      <>
-                        <div className={`flex items-center justify-between mb-1.5`}>
-                          <span>{t('correspondence.nextDeadline' as TranslationKey)}</span>
-                          <span className="text-blue-600">
-                            {formatDate(nextCircularsDue[0].dueDate)}
-                          </span>
-                        </div>
-                        <ul className={`space-y-0.5`}>
-                          {nextCircularsDue.map(c => (
-                            <li key={c.id} className="text-slate-600 truncate">· {c.title}</li>
-                          ))}
-                        </ul>
-                      </>
-                    ) : (
+                    {nextCircularsDue.length > 0 ? (() => {
+                      const isOverdue = new Date(nextCircularsDue[0].dueDate) < new Date()
+                      return (
+                        <>
+                          <div className={`flex items-center justify-between mb-1.5`}>
+                            <span className="flex items-center gap-1.5">
+                              {t('correspondence.nextDeadline' as TranslationKey)}
+                              {isOverdue && (
+                                <span className="text-[9px] font-black uppercase tracking-wide px-1.5 py-0.5 rounded bg-rose-100 text-rose-600">
+                                  {t('correspondence.overdue' as TranslationKey)}
+                                </span>
+                              )}
+                            </span>
+                            <span className={isOverdue ? 'text-rose-600' : 'text-blue-600'}>
+                              {formatDate(nextCircularsDue[0].dueDate)}
+                            </span>
+                          </div>
+                          <ul className={`space-y-0.5`}>
+                            {nextCircularsDue.map(c => (
+                              <li key={c.id} className="text-slate-600 truncate">· {c.title}</li>
+                            ))}
+                          </ul>
+                        </>
+                      )
+                    })() : (
                       <span className="text-slate-400">{t('correspondence.noUpcomingReviews')}</span>
                     )}
                   </div>
@@ -1018,21 +1082,34 @@ export default function CorrespondenceFeedPage() {
                         'registry':    'bg-emerald-100 text-emerald-700',
                         'sama-letter': 'bg-blue-100 text-blue-700',
                         'observation': 'bg-rose-100 text-rose-700',
+                        'policy':      'bg-violet-100 text-violet-700',
                       }
+                      const sourceLabel =
+                        item.source === 'registry' ? 'Rule'
+                        : item.source === 'sama-letter' ? (item.authority || '—')
+                        : item.source === 'policy' ? 'Policy'
+                        : 'Obs'
                       return (
-                        <div key={item.id} className={`bg-white p-4 rounded-2xl border border-emerald-100 shadow-sm`}>
+                        <div key={`${item.source}-${item.id}`} className={`bg-white p-4 rounded-2xl border shadow-sm ${item.overdue ? 'border-rose-200' : 'border-emerald-100'}`}>
                           <div className={`flex items-start justify-between gap-2`}>
                             <div className="flex-1 min-w-0">
                               <p className="text-sm font-bold text-slate-900 truncate">{item.name}</p>
                               <p className="text-xs text-slate-500 mt-0.5">{item.subtitle}</p>
                             </div>
                             <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full shrink-0 ${sourceChip[item.source]}`}>
-                              {item.source === 'registry' ? 'Registry' : item.source === 'sama-letter' ? (item.authority || '—') : 'Obs'}
+                              {sourceLabel}
                             </span>
                           </div>
                           <div className={`flex items-center justify-between mt-3 pt-3 border-t border-slate-100`}>
-                            <span className="text-xs font-bold text-rose-500">
-                              {formatDate(item.dueDate)}
+                            <span className="flex items-center gap-1.5">
+                              <span className={`text-xs font-bold ${item.overdue ? 'text-rose-500' : 'text-slate-500'}`}>
+                                {formatDate(item.dueDate)}
+                              </span>
+                              {item.overdue && (
+                                <span className="text-[9px] font-black uppercase tracking-wide px-1.5 py-0.5 rounded bg-rose-100 text-rose-600">
+                                  {t('correspondence.overdue' as TranslationKey)}
+                                </span>
+                              )}
                             </span>
                             <button
                               onClick={() => handleReviewItem(item)}

@@ -80,6 +80,7 @@ interface ChecklistItem {
   id: string
   text: string
   completed: boolean
+  deadline?: string
 }
 
 // Extended observation type with comments for the detail modal
@@ -287,6 +288,7 @@ interface ObservationState {
 
   addChecklistItem: (observationId: string, text: string, user?: User) => Promise<ChecklistItem>
   editChecklistItem: (observationId: string, itemId: string, newText: string, user?: User) => Promise<void>
+  setChecklistItemDeadline: (observationId: string, itemId: string, deadline: string | undefined, user?: User) => Promise<void>
   toggleChecklistItem: (observationId: string, itemId: string, completed: boolean, user?: User) => Promise<void>
   removeChecklistItem: (observationId: string, itemId: string, itemText?: string, user?: User) => Promise<void>
 
@@ -489,6 +491,7 @@ export const useObservationStore = create<ObservationState>()((set, get) => ({
           id: c.id,
           text: c.text,
           completed: c.completed,
+          deadline: (c as { deadline?: string | null }).deadline ?? undefined,
         }))
       }
       if (row.documents) {
@@ -1571,6 +1574,55 @@ export const useObservationStore = create<ObservationState>()((set, get) => ({
       })
     } catch (e) {
       set({ error: errorMessage(e, 'Failed to edit checklist item') })
+      throw e
+    }
+  },
+
+  setChecklistItemDeadline: async (observationId, itemId, deadline) => {
+    const state = get()
+    const item = state.selectedObservation?.checklist?.find((i) => i.id === itemId)
+      || state.byId[observationId]?.checklist?.find((i) => i.id === itemId)
+    const itemUpdatedAt = (item as { updatedAt?: string } | undefined)?.updatedAt
+    const prevSelected = get().selectedObservation?.id === observationId ? get().selectedObservation : null
+    const prevById = get().byId[observationId]
+    const applyDeadline = (it: ChecklistItem) => (it.id === itemId ? { ...it, deadline: deadline ?? undefined } : it)
+    try {
+      await optimisticMutation<void>({
+        context: 'observation.setChecklistItemDeadline',
+        errorMessage: revertMessage,
+        apply: () => {
+          set((state) => {
+            const observations = state.observations.map((obs) =>
+              obs.id === observationId ? { ...obs, checklist: obs.checklist?.map(applyDeadline) } : obs,
+            )
+            const selectedObservation =
+              state.selectedObservation?.id === observationId
+                ? { ...state.selectedObservation, checklist: state.selectedObservation.checklist?.map(applyDeadline) }
+                : state.selectedObservation
+            return { observations, selectedObservation }
+          })
+        },
+        request: async () => {
+          if (!isPersistedId(itemId)) return
+          await api.patch(
+            `/observations/${observationId}/checklist/${itemId}`,
+            { deadline: deadline ?? null },
+            ifMatchHeader(itemUpdatedAt),
+          )
+        },
+        revert: () => {
+          set((state) => ({
+            observations: state.observations.map((o) => (o.id === observationId && prevById ? prevById : o)),
+            byId: prevById ? { ...state.byId, [observationId]: prevById } : state.byId,
+            selectedObservation:
+              state.selectedObservation?.id === observationId && prevSelected
+                ? prevSelected
+                : state.selectedObservation,
+          }))
+        },
+      })
+    } catch (e) {
+      set({ error: errorMessage(e, 'Failed to set checklist deadline') })
       throw e
     }
   },

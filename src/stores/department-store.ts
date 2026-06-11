@@ -15,6 +15,7 @@ interface DepartmentApiRow {
   key: string | null
   name_en: string
   name_ar: string
+  email: string | null
   is_default: boolean
   created_at: string
   updated_at: string
@@ -27,6 +28,7 @@ function mapRow(row: DepartmentApiRow): Department {
     nameAr: row.name_ar,
     isDefault: row.is_default,
     key: row.key ?? undefined,
+    email: row.email ?? undefined,
   }
 }
 
@@ -160,6 +162,7 @@ export const useDepartmentStore = create<DepartmentState>()((set, get) => ({
       const payload: Record<string, unknown> = {}
       if (data.name !== undefined) payload.name_en = data.name
       if (data.nameAr !== undefined) payload.name_ar = data.nameAr
+      if (data.email !== undefined) payload.email = data.email || null
       const row = await api.patch<DepartmentApiRow>(`/settings/departments/${id}`, payload)
       const updated = mapRow(row)
       set((s) => ({

@@ -92,6 +92,7 @@ interface RiskChecklistRow {
   text: string
   completed: boolean
   sort_order: number
+  deadline?: string | null
 }
 
 interface RiskHistoryRow {
@@ -112,10 +113,20 @@ interface RiskProposedPlanRow {
   submitted_at: string
 }
 
+interface RiskPlanDocumentRow {
+  id: string
+  risk_id: string
+  name: string
+  type: string
+  storage_path: string
+  uploaded_at: string
+}
+
 interface RiskApiDetail extends RiskApiRow {
   mitigation_checklist?: RiskChecklistRow[]
   proposed_plan?: RiskProposedPlanRow | null
   history?: RiskHistoryRow[]
+  plan_documents?: RiskPlanDocumentRow[]
 }
 
 function stubOwner(id: string | null): User {
@@ -135,6 +146,7 @@ function mapChecklistRow(row: RiskChecklistRow): MitigationChecklistItem {
     id: row.id,
     text: row.text,
     completed: row.completed,
+    deadline: row.deadline ?? undefined,
   }
 }
 
@@ -195,6 +207,11 @@ function mapRow(row: RiskApiRow | RiskApiDetail, previous?: Risk): Risk {
       (row.mitigation_workflow_status as RiskMitigationWorkflowStatus | undefined) ??
       previous?.mitigationWorkflowStatus,
     departmentProposedPlan: proposedPlan,
+    planDocuments: Array.isArray(detail.plan_documents)
+      ? detail.plan_documents.map((d) => ({
+          id: d.id, name: d.name, type: d.type, storagePath: d.storage_path, uploadedAt: d.uploaded_at,
+        }))
+      : previous?.planDocuments,
     sentToDepartmentAt: row.sent_to_department_at ?? previous?.sentToDepartmentAt,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -227,6 +244,9 @@ function toUpdatePayload(patch: Partial<Risk>): Record<string, unknown> {
   if (patch.category !== undefined) out.category = patch.category
   if (patch.likelihood !== undefined) out.likelihood = patch.likelihood
   if (patch.impact !== undefined) out.impact = patch.impact
+  // Owner edits previously no-op'd: the modal sent `owner` but this mapper
+  // never translated it to the `owner_id` the API expects. Map it through.
+  if (patch.owner !== undefined) out.owner_id = patch.owner.id
   if (patch.status !== undefined) out.status = patch.status
   if (patch.mitigationPlan !== undefined) out.mitigation_plan = patch.mitigationPlan
   if (patch.mitigationProgress !== undefined) out.mitigation_progress = patch.mitigationProgress
@@ -306,6 +326,9 @@ interface RiskState {
   editMitigationItem: (riskId: string, itemId: string, newText: string) => Promise<void>
   toggleMitigationItem: (riskId: string, itemId: string) => Promise<void>
   removeMitigationItem: (riskId: string, itemId: string) => Promise<void>
+  setMitigationItemDeadline: (riskId: string, itemId: string, deadline: string | undefined) => Promise<void>
+  addPlanDocument: (riskId: string, doc: { name: string; type: string; storage_path: string }) => Promise<void>
+  removePlanDocument: (riskId: string, docId: string) => Promise<void>
 
   // Officer-driven mitigation workflow (async; backed by /api/risks/[id]/*).
   assignDepartment: (riskId: string, departmentId: string) => void
@@ -521,50 +544,29 @@ export const useRiskStore = create<RiskState>()((set, get) => ({
 
   delete: async (id) => {
     requirePermission('Manage Audit Findings', { storeName: 'risk', actionName: 'delete', id })
-    // OPTIMISTIC HARD-DELETE: the server route soft-deletes via `deleted_at`,
-    // but from the client's perspective the row is gone for good. Snapshot
-    // the row, list index, selection state, and detail-loaded flag up front
-    // so we can splice everything back in on failure.
-    const snapshot = get().byId[id]
-    const prevIndex = get().risks.findIndex((r) => r.id === id)
-    const wasSelected = get().selectedRisk?.id === id
-    const previousSelected = wasSelected ? get().selectedRisk : null
-    const wasDetailLoaded = Boolean(get().detailLoadedIds[id])
-    set((s) => {
-      const { [id]: _drop, ...rest } = s.byId
-      const { [id]: _dropDetail, ...restDetail } = s.detailLoadedIds
-      return {
-        risks: s.risks.filter((r) => r.id !== id),
-        byId: rest,
-        selectedRisk: wasSelected ? null : s.selectedRisk,
-        detailLoadedIds: restDetail,
-        isMutating: true,
-        error: null,
-      }
-    })
+    // CONFIRM-THEN-REMOVE (not optimistic): the delete confirmation dialog
+    // shows its spinner for the lifetime of this promise and closes when it
+    // resolves. If we removed the row up front (optimistic), the row would
+    // vanish from the table seconds before the dialog's spinner finished —
+    // the mismatch Hani reported. Awaiting the server first means the row
+    // disappears at the same instant the dialog closes. Matches the
+    // EditableSelect delete convention (server-confirmed, then mutate state).
+    set({ isMutating: true, error: null })
     try {
       await api.delete(`/risks/${id}`)
-      set({ isMutating: false })
+      set((s) => {
+        const { [id]: _drop, ...rest } = s.byId
+        const { [id]: _dropDetail, ...restDetail } = s.detailLoadedIds
+        return {
+          risks: s.risks.filter((r) => r.id !== id),
+          byId: rest,
+          selectedRisk: s.selectedRisk?.id === id ? null : s.selectedRisk,
+          detailLoadedIds: restDetail,
+          isMutating: false,
+        }
+      })
     } catch (e) {
-      if (snapshot) {
-        set((s) => {
-          const list = [...s.risks]
-          const insertAt = prevIndex >= 0 && prevIndex <= list.length ? prevIndex : list.length
-          list.splice(insertAt, 0, snapshot)
-          return {
-            risks: list,
-            byId: { ...s.byId, [id]: snapshot },
-            selectedRisk: wasSelected ? previousSelected : s.selectedRisk,
-            detailLoadedIds: wasDetailLoaded
-              ? { ...s.detailLoadedIds, [id]: true }
-              : s.detailLoadedIds,
-            error: errorMessage(e, 'Failed to delete risk'),
-            isMutating: false,
-          }
-        })
-      } else {
-        set({ error: errorMessage(e, 'Failed to delete risk'), isMutating: false })
-      }
+      set({ error: errorMessage(e, 'Failed to delete risk'), isMutating: false })
       throw e
     }
   },
@@ -777,6 +779,10 @@ export const useRiskStore = create<RiskState>()((set, get) => ({
         selectedRisk: s.selectedRisk?.id === riskId ? previous : s.selectedRisk,
         error: errorMessage(e, 'Failed to update checklist item'),
       }))
+      // If the row is gone server-side (404 — id drifted out of sync after a
+      // plan submit/accept), reconcile to server truth rather than leaving a
+      // stale local item that will keep failing.
+      if (e instanceof ApiClientError && e.code === 'not_found') void get().fetchById(riskId)
     }
   },
 
@@ -829,9 +835,19 @@ export const useRiskStore = create<RiskState>()((set, get) => ({
     const now = new Date().toISOString()
     const removed = (previous.mitigationChecklist ?? []).find((i) => i.id === itemId)
     const checklist = (previous.mitigationChecklist ?? []).filter((i) => i.id !== itemId)
+    // Cascade: the department's proposed-plan checklist is the SAME set of
+    // risk_mitigation_checklist rows, so removing an item must drop it from the
+    // proposed-plan view too (otherwise the two lists diverge until refetch).
+    const proposedPlan = previous.departmentProposedPlan
+      ? {
+          ...previous.departmentProposedPlan,
+          checklist: previous.departmentProposedPlan.checklist.filter((i) => i.id !== itemId),
+        }
+      : previous.departmentProposedPlan
     const optimistic: Risk = {
       ...previous,
       mitigationChecklist: checklist,
+      departmentProposedPlan: proposedPlan,
       mitigationProgress: computeMitigationProgress(checklist),
       updatedAt: now,
       history: appendHistory(previous, {
@@ -855,6 +871,91 @@ export const useRiskStore = create<RiskState>()((set, get) => ({
         selectedRisk: s.selectedRisk?.id === riskId ? previous : s.selectedRisk,
         error: errorMessage(e, 'Failed to remove checklist item'),
       }))
+    }
+  },
+
+  setMitigationItemDeadline: async (riskId, itemId, deadline) => {
+    const previous = get().byId[riskId]
+    if (!previous) return
+    requirePermission('Manage Audit Findings', { storeName: 'risk', actionName: 'setMitigationItemDeadline', id: riskId })
+    const apply = (item: MitigationChecklistItem) =>
+      item.id === itemId ? { ...item, deadline: deadline ?? undefined } : item
+    const optimistic: Risk = {
+      ...previous,
+      mitigationChecklist: (previous.mitigationChecklist ?? []).map(apply),
+      // Keep the proposed-plan view in sync (same underlying rows).
+      departmentProposedPlan: previous.departmentProposedPlan
+        ? { ...previous.departmentProposedPlan, checklist: previous.departmentProposedPlan.checklist.map(apply) }
+        : previous.departmentProposedPlan,
+      updatedAt: new Date().toISOString(),
+    }
+    set((s) => ({
+      risks: s.risks.map((r) => (r.id === riskId ? optimistic : r)),
+      byId: { ...s.byId, [riskId]: optimistic },
+      selectedRisk: s.selectedRisk?.id === riskId ? optimistic : s.selectedRisk,
+    }))
+    // The item hasn't been persisted yet (still an optimistic temp id) — keep
+    // the local deadline; it'll be saved once the add reconciles. Firing now
+    // would PATCH a non-existent id.
+    if (itemId.startsWith('temp-')) return
+    try {
+      await api.patch(`/risks/${riskId}/checklist/${itemId}`, { deadline: deadline ?? null })
+    } catch (e) {
+      set((s) => ({
+        risks: s.risks.map((r) => (r.id === riskId ? previous : r)),
+        byId: { ...s.byId, [riskId]: previous },
+        selectedRisk: s.selectedRisk?.id === riskId ? previous : s.selectedRisk,
+        error: errorMessage(e, 'Failed to set checklist item deadline'),
+      }))
+      if (e instanceof ApiClientError && e.code === 'not_found') void get().fetchById(riskId)
+    }
+  },
+
+  addPlanDocument: async (riskId, doc) => {
+    requirePermission('Manage Audit Findings', { storeName: 'risk', actionName: 'addPlanDocument', id: riskId })
+    const row = await api.post<RiskPlanDocumentRow>(`/risks/${riskId}/plan-documents`, doc)
+    const mapped = { id: row.id, name: row.name, type: row.type, storagePath: row.storage_path, uploadedAt: row.uploaded_at }
+    set((s) => {
+      const prev = s.byId[riskId]
+      if (!prev) return s
+      const next: Risk = { ...prev, planDocuments: [mapped, ...(prev.planDocuments ?? [])] }
+      return {
+        risks: s.risks.map((r) => (r.id === riskId ? next : r)),
+        byId: { ...s.byId, [riskId]: next },
+        selectedRisk: s.selectedRisk?.id === riskId ? next : s.selectedRisk,
+      }
+    })
+  },
+
+  removePlanDocument: async (riskId, docId) => {
+    requirePermission('Manage Audit Findings', { storeName: 'risk', actionName: 'removePlanDocument', id: riskId })
+    const prev = get().byId[riskId]
+    const snapshot = prev?.planDocuments
+    // Optimistic remove.
+    set((s) => {
+      const cur = s.byId[riskId]
+      if (!cur) return s
+      const next: Risk = { ...cur, planDocuments: (cur.planDocuments ?? []).filter((d) => d.id !== docId) }
+      return {
+        risks: s.risks.map((r) => (r.id === riskId ? next : r)),
+        byId: { ...s.byId, [riskId]: next },
+        selectedRisk: s.selectedRisk?.id === riskId ? next : s.selectedRisk,
+      }
+    })
+    try {
+      await api.delete(`/risks/${riskId}/plan-documents/${docId}`)
+    } catch (e) {
+      set((s) => {
+        const cur = s.byId[riskId]
+        if (!cur) return { error: errorMessage(e, 'Failed to remove document') }
+        const restored: Risk = { ...cur, planDocuments: snapshot }
+        return {
+          risks: s.risks.map((r) => (r.id === riskId ? restored : r)),
+          byId: { ...s.byId, [riskId]: restored },
+          selectedRisk: s.selectedRisk?.id === riskId ? restored : s.selectedRisk,
+          error: errorMessage(e, 'Failed to remove document'),
+        }
+      })
     }
   },
 
@@ -1009,9 +1110,14 @@ export const useRiskStore = create<RiskState>()((set, get) => ({
           plan,
           checklist: checklist.map((c, idx) => ({
             text: c.text,
+            deadline: c.deadline,
             sort_order: idx,
           })),
         })
+        // submit-plan delete-reinserts risk_mitigation_checklist with fresh
+        // server ids; refetch so the client's proposed-plan + checklist hold
+        // the real ids (otherwise later edits hit a stale id → 0 rows → 500).
+        await get().fetchById(riskId)
       } catch (e) {
         set({ error: errorMessage(e, 'Failed to submit department plan') })
       }
@@ -1046,6 +1152,12 @@ export const useRiskStore = create<RiskState>()((set, get) => ({
     void (async () => {
       try {
         await api.post(`/risks/${riskId}/accept-plan`)
+        // Re-sync: the optimistic mitigationChecklist holds CLIENT-generated
+        // uuids for the proposed items, but the server checklist rows have
+        // their own ids. Without this refetch, editing/toggling an accepted
+        // item PATCHes a non-existent id → 0 rows → 500. fetchById pulls the
+        // real ids in.
+        await get().fetchById(riskId)
       } catch (e) {
         set({ error: errorMessage(e, 'Failed to accept plan') })
       }

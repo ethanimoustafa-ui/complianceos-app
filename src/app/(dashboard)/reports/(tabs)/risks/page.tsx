@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useMemo, useEffect, useRef } from 'react'
+import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react'
 import { usePathname, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { Icon } from '@iconify/react'
@@ -32,6 +32,13 @@ import { ChecklistSection } from '@/components/observations/detail/checklist-sec
 import { Gate } from '@/components/auth/gate'
 import { dicebearAvatar } from '@/lib/avatar'
 import { paginate } from '@/lib/pagination'
+import { ToastHost } from '@/components/ui/toast-host'
+import { FieldLabel } from '@/components/ui/field-label'
+import { FileUpload, type UploadedFile } from '@/components/ui/file-upload'
+import { supabase as supabaseClient } from '@/lib/supabase/client'
+import { pushToast } from '@/stores/toast-store'
+import { ApiClientError } from '@/lib/api-client'
+import type { Risk as StoreRisk } from '@/types'
 
 // Types
 // RiskCategory is now an opaque string (managed via useRiskCategoryStore).
@@ -40,7 +47,12 @@ import { paginate } from '@/lib/pagination'
 type RiskCategory = string
 type RiskStatus = 'open' | 'mitigating' | 'accepted' | 'closed'
 type MonitoringFrequency = 'weekly' | 'monthly' | 'quarterly' | 'semi_annual' | 'annual'
-type HistoryAction = 'created' | 'status_changed' | 'score_updated' | 'mitigation_updated' | 'reviewed' | 'assigned' | 'note_added' | 'checklist_added' | 'checklist_toggled' | 'checklist_edited' | 'checklist_removed'
+// Covers both client-minted optimistic entries (first row) and the actions
+// the API routes persist to risk_history (second row) — hydrated rows carry
+// those, so missing keys here rendered blank timeline entries.
+type HistoryAction =
+  | 'created' | 'status_changed' | 'score_updated' | 'mitigation_updated' | 'reviewed' | 'assigned' | 'note_added' | 'checklist_added' | 'checklist_toggled' | 'checklist_edited' | 'checklist_removed'
+  | 'updated' | 'department_assigned' | 'deadline_set' | 'sent_to_department' | 'plan_submitted' | 'plan_accepted' | 'mitigated'
 
 interface RiskHistoryEntry {
   id: number
@@ -104,6 +116,27 @@ const riskStatusLabelKeys: Record<RiskStatus, string> = {
 // Helpers
 function getRiskScore(likelihood: number, impact: number): number { return likelihood * impact }
 
+const STORE_STATUS_TO_UI: Record<string, RiskStatus> = {
+  identified: 'open', mitigating: 'mitigating', accepted: 'accepted', resolved: 'closed',
+}
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+// Surface the FIRST Zod issue from a 400 instead of the generic
+// "Validation failed" — "category: Invalid option …" tells the user what to fix.
+function apiErrorMessage(e: unknown, fallback: string): string {
+  if (e instanceof ApiClientError) {
+    const details = e.details as Array<{ message?: string; path?: Array<string | number> }> | undefined
+    const first = Array.isArray(details) ? details[0] : undefined
+    if (first?.message) {
+      const path = Array.isArray(first.path) && first.path.length > 0 ? `${first.path.join('.')}: ` : ''
+      return `${path}${first.message}`
+    }
+    return e.message
+  }
+  return e instanceof Error && e.message ? e.message : fallback
+}
+
 function getRiskLevel(score: number): { labelKey: string; color: string; bgColor: string } {
   if (score >= 20) return { labelKey: 'reports.critical', color: 'text-rose-700', bgColor: 'bg-rose-500' }
   if (score >= 12) return { labelKey: 'reports.high', color: 'text-orange-700', bgColor: 'bg-orange-500' }
@@ -126,6 +159,21 @@ function getRiskDotColor(score: number): string {
   return 'bg-emerald-400'
 }
 
+// Mitigation-review cadence is a sub-status that runs ON TOP OF the open/
+// mitigating/closed lifecycle: regardless of where a risk sits in that
+// lifecycle, its review falls due on a cadence and the officer must re-evaluate
+// the checklist / plan / affected departments. `getReviewState` derives that
+// purely from nextReviewDate vs now (it never touches lifecycle status).
+type RiskReviewState = 'overdue' | 'due-soon' | 'ok' | 'none'
+const REVIEW_SOON_DAYS = 14
+function getReviewState(nextReviewDate: Date | undefined, now: Date): RiskReviewState {
+  if (!nextReviewDate) return 'none'
+  const diffMs = nextReviewDate.getTime() - now.getTime()
+  if (diffMs < 0) return 'overdue'
+  if (diffMs <= REVIEW_SOON_DAYS * 24 * 60 * 60 * 1000) return 'due-soon'
+  return 'ok'
+}
+
 export default function ReportsRisksPage() {
   const { t, isRTL } = useTranslation()
   const pathname = usePathname()
@@ -138,7 +186,6 @@ export default function ReportsRisksPage() {
   // when fetchById landed before the list refetch).
   const risksById = useRiskStore((s) => s.byId)
   const riskStore = useRiskStore()
-  const isMutating = useRiskStore((s) => s.isMutating)
   const fetchRiskById = useRiskStore((s) => s.fetchById)
   // RISKS-STORE may expose `isDetailLoaded` — guard the read so we never
   // explode if the predicate is missing (returns `false` → skeletons render).
@@ -156,6 +203,9 @@ export default function ReportsRisksPage() {
   const editMitigationItem = useRiskStore((s) => s.editMitigationItem)
   const toggleMitigationItem = useRiskStore((s) => s.toggleMitigationItem)
   const removeMitigationItem = useRiskStore((s) => s.removeMitigationItem)
+  const setMitigationItemDeadline = useRiskStore((s) => s.setMitigationItemDeadline)
+  const addPlanDocument = useRiskStore((s) => s.addPlanDocument)
+  const removePlanDocument = useRiskStore((s) => s.removePlanDocument)
   const markReviewed = useRiskStore((s) => s.markReviewed)
   const assignDept = useRiskStore((s) => s.assignDepartment)
   const setMitigationDeadlineAction = useRiskStore((s) => s.setMitigationDeadline)
@@ -200,14 +250,60 @@ export default function ReportsRisksPage() {
   const renderLikelihoodLabel = (n: 1 | 2 | 3 | 4 | 5): string => t(likelihoodDefaultKey(n))
   const renderImpactLabel = (n: 1 | 2 | 3 | 4 | 5): string => t(impactDefaultKey(n))
 
-  // Map store risks to RiskRegisterItem
-  const risks: RiskRegisterItem[] = useMemo(() => {
-    const statusMap: Record<string, RiskStatus> = { identified: 'open', mitigating: 'mitigating', accepted: 'accepted', resolved: 'closed' }
-    return storeRisks.map((r) => ({
+  // ---- display-name resolution -------------------------------------------
+  // The risks API ships ids only (owner_id; history user_id), the store's
+  // stubOwner leaves name/department empty on hydrate, and team-store maps
+  // `member.department` to the department UUID. Resolve everything to display
+  // names here so the table, drawer, search, and exports never show a raw
+  // UUID or a blank owner.
+  const resolveDeptName = useCallback((idOrName: string | undefined | null): string => {
+    if (!idOrName) return ''
+    const dept = deptList.find((d) => d.id === idOrName || d.name === idOrName)
+    if (dept) return isRTL && dept.nameAr ? dept.nameAr : dept.name
+    return UUID_RE.test(idOrName) ? '' : idOrName
+  }, [deptList, isRTL])
+
+  // History rows persist `user_id`; in-session optimistic entries carry the
+  // display name. Render-time helper (not part of the memoized mapping) so it
+  // can fall back to a translated "Unknown user" without invalidating memos
+  // on every `t` identity change.
+  const resolveUserName = (idOrName: string): string => {
+    if (!idOrName) return ''
+    const member = teamMembers.find((m) => m.id === idOrName)
+    if (member) return member.name
+    if (authUser && authUser.id === idOrName) return authUser.name
+    return UUID_RE.test(idOrName) ? t('reports.unknownUser' as TranslationKey) : idOrName
+  }
+
+  // History prev/new values persist raw machine values (department UUIDs for
+  // department_assigned, workflow slugs for sent_to_department) — humanize
+  // them at render time. English labels match the wfMeta pills below.
+  const WORKFLOW_VALUE_LABELS: Record<string, string> = {
+    'not-started': 'Pending assignment', 'pending-assignment': 'Pending assignment',
+    'sent-to-department': 'Sent to department', 'plan-proposed': 'Plan proposed',
+    'plan-accepted': 'Plan accepted', 'in-progress': 'In progress',
+    resolved: 'Mitigated', mitigated: 'Mitigated', overdue: 'Overdue',
+  }
+  const formatHistoryValue = (action: HistoryAction, value: string): string => {
+    if (action === 'department_assigned') return resolveDeptName(value) || value
+    return WORKFLOW_VALUE_LABELS[value] ?? value
+  }
+
+  // Single store-Risk → RiskRegisterItem mapper, shared by the list mapping
+  // and the drawer-sync fallback below so the two can never drift.
+  const toRegisterItem = useCallback((r: StoreRisk): RiskRegisterItem => {
+    const member =
+      (r.owner.id ? teamMembers.find((m) => m.id === r.owner.id) : undefined) ??
+      (r.owner.name ? teamMembers.find((m) => m.name === r.owner.name) : undefined)
+    return {
       id: r.id, name: r.title, description: r.description, category: r.category as RiskCategory,
       likelihood: r.likelihood, impact: r.impact,
-      owner: { name: r.owner.name, avatar: r.owner.avatar || '', department: r.owner.department },
-      status: statusMap[r.status] || ('open' as RiskStatus),
+      owner: {
+        name: r.owner.name || member?.name || '',
+        avatar: r.owner.avatar || member?.avatarSeed || member?.avatar || '',
+        department: resolveDeptName(member?.department ?? r.owner.department),
+      },
+      status: STORE_STATUS_TO_UI[r.status] || ('open' as RiskStatus),
       mitigationPlan: r.mitigationPlan, mitigationChecklist: r.mitigationChecklist, mitigationProgress: r.mitigationProgress,
       monitoringFrequency: r.monitoringFrequency,
       lastReviewDate: r.lastReviewDate ? new Date(r.lastReviewDate) : undefined,
@@ -218,8 +314,25 @@ export default function ReportsRisksPage() {
         previousValue: h.previousValue, newValue: h.newValue, notes: h.notes,
       })),
       createdAt: new Date(r.createdAt), updatedAt: new Date(r.updatedAt),
-    }))
-  }, [storeRisks])
+    }
+  }, [teamMembers, resolveDeptName])
+
+  // Map store risks to RiskRegisterItem
+  const risks: RiskRegisterItem[] = useMemo(
+    () => storeRisks.map(toRegisterItem),
+    [storeRisks, toRegisterItem],
+  )
+
+  // Count of risks whose mitigation review is overdue or due within the
+  // soon-window — drives the "Review Due" stat card. Recomputed when the list
+  // changes (a fixed `now` per render is precise enough for a day-grained badge).
+  const reviewDueCount = useMemo(() => {
+    const now = new Date()
+    return risks.filter((r) => {
+      const s = getReviewState(r.nextReviewDate, now)
+      return s === 'overdue' || s === 'due-soon'
+    }).length
+  }, [risks])
 
   // State
   const [riskSearchTerm, setRiskSearchTerm] = useState('')
@@ -231,9 +344,20 @@ export default function ReportsRisksPage() {
   const [matrixCellSelection, setMatrixCellSelection] = useState<{ cellKey: string; index: number } | null>(null)
   const [riskToDelete, setRiskToDelete] = useState<RiskRegisterItem | null>(null)
   const [showRiskDeleteConfirm, setShowRiskDeleteConfirm] = useState(false)
+  // Audit trail is capped at the 5 most-recent entries; this expands to the
+  // full set already loaded by the detail GET (server caps history at 100).
+  // Track the EXPANDED risk id (not a bare boolean) so opening a different
+  // risk auto-collapses without a reset effect.
+  const HISTORY_PREVIEW_COUNT = 5
+  const [historyExpandedId, setHistoryExpandedId] = useState<string | null>(null)
   const [riskPage, setRiskPage] = useState(1)
   const RISKS_PER_PAGE = 10
   const [showAddRiskModal, setShowAddRiskModal] = useState(false)
+  // Local busy flag for the create/edit modal button. Keying on the store's
+  // global `isMutating` let any other risk mutation flip this spinner; a local
+  // flag scopes it to THIS save and spans the whole awaited operation before
+  // the modal closes (see memory: spinner-spans-full-operation).
+  const [isSavingRisk, setIsSavingRisk] = useState(false)
   const [editingRiskId, setEditingRiskId] = useState<string | null>(null)
   const [newRiskName, setNewRiskName] = useState('')
   const [newRiskCategory, setNewRiskCategory] = useState<RiskCategory | ''>('')
@@ -252,17 +376,57 @@ export default function ReportsRisksPage() {
   const [proposePlanItems, setProposePlanItems] = useState<Array<{ text: string; deadline?: string }>>([
     { text: '', deadline: undefined },
   ])
+  // Document attachments for the received plan (department's plan doc/outline).
+  const [proposePlanFiles, setProposePlanFiles] = useState<UploadedFile[]>([])
+  const [proposePlanBusy, setProposePlanBusy] = useState(false)
   const resetProposePlanForm = () => {
     setProposePlanOpen(false)
     setProposePlanText('')
     setProposePlanItems([{ text: '', deadline: undefined }])
+    setProposePlanFiles([])
   }
-  const submitProposePlan = (riskId: string) => {
+  const submitProposePlan = async (riskId: string) => {
     const validItems = proposePlanItems.filter((it) => it.text.trim().length > 0)
     if (proposePlanText.trim().length === 0 || validItems.length === 0) return
     const submittedBy = authUser?.name ?? 'Department User'
-    submitDepartmentPlan(riskId, proposePlanText.trim(), validItems, submittedBy)
+    setProposePlanBusy(true)
+    try {
+      submitDepartmentPlan(riskId, proposePlanText.trim(), validItems, submittedBy)
+      // Upload any attached documents to storage, then register each.
+      for (const f of proposePlanFiles) {
+        if (!f.file) continue
+        const fileType = f.type.includes('pdf') ? 'pdf' : f.type.includes('image') ? 'image' : 'doc'
+        const safeName = f.name.replace(/[^a-zA-Z0-9._-]+/g, '_')
+        const storagePath = `risks/${riskId}/${Date.now()}-${safeName}`
+        const { error: upErr } = await supabaseClient.storage.from('risk_plan_documents').upload(storagePath, f.file)
+        if (upErr) { pushToast(apiErrorMessage(upErr, t('reports.failedToSaveRisk' as TranslationKey)), 'error'); continue }
+        try {
+          await addPlanDocument(riskId, { name: f.name, type: fileType, storage_path: storagePath })
+        } catch (e) {
+          pushToast(apiErrorMessage(e, t('reports.failedToSaveRisk' as TranslationKey)), 'error')
+        }
+      }
+    } finally {
+      setProposePlanBusy(false)
+    }
     resetProposePlanForm()
+  }
+
+  // Download a received-plan document via a short-lived signed URL.
+  const downloadPlanDocument = async (name: string, storagePath: string) => {
+    const { data, error } = await supabaseClient.storage
+      .from('risk_plan_documents')
+      .createSignedUrl(storagePath, 60, { download: name })
+    if (error || !data?.signedUrl) {
+      pushToast(apiErrorMessage(error, 'Download unavailable'), 'error')
+      return
+    }
+    const a = document.createElement('a')
+    a.href = data.signedUrl
+    a.download = name
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
   }
 
   const resetAddRiskForm = () => {
@@ -276,26 +440,81 @@ export default function ReportsRisksPage() {
     const owner = teamMembers.find(m => m.id === newRiskOwnerId)
     if (!owner) return
 
-    if (editingRiskId) {
-      const existingStoreRisk = storeRisks.find(r => r.id === editingRiskId)
-      const editHistoryEntry = { id: crypto.randomUUID(), timestamp: new Date().toISOString(), user: owner.name, action: 'mitigation_updated' as const, notes: 'Risk details updated' }
-      await updateRisk(editingRiskId, {
-        title: newRiskName, description: newRiskDescription, category: newRiskCategory, likelihood: newRiskLikelihood, impact: newRiskImpact,
-        owner: { id: owner.id, name: owner.name, email: owner.email, role: owner.role, department: owner.department, workload: owner.workload },
-        mitigationPlan: newRiskMitigation || undefined, monitoringFrequency: newRiskMonitoringFrequency,
-        reviewSchedule: newRiskSchedule, frameworkIds,
-        history: [...(existingStoreRisk?.history || []), editHistoryEntry],
-      })
-    } else {
-      await createRisk({
-        title: newRiskName, description: newRiskDescription, category: newRiskCategory, likelihood: newRiskLikelihood, impact: newRiskImpact,
-        status: 'identified',
-        owner: { id: owner.id, name: owner.name, email: owner.email, role: owner.role, department: owner.department, workload: owner.workload },
-        mitigationPlan: newRiskMitigation || undefined, mitigationProgress: 0, monitoringFrequency: newRiskMonitoringFrequency,
-        reviewSchedule: newRiskSchedule, frameworkIds,
-      })
+    const ownerPayload = { id: owner.id, name: owner.name, email: owner.email, role: owner.role, department: owner.department, workload: owner.workload }
+    setIsSavingRisk(true)
+    try {
+      if (editingRiskId) {
+        // DIFF, don't blanket-send. Sending the whole form made the server's
+        // history note read "Updated fields: title, description, category, …"
+        // for every edit even when only the title changed. Compare each field
+        // against the stored risk and PATCH only what actually changed, so the
+        // audit trail is truthful and we never re-send (and overwrite) fields
+        // the user didn't touch.
+        const existing = storeRisks.find(r => r.id === editingRiskId)
+        const patch: Partial<StoreRisk> = {}
+        if (existing) {
+          if (newRiskName !== existing.title) patch.title = newRiskName
+          if (newRiskDescription !== existing.description) patch.description = newRiskDescription
+          if (newRiskCategory !== existing.category) patch.category = newRiskCategory
+          if (newRiskLikelihood !== existing.likelihood) patch.likelihood = newRiskLikelihood
+          if (newRiskImpact !== existing.impact) patch.impact = newRiskImpact
+          if (owner.id !== existing.owner.id) patch.owner = ownerPayload
+          if ((newRiskMitigation || undefined) !== (existing.mitigationPlan || undefined)) patch.mitigationPlan = newRiskMitigation || undefined
+          if (newRiskMonitoringFrequency !== existing.monitoringFrequency) patch.monitoringFrequency = newRiskMonitoringFrequency
+          if (JSON.stringify(newRiskSchedule) !== JSON.stringify(existing.reviewSchedule)) patch.reviewSchedule = newRiskSchedule
+          const sortedNew = [...frameworkIds].sort()
+          const sortedOld = [...(existing.frameworkIds ?? [])].sort()
+          if (JSON.stringify(sortedNew) !== JSON.stringify(sortedOld)) patch.frameworkIds = frameworkIds
+        } else {
+          // Defensive fallback (store row vanished): send the full form.
+          Object.assign(patch, {
+            title: newRiskName, description: newRiskDescription, category: newRiskCategory,
+            likelihood: newRiskLikelihood, impact: newRiskImpact, owner: ownerPayload,
+            mitigationPlan: newRiskMitigation || undefined, monitoringFrequency: newRiskMonitoringFrequency,
+            reviewSchedule: newRiskSchedule, frameworkIds,
+          })
+        }
+        if (Object.keys(patch).length > 0) {
+          await updateRisk(editingRiskId, patch)
+        }
+      } else {
+        await createRisk({
+          title: newRiskName, description: newRiskDescription, category: newRiskCategory, likelihood: newRiskLikelihood, impact: newRiskImpact,
+          status: 'identified',
+          owner: ownerPayload,
+          mitigationPlan: newRiskMitigation || undefined, mitigationProgress: 0, monitoringFrequency: newRiskMonitoringFrequency,
+          reviewSchedule: newRiskSchedule, frameworkIds,
+        })
+      }
+    } catch (e) {
+      // Keep the modal open with the user's input; the store already rolled
+      // back its optimistic row. Without this the failure was completely
+      // silent (unhandled rejection, modal stuck, no message).
+      pushToast(apiErrorMessage(e, t('reports.failedToSaveRisk' as TranslationKey)), 'error')
+      return
+    } finally {
+      setIsSavingRisk(false)
     }
     resetAddRiskForm(); setShowAddRiskModal(false)
+  }
+
+  // "Send to department" opens the user's mail client pre-addressed to the
+  // department's contact email (set in Settings → Departments), with a
+  // subject + body localized to the current UI language. The risk is named by
+  // its title + description — never its UUID. Then the workflow transition runs.
+  const sendRiskToDepartmentByEmail = (storeRisk: StoreRisk) => {
+    const dept = deptList.find((d) => d.id === storeRisk.intendedDepartmentId)
+    const deptName = dept ? (isRTL && dept.nameAr ? dept.nameAr : dept.name) : ''
+    const subject = t('risks.mailtoSubject' as TranslationKey, { risk: storeRisk.title })
+    const body = t('risks.mailtoBody' as TranslationKey, {
+      department: deptName,
+      risk: storeRisk.title,
+      description: storeRisk.description ?? '',
+      sender: actingUser,
+    })
+    const url = `mailto:${dept?.email ?? ''}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
+    if (typeof window !== 'undefined') window.location.href = url
+    sendToDepartment(storeRisk.id, actingUser)
   }
 
   // Deep-link: open a specific risk from ?id= query param
@@ -322,46 +541,9 @@ export default function ReportsRisksPage() {
     const fromList = risks.find((r) => r.id === selectedRisk.id)
     const fromById = risksById[selectedRisk.id]
     // Prefer list-shape (already mapped to UI fields); only fall back to
-    // synthesising from byId when the list doesn't have it.
-    const updated =
-      fromList ??
-      (fromById
-        ? (() => {
-            const statusMap: Record<string, RiskStatus> = { identified: 'open', mitigating: 'mitigating', accepted: 'accepted', resolved: 'closed' }
-            return {
-              id: fromById.id,
-              name: fromById.title,
-              description: fromById.description,
-              category: fromById.category as RiskCategory,
-              likelihood: fromById.likelihood,
-              impact: fromById.impact,
-              owner: {
-                name: fromById.owner.name,
-                avatar: fromById.owner.avatar || '',
-                department: fromById.owner.department,
-              },
-              status: statusMap[fromById.status] || ('open' as RiskStatus),
-              mitigationPlan: fromById.mitigationPlan,
-              mitigationChecklist: fromById.mitigationChecklist,
-              mitigationProgress: fromById.mitigationProgress,
-              monitoringFrequency: fromById.monitoringFrequency,
-              lastReviewDate: fromById.lastReviewDate ? new Date(fromById.lastReviewDate) : undefined,
-              nextReviewDate: fromById.nextReviewDate ? new Date(fromById.nextReviewDate) : undefined,
-              reviewSchedule: fromById.reviewSchedule,
-              history: (fromById.history ?? []).map((h, idx) => ({
-                id: idx + 1,
-                timestamp: new Date(h.timestamp),
-                user: h.user,
-                action: h.action as HistoryAction,
-                previousValue: h.previousValue,
-                newValue: h.newValue,
-                notes: h.notes,
-              })),
-              createdAt: new Date(fromById.createdAt),
-              updatedAt: new Date(fromById.updatedAt),
-            } as RiskRegisterItem
-          })()
-        : null)
+    // synthesising from byId when the list doesn't have it. Both paths go
+    // through the shared `toRegisterItem` mapper.
+    const updated = fromList ?? (fromById ? toRegisterItem(fromById) : null)
     if (!updated) return
     const changed =
       updated.status !== selectedRisk.status ||
@@ -397,11 +579,18 @@ export default function ReportsRisksPage() {
     note_added: t('reports.noteAdded' as TranslationKey), checklist_added: t('reports.checklistAdded' as TranslationKey),
     checklist_toggled: t('reports.checklistToggled' as TranslationKey), checklist_edited: t('reports.checklistEdited' as TranslationKey),
     checklist_removed: t('reports.checklistRemoved' as TranslationKey),
+    updated: t('reports.updated' as TranslationKey), department_assigned: t('reports.departmentAssigned' as TranslationKey),
+    deadline_set: t('reports.deadlineSet' as TranslationKey), sent_to_department: t('reports.sentToDepartmentAction' as TranslationKey),
+    plan_submitted: t('reports.planSubmitted' as TranslationKey), plan_accepted: t('reports.planAccepted' as TranslationKey),
+    mitigated: t('reports.mitigated' as TranslationKey),
   }
   const historyActionColors: Record<HistoryAction, string> = {
     created: 'bg-emerald-500', status_changed: 'bg-blue-500', score_updated: 'bg-amber-500', mitigation_updated: 'bg-purple-500',
     reviewed: 'bg-indigo-500', assigned: 'bg-slate-500', note_added: 'bg-teal-500', checklist_added: 'bg-emerald-400',
     checklist_toggled: 'bg-sky-500', checklist_edited: 'bg-orange-400', checklist_removed: 'bg-rose-400',
+    updated: 'bg-purple-400', department_assigned: 'bg-slate-500', deadline_set: 'bg-amber-500',
+    sent_to_department: 'bg-blue-400', plan_submitted: 'bg-violet-500', plan_accepted: 'bg-cyan-500',
+    mitigated: 'bg-emerald-600',
   }
 
   // Monitoring frequency helpers
@@ -540,10 +729,13 @@ export default function ReportsRisksPage() {
           </Card>
           <Card className="p-6">
             <div className="flex items-center gap-4">
-              <div className="p-3 bg-blue-50 rounded-xl"><Icon icon="lucide:check-circle" className="text-2xl text-blue-600" /></div>
+              <div className="p-3 bg-indigo-50 rounded-xl"><Icon icon="lucide:calendar-clock" className="text-2xl text-indigo-600" /></div>
               <div className={isRTL ? 'text-right' : ''}>
-                <p className="text-2xl font-bold text-slate-900">{risks.filter(r => r.status === 'accepted').length}</p>
-                <p className="text-xs text-slate-500 font-bold uppercase">{t('reports.accepted' as TranslationKey)}</p>
+                {/* Replaces the old "Accepted" card. Counts risks whose
+                    mitigation review is overdue or due within the soon-window,
+                    regardless of lifecycle status — the officer's work queue. */}
+                <p className="text-2xl font-bold text-slate-900">{reviewDueCount}</p>
+                <p className="text-xs text-slate-500 font-bold uppercase">{t('reports.reviewDue' as TranslationKey)}</p>
               </div>
             </div>
           </Card>
@@ -726,7 +918,7 @@ export default function ReportsRisksPage() {
               <EditableSelect
                 size="sm"
                 className="min-w-[160px]"
-                value={riskCategoryFilter || null}
+                value={riskCategoryFilter}
                 onChange={(id) => setRiskCategoryFilter((id || '') as RiskCategory | '')}
                 items={[
                   { id: '', label: t('reports.allCategories' as TranslationKey), isDefault: true },
@@ -741,13 +933,12 @@ export default function ReportsRisksPage() {
                 locked
                 size="sm"
                 className="min-w-[140px]"
-                value={riskStatusFilter || null}
+                value={riskStatusFilter}
                 onChange={(id) => setRiskStatusFilter((id || '') as RiskStatus | '')}
                 items={[
                   { id: '', label: t('reports.allStatuses' as TranslationKey) },
                   { id: 'open', label: t('reports.open' as TranslationKey) },
                   { id: 'mitigating', label: t('reports.mitigating' as TranslationKey) },
-                  { id: 'accepted', label: t('reports.accepted' as TranslationKey) },
                   { id: 'closed', label: t('reports.closed' as TranslationKey) },
                 ]}
                 isRTL={isRTL}
@@ -794,6 +985,7 @@ export default function ReportsRisksPage() {
                     const categoryConfig = getRiskCatConfig(risk.category)
                     const riskCatItem = riskCategoryItems.find((c) => c.id === risk.category)
                     const statusConf = riskStatusConfig[risk.status]
+                    const reviewState = getReviewState(risk.nextReviewDate, new Date())
                     return (
                       <tr
                         key={risk.id}
@@ -801,7 +993,8 @@ export default function ReportsRisksPage() {
                         onClick={() => { setSelectedRisk(risk); setIsRiskDrawerOpen(true) }}
                       >
                         <td className="px-6 py-4">
-                          <div><span className="text-xs font-bold text-slate-400">{risk.id}</span><p className="text-sm font-bold text-slate-900">{risk.name}</p><p className="text-xs text-slate-500 line-clamp-1">{risk.description}</p></div>
+                          {/* Server rows carry opaque UUIDs — only legacy short codes (RISK-001) are worth showing. */}
+                          <div>{!UUID_RE.test(risk.id) && <span className="text-xs font-bold text-slate-400">{risk.id}</span>}<p className="text-sm font-bold text-slate-900">{risk.name}</p><p className="text-xs text-slate-500 line-clamp-1">{risk.description}</p></div>
                         </td>
                         <td className="px-6 py-4">
                           <span className={cn('text-xs font-bold px-2.5 py-1 rounded-full flex items-center gap-1 w-fit', categoryConfig.color)}>
@@ -819,7 +1012,22 @@ export default function ReportsRisksPage() {
                             <span className="text-xs text-slate-400">({t(level.labelKey as TranslationKey)})</span>
                           </div>
                         </td>
-                        <td className="px-6 py-4"><span className={cn('text-xs font-bold px-2.5 py-1 rounded-full', statusConf.color)}>{t(riskStatusLabelKeys[risk.status] as TranslationKey)}</span></td>
+                        <td className="px-6 py-4">
+                          <div className="flex flex-col items-start gap-1">
+                            <span className={cn('text-xs font-bold px-2.5 py-1 rounded-full', statusConf.color)}>{t(riskStatusLabelKeys[risk.status] as TranslationKey)}</span>
+                            {/* Review-cadence sub-status — independent of the lifecycle pill above. */}
+                            {reviewState === 'overdue' && (
+                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-100 text-rose-700 flex items-center gap-1">
+                                <Icon icon="lucide:alarm-clock" className="text-[10px]" />{t('reports.reviewOverdue' as TranslationKey)}
+                              </span>
+                            )}
+                            {reviewState === 'due-soon' && (
+                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 flex items-center gap-1">
+                                <Icon icon="lucide:calendar-clock" className="text-[10px]" />{t('reports.reviewDueSoon' as TranslationKey)}
+                              </span>
+                            )}
+                          </div>
+                        </td>
                         <td className="px-6 py-4">
                           <div className="flex items-center gap-2">
                             <img src={dicebearAvatar(risk.owner.avatar || risk.owner.name)} className="w-7 h-7 rounded-full border border-slate-200" alt={risk.owner.name} />
@@ -860,8 +1068,28 @@ export default function ReportsRisksPage() {
           const level = getRiskLevel(score)
           const categoryConfig = getRiskCatConfig(selectedRisk.category)
           const selectedCatItem = riskCategoryItems.find((c) => c.id === selectedRisk.category)
+          const reviewState = getReviewState(selectedRisk.nextReviewDate, new Date())
           return (
             <div className="space-y-6">
+              {/* Mitigation-review prompt — fires on cadence regardless of the
+                  open/mitigating/closed status. This is the officer's cue to
+                  re-evaluate the checklist, plan, and affected departments. */}
+              {(reviewState === 'overdue' || reviewState === 'due-soon') && (
+                <div className={cn(
+                  'flex items-start gap-3 p-3 rounded-xl border',
+                  reviewState === 'overdue' ? 'bg-rose-50 border-rose-200' : 'bg-amber-50 border-amber-200',
+                )}>
+                  <Icon icon="lucide:alarm-clock" className={cn('text-lg mt-0.5 shrink-0', reviewState === 'overdue' ? 'text-rose-600' : 'text-amber-600')} />
+                  <div className={isRTL ? 'text-right' : ''}>
+                    <p className={cn('text-xs font-bold', reviewState === 'overdue' ? 'text-rose-700' : 'text-amber-700')}>
+                      {reviewState === 'overdue' ? t('reports.mitigationReviewOverdue' as TranslationKey) : t('reports.mitigationReviewDueSoon' as TranslationKey)}
+                    </p>
+                    {selectedRisk.nextReviewDate && (
+                      <p className="text-[11px] text-slate-500 mt-0.5">{t('reports.nextReview' as TranslationKey)}: {formatDate(selectedRisk.nextReviewDate)}</p>
+                    )}
+                  </div>
+                </div>
+              )}
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <div className={cn('w-12 h-12 rounded-xl flex items-center justify-center text-white font-bold text-lg', level.bgColor)}>{score}</div>
@@ -876,7 +1104,6 @@ export default function ReportsRisksPage() {
                   items={[
                     { id: 'open', label: t('reports.open' as TranslationKey) },
                     { id: 'mitigating', label: t('reports.mitigating' as TranslationKey) },
-                    { id: 'accepted', label: t('reports.accepted' as TranslationKey) },
                     { id: 'closed', label: t('reports.closed' as TranslationKey) },
                   ]}
                   isRTL={isRTL}
@@ -903,18 +1130,25 @@ export default function ReportsRisksPage() {
                 if (!storeRisk) return null
                 const wfStatus = storeRisk.mitigationWorkflowStatus ?? 'pending-assignment'
                 const wfMeta: Record<string, { bg: string; text: string; label: string }> = {
-                  'not-started':        { bg: 'bg-slate-100', text: 'text-slate-600', label: 'Not started' },
+                  // 'not-started' is the SERVER default (migration 009); the client
+                  // alias pre-hydration is 'pending-assignment'. Same meaning, same pill.
+                  'not-started':        { bg: 'bg-slate-100', text: 'text-slate-600', label: 'Pending assignment' },
                   'pending-assignment': { bg: 'bg-slate-100', text: 'text-slate-600', label: 'Pending assignment' },
                   'sent-to-department': { bg: 'bg-blue-100', text: 'text-blue-700', label: 'Sent to department' },
                   'plan-proposed':      { bg: 'bg-violet-100', text: 'text-violet-700', label: 'Plan proposed' },
                   'plan-accepted':      { bg: 'bg-cyan-100', text: 'text-cyan-700', label: 'Plan accepted' },
                   'in-progress':        { bg: 'bg-amber-100', text: 'text-amber-700', label: 'In progress' },
                   'mitigated':          { bg: 'bg-emerald-100', text: 'text-emerald-700', label: 'Mitigated' },
+                  'resolved':           { bg: 'bg-emerald-100', text: 'text-emerald-700', label: 'Mitigated' },
                   'overdue':            { bg: 'bg-rose-100', text: 'text-rose-700', label: 'Overdue' },
                 }
                 // Defensive fallback: never crash on an unknown workflow status.
                 const meta = wfMeta[wfStatus] ?? { bg: 'bg-slate-100', text: 'text-slate-600', label: wfStatus }
-                const canSend = !!storeRisk.intendedDepartmentId && !!storeRisk.mitigationDeadline && wfStatus === 'pending-assignment'
+                // Hydrated rows arrive as 'not-started' — the server never emits
+                // 'pending-assignment', so gating on it alone made the send button
+                // unreachable after any refresh.
+                const isAssignable = wfStatus === 'pending-assignment' || wfStatus === 'not-started'
+                const canSend = !!storeRisk.intendedDepartmentId && !!storeRisk.mitigationDeadline && isAssignable
                 return (
                   <div className="p-4 bg-white rounded-xl border border-slate-200">
                     <div className="flex items-center justify-between mb-3">
@@ -948,11 +1182,11 @@ export default function ReportsRisksPage() {
                           size="md"
                         />
                       </div>
-                      {wfStatus === 'pending-assignment' && (
+                      {isAssignable && (
                         <button
                           type="button"
                           disabled={!canSend}
-                          onClick={() => sendToDepartment(storeRisk.id, actingUser)}
+                          onClick={() => sendRiskToDepartmentByEmail(storeRisk)}
                           className={cn(
                             'w-full mt-1 py-2 text-xs font-bold rounded-lg transition-all',
                             canSend
@@ -1003,11 +1237,11 @@ export default function ReportsRisksPage() {
                                   <label className="text-[10px] font-bold text-slate-500 uppercase mb-1 block">
                                     {t('risks.checklistItems' as TranslationKey)}
                                   </label>
-                                  <div className="space-y-2">
+                                  <div className="space-y-3">
                                     {proposePlanItems.map((item, idx) => (
                                       <div
                                         key={idx}
-                                        className="flex items-center gap-2 p-2 bg-white rounded-md border border-slate-200"
+                                        className="flex items-center gap-2 p-2.5 bg-white rounded-lg border border-slate-200"
                                       >
                                         <input
                                           type="text"
@@ -1018,7 +1252,7 @@ export default function ReportsRisksPage() {
                                             next[idx] = { ...next[idx], text: e.target.value }
                                             setProposePlanItems(next)
                                           }}
-                                          className="flex-1 px-2 py-1 border border-slate-200 rounded text-xs focus:outline-none focus:ring-2 focus:ring-violet-500"
+                                          className="flex-1 px-2.5 py-1.5 border border-slate-200 rounded-md text-xs focus:outline-none focus:ring-2 focus:ring-violet-500"
                                         />
                                         <InlineDeadlinePicker
                                           value={item.deadline}
@@ -1062,19 +1296,32 @@ export default function ReportsRisksPage() {
                                     {t('risks.addChecklistItem' as TranslationKey)}
                                   </button>
                                 </div>
+                                {/* Department's plan document/outline attachment(s). */}
+                                <div>
+                                  <label className="text-[10px] font-bold text-slate-500 uppercase mb-1 block">
+                                    {t('risks.attachments' as TranslationKey)}
+                                  </label>
+                                  <FileUpload
+                                    multiple
+                                    accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg"
+                                    files={proposePlanFiles}
+                                    onChange={setProposePlanFiles}
+                                    helperText={t('risks.attachmentsHelp' as TranslationKey)}
+                                  />
+                                </div>
                                 <div className="flex gap-2 pt-1">
                                   <button
                                     type="button"
-                                    disabled={!isValid}
-                                    onClick={() => submitProposePlan(storeRisk.id)}
+                                    disabled={!isValid || proposePlanBusy}
+                                    onClick={() => void submitProposePlan(storeRisk.id)}
                                     className={cn(
                                       'flex-1 py-2 text-xs font-bold rounded-lg transition-all',
-                                      isValid
+                                      isValid && !proposePlanBusy
                                         ? 'bg-violet-600 text-white hover:bg-violet-700 cursor-pointer'
                                         : 'bg-slate-100 text-slate-400 cursor-not-allowed',
                                     )}
                                   >
-                                    {t('risks.submit' as TranslationKey)}
+                                    {proposePlanBusy ? <Icon icon="lucide:loader-2" className="inline animate-spin" /> : t('risks.submit' as TranslationKey)}
                                   </button>
                                   <button
                                     type="button"
@@ -1094,7 +1341,7 @@ export default function ReportsRisksPage() {
                           <p className="text-[10px] font-bold text-slate-500 uppercase mb-1">Department-proposed plan</p>
                           <p className="text-xs text-slate-700 whitespace-pre-line">{storeRisk.departmentProposedPlan.plan}</p>
                           <p className="text-[10px] text-slate-400 mt-1">
-                            Submitted by {storeRisk.departmentProposedPlan.submittedBy} on{' '}
+                            Submitted by {resolveUserName(storeRisk.departmentProposedPlan.submittedBy)} on{' '}
                             {new Date(storeRisk.departmentProposedPlan.submittedAt).toLocaleDateString()}
                           </p>
                           {storeRisk.departmentProposedPlan.checklist.length > 0 && (
@@ -1109,6 +1356,39 @@ export default function ReportsRisksPage() {
                                 </li>
                               ))}
                             </ul>
+                          )}
+                          {(storeRisk.planDocuments?.length ?? 0) > 0 && (
+                            <div className="mt-3 space-y-1.5">
+                              <p className="text-[10px] font-bold text-slate-500 uppercase">{t('risks.attachments' as TranslationKey)}</p>
+                              {storeRisk.planDocuments!.map((doc) => (
+                                <div key={doc.id} className="flex items-center gap-2 p-2 bg-white rounded-md border border-slate-200">
+                                  <Icon icon={doc.type === 'pdf' ? 'lucide:file-text' : doc.type === 'image' ? 'lucide:image' : 'lucide:file'} className="text-slate-400 shrink-0" />
+                                  <button
+                                    type="button"
+                                    onClick={() => void downloadPlanDocument(doc.name, doc.storagePath)}
+                                    className="flex-1 min-w-0 truncate text-[11px] font-medium text-slate-700 hover:text-emerald-600 cursor-pointer text-start"
+                                  >
+                                    {doc.name}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => void downloadPlanDocument(doc.name, doc.storagePath)}
+                                    className="p-1 text-slate-400 hover:text-emerald-600 cursor-pointer shrink-0"
+                                    aria-label="Download"
+                                  >
+                                    <Icon icon="lucide:download" className="text-sm" />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => void removePlanDocument(storeRisk.id, doc.id)}
+                                    className="p-1 text-slate-400 hover:text-rose-600 cursor-pointer shrink-0"
+                                    aria-label="Remove"
+                                  >
+                                    <Icon icon="lucide:x" className="text-sm" />
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
                           )}
                           {wfStatus === 'plan-proposed' && (
                             <button
@@ -1153,7 +1433,7 @@ export default function ReportsRisksPage() {
                   <div className="flex justify-between items-center mb-1"><span className="text-xs font-bold text-slate-500">{t('reports.progress' as TranslationKey)}</span><span className="text-xs font-bold text-emerald-600">{selectedRisk.mitigationProgress}%</span></div>
                   <div className="h-2 bg-slate-200 rounded-full overflow-hidden"><div className="h-full bg-emerald-500 rounded-full transition-all" style={{ width: `${selectedRisk.mitigationProgress}%` }} /></div>
                 </div>
-                <ChecklistSection items={selectedRisk.mitigationChecklist || []} onAdd={(text) => addMitigationItem(selectedRisk.id, text)} onEdit={(itemId, newText) => editMitigationItem(selectedRisk.id, itemId, newText)} onRemove={(itemId) => removeMitigationItem(selectedRisk.id, itemId)} onToggle={(itemId) => toggleMitigationItem(selectedRisk.id, itemId)} isRTL={isRTL} titleKey="reports.mitigationChecklist" completionKey="reports.mitigationComplete" addPlaceholderKey="reports.addMitigationItem" removeTooltipKey="reports.removeMitigationItem" />
+                <ChecklistSection items={selectedRisk.mitigationChecklist || []} onAdd={(text) => addMitigationItem(selectedRisk.id, text)} onEdit={(itemId, newText) => editMitigationItem(selectedRisk.id, itemId, newText)} onRemove={(itemId) => removeMitigationItem(selectedRisk.id, itemId)} onToggle={(itemId) => toggleMitigationItem(selectedRisk.id, itemId)} onSetDeadline={(itemId, deadline) => setMitigationItemDeadline(selectedRisk.id, itemId, deadline)} parentDeadline={storeRisks.find((r) => r.id === selectedRisk.id)?.mitigationDeadline} isRTL={isRTL} titleKey="reports.mitigationChecklist" completionKey="reports.mitigationComplete" addPlaceholderKey="reports.addMitigationItem" removeTooltipKey="reports.removeMitigationItem" />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="p-4 bg-slate-50 rounded-xl"><p className="text-xs font-bold text-slate-400 uppercase mb-1">{t('reports.monitoringFrequency' as TranslationKey)}</p><span className="text-sm font-bold text-slate-700 bg-slate-100 px-2 py-1 rounded">{monitoringFrequencyLabels[selectedRisk.monitoringFrequency]}</span></div>
@@ -1167,29 +1447,58 @@ export default function ReportsRisksPage() {
               </div>
               <div className={isRTL ? 'text-right' : ''}>
                 <p className="text-xs font-bold text-slate-400 uppercase mb-3">{t('reports.auditTrail' as TranslationKey)}</p>
-                <div className="relative">
-                  <div className={`absolute ${isRTL ? 'right-[7px]' : 'left-[7px]'} top-3 bottom-3 w-0.5 bg-slate-200`} />
-                  <div className="space-y-4">
-                    {[...selectedRisk.history].reverse().map((entry) => (
-                      <div key={entry.id} className="relative flex gap-3">
-                        <div className={cn('w-4 h-4 rounded-full shrink-0 z-10 border-2 border-white', historyActionColors[entry.action])} />
-                        <div className="flex-1 pb-2">
-                          <div className="flex items-center gap-2">
-                            <span className="text-[10px] text-slate-400">{formatDate(entry.timestamp)}</span>
-                            <span className="text-[10px] text-slate-400">-</span>
-                            <span className="text-[10px] font-bold text-slate-600">{entry.user}</span>
-                          </div>
-                          <p className="text-xs text-slate-900 mt-1">
-                            <span className="font-bold">{historyActionLabels[entry.action]}</span>
-                            {entry.previousValue && entry.newValue && <span className="text-slate-500">: {entry.previousValue} → {entry.newValue}</span>}
-                            {!entry.previousValue && entry.newValue && <span className="text-slate-500">: {entry.newValue}</span>}
-                          </p>
-                          {entry.notes && <p className="text-[10px] text-slate-500 mt-1 italic">"{entry.notes}"</p>}
+                {(() => {
+                  // Newest-first regardless of source order: the detail GET
+                  // hydrates history newest-first while optimistic entries
+                  // append newest-last — sorting by timestamp desc here makes
+                  // both consistent. Preview the 5 most recent; expand for more.
+                  const ordered = [...selectedRisk.history].sort(
+                    (a, b) => b.timestamp.getTime() - a.timestamp.getTime(),
+                  )
+                  const showAllHistory = historyExpandedId === selectedRisk.id
+                  const visible = showAllHistory ? ordered : ordered.slice(0, HISTORY_PREVIEW_COUNT)
+                  const hiddenCount = ordered.length - visible.length
+                  return (
+                    <>
+                      <div className="relative">
+                        <div className={`absolute ${isRTL ? 'right-[7px]' : 'left-[7px]'} top-3 bottom-3 w-0.5 bg-slate-200`} />
+                        <div className="space-y-4">
+                          {visible.map((entry) => (
+                            <div key={entry.id} className="relative flex gap-3">
+                              <div className={cn('w-4 h-4 rounded-full shrink-0 z-10 border-2 border-white', historyActionColors[entry.action] ?? 'bg-slate-400')} />
+                              <div className="flex-1 pb-2">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-[10px] text-slate-400">{formatDate(entry.timestamp)}</span>
+                                  <span className="text-[10px] text-slate-400">-</span>
+                                  <span className="text-[10px] font-bold text-slate-600">{resolveUserName(entry.user)}</span>
+                                </div>
+                                <p className="text-xs text-slate-900 mt-1">
+                                  {/* Unknown future server actions humanize ("plan_submitted" → "plan submitted") instead of rendering blank. */}
+                                  <span className="font-bold">{historyActionLabels[entry.action] ?? entry.action.replace(/_/g, ' ')}</span>
+                                  {entry.previousValue && entry.newValue && <span className="text-slate-500">: {formatHistoryValue(entry.action, entry.previousValue)} → {formatHistoryValue(entry.action, entry.newValue)}</span>}
+                                  {!entry.previousValue && entry.newValue && <span className="text-slate-500">: {formatHistoryValue(entry.action, entry.newValue)}</span>}
+                                </p>
+                                {entry.notes && <p className="text-[10px] text-slate-500 mt-1 italic">"{entry.notes}"</p>}
+                              </div>
+                            </div>
+                          ))}
                         </div>
                       </div>
-                    ))}
-                  </div>
-                </div>
+                      {ordered.length > HISTORY_PREVIEW_COUNT && (
+                        <button
+                          type="button"
+                          onClick={() => setHistoryExpandedId((cur) => (cur === selectedRisk.id ? null : selectedRisk.id))}
+                          className="mt-3 text-[11px] font-bold text-emerald-600 hover:text-emerald-700 cursor-pointer flex items-center gap-1"
+                        >
+                          <Icon icon={showAllHistory ? 'lucide:chevron-up' : 'lucide:chevron-down'} className="text-xs" />
+                          {showAllHistory
+                            ? t('reports.showLess' as TranslationKey)
+                            : `${t('reports.showAll' as TranslationKey)} (${hiddenCount})`}
+                        </button>
+                      )}
+                    </>
+                  )
+                })()}
               </div>
               <div className="pt-4 border-t border-slate-100 flex gap-3">
                 <button className="flex-1 bg-slate-100 text-slate-700 py-3 rounded-xl font-bold text-xs hover:bg-slate-200 transition-all cursor-pointer" onClick={() => { const sanitizedName = selectedRisk.name.replace(/[^a-zA-Z0-9]/g, '-').toLowerCase(); exportRisksLocalized([selectedRisk], `risk-${sanitizedName}-${new Date().toISOString().slice(0, 10)}`, t, isRTL) }}>{t('reports.exportRisk' as TranslationKey)}</button>
@@ -1217,10 +1526,10 @@ export default function ReportsRisksPage() {
       {/* Add/Edit Risk Modal */}
       <Modal isOpen={showAddRiskModal} onClose={() => { resetAddRiskForm(); setShowAddRiskModal(false) }} title={editingRiskId ? t('reports.editRisk' as TranslationKey) : t('reports.addNewRisk' as TranslationKey)} subtitle={editingRiskId ? undefined : t('reports.createNewRiskEntry' as TranslationKey)} size="lg">
         <div className="space-y-4">
-          <div><label className="text-xs font-bold text-slate-700 uppercase mb-2 block">{t('reports.riskName' as TranslationKey)} *</label><input type="text" value={newRiskName} onChange={(e) => setNewRiskName(e.target.value)} placeholder={t('reports.enterRiskName' as TranslationKey)} className="w-full px-4 py-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500" /></div>
+          <div><FieldLabel required>{t('reports.riskName' as TranslationKey)}</FieldLabel><input type="text" aria-required="true" value={newRiskName} onChange={(e) => setNewRiskName(e.target.value)} placeholder={t('reports.enterRiskName' as TranslationKey)} className="w-full px-4 py-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500" /></div>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="text-xs font-bold text-slate-700 uppercase mb-2 block">{t('reports.category' as TranslationKey)} *</label>
+              <FieldLabel required>{t('reports.category' as TranslationKey)}</FieldLabel>
               <EditableSelect
                 value={newRiskCategory || null}
                 onChange={(id) => setNewRiskCategory(id as RiskCategory | '')}
@@ -1233,15 +1542,17 @@ export default function ReportsRisksPage() {
               />
             </div>
             <div>
-              <label className="text-xs font-bold text-slate-700 uppercase mb-2 block">{t('reports.owner' as TranslationKey)} *</label>
+              <FieldLabel required>{t('reports.owner' as TranslationKey)}</FieldLabel>
               <EditableSelect
                 locked
                 value={newRiskOwnerId || null}
                 onChange={(id) => setNewRiskOwnerId(id)}
-                items={teamMembers.filter(m => m.status === 'active').map((member) => ({
-                  id: member.id,
-                  label: `${member.name} - ${member.department}`,
-                }))}
+                items={teamMembers.filter(m => m.status === 'active').map((member) => {
+                  // member.department holds the department UUID (team-store maps
+                  // department_id straight through) — resolve it to a name.
+                  const dept = resolveDeptName(member.department)
+                  return { id: member.id, label: dept ? `${member.name} - ${dept}` : member.name }
+                })}
                 placeholder={t('reports.selectOwner' as TranslationKey)}
                 isRTL={isRTL}
               />
@@ -1249,7 +1560,7 @@ export default function ReportsRisksPage() {
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="text-xs font-bold text-slate-700 uppercase mb-2 block">{t('reports.likelihood' as TranslationKey)} *</label>
+              <FieldLabel required>{t('reports.likelihood' as TranslationKey)}</FieldLabel>
               <EditableSelect
                 locked
                 value={String(newRiskLikelihood)}
@@ -1262,7 +1573,7 @@ export default function ReportsRisksPage() {
               />
             </div>
             <div>
-              <label className="text-xs font-bold text-slate-700 uppercase mb-2 block">{t('reports.impact' as TranslationKey)} *</label>
+              <FieldLabel required>{t('reports.impact' as TranslationKey)}</FieldLabel>
               <EditableSelect
                 locked
                 value={String(newRiskImpact)}
@@ -1275,14 +1586,14 @@ export default function ReportsRisksPage() {
               />
             </div>
           </div>
-          <div><label className="text-xs font-bold text-slate-700 uppercase mb-2 block">{t('reports.description' as TranslationKey)} *</label><textarea rows={3} value={newRiskDescription} onChange={(e) => setNewRiskDescription(e.target.value)} placeholder={t('reports.enterRiskDescription' as TranslationKey)} className="w-full px-4 py-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500" /></div>
-          <div><label className="text-xs font-bold text-slate-700 uppercase mb-2 block">{t('reports.mitigationPlan' as TranslationKey)}</label><textarea rows={2} value={newRiskMitigation} onChange={(e) => setNewRiskMitigation(e.target.value)} placeholder={t('reports.enterMitigationPlan' as TranslationKey)} className="w-full px-4 py-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500" /></div>
+          <div><FieldLabel required>{t('reports.description' as TranslationKey)}</FieldLabel><textarea rows={3} aria-required="true" value={newRiskDescription} onChange={(e) => setNewRiskDescription(e.target.value)} placeholder={t('reports.enterRiskDescription' as TranslationKey)} className="w-full px-4 py-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500" /></div>
+          <div><FieldLabel optional>{t('reports.mitigationPlan' as TranslationKey)}</FieldLabel><textarea rows={2} value={newRiskMitigation} onChange={(e) => setNewRiskMitigation(e.target.value)} placeholder={t('reports.enterMitigationPlan' as TranslationKey)} className="w-full px-4 py-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500" /></div>
           <ReviewSchedulePicker value={newRiskSchedule} onChange={setNewRiskSchedule} t={t} isRTL={isRTL} />
           <FrameworkTagSelector value={frameworkIds} onChange={setFrameworkIds} label="Frameworks" />
           <div className="flex gap-3 mt-6">
             <LoadingButton
               className="flex-1"
-              loading={isMutating}
+              loading={isSavingRisk}
               disabled={!newRiskName || !newRiskCategory || !newRiskOwnerId || !newRiskDescription}
               onClick={handleCreateRisk}
             >
@@ -1312,6 +1623,9 @@ export default function ReportsRisksPage() {
             : undefined
         }
       />
+
+      {/* Error/success toasts (create/update failures surface here). */}
+      <ToastHost />
     </div>
   )
 }

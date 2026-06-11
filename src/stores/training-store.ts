@@ -217,6 +217,16 @@ function recomputeOverallProgress(courses: CourseProgress[]): number {
   return Math.round((completed / courses.length) * 100)
 }
 
+// In-flight de-dup for the two server-backed leaf fetches. The dashboard mounts
+// several widgets that each trigger a training fetch in the same tick (plus the
+// page calls fetchTrainings() — which fans out — AND fetchEmployees/fetchCourses
+// directly), so one load fired /training/employees and /training/courses 3x
+// each. Coalescing concurrent callers onto a single promise collapses that to
+// one request per resource. Deliberately NOT a TTL guard: post-mutation
+// background refreshes (e.g. after addEmployee) must still hit the wire.
+let coursesInFlight: Promise<void> | null = null
+let employeesInFlight: Promise<void> | null = null
+
 export const useTrainingStore = create<TrainingState>()((set, get) => ({
   trainings: [],
   selectedTraining: null,
@@ -326,51 +336,65 @@ export const useTrainingStore = create<TrainingState>()((set, get) => ({
   // ---------- Team-training page slice (server-backed) ---------------------
 
   fetchCourses: async () => {
-    set({ isLoading: true, error: null })
-    try {
-      // _ts cache-buster forces the browser to revalidate the GET against the
-      // origin. The Route Handler sets `s-maxage=60, stale-while-revalidate=300`,
-      // which otherwise lets the browser serve a stale list right after a POST
-      // (the server-side `revalidateTag` only invalidates the Next data cache,
-      // not the HTTP response cache). See `lib/api/cache.ts`.
-      const result = await api.get<{
-        items: TrainingCourseApiRow[]
-        page: number
-        pageSize: number
-        total: number
-        totalPages: number
-      }>('/training/courses', { pageSize: 100, _ts: Date.now() })
-      const previousById = new Map(get().courses.map((c) => [c.id, c]))
-      set({
-        courses: result.items.map((row) => mapCourseRow(row, previousById.get(row.id))),
-        isLoading: false,
-        lastFetched: Date.now(),
-      })
-    } catch (e) {
-      set({ error: errorMessage(e, 'Failed to fetch training courses'), isLoading: false })
-    }
+    // Coalesce concurrent callers onto one request (see module note above).
+    if (coursesInFlight) return coursesInFlight
+    coursesInFlight = (async () => {
+      set({ isLoading: true, error: null })
+      try {
+        // _ts cache-buster forces the browser to revalidate the GET against the
+        // origin. The Route Handler sets `s-maxage=60, stale-while-revalidate=300`,
+        // which otherwise lets the browser serve a stale list right after a POST
+        // (the server-side `revalidateTag` only invalidates the Next data cache,
+        // not the HTTP response cache). See `lib/api/cache.ts`.
+        const result = await api.get<{
+          items: TrainingCourseApiRow[]
+          page: number
+          pageSize: number
+          total: number
+          totalPages: number
+        }>('/training/courses', { pageSize: 100, _ts: Date.now() })
+        const previousById = new Map(get().courses.map((c) => [c.id, c]))
+        set({
+          courses: result.items.map((row) => mapCourseRow(row, previousById.get(row.id))),
+          isLoading: false,
+          lastFetched: Date.now(),
+        })
+      } catch (e) {
+        set({ error: errorMessage(e, 'Failed to fetch training courses'), isLoading: false })
+      } finally {
+        coursesInFlight = null
+      }
+    })()
+    return coursesInFlight
   },
 
   fetchEmployees: async () => {
-    set({ isLoading: true, error: null })
-    try {
-      // See `fetchCourses` for the rationale on the `_ts` cache-buster.
-      const result = await api.get<{
-        items: TrainingEmployeeApiRow[]
-        page: number
-        pageSize: number
-        total: number
-        totalPages: number
-      }>('/training/employees', { pageSize: 100, _ts: Date.now() })
-      const previousById = new Map(get().employees.map((e) => [e.id, e]))
-      set({
-        employees: result.items.map((row) => mapEmployeeRow(row, previousById.get(row.id))),
-        isLoading: false,
-        lastFetched: Date.now(),
-      })
-    } catch (e) {
-      set({ error: errorMessage(e, 'Failed to fetch training employees'), isLoading: false })
-    }
+    // Coalesce concurrent callers onto one request (see module note above).
+    if (employeesInFlight) return employeesInFlight
+    employeesInFlight = (async () => {
+      set({ isLoading: true, error: null })
+      try {
+        // See `fetchCourses` for the rationale on the `_ts` cache-buster.
+        const result = await api.get<{
+          items: TrainingEmployeeApiRow[]
+          page: number
+          pageSize: number
+          total: number
+          totalPages: number
+        }>('/training/employees', { pageSize: 100, _ts: Date.now() })
+        const previousById = new Map(get().employees.map((e) => [e.id, e]))
+        set({
+          employees: result.items.map((row) => mapEmployeeRow(row, previousById.get(row.id))),
+          isLoading: false,
+          lastFetched: Date.now(),
+        })
+      } catch (e) {
+        set({ error: errorMessage(e, 'Failed to fetch training employees'), isLoading: false })
+      } finally {
+        employeesInFlight = null
+      }
+    })()
+    return employeesInFlight
   },
 
   fetchCourseById: async (id) => {

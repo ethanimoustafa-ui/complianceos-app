@@ -18,7 +18,7 @@ export const FRAMEWORK_CONFIG_COLUMNS =
 export const FRAMEWORK_PIN_COLUMNS = 'framework_id, position'
 
 export const DEPARTMENT_COLUMNS =
-  'id, key, name_en, name_ar, is_default, created_at, updated_at'
+  'id, key, name_en, name_ar, email, is_default, created_at, updated_at'
 
 export const BUSINESS_UNIT_COLUMNS =
   'id, key, name_en, name_ar, is_default, created_at, updated_at'
