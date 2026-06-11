@@ -21,6 +21,13 @@ function extractDate(dateStr: string | undefined | null): string | null {
   return d
 }
 
+// Terminal statuses that mean "this deadline's work is complete" — drives the
+// calendar cross-out + completed/due filter. Policies are intentionally never
+// "done" (their review recurs); training skips completed rows entirely.
+const DONE_STATUSES = new Set(['completed', 'closed', 'resolved', 'response-received', 'mitigated'])
+const isDone = (status: string | undefined | null): boolean =>
+  DONE_STATUSES.has((status ?? '').toLowerCase())
+
 export function useCalendarEvents() {
   const audits = useAuditStore((s) => s.audits)
   const observations = useObservationStore((s) => s.observations)
@@ -97,6 +104,7 @@ export function useCalendarEvents() {
         title: a.title,
         date,
         status: a.status,
+        done: isDone(a.status),
         priority: a.status === 'overdue' ? 'critical' : undefined,
         route: `/reports/${a.id}`,
         colorKey: 'audit',
@@ -113,6 +121,7 @@ export function useCalendarEvents() {
         title: o.title,
         date,
         status: o.status,
+        done: isDone(o.status),
         priority: 'high',
         route: `/correspondence/observations?id=${o.id}`,
         colorKey: 'observation',
@@ -131,6 +140,7 @@ export function useCalendarEvents() {
         subtitle: 'Remediation plan due',
         date,
         status: o.status,
+        done: isDone(o.status),
         priority: 'high',
         route: `/correspondence/observations?id=${o.id}`,
         colorKey: 'observation',
@@ -147,6 +157,9 @@ export function useCalendarEvents() {
         title: p.name,
         date,
         status: p.status,
+        // A policy review recurs — the review date is never "done" (completing
+        // a review rolls the date forward), so it stays an active reminder.
+        done: false,
         route: `/correspondence/regulatory-updates/policies?policyId=${p.id}`,
         colorKey: 'policy',
       })
@@ -163,6 +176,7 @@ export function useCalendarEvents() {
         subtitle: l.reference,
         date,
         status: l.status,
+        done: l.status === 'response-received',
         priority: l.status === 'overdue' ? 'critical' : 'high',
         route: `/correspondence/letters?id=${l.id}`,
         colorKey: 'sama-letter',
@@ -180,6 +194,7 @@ export function useCalendarEvents() {
           subtitle: c.reference,
           date,
           status: c.status,
+          done: c.status === 'completed',
           route: `/correspondence/regulatory-updates/rules?id=${c.id}`,
           colorKey: 'circular',
         })
@@ -194,6 +209,7 @@ export function useCalendarEvents() {
           subtitle: c.reference,
           date: capDate,
           status: c.capStatus || 'pending',
+          done: (c.capStatus || '') === 'completed',
           route: `/correspondence/regulatory-updates/rules?id=${c.id}`,
           colorKey: 'circular',
         })
@@ -214,6 +230,7 @@ export function useCalendarEvents() {
           subtitle: emp.name,
           date,
           status: course.status,
+          done: false,
           priority: course.status === 'overdue' ? 'critical' : 'medium',
           route: `/team/training?employeeId=${emp.id}`,
           colorKey: 'training',
@@ -233,6 +250,7 @@ export function useCalendarEvents() {
         subtitle: c.reference,
         date,
         status: c.status,
+        done: isDone(c.status),
         assignee: c.assignee,
         route: `/correspondence/feed?id=${c.id}`,
         colorKey: 'correspondence',
@@ -250,6 +268,7 @@ export function useCalendarEvents() {
         subtitle: a.ref,
         date,
         status: a.status,
+        done: isDone(a.status),
         priority: a.priority === 'high' ? 'high' : a.priority === 'medium' ? 'medium' : 'low',
         assignee: a.assignedTo,
         route: `/correspondence/advisory?id=${a.id}`,
@@ -268,6 +287,7 @@ export function useCalendarEvents() {
         subtitle: 'Mitigation review',
         date,
         status: r.status,
+        done: r.status === 'resolved',
         route: `/reports/risks?id=${r.id}`,
         colorKey: 'risk',
       })
@@ -285,6 +305,7 @@ export function useCalendarEvents() {
         subtitle: 'Mitigation deadline',
         date,
         status: r.status,
+        done: r.status === 'resolved',
         priority: 'high',
         route: `/reports/risks?id=${r.id}`,
         colorKey: 'risk',
@@ -310,7 +331,8 @@ export function useCalendarEvents() {
         title: e.title,
         subtitle: e.description,
         date,
-        status: e.type,
+        status: e.completed ? 'completed' : e.type,
+        done: Boolean(e.completed),
         route: '',
         colorKey: 'user-event',
       })

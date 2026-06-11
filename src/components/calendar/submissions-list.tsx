@@ -7,7 +7,7 @@ import { useTranslation } from '@/i18n'
 import type { TranslationKey } from '@/i18n'
 import type { CalendarSourceType, UnifiedCalendarItem } from '@/types'
 import type { CalendarType } from './calendar-types'
-import { getDueStatus, getHijriMonthsFull, toHijri, SOURCE_COLORS, SOURCE_LABEL_KEYS, PRIORITY_COLORS } from './calendar-utils'
+import { getDueStatus, getHijriMonthsFull, toHijri, SOURCE_COLORS, SOURCE_LABEL_KEYS, PRIORITY_COLORS, isItemDone, KIND_LABEL_KEYS } from './calendar-utils'
 
 interface SubmissionsListProps {
   items: UnifiedCalendarItem[]
@@ -38,7 +38,7 @@ export function SubmissionsList({
   // Filter items
   const filteredItems = items.filter(item => {
     if (!selectedSourceTypes.has(item.sourceType)) return false
-    if (!showCompleted && (item.status === 'completed' || item.status === 'closed')) return false
+    if (!showCompleted && isItemDone(item)) return false
 
     if (filterDate) {
       return item.date === filterDate
@@ -127,7 +127,8 @@ export function SubmissionsList({
                 const dueStatus = getDueStatus(item.date, t)
                 const priorityColor = item.priority ? PRIORITY_COLORS[item.priority] : ''
                 const labelKey = SOURCE_LABEL_KEYS[item.sourceType] as TranslationKey
-                const isCompleted = item.status === 'completed' || item.status === 'closed'
+                const isCompleted = isItemDone(item)
+                const kindLabel = item.kind ? t(KIND_LABEL_KEYS[item.kind] as TranslationKey) : null
 
                 return (
                   <div
@@ -149,8 +150,15 @@ export function SubmissionsList({
 
                     {/* Info */}
                     <div className="flex-1 min-w-0">
-                      <h4 className={cn('text-sm font-bold text-slate-900 truncate mb-0.5', isCompleted && 'line-through')}>{item.title}</h4>
-                      {item.subtitle && <p className="text-xs text-slate-500 truncate">{item.subtitle}</p>}
+                      {kindLabel && (
+                        <p className="text-[10px] font-bold text-slate-400 flex items-center gap-1 mb-0.5">
+                          <Icon icon="lucide:corner-down-right" className="text-[11px]" />
+                          <span className={cn('uppercase tracking-wider', colors.text)}>{kindLabel}</span>
+                          {item.parentTitle && <span className="normal-case font-medium truncate">· {t('calendar.fromParent' as TranslationKey, { parent: item.parentTitle })}</span>}
+                        </p>
+                      )}
+                      <h4 className={cn('text-sm font-bold text-slate-900 truncate mb-0.5', isCompleted && 'line-through text-slate-400')}>{item.title}</h4>
+                      {!kindLabel && item.subtitle && <p className="text-xs text-slate-500 truncate">{item.subtitle}</p>}
                     </div>
 
                     {/* Right side */}

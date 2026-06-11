@@ -170,6 +170,20 @@ export const ALL_SOURCE_TYPES: CalendarSourceType[] = [
   'training', 'correspondence', 'advisory', 'risk', 'user-event',
 ]
 
+// Single source of truth for "is this calendar item complete?" — the `done`
+// flag is computed per-source in useCalendarEvents / the deadlines endpoint.
+export function isItemDone(item: { done?: boolean }): boolean {
+  return item.done === true
+}
+
+// i18n keys for the sub-item kind labels (checklist item / workflow step / …).
+export const KIND_LABEL_KEYS: Record<NonNullable<import('@/types').UnifiedCalendarItem['kind']>, string> = {
+  checklist: 'calendar.checklistItem',
+  step: 'calendar.workflowStep',
+  task: 'calendar.auditTaskItem',
+  remediation: 'calendar.remediationItem',
+}
+
 export const PRIORITY_COLORS: Record<string, string> = {
   critical: 'bg-red-500 text-white',
   high: 'bg-orange-500 text-white',

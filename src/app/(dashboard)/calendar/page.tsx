@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useMemo } from 'react'
 import type { CalendarSourceType, CalendarEvent } from '@/types'
 import type { ViewMode, CalendarType } from '@/components/calendar/calendar-types'
 import { ALL_SOURCE_TYPES } from '@/components/calendar/calendar-utils'
@@ -14,6 +14,7 @@ import { EventDrawer } from '@/components/calendar/event-drawer'
 import { DatePickerModal } from '@/components/calendar/date-picker-modal'
 import { CreateEventModal } from '@/components/calendar/create-event-modal'
 import { EditEventModal } from '@/components/calendar/edit-event-modal'
+import { ToastHost } from '@/components/ui/toast-host'
 
 export default function CalendarPage() {
   const { t, isRTL } = useTranslation()
@@ -28,10 +29,27 @@ export default function CalendarPage() {
     () => new Set(ALL_SOURCE_TYPES)
   )
 
+  // Completion filter — drives every view (month/year/submissions/drawer).
+  // 'due' = not-yet-done, 'completed' = crossed-out done items, 'all' = both.
+  const [completionFilter, setCompletionFilter] = useState<'all' | 'due' | 'completed'>('all')
+
   // Submissions filter state
-  const [showCompletedSubmissions, setShowCompletedSubmissions] = useState(false)
   const [submissionFilterDate, setSubmissionFilterDate] = useState<string | null>(null)
   const [submissionGroupBy, setSubmissionGroupBy] = useState<'date' | 'month' | 'year'>('date')
+
+  // Apply the completion filter once, here, so all views stay consistent.
+  const visibleItems = useMemo(() => {
+    if (completionFilter === 'all') return items
+    return items.filter((i) => (completionFilter === 'completed' ? i.done : !i.done))
+  }, [items, completionFilter])
+  const visibleItemsByDate = useMemo(() => {
+    const map: Record<string, typeof items> = {}
+    for (const i of visibleItems) {
+      if (!map[i.date]) map[i.date] = []
+      map[i.date].push(i)
+    }
+    return map
+  }, [visibleItems])
 
   // Modal state
   const [isPickerOpen, setIsPickerOpen] = useState(false)
@@ -85,7 +103,7 @@ export default function CalendarPage() {
           calendarType={calendarType}
           selectedSourceTypes={selectedSourceTypes}
           submissionGroupBy={submissionGroupBy}
-          showCompleted={showCompletedSubmissions}
+          completionFilter={completionFilter}
           submissionFilterDate={submissionFilterDate}
           onChangeView={changeView}
           onNavigate={navigateDate}
@@ -95,7 +113,7 @@ export default function CalendarPage() {
           onToggleSourceType={toggleSourceType}
           onToggleAllSourceTypes={toggleAllSourceTypes}
           onSetSubmissionGroupBy={setSubmissionGroupBy}
-          onToggleShowCompleted={() => setShowCompletedSubmissions(prev => !prev)}
+          onSetCompletionFilter={setCompletionFilter}
           onClearSubmissionFilter={() => setSubmissionFilterDate(null)}
           onCreateEvent={() => setIsCreateModalOpen(true)}
         />
@@ -104,7 +122,7 @@ export default function CalendarPage() {
           {viewMode === 'month' && (
             <MonthView
               currentDate={currentDate}
-              itemsByDate={itemsByDate}
+              itemsByDate={visibleItemsByDate}
               selectedDayKey={selectedDayKey}
               selectedSourceTypes={selectedSourceTypes}
               calendarType={calendarType}
@@ -114,16 +132,16 @@ export default function CalendarPage() {
           {viewMode === 'year' && (
             <YearView
               currentDate={currentDate}
-              itemsByDate={itemsByDate}
+              itemsByDate={visibleItemsByDate}
               selectedSourceTypes={selectedSourceTypes}
               onSelectMonth={(month) => { setCurrentDate(new Date(currentDate.getFullYear(), month, 1)); setViewMode('month') }}
             />
           )}
           {viewMode === 'submissions' && (
             <SubmissionsList
-              items={items}
+              items={visibleItems}
               selectedSourceTypes={selectedSourceTypes}
-              showCompleted={showCompletedSubmissions}
+              showCompleted={true}
               filterMonth={currentDate.getMonth()}
               filterYear={currentDate.getFullYear()}
               filterDate={submissionFilterDate}
@@ -137,7 +155,7 @@ export default function CalendarPage() {
 
       <EventDrawer
         selectedDayKey={selectedDayKey}
-        items={items}
+        items={visibleItems}
         calendarType={calendarType}
         onClose={closeDrawer}
         onEditEvent={setEditingEvent}
@@ -182,6 +200,9 @@ export default function CalendarPage() {
           if (updated.date) selectDay(updated.date.substring(0, 10))
         }}
       />
+
+      {/* Surfaces calendar mutation/rollback errors as toasts (see EventDrawer). */}
+      <ToastHost />
     </div>
   )
 }

@@ -8,11 +8,12 @@ import { useTranslation } from '@/i18n'
 import type { TranslationKey } from '@/i18n'
 import type { CalendarEvent, UnifiedCalendarItem } from '@/types'
 import type { CalendarType } from './calendar-types'
-import { toHijri, getHijriMonthsFull, getDueStatus, SOURCE_COLORS, SOURCE_LABEL_KEYS, PRIORITY_COLORS } from './calendar-utils'
+import { toHijri, getHijriMonthsFull, getDueStatus, SOURCE_COLORS, SOURCE_LABEL_KEYS, PRIORITY_COLORS, isItemDone, KIND_LABEL_KEYS } from './calendar-utils'
 import { useCalendarStore } from '@/stores/calendar-store'
 import { LoadingButton } from '@/components/ui/loading-button'
 import { Modal } from '@/components/ui/modal'
 import { formatTimelineDate } from '@/lib/format-date'
+import { pushToast } from '@/stores/toast-store'
 
 function exportItemsToCsv(items: UnifiedCalendarItem[], dateLabel: string) {
   const headers = ['Title', 'Source Type', 'Date', 'Status', 'Priority', 'Subtitle', 'Assignee', 'Route']
@@ -76,19 +77,19 @@ export function EventDrawer({ selectedDayKey, items, calendarType, onClose, onEd
     return items.filter(i => i.date === selectedDayKey)
   }, [items, selectedDayKey])
 
-  // Surface calendar-store errors (e.g. failed DELETE after optimistic remove)
-  // as a quick alert and clear the flag so the next failure surfaces too.
+  // Surface calendar-store errors (e.g. a failed DELETE/update that rolled the
+  // optimistic change back) as an error toast with a retry hint, then clear
+  // the flag so the next failure surfaces too.
   useEffect(() => {
     if (calendarError) {
-      // eslint-disable-next-line no-alert
-      alert(calendarError)
+      pushToast(`${calendarError} — ${t('calendar.actionFailedRetry' as TranslationKey)}`, 'error')
       clearCalendarError()
     }
-  }, [calendarError, clearCalendarError])
+  }, [calendarError, clearCalendarError, t])
 
   const stats = useMemo(() => {
     const total = dayItems.length
-    const completed = dayItems.filter(i => i.status === 'completed' || i.status === 'closed').length
+    const completed = dayItems.filter(isItemDone).length
     const rate = total > 0 ? Math.round((completed / total) * 100) : 0
     return { rate, done: completed, total }
   }, [dayItems])
@@ -144,30 +145,65 @@ export function EventDrawer({ selectedDayKey, items, calendarType, onClose, onEd
                 const labelKey = SOURCE_LABEL_KEYS[item.sourceType] as TranslationKey
                 const dueStatus = getDueStatus(item.date, t)
                 const priorityColor = item.priority ? PRIORITY_COLORS[item.priority] : ''
+                const done = isItemDone(item)
+                const isSubItem = !!item.kind
+                const kindLabel = item.kind ? t(KIND_LABEL_KEYS[item.kind] as TranslationKey) : null
 
                 return (
-                  <div key={item.id} className={cn('flex flex-col gap-2 p-3 rounded-xl border', colors.border, colors.bg)}>
+                  <div
+                    key={item.id}
+                    className={cn(
+                      'flex flex-col gap-2 rounded-xl border',
+                      // Sub-items get a thicker left accent + a touch of indent so
+                      // they read as nested under their parent, not standalone.
+                      isSubItem ? cn('p-3 border-l-4', colors.border, 'bg-white') : cn('p-3', colors.border, colors.bg),
+                      done && 'opacity-60',
+                    )}
+                  >
+                    {/* Sub-item provenance line: "⮡ Checklist item · from <parent>" */}
+                    {isSubItem && (
+                      <div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-400">
+                        <Icon icon="lucide:corner-down-right" className="text-[11px]" />
+                        <span className={cn('uppercase tracking-wider', colors.text)}>{kindLabel}</span>
+                        {item.parentTitle && (
+                          <span className="text-slate-400 normal-case font-medium truncate">
+                            · {t('calendar.fromParent' as TranslationKey, { parent: item.parentTitle })}
+                          </span>
+                        )}
+                      </div>
+                    )}
                     <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <div className={cn('w-1.5 h-1.5 rounded-full', colors.dot)} />
-                        <span className="text-xs font-bold text-slate-700">{item.title}</span>
+                      <div className="flex items-center gap-3 min-w-0">
+                        {done
+                          ? <Icon icon="lucide:check-circle-2" className="text-emerald-500 text-sm shrink-0" />
+                          : <div className={cn('w-1.5 h-1.5 rounded-full shrink-0', colors.dot)} />}
+                        <span className={cn('text-xs font-bold text-slate-700 truncate', done && 'line-through text-slate-400')}>{item.title}</span>
                       </div>
                     </div>
-                    {item.subtitle && (
+                    {/* Top-level items show their subtitle; sub-items already show
+                        the parent in the provenance line above. */}
+                    {!isSubItem && item.subtitle && (
                       <p className="text-[10px] text-slate-500 truncate">{item.subtitle}</p>
                     )}
                     <div className="flex items-center gap-2 flex-wrap mt-1">
                       <span className={cn('text-[9px] font-black uppercase tracking-wider px-2 py-1 rounded text-white', colors.badge)}>
                         {t(labelKey)}
                       </span>
-                      {item.priority && (
+                      {done && (
+                        <span className="text-[9px] font-black uppercase tracking-wider px-2 py-1 rounded bg-emerald-500 text-white flex items-center gap-1">
+                          <Icon icon="lucide:check" className="text-[10px]" />{t('calendar.completedLabel' as TranslationKey)}
+                        </span>
+                      )}
+                      {!done && item.priority && (
                         <span className={cn('text-[9px] font-bold uppercase tracking-wider px-2 py-1 rounded', priorityColor)}>
                           {item.priority}
                         </span>
                       )}
-                      <span className={cn('text-[9px] font-bold px-2 py-1 rounded', dueStatus.className)}>
-                        {dueStatus.text}
-                      </span>
+                      {!done && (
+                        <span className={cn('text-[9px] font-bold px-2 py-1 rounded', dueStatus.className)}>
+                          {dueStatus.text}
+                        </span>
+                      )}
                     </div>
                     {item.route && (
                       <button

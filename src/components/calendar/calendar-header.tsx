@@ -14,7 +14,7 @@ interface CalendarHeaderProps {
   calendarType: CalendarType
   selectedSourceTypes: Set<CalendarSourceType>
   submissionGroupBy: 'date' | 'month' | 'year'
-  showCompleted: boolean
+  completionFilter: 'all' | 'due' | 'completed'
   submissionFilterDate: string | null
   onChangeView: (view: ViewMode) => void
   onNavigate: (offset: number) => void
@@ -24,7 +24,7 @@ interface CalendarHeaderProps {
   onToggleSourceType: (type: CalendarSourceType) => void
   onToggleAllSourceTypes: () => void
   onSetSubmissionGroupBy: (groupBy: 'date' | 'month' | 'year') => void
-  onToggleShowCompleted: () => void
+  onSetCompletionFilter: (filter: 'all' | 'due' | 'completed') => void
   onClearSubmissionFilter: () => void
   onCreateEvent: () => void
 }
@@ -35,7 +35,7 @@ export function CalendarHeader({
   calendarType,
   selectedSourceTypes,
   submissionGroupBy,
-  showCompleted,
+  completionFilter,
   submissionFilterDate,
   onChangeView,
   onNavigate,
@@ -45,7 +45,7 @@ export function CalendarHeader({
   onToggleSourceType,
   onToggleAllSourceTypes,
   onSetSubmissionGroupBy,
-  onToggleShowCompleted,
+  onSetCompletionFilter,
   onClearSubmissionFilter,
   onCreateEvent,
 }: CalendarHeaderProps) {
@@ -159,33 +159,37 @@ export function CalendarHeader({
             </button>
           </div>
 
-          {/* Submissions view filters */}
-          {viewMode === 'submissions' && (
-            <>
+          {/* Completion filter — All / Due / Completed (applies to every view). */}
+          <div className="flex bg-slate-100 p-1 rounded-lg">
+            {([
+              { key: 'all', labelKey: 'calendar.filterAll', icon: 'lucide:layers' },
+              { key: 'due', labelKey: 'calendar.filterDue', icon: 'lucide:clock' },
+              { key: 'completed', labelKey: 'calendar.filterCompleted', icon: 'lucide:check-circle' },
+            ] as const).map((opt) => (
               <button
-                onClick={onToggleShowCompleted}
+                key={opt.key}
+                onClick={() => onSetCompletionFilter(opt.key)}
                 className={cn(
-                  'px-4 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer flex items-center gap-2',
-                  showCompleted
-                    ? 'bg-emerald-600 text-white'
-                    : 'bg-slate-100 text-slate-500 hover:text-slate-900'
+                  'px-3 py-2 text-xs font-bold rounded-md transition-all cursor-pointer flex items-center gap-1.5',
+                  completionFilter === opt.key ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500 hover:text-slate-900',
                 )}
               >
-                <Icon icon="lucide:check-circle" className="text-sm" />
-                {t('calendar.showCompleted')}
+                <Icon icon={opt.icon} className="text-sm" />
+                {t(opt.labelKey as TranslationKey)}
               </button>
-              {submissionFilterDate && (
-                <button
-                  onClick={onClearSubmissionFilter}
-                  className={cn(
-                    'px-4 py-2 text-xs font-bold rounded-lg bg-slate-100 text-slate-500 hover:text-slate-900 transition-all cursor-pointer flex items-center gap-2'
-                  )}
-                >
-                  <Icon icon="lucide:x" className="text-sm" />
-                  {t('calendar.removeFilter')}
-                </button>
+            ))}
+          </div>
+
+          {viewMode === 'submissions' && submissionFilterDate && (
+            <button
+              onClick={onClearSubmissionFilter}
+              className={cn(
+                'px-4 py-2 text-xs font-bold rounded-lg bg-slate-100 text-slate-500 hover:text-slate-900 transition-all cursor-pointer flex items-center gap-2'
               )}
-            </>
+            >
+              <Icon icon="lucide:x" className="text-sm" />
+              {t('calendar.removeFilter')}
+            </button>
           )}
 
           <button

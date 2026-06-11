@@ -22,15 +22,19 @@ export const dynamic = 'force-dynamic'
 
 // Mirror of UnifiedCalendarItem (src/types) — title = the sub-item, subtitle =
 // the parent it's derived from, route = deep-link to that parent.
+type DerivedSource = 'risk' | 'policy' | 'circular' | 'audit' | 'observation'
 interface DerivedItem {
   id: string
-  sourceType: 'risk' | 'policy' | 'circular' | 'audit' | 'observation'
+  sourceType: DerivedSource
   title: string
   subtitle: string
   date: string
   status: string
   route: string
-  colorKey: 'risk' | 'policy' | 'circular' | 'audit' | 'observation'
+  colorKey: DerivedSource
+  done: boolean
+  kind?: 'checklist' | 'step' | 'task' | 'remediation'
+  parentTitle: string
 }
 
 function ymd(d: string | null | undefined): string | null {
@@ -101,6 +105,9 @@ export async function GET(_req: NextRequest) {
         sourceType: 'risk',
         title: (r.text as string) || 'Checklist item',
         subtitle: parent.title,
+        parentTitle: parent.title,
+        kind: 'checklist',
+        done: Boolean(r.completed),
         date,
         status: (r.completed as boolean) ? 'completed' : 'pending',
         route: `/reports/risks?id=${parent.id}`,
@@ -118,6 +125,9 @@ export async function GET(_req: NextRequest) {
         sourceType: 'policy',
         title: (s.step as string) || 'Workflow step',
         subtitle: parent.name,
+        parentTitle: parent.name,
+        kind: 'step',
+        done: (s.status as string) === 'completed',
         date,
         status: (s.status as string) || 'pending',
         route: `/correspondence/regulatory-updates/policies?policyId=${parent.ref_code ?? parent.id}`,
@@ -135,6 +145,9 @@ export async function GET(_req: NextRequest) {
         sourceType: 'circular',
         title: (s.label as string) || 'Workflow step',
         subtitle: parent.title,
+        parentTitle: parent.title,
+        kind: 'step',
+        done: (s.status as string) === 'completed',
         date,
         status: (s.status as string) || 'pending',
         route: `/correspondence/regulatory-updates/rules?id=${parent.id}`,
@@ -152,6 +165,9 @@ export async function GET(_req: NextRequest) {
         sourceType: 'audit',
         title: (tsk.title as string) || 'Audit task',
         subtitle: parent.title,
+        parentTitle: parent.title,
+        kind: 'task',
+        done: (tsk.status as string) === 'completed',
         date,
         status: (tsk.status as string) || 'pending',
         route: `/reports/${parent.id}`,
@@ -169,6 +185,9 @@ export async function GET(_req: NextRequest) {
         sourceType: 'observation',
         title: (p.title as string) || 'Remediation plan',
         subtitle: parent.title,
+        parentTitle: parent.title,
+        kind: 'remediation',
+        done: (p.status as string) === 'approved',
         date,
         status: (p.status as string) || 'pending',
         route: `/correspondence/observations?id=${parent.id}`,
@@ -186,6 +205,9 @@ export async function GET(_req: NextRequest) {
         sourceType: 'observation',
         title: (cl.text as string) || 'Checklist item',
         subtitle: parent.title,
+        parentTitle: parent.title,
+        kind: 'checklist',
+        done: Boolean(cl.completed),
         date,
         status: (cl.completed as boolean) ? 'completed' : 'pending',
         route: `/correspondence/observations?id=${parent.id}`,
@@ -198,6 +220,7 @@ export async function GET(_req: NextRequest) {
     for (const c of (circs.data ?? []) as Array<Record<string, unknown>>) {
       const cid = c.id as string
       const status = (c.status as string) || 'pending'
+      const done = status === 'completed'
       const capResp = ymd(c.cap_response_deadline as string)
       if (capResp) {
         items.push({
@@ -205,6 +228,8 @@ export async function GET(_req: NextRequest) {
           sourceType: 'circular',
           title: `${c.title as string} — CAP response`,
           subtitle: c.title as string,
+          parentTitle: c.title as string,
+          done,
           date: capResp,
           status,
           route: `/correspondence/regulatory-updates/rules?id=${cid}`,
@@ -218,6 +243,8 @@ export async function GET(_req: NextRequest) {
           sourceType: 'circular',
           title: `${c.title as string} — Remediation`,
           subtitle: c.title as string,
+          parentTitle: c.title as string,
+          done,
           date: remDl,
           status,
           route: `/correspondence/regulatory-updates/rules?id=${cid}`,

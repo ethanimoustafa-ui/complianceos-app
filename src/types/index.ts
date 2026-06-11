@@ -1270,6 +1270,16 @@ export interface UnifiedCalendarItem {
   assignee?: string
   route: string
   colorKey: CalendarSourceType
+  /** True when the source entity/sub-item is complete — drives the calendar's
+   *  cross-out + the completed/due/all filter. Computed at the data source. */
+  done?: boolean
+  /** Set on derived SUB-ITEMS (checklist items, workflow steps, tasks,
+   *  remediation plans) so the calendar can visually distinguish them from
+   *  top-level entities and label them. Absent on entity-level items. */
+  kind?: 'checklist' | 'step' | 'task' | 'remediation'
+  /** The parent entity this sub-item belongs to (e.g. the risk/observation
+   *  title), shown as "from <parentTitle>" in the calendar detail. */
+  parentTitle?: string
 }
 
 // Pagination type

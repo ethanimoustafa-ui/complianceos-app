@@ -119,11 +119,11 @@ export function MonthView({ currentDate, itemsByDate, selectedDayKey, selectedSo
               <div
                 key={item.id}
                 title={item.title}
-                className="mt-1.5 bg-white/80 p-1.5 rounded-lg border border-slate-200/50 shadow-sm"
+                className={cn('mt-1.5 bg-white/80 p-1.5 rounded-lg border border-slate-200/50 shadow-sm', item.done && 'opacity-60')}
               >
-                <p className="text-[10px] font-bold text-slate-700 truncate">{item.title}</p>
-                <span className={cn('inline-block mt-0.5 text-[8px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded text-white', SOURCE_COLORS[item.sourceType].badge)}>
-                  {item.sourceType.split('-')[0]}
+                <p className={cn('text-[10px] font-bold text-slate-700 truncate', item.done && 'line-through text-slate-400')}>{item.title}</p>
+                <span className={cn('inline-block mt-0.5 text-[8px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded text-white', item.done ? 'bg-emerald-500' : SOURCE_COLORS[item.sourceType].badge)}>
+                  {item.done ? '✓' : item.sourceType.split('-')[0]}
                 </span>
               </div>
             ))}
