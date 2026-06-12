@@ -80,6 +80,8 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     if (patch.title !== undefined) update.text = patch.title
     if (patch.completed !== undefined) update.completed = patch.completed
     if (patch.sort_order !== undefined) update.sort_order = patch.sort_order
+    // Task D / #32: empty/null clears the deadline → store NULL.
+    if (patch.deadline !== undefined) update.deadline = patch.deadline ? patch.deadline : null
 
     let query = supabase
       .from('article_checklist_items')

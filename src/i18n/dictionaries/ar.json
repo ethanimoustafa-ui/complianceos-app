@@ -627,6 +627,7 @@
     "letterResubmittedApproval": "أُعيد تقديمه للاعتماد",
     "tableSent": "تاريخ الإرسال",
     "tableResponseDue": "موعد الرد",
+    "tableResponseReceived": "تاريخ استلام الرد",
     "missingRequired": "حقول مطلوبة ناقصة:",
     "letterBody": "نص الخطاب",
     "configureChain": "تهيئة",

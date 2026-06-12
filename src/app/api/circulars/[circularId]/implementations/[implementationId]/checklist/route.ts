@@ -59,6 +59,8 @@ export async function POST(req: NextRequest, { params }: Params) {
         text: input.title,
         completed: input.completed,
         sort_order: input.sort_order,
+        // Task D / #32: empty/null clears the deadline → store NULL.
+        deadline: input.deadline ? input.deadline : null,
       })
       .select(ARTICLE_CHECKLIST_COLUMNS)
       .single()

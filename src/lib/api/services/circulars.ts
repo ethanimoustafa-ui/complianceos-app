@@ -215,7 +215,7 @@ export async function insertArticleVersion(
 
 // --- article checklist + timeline -----------------------------------------
 
-export const ARTICLE_CHECKLIST_COLUMNS = 'id, article_id, text, completed, sort_order, updated_at'
+export const ARTICLE_CHECKLIST_COLUMNS = 'id, article_id, text, completed, sort_order, deadline, updated_at'
 // Wave-19.4 / Item-3 — dual-store columns (migration 057).
 export const ARTICLE_VERSION_COLUMNS =
   'id, article_id, version_no, date, author, text_en, text_ar, field_changes'

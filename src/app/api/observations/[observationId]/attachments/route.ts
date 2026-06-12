@@ -71,6 +71,8 @@ export async function POST(req: NextRequest, { params }: Params) {
 
     const created = data as { id: string }
     const actor = observationActorName(profile, user.id)
+    // E (#33): creation-time uploads pass skip_timeline so the attachment isn't
+    // logged as a separate post-creation timeline entry. Audit still fires.
     await Promise.all([
       writeAudit({
         actor_id: user.id,
@@ -81,15 +83,19 @@ export async function POST(req: NextRequest, { params }: Params) {
         metadata: { observation_id: observationId, name: safeName },
         supabase,
       }),
-      insertObservationTimeline({
-        supabase,
-        observation_id: observationId,
-        action_type: 'attachment.added',
-        user_id: user.id,
-        user_name: actor,
-        target_id: created.id,
-        ...renderBilingual('regulatoryUpdates.timeline.observationAttachmentAdded', { name: safeName }),
-      }),
+      ...(input.skip_timeline
+        ? []
+        : [
+            insertObservationTimeline({
+              supabase,
+              observation_id: observationId,
+              action_type: 'attachment.added',
+              user_id: user.id,
+              user_name: actor,
+              target_id: created.id,
+              ...renderBilingual('regulatoryUpdates.timeline.observationAttachmentAdded', { name: safeName }),
+            }),
+          ]),
     ])
 
     revalidateAll([cacheTags.observations(), cacheTags.observations(observationId)])

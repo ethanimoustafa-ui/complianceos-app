@@ -176,6 +176,9 @@ export const ChecklistSection = memo(function ChecklistSection({
           {items.map((item) => (
             <div
               key={item.id}
+              // C(#31): deep-link target — the calendar can scroll to + glow this
+              // exact checklist item (observation obs-cl / risk risk-cl).
+              data-highlight-id={item.id}
               className={`flex items-center gap-3 p-3 border rounded-xl transition-all group ${
                 item.completed
                   ? 'border-emerald-100 bg-emerald-50/30'
@@ -258,10 +261,13 @@ export const ChecklistSection = memo(function ChecklistSection({
                     />
                   ) : null}
                   {/* Edit/remove hidden in read-only (closed) mode (O4) */}
+                  {/* Hover-reveal actions use `hidden` (not opacity-0) so they
+                      don't reserve width — otherwise the deadline pill never
+                      sits flush-right and looks oddly mid-aligned. */}
                   {!readOnly && onEdit ? (
                     <button
                       onClick={() => handleStartEdit(item)}
-                      className="p-1 text-slate-300 hover:text-blue-500 opacity-0 group-hover:opacity-100 transition-all cursor-pointer"
+                      className="p-1 text-slate-300 hover:text-blue-500 transition-all cursor-pointer shrink-0 hidden group-hover:inline-flex"
                       title={t('common.edit')}
                     >
                       <Icon icon="lucide:pencil" className="text-lg" />
@@ -272,7 +278,7 @@ export const ChecklistSection = memo(function ChecklistSection({
                       onClick={() => void handleRemove(item.id)}
                       disabled={removingIds.has(item.id)}
                       aria-busy={removingIds.has(item.id) || undefined}
-                      className="p-1 text-slate-300 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-all cursor-pointer disabled:cursor-not-allowed disabled:opacity-100"
+                      className={`p-1 text-slate-300 hover:text-rose-500 transition-all cursor-pointer shrink-0 disabled:cursor-not-allowed ${removingIds.has(item.id) ? 'inline-flex' : 'hidden group-hover:inline-flex'}`}
                       title={t((removeTooltipKey || 'observations.detail.removeItem') as Parameters<typeof t>[0])}
                     >
                       <Icon

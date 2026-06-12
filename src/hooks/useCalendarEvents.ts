@@ -57,6 +57,13 @@ export function useCalendarEvents() {
   // /api/calendar/deadlines and merged into the unified item list below.
   const [derivedDeadlines, setDerivedDeadlines] = useState<UnifiedCalendarItem[]>([])
 
+  // K(#39): first-load skeleton gate. The nine source stores + the server
+  // deadlines aggregation hydrate in parallel; `loading` stays true until the
+  // long-pole (the /calendar/deadlines fetch) settles, so the page can show a
+  // skeleton instead of letting items pop in one store at a time over an empty
+  // grid. Cached revisits flip it false almost immediately.
+  const [loading, setLoading] = useState(true)
+
   // Hydrate the user-created `calendar_events` collection and its `event_types`
   // lookup on mount. Without this, freshly-signed-in users (or anyone after a
   // page reload) see an empty list because the store starts cold. Server
@@ -86,6 +93,8 @@ export function useCalendarEvents() {
         setDerivedDeadlines(rows)
       } catch {
         // Non-fatal: the calendar still renders top-level deadlines + user events.
+      } finally {
+        setLoading(false)
       }
     })()
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -147,7 +156,11 @@ export function useCalendarEvents() {
       })
     }
 
-    // Policies
+    // Policies — review cadence is a CYCLE task. Show the upcoming cycle
+    // (nextReviewDate, active) and the most-recently-completed cycle
+    // (lastReviewDate, crossed out). The officer sees this cycle done + next
+    // cycle pending; the cadence itself is on the policy detail. We emit only
+    // the latest completed cycle (not every past one) to keep it uncluttered.
     for (const p of policies) {
       const date = extractDate(p.nextReviewDate)
       if (!date) continue
@@ -155,14 +168,27 @@ export function useCalendarEvents() {
         id: `policy-${p.id}`,
         sourceType: 'policy',
         title: p.name,
+        subtitle: 'Policy review',
         date,
         status: p.status,
-        // A policy review recurs — the review date is never "done" (completing
-        // a review rolls the date forward), so it stays an active reminder.
         done: false,
         route: `/correspondence/regulatory-updates/policies?policyId=${p.id}`,
         colorKey: 'policy',
       })
+      const lastDate = extractDate(p.lastReviewDate)
+      if (lastDate && lastDate !== date) {
+        result.push({
+          id: `policy-done-${p.id}`,
+          sourceType: 'policy',
+          title: p.name,
+          subtitle: 'Policy review',
+          date: lastDate,
+          status: 'completed',
+          done: true,
+          route: `/correspondence/regulatory-updates/policies?policyId=${p.id}`,
+          colorKey: 'policy',
+        })
+      }
     }
 
     // Letters
@@ -291,6 +317,22 @@ export function useCalendarEvents() {
         route: `/reports/risks?id=${r.id}`,
         colorKey: 'risk',
       })
+      // Most-recently-completed review cycle (crossed out) — same cadence model
+      // as policies: this cycle done, next cycle (above) pending.
+      const lastReview = extractDate(r.lastReviewDate)
+      if (lastReview && lastReview !== date) {
+        result.push({
+          id: `risk-review-done-${r.id}`,
+          sourceType: 'risk',
+          title: r.title,
+          subtitle: 'Mitigation review',
+          date: lastReview,
+          status: 'completed',
+          done: true,
+          route: `/reports/risks?id=${r.id}`,
+          colorKey: 'risk',
+        })
+      }
     }
 
     // Risks — mitigation deadline (the hard date the mitigation work is due,
@@ -365,5 +407,5 @@ export function useCalendarEvents() {
     }
   }, [items, itemsByDate])
 
-  return { items, itemsByDate, sourceTypes, stats }
+  return { items, itemsByDate, sourceTypes, stats, loading }
 }

@@ -198,7 +198,9 @@ export default function ObservationsPage() {
         for (const att of data.attachments) {
           if (att.file) {
             try {
-              await uploadObservationDocument(created.reference || created.id, att.file, user, false)
+              // skipTimeline=true: these are creation-time uploads, so they
+              // must NOT appear as separate post-creation timeline entries.
+              await uploadObservationDocument(created.reference || created.id, att.file, user, false, true)
             } catch (uploadErr) {
               // Non-fatal: the observation was created; the document can be
               // re-uploaded from the detail view.

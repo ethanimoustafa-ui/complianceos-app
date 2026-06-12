@@ -71,6 +71,9 @@ export async function POST(req: NextRequest, { params }: Params) {
 
     const created = data as { id: string }
     const actor = observationActorName(profile, user.id)
+    // E (#33): creation-time uploads pass skip_timeline so the document doesn't
+    // appear as a separate post-creation "PDF uploaded" entry — the observation
+    // is already represented by its "created" timeline entry. Audit still fires.
     await Promise.all([
       writeAudit({
         actor_id: user.id,
@@ -81,15 +84,19 @@ export async function POST(req: NextRequest, { params }: Params) {
         metadata: { observation_id: observationId, name: safeName },
         supabase,
       }),
-      insertObservationTimeline({
-        supabase,
-        observation_id: observationId,
-        action_type: 'evidence.added',
-        user_id: user.id,
-        user_name: actor,
-        target_id: created.id,
-        ...renderBilingual('regulatoryUpdates.timeline.pdfDocumentUploaded', { name: safeName }),
-      }),
+      ...(input.skip_timeline
+        ? []
+        : [
+            insertObservationTimeline({
+              supabase,
+              observation_id: observationId,
+              action_type: 'evidence.added',
+              user_id: user.id,
+              user_name: actor,
+              target_id: created.id,
+              ...renderBilingual('regulatoryUpdates.timeline.pdfDocumentUploaded', { name: safeName }),
+            }),
+          ]),
     ])
 
     revalidateAll([cacheTags.observations(), cacheTags.observations(observationId)])

@@ -56,7 +56,7 @@ export async function GET(_req: NextRequest) {
   try {
     const { supabase } = await requireUser()
 
-    const [riskCl, polSteps, circSteps, auditTasks, remPlans, obsCl, circs] = await Promise.all([
+    const [riskCl, polSteps, circSteps, auditTasks, remPlans, obsCl, circArtCl, circs] = await Promise.all([
       supabase
         .from('risk_mitigation_checklist')
         .select('id, text, deadline, completed, risks(id, title, status)')
@@ -85,6 +85,13 @@ export async function GET(_req: NextRequest) {
       supabase
         .from('observation_checklist')
         .select('id, text, deadline, completed, observations(id, title)')
+        .not('deadline', 'is', null)
+        .limit(LIMIT),
+      // Task D / #32: circular ARTICLE checklist-item deadlines. Join up two
+      // levels: article_checklist_items → circular_articles → circulars.
+      supabase
+        .from('article_checklist_items')
+        .select('id, text, deadline, completed, circular_articles(id, circulars(id, title))')
         .not('deadline', 'is', null)
         .limit(LIMIT),
       supabase
@@ -212,6 +219,31 @@ export async function GET(_req: NextRequest) {
         status: (cl.completed as boolean) ? 'completed' : 'pending',
         route: `/correspondence/observations?id=${parent.id}`,
         colorKey: 'observation',
+      })
+    }
+
+    // Circular ARTICLE checklist-item deadlines (Task D / #32). The parent
+    // circular is reached through the article: item → circular_articles →
+    // circulars. Skip rows missing a date or a resolvable parent circular.
+    for (const cl of (circArtCl.data ?? []) as Array<Record<string, unknown>>) {
+      const date = ymd(cl.deadline as string)
+      const article = one(cl.circular_articles as { id: string; circulars: unknown })
+      const parent = article
+        ? one(article.circulars as { id: string; title: string })
+        : null
+      if (!date || !parent) continue
+      items.push({
+        id: `circ-article-cl-${cl.id as string}`,
+        sourceType: 'circular',
+        title: (cl.text as string) || 'Checklist item',
+        subtitle: parent.title,
+        parentTitle: parent.title,
+        kind: 'checklist',
+        done: Boolean(cl.completed),
+        date,
+        status: (cl.completed as boolean) ? 'completed' : 'pending',
+        route: `/correspondence/regulatory-updates/rules?id=${parent.id}`,
+        colorKey: 'circular',
       })
     }
 

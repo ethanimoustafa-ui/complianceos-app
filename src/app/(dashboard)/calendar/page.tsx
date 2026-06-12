@@ -7,6 +7,7 @@ import { ALL_SOURCE_TYPES } from '@/components/calendar/calendar-utils'
 import { useCalendarEvents } from '@/hooks/useCalendarEvents'
 import { useTranslation } from '@/i18n'
 import { CalendarHeader } from '@/components/calendar/calendar-header'
+import { CalendarSkeleton } from '@/components/calendar/calendar-skeleton'
 import { MonthView } from '@/components/calendar/month-view'
 import { YearView } from '@/components/calendar/year-view'
 import { SubmissionsList } from '@/components/calendar/submissions-list'
@@ -18,7 +19,7 @@ import { ToastHost } from '@/components/ui/toast-host'
 
 export default function CalendarPage() {
   const { t, isRTL } = useTranslation()
-  const { items, itemsByDate } = useCalendarEvents()
+  const { items, itemsByDate, loading } = useCalendarEvents()
 
   // View state
   const [currentDate, setCurrentDate] = useState(() => new Date())
@@ -119,6 +120,12 @@ export default function CalendarPage() {
         />
 
         <div className="flex-1 overflow-auto bg-slate-50 hide-scrollbar">
+          {/* K(#39): cold-load skeleton — only when there's nothing cached yet,
+              so revisits (TTL-warm stores) render instantly without a flash. */}
+          {loading && items.length === 0 ? (
+            <CalendarSkeleton />
+          ) : (
+          <>
           {viewMode === 'month' && (
             <MonthView
               currentDate={currentDate}
@@ -149,6 +156,8 @@ export default function CalendarPage() {
               calendarType={calendarType}
               onSelectDay={selectDay}
             />
+          )}
+          </>
           )}
         </div>
       </main>

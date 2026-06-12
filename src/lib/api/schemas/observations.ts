@@ -174,6 +174,10 @@ export const RegisterObservationDocumentSchema = z
     storage_path: z.string().min(1).max(15_000_000),
     // BUG 3: persisted remediation-plan classification (defaults false).
     is_remediation: z.boolean().optional(),
+    // When the upload happens AS PART of observation creation, skip the
+    // separate "PDF uploaded" timeline entry — it's already covered by the
+    // "Observation created" entry and otherwise reads as a post-creation event.
+    skip_timeline: z.boolean().optional(),
   })
   .strict()
 export type RegisterObservationDocumentInput = z.infer<typeof RegisterObservationDocumentSchema>

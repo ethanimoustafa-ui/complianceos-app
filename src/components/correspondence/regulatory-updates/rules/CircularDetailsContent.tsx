@@ -13,6 +13,8 @@ import { useAuthStore } from '@/stores/auth-store'
 import { useCan } from '@/lib/permissions'
 import { resolveAuthorityLabel } from '@/lib/authority-display'
 import { InlineDeadlinePicker } from '@/components/ui/inline-deadline-picker'
+// C(#31): consume a calendar deep-link → open the workflow tab + glow the step.
+import { useDeepLinkTab, useDeepLinkHighlight } from '@/hooks/useDeepLink'
 import { Skeleton } from '@/components/ui/skeleton'
 import { formatTimelineDate, useRelativeTime } from '@/lib/format-date'
 import type { Circular, CircularArticle, CircularWorkflowStep } from '@/types'
@@ -161,6 +163,12 @@ export function CircularDetailsContent({ circular, activeTab, setActiveTab, onCl
   // children (workflow_steps / implementations / timeline) land. Until then,
   // every section that depends on those arrays renders a skeleton.
   const detailHydrated = !!freshCircular.detailHydrated
+
+  // C(#31): a calendar workflow-step deadline opens the Workflow tab, then —
+  // once the steps have hydrated — scrolls to and glows the targeted step.
+  useDeepLinkTab((tab) => setActiveTab(tab as DetailTab))
+  useDeepLinkHighlight(activeTab === 'workflow' && detailHydrated && (freshCircular.workflowSteps?.length ?? 0) > 0)
+
   const frameworkChips = (freshCircular.frameworkIds ?? [])
     .map((id) => {
       const fw = frameworks.find((f) => f.id === id)
@@ -607,6 +615,7 @@ export function CircularDetailsContent({ circular, activeTab, setActiveTab, onCl
                     return (
                       <div
                         key={step.id}
+                        data-highlight-id={step.id}
                         draggable={!isCompleted}
                         onDragStart={() => !isCompleted && setDragId(step.id)}
                         onDragOver={(e) => {

@@ -223,6 +223,11 @@ export const CreateArticleChecklistItemSchema = z
     title: PlainTextMin(2_000),
     completed: z.boolean().default(false),
     sort_order: z.coerce.number().int().min(0).default(0),
+    // Task D / #32: per-item deadline (DATE). Plain optional string — NO
+    // .default() (the UpdateSchema below is hand-written, but keep parity and
+    // avoid the zod partial+default footgun). Accepts YYYY-MM-DD; null/empty
+    // clears (route coerces falsy → NULL).
+    deadline: z.string().nullable().optional(),
   })
   // SEC-8: reject unknown keys.
   .strict()
@@ -234,6 +239,8 @@ export const UpdateArticleChecklistItemSchema = z
     title: PlainTextMin(2_000).optional(),
     completed: z.boolean().optional(),
     sort_order: z.coerce.number().int().min(0).optional(),
+    // Task D / #32: per-item deadline (DATE). null/empty clears (→ NULL).
+    deadline: z.string().nullable().optional(),
   })
   // SEC-8: reject unknown keys.
   .strict()

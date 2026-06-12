@@ -128,6 +128,8 @@ interface ArticleChecklistApiRow {
   text: string
   completed: boolean
   sort_order: number
+  // Task D / #32: per-item deadline (DATE column).
+  deadline?: string | null
   // W17-1 / SEC-1: optimistic-locking token from the server.
   updated_at?: string
 }
@@ -375,6 +377,8 @@ function mapArticleChecklistRow(row: ArticleChecklistApiRow): ChecklistItem {
     title: row.text,
     completed: !!row.completed,
     order: typeof row.sort_order === 'number' ? row.sort_order : 0,
+    // Task D / #32: per-item deadline.
+    deadline: row.deadline ?? undefined,
     // W17-1 / SEC-1: server-stamped optimistic-locking token threaded to PATCH/DELETE.
     updatedAt: row.updated_at,
   }
@@ -739,8 +743,15 @@ interface CircularState {
   ) => Promise<void>
   deleteArticle: (circularId: string, articleId: string) => Promise<void>
   toggleChecklistItem: (circularId: string, articleId: string, itemId: string) => Promise<void>
-  addChecklistItem: (circularId: string, articleId: string, title: string) => Promise<void>
+  addChecklistItem: (circularId: string, articleId: string, title: string, deadline?: string) => Promise<void>
   deleteChecklistItem: (circularId: string, articleId: string, itemId: string) => Promise<void>
+  // Task D / #32: set/clear a per-item deadline (optimistic + rollback).
+  setArticleChecklistItemDeadline: (
+    circularId: string,
+    articleId: string,
+    itemId: string,
+    deadline: string | undefined,
+  ) => Promise<void>
   addArticleTimelineEvent: (
     circularId: string,
     articleId: string,
@@ -1657,7 +1668,7 @@ export const useCircularStore = create<CircularState>()((set, get) => ({
     }
   },
 
-  addChecklistItem: async (circularId, articleId, title) => {
+  addChecklistItem: async (circularId, articleId, title, deadline) => {
     const snapshot = get().byId[circularId]
     const tempId = `temp-${nanoid()}`
     const now = new Date().toISOString()
@@ -1667,6 +1678,7 @@ export const useCircularStore = create<CircularState>()((set, get) => ({
       title,
       completed: false,
       order: Date.now(),
+      deadline: deadline || undefined,
     }
     const newEvent: ArticleTimelineEvent = {
       id: nanoid(),
@@ -1700,9 +1712,9 @@ export const useCircularStore = create<CircularState>()((set, get) => ({
     if (!isPersistedId(articleId)) return
 
     try {
-      const row = await api.post<{ id: string; text: string; completed: boolean; sort_order: number }>(
+      const row = await api.post<ArticleChecklistApiRow>(
         `/circulars/${circularId}/implementations/${articleId}/checklist`,
-        { title },
+        { title, deadline: deadline || undefined },
       )
       set((state) =>
         applyCircular(state, circularId, (c) => ({
@@ -1712,9 +1724,7 @@ export const useCircularStore = create<CircularState>()((set, get) => ({
             return {
               ...a,
               checklist: a.checklist.map((i) =>
-                i.id === tempId
-                  ? { id: row.id, title: row.text, completed: row.completed, order: row.sort_order }
-                  : i,
+                i.id === tempId ? mapArticleChecklistRow(row) : i,
               ),
             }
           }),
@@ -1727,6 +1737,69 @@ export const useCircularStore = create<CircularState>()((set, get) => ({
       set({ error: errorMessage(e, 'Failed to add checklist item') })
       pushToast(revertMessage(e), 'error')
       console.error('[optimistic:addChecklistItem] failed —', e)
+      throw e
+    }
+  },
+
+  // Task D / #32: set/clear a per-item deadline. Mirrors the observation/risk
+  // checklist deadline actions — optimistic apply, PATCH, rollback on failure.
+  setArticleChecklistItemDeadline: async (circularId, articleId, itemId, deadline) => {
+    const snapshot = get().byId[circularId]
+    const article = snapshot?.articles.find((a) => a.id === articleId)
+    const item = article?.checklist.find((i) => i.id === itemId)
+    const now = new Date().toISOString()
+    const next = deadline || undefined
+    set((state) =>
+      applyCircular(state, circularId, (c) => ({
+        ...c,
+        articles: c.articles.map((a) =>
+          a.id === articleId
+            ? {
+                ...a,
+                checklist: a.checklist.map((i) =>
+                  i.id === itemId ? { ...i, deadline: next } : i,
+                ),
+              }
+            : a,
+        ),
+        updatedAt: now,
+      })),
+    )
+
+    // GAP-20: only PATCH when BOTH article and item carry real persisted ids.
+    if (!isPersistedId(articleId) || !isPersistedId(itemId)) return
+
+    try {
+      // W17-1 / SEC-1: thread the item's last-known `updatedAt` as `If-Match`.
+      const row = await api.patch<ArticleChecklistApiRow>(
+        `/circulars/${circularId}/implementations/${articleId}/checklist/${itemId}`,
+        { deadline: deadline ?? null },
+        ifMatchHeader(item?.updatedAt),
+      )
+      if (row?.updated_at) {
+        set((state) =>
+          applyCircular(state, circularId, (c) => ({
+            ...c,
+            articles: c.articles.map((a) =>
+              a.id === articleId
+                ? {
+                    ...a,
+                    checklist: a.checklist.map((i) =>
+                      i.id === itemId ? { ...i, updatedAt: row.updated_at } : i,
+                    ),
+                  }
+                : a,
+            ),
+          })),
+        )
+      }
+    } catch (e) {
+      if (snapshot) {
+        set((state) => restoreCircularState(state, circularId, snapshot))
+      }
+      set({ error: errorMessage(e, 'Failed to set checklist deadline') })
+      pushToast(revertMessage(e), 'error')
+      console.error('[optimistic:setArticleChecklistItemDeadline] failed —', e)
       throw e
     }
   },

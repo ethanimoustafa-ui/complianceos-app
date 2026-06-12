@@ -16,6 +16,9 @@ import { useTeamStore } from '@/stores/team-store'
 import { useCan } from '@/lib/permissions'
 import { EditableSelect } from '@/components/ui/editable-select'
 import { InlineDeadlinePicker } from '@/components/ui/inline-deadline-picker'
+// C(#31)/B(#30): consume a calendar deep-link → open the workflow tab + glow
+// the targeted step.
+import { useDeepLinkTab, useDeepLinkHighlight } from '@/hooks/useDeepLink'
 // P3 (W29): skeleton loaders for detail sections during initial fetch.
 import { Skeleton } from '@/components/ui/skeleton'
 import {
@@ -168,6 +171,13 @@ export function PolicyDetailsContent({
   // and the skeletons never rendered. Gating on detailLoading also means a
   // genuinely-empty policy never gets stuck showing skeletons after the GET.
   const isDetailPrefetch = detailLoading && !fresh.description && fresh.workflowTimeline.length === 0
+
+  // C(#31)/B(#30): if the user arrived from a calendar workflow-step deadline,
+  // switch to the Workflow tab, then (once the steps have rendered) scroll to
+  // and glow the targeted step. The sub-item id rides the transient deep-link
+  // store, never the URL.
+  useDeepLinkTab((tab) => setActiveTab(tab as DetailTab))
+  useDeepLinkHighlight(activeTab === 'workflow' && !isDetailPrefetch && fresh.workflowTimeline.length > 0)
 
   // P1 (W30): archived policies are strictly view-only — hide every mutation
   // affordance (upload zone, edit button, workflow actions, etc.).
@@ -793,6 +803,7 @@ export function PolicyDetailsContent({
                   return (
                     <div
                       key={idx}
+                      data-highlight-id={step.id}
                       draggable={!isCompleted && !isArchived}
                       onDragStart={() => !isCompleted && !isArchived && handleDragStart(idx)}
                       onDragOver={(e) => handleDragOver(e, idx)}

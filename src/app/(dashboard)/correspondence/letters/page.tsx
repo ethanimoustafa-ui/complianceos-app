@@ -9,6 +9,8 @@ import { Modal } from '@/components/ui/modal'
 import { NoDataEmptyState, NoResultsEmptyState } from '@/components/ui/empty-state'
 import { ListSkeleton, Skeleton } from '@/components/ui/skeleton'
 import { formatTimelineDate, formatLocalizedDate } from '@/lib/format-date'
+import { paginate } from '@/lib/pagination'
+import { TablePagination } from '@/components/ui/table-pagination'
 import { cn } from '@/lib/utils'
 import { useTranslation } from '@/i18n'
 import { Gate } from '@/components/auth/gate'
@@ -285,6 +287,13 @@ export default function LettersPage() {
       }
     })
   }, [filteredLetters, sort])
+
+  // Pagination — keep the Recent Correspondence table from dragging down the
+  // page when there are many letters (mirrors the risks/observations tables).
+  const LETTERS_PER_PAGE = 10
+  const [letterPage, setLetterPage] = useState(1)
+  useEffect(() => { setLetterPage(1) }, [letterSearch, dateFilter, sort, authorityFilter])
+  const { items: pagedLetters, totalPages: letterTotalPages } = paginate(sortedLetters, letterPage, LETTERS_PER_PAGE)
 
   // Actions dropdown state
   const [openMenuId, setOpenMenuId] = useState<string | null>(null)
@@ -1492,13 +1501,13 @@ export default function LettersPage() {
                       <th className={`px-6 py-4`}><LetterSortHeader label={t('common.status')} col="status" sort={sort} onSort={handleLetterSort} onClear={() => setSort(null)} /></th>
                       {/* W40 (story 2): sent + response-due surfaced on the row. */}
                       <th className={`px-6 py-4`}>{t('letters.tableSent')}</th>
-                      <th className={`px-6 py-4`}>{t('letters.tableResponseDue')}</th>
+                      <th className={`px-6 py-4`}>{t('letters.tableResponseReceived')}</th>
                       <th className={`px-6 py-4`}><LetterSortHeader label={t('letters.lastModified')} col="updatedAt" sort={sort} onSort={handleLetterSort} onClear={() => setSort(null)} /></th>
                       <th className={`px-6 py-4 ${isRTL ? 'text-left' : 'text-right'}`}>{t('common.actions')}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {sortedLetters.map((letter) => {
+                    {pagedLetters.map((letter) => {
                       const statusDisplay = getStatusDisplay(letter.status)
                       return (
                         <tr
@@ -1514,7 +1523,7 @@ export default function LettersPage() {
                           </td>
                           <td className="px-6 py-4">
                             <span
-                              className={`px-2 py-1 text-[10px] font-bold rounded-md ${getTypeBadgeColor(letter.type)}`}
+                              className={`inline-block whitespace-nowrap px-2 py-1 text-[10px] font-bold rounded-md ${getTypeBadgeColor(letter.type)}`}
                             >
                               {getTypeLabel(letter.type)}
                             </span>
@@ -1559,17 +1568,11 @@ export default function LettersPage() {
                             {letter.sentDate ? formatDate(letter.sentDate) : '—'}
                           </td>
                           <td className="px-6 py-4 text-sm whitespace-nowrap">
-                            {letter.responseDeadline ? (
-                              <span
-                                className={
-                                  (letter.status === 'sent' || letter.status === 'overdue') &&
-                                  new Date(letter.responseDeadline).getTime() < Date.now()
-                                    ? 'text-rose-600 font-bold'
-                                    : 'text-slate-400'
-                                }
-                              >
-                                {formatDate(letter.responseDeadline)}
-                              </span>
+                            {/* When the authority actually responded — more
+                                meaningful than a synthetic "due" date the
+                                regulator isn't bound by. */}
+                            {letter.responseReceivedDate ? (
+                              <span className="text-emerald-600 font-medium">{formatDate(letter.responseReceivedDate)}</span>
                             ) : (
                               <span className="text-slate-300">—</span>
                             )}
@@ -1618,6 +1621,15 @@ export default function LettersPage() {
                   </tbody>
                 </table>
               </div>
+              )}
+              {sortedLetters.length > LETTERS_PER_PAGE && (
+                <TablePagination
+                  currentPage={letterPage}
+                  totalPages={letterTotalPages}
+                  totalItems={sortedLetters.length}
+                  itemsPerPage={LETTERS_PER_PAGE}
+                  onPageChange={setLetterPage}
+                />
               )}
             </div>
           </div>
@@ -2283,10 +2295,10 @@ export default function LettersPage() {
                                 <div className="flex-1 min-w-0">
                                   <p className="text-xs font-bold text-slate-900">{roleLabel}</p>
                                   {step.status === 'approved' && (
-                                    <p className="text-[10px] text-emerald-600">{t('letters.stepApproved')} · {step.approvedAt}</p>
+                                    <p className="text-[10px] text-emerald-600">{t('letters.stepApproved')} · {step.approvedAt ? formatTimelineDate(step.approvedAt, isRTL) : ''}</p>
                                   )}
                                   {step.status === 'rejected' && (
-                                    <p className="text-[10px] text-rose-600">{t('letters.stepRejected')} · {step.rejectedAt}</p>
+                                    <p className="text-[10px] text-rose-600">{t('letters.stepRejected')} · {step.rejectedAt ? formatTimelineDate(step.rejectedAt, isRTL) : ''}</p>
                                   )}
                                   {step.status === 'pending' && (
                                     <p className="text-[10px] text-slate-400">

@@ -94,10 +94,21 @@ export async function POST(req: NextRequest, { params }: Params) {
     // template literal. Fall back to a generic key when names aren't provided
     // (e.g., pure assignees update).
     const isLeaderTransfer = input.leader_id !== undefined
+    // Resolve the new leader's name server-side when the client didn't send it,
+    // so the timeline never shows a raw profile UUID ("…transferred to c5a1…").
+    let toLeaderName = input.to_leader_name
+    if (isLeaderTransfer && !toLeaderName && input.leader_id) {
+      const { data: prof } = await supabase
+        .from('profiles')
+        .select('name, email')
+        .eq('id', input.leader_id)
+        .maybeSingle<{ name: string | null; email: string | null }>()
+      toLeaderName = prof?.name ?? prof?.email ?? undefined
+    }
     const timelineParams: Record<string, string> = isLeaderTransfer
       ? {
           from: input.from_leader_name ?? actor,
-          to: input.to_leader_name ?? String(input.leader_id ?? ''),
+          to: toLeaderName ?? 'the new leader',
         }
       : {}
     const timelineKey = isLeaderTransfer

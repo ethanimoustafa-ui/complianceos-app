@@ -627,6 +627,7 @@
     "letterResubmittedApproval": "Resubmitted for Approval",
     "tableSent": "Sent",
     "tableResponseDue": "Response Due",
+    "tableResponseReceived": "Response Received",
     "missingRequired": "Missing required:",
     "letterBody": "Body",
     "configureChain": "Configure",

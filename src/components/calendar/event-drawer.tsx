@@ -10,6 +10,7 @@ import type { CalendarEvent, UnifiedCalendarItem } from '@/types'
 import type { CalendarType } from './calendar-types'
 import { toHijri, getHijriMonthsFull, getDueStatus, SOURCE_COLORS, SOURCE_LABEL_KEYS, PRIORITY_COLORS, isItemDone, KIND_LABEL_KEYS } from './calendar-utils'
 import { useCalendarStore } from '@/stores/calendar-store'
+import { useDeepLinkStore, deepLinkTargetFromItemId } from '@/stores/deep-link-store'
 import { LoadingButton } from '@/components/ui/loading-button'
 import { Modal } from '@/components/ui/modal'
 import { formatTimelineDate } from '@/lib/format-date'
@@ -207,7 +208,17 @@ export function EventDrawer({ selectedDayKey, items, calendarType, onClose, onEd
                     </div>
                     {item.route && (
                       <button
-                        onClick={() => router.push(item.route)}
+                        onClick={() => {
+                          // C(#31): hand the exact sub-item + tab to the
+                          // destination via the transient store (NOT the URL),
+                          // then navigate to the clean entity route.
+                          const dl = deepLinkTargetFromItemId(item.id)
+                          useDeepLinkStore.getState().setDeepLink({
+                            highlightId: dl?.highlightId ?? null,
+                            tab: dl?.tab ?? null,
+                          })
+                          router.push(item.route)
+                        }}
                         className={cn(
                           'mt-1 w-full text-xs font-bold py-2 rounded-lg border transition-colors cursor-pointer flex items-center justify-center gap-2',
                           'bg-white text-slate-700 border-slate-200 hover:border-emerald-300 hover:text-emerald-600'

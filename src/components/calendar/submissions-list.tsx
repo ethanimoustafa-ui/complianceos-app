@@ -8,6 +8,7 @@ import type { TranslationKey } from '@/i18n'
 import type { CalendarSourceType, UnifiedCalendarItem } from '@/types'
 import type { CalendarType } from './calendar-types'
 import { getDueStatus, getHijriMonthsFull, toHijri, SOURCE_COLORS, SOURCE_LABEL_KEYS, PRIORITY_COLORS, isItemDone, KIND_LABEL_KEYS } from './calendar-utils'
+import { useDeepLinkStore, deepLinkTargetFromItemId } from '@/stores/deep-link-store'
 
 interface SubmissionsListProps {
   items: UnifiedCalendarItem[]
@@ -173,7 +174,17 @@ export function SubmissionsList({
                       </span>
                       {item.route && (
                         <button
-                          onClick={(e) => { e.stopPropagation(); router.push(item.route) }}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            // C(#31): hand sub-item + tab to the destination
+                            // via the transient store, then navigate.
+                            const dl = deepLinkTargetFromItemId(item.id)
+                            useDeepLinkStore.getState().setDeepLink({
+                              highlightId: dl?.highlightId ?? null,
+                              tab: dl?.tab ?? null,
+                            })
+                            router.push(item.route)
+                          }}
                           className="p-1.5 rounded-lg bg-slate-100 hover:bg-emerald-100 text-slate-500 hover:text-emerald-600 transition-colors cursor-pointer"
                           title={t('calendar.goToSource')}
                         >

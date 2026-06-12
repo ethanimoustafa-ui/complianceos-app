@@ -803,14 +803,17 @@ export default function ReportsAuditsPage() {
       <AddAuditModal
         isOpen={showScheduleAuditModal}
         onClose={() => setShowScheduleAuditModal(false)}
-        // W54: return the refetch promise — the modal's spinner awaits it.
-        onSuccess={() => fetchAudits()}
+        // W54 + J(#38): return the refetch promise so the modal's spinner awaits
+        // it — and force:true so the 30s TTL guard can't short-circuit it to an
+        // instant no-op (which let the spinner end ~0.5-1s before the reconciled
+        // row landed). The spinner now provably covers a real server refetch.
+        onSuccess={() => fetchAudits({ force: true })}
       />
       <EditAuditModal
         isOpen={!!auditToEdit}
         onClose={() => setAuditToEdit(null)}
         audit={auditToEdit}
-        onSuccess={() => { fetchAudits() }}
+        onSuccess={() => fetchAudits({ force: true })}
       />
       <DeleteConfirmationDialog
         isOpen={showDeleteConfirm}

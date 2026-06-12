@@ -29,6 +29,8 @@ import { exportRisksLocalized } from '@/lib/export'
 import type { TranslationKey } from '@/i18n'
 import { useFormattedDate } from '@/hooks/useFormattedDate'
 import { ChecklistSection } from '@/components/observations/detail/checklist-section'
+// C(#31): glow a mitigation-checklist item opened from the calendar.
+import { useDeepLinkHighlight } from '@/hooks/useDeepLink'
 import { Gate } from '@/components/auth/gate'
 import { dicebearAvatar } from '@/lib/avatar'
 import { paginate } from '@/lib/pagination'
@@ -530,6 +532,13 @@ export default function ReportsRisksPage() {
       setIsRiskDrawerOpen(true)
     }
   }, [risks]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // C(#31): once the drawer's mitigation checklist has rendered, scroll to +
+  // glow the exact item the user clicked on the calendar (id via the transient
+  // deep-link store, not the URL).
+  useDeepLinkHighlight(
+    isRiskDrawerOpen && !!selectedRisk && (selectedRisk.mitigationChecklist?.length ?? 0) > 0,
+  )
 
   // Sync selectedRisk.
   // Read-side defense (mirrors audits' "Not Found" fix): prefer `byId[id]`

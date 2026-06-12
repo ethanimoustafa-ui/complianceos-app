@@ -138,9 +138,11 @@ export function CalendarHeader({
           </div>
         </div>
 
-        <div className={`flex items-center gap-4`}>
-          {/* Date Navigation */}
-          <div className={`flex items-center gap-1 bg-white border border-slate-200 p-1 rounded-lg`}>
+        <div className={`flex items-center gap-6`}>
+          {/* Date Navigation — L(#40): more breathing space between the prev /
+              today / picker / next controls so they don't read as one cramped
+              block (gap-1.5 + roomier picker padding). */}
+          <div className={`flex items-center gap-1.5 bg-white border border-slate-200 px-1.5 py-1 rounded-lg`}>
             <button onClick={() => onNavigate(-1)} className="p-1.5 hover:bg-slate-50 rounded transition-colors cursor-pointer">
               <Icon icon="lucide:chevron-left" className={cn("text-slate-600", isRTL && "flip-x")} />
             </button>
@@ -149,7 +151,7 @@ export function CalendarHeader({
             </button>
             <button
               onClick={onOpenPicker}
-              className="px-4 py-1.5 text-sm font-bold text-slate-900 hover:bg-slate-50 transition-colors border-x border-slate-100 flex items-center gap-2 cursor-pointer"
+              className="px-4 py-1.5 mx-0.5 text-sm font-bold text-slate-900 hover:bg-slate-50 transition-colors border-x border-slate-100 flex items-center gap-2 cursor-pointer"
             >
               <span>{getDisplayLabel()}</span>
               <Icon icon="lucide:calendar-range" className="text-xl text-emerald-500" />

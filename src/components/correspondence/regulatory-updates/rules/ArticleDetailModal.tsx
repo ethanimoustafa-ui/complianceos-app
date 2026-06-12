@@ -11,6 +11,7 @@ import type { CircularArticle, ArticleRiskLevel, ArticleComplianceStatus } from 
 import { useDepartmentStore } from '@/stores/department-store'
 import { useTeamStore } from '@/stores/team-store'
 import { EditableSelect } from '@/components/ui/editable-select'
+import { InlineDeadlinePicker } from '@/components/ui/inline-deadline-picker'
 import { TimelineMeta } from './CircularDetailsContent'
 import { VersionHistoryList } from './VersionHistoryList'
 import { TimelineLoadMore } from './TimelineLoadMore'
@@ -33,7 +34,9 @@ type Props = {
 }
 
 export function ArticleDetailModal({ circularId, article, mode, onClose, t, isRTL }: Props) {
-  const { addArticle, updateArticle, deleteArticle, toggleChecklistItem, addChecklistItem, deleteChecklistItem, loadArticleTimeline, loadMoreArticleTimeline, loadArticleVersions, loadMoreArticleVersions } = useCircularStore()
+  const { addArticle, updateArticle, deleteArticle, toggleChecklistItem, addChecklistItem, deleteChecklistItem, setArticleChecklistItemDeadline, loadArticleTimeline, loadMoreArticleTimeline, loadArticleVersions, loadMoreArticleVersions } = useCircularStore()
+  // Task D / #32: parent circular due date bounds the per-item deadline picker.
+  const parentCircularDueDate = useCircularStore((s) => s.byId[circularId]?.dueDate)
   const { departments: allDepartments, addDepartment, updateDepartment, removeDepartment } = useDepartmentStore()
   const teamMembers = useTeamStore(s => s.members)
   // GAP-15: per-article Activity timeline pagination state.
@@ -321,6 +324,17 @@ export function ArticleDetailModal({ circularId, article, mode, onClose, t, isRT
                       className="rounded text-emerald-600 focus:ring-emerald-500 shrink-0 cursor-pointer"
                     />
                     <span className={cn('text-sm flex-1', item.completed ? 'line-through text-slate-400' : 'text-slate-700')}>{item.title}</span>
+                    {/* Task D / #32: per-item deadline. Only for persisted
+                        articles (the picker PATCHes the server). */}
+                    {article ? (
+                      <InlineDeadlinePicker
+                        value={item.deadline}
+                        parentDeadline={parentCircularDueDate}
+                        onChange={(next) => {
+                          void setArticleChecklistItemDeadline(circularId, article.id, item.id, next)
+                        }}
+                      />
+                    ) : null}
                     <button
                       onClick={() => {
                         if (article) {

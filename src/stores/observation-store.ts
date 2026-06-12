@@ -334,6 +334,9 @@ interface ObservationState {
     file: File,
     uploader: User,
     addToRemediationPlan?: boolean,
+    // E (#33): when uploaded as part of observation creation, suppress the
+    // separate "document uploaded" timeline entry (server + optimistic).
+    skipTimeline?: boolean,
   ) => Promise<string | null>
   removeDocument: (observationId: string, documentId: string, documentName: string, user: User) => Promise<void>
   /** Mints a short-lived signed URL to open/download a stored document. */
@@ -2641,7 +2644,7 @@ export const useObservationStore = create<ObservationState>()((set, get) => ({
   // `observation_documents` bucket, then registers the metadata row so a
   // reviewer can open it via the signed-URL endpoint. Mirrors
   // letter-store.uploadAttachment: bytes → bucket → /evidence → reflect state.
-  uploadDocument: async (observationId, file, uploader, addToRemediationPlan) => {
+  uploadDocument: async (observationId, file, uploader, addToRemediationPlan, skipTimeline) => {
     if (file.size === 0) {
       set({ error: 'Cannot upload an empty file.' })
       throw new Error('Cannot upload an empty file.')
@@ -2677,6 +2680,7 @@ export const useObservationStore = create<ObservationState>()((set, get) => ({
             type,
             storage_path: storagePath,
             is_remediation: Boolean(addToRemediationPlan),
+            skip_timeline: Boolean(skipTimeline),
           },
         )
       } catch (postErr) {
@@ -2725,7 +2729,9 @@ export const useObservationStore = create<ObservationState>()((set, get) => ({
             ...selectedObservation,
             documents: [...(selectedObservation.documents || []), realDocument],
             remediationPlan: attachToPlan(selectedObservation.remediationPlan),
-            timeline: [timelineEntry, ...(selectedObservation.timeline || [])],
+            timeline: skipTimeline
+              ? selectedObservation.timeline || []
+              : [timelineEntry, ...(selectedObservation.timeline || [])],
           }
         }
         const previous = state.byId[observationId]

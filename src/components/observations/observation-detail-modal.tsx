@@ -9,6 +9,8 @@ import { useAuthStore } from '@/stores/auth-store'
 import { useTeamStore } from '@/stores/team-store'
 import { useTranslation } from '@/i18n'
 import { canTransferLeadership, canReviewRemediation, canSubmitRemediation, canUploadDocument, canRequestClosure, canReviewClosure } from '@/lib/permissions'
+// C(#31): scroll to + glow a checklist item the user clicked on the calendar.
+import { useDeepLinkHighlight } from '@/hooks/useDeepLink'
 import { TransferLeadershipModal } from './transfer-leadership-modal'
 import { FileUploadModal } from './file-upload-modal'
 import { RemediationPlanModal, type RemediationPlanInitial } from './remediation-plan-modal'
@@ -106,6 +108,9 @@ export const ObservationDetailModal = memo(function ObservationDetailModal({
   const detailLoaded = observation?.id
     ? (isDetailLoadedFn ? isDetailLoadedFn(observation.id) : !isHydrating)
     : false
+
+  // C(#31): once the modal's checklist has rendered, glow the deep-linked item.
+  useDeepLinkHighlight(isOpen && detailLoaded && localChecklist.length > 0)
 
   // Modal states
   const [showTransferModal, setShowTransferModal] = useState(false)
