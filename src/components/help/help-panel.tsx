@@ -7,6 +7,8 @@ import { Modal } from '@/components/ui/modal'
 import { useHelpStore } from '@/stores/help-store'
 import { useTranslation } from '@/i18n'
 import { HelpPanelAr } from './help-panel-ar'
+import { HelpComingSoon } from './help-coming-soon'
+import { HELP_CENTER_ENABLED } from '@/config/help-center'
 
 const CATEGORIES = [
   'Getting Started',
@@ -60,6 +62,9 @@ export function HelpPanel({ isOpen, onClose }: HelpPanelProps) {
     trackView(id)
   }
 
+  // Help content not authored yet → branded "coming soon" (covers LTR + RTL).
+  // Flip src/config/help-center.ts (see docs/help-center/README.md) to go live.
+  if (isOpen && !HELP_CENTER_ENABLED) return <HelpComingSoon onClose={onClose} isRTL={isRTL} />
   if (isRTL) return <HelpPanelAr isOpen={isOpen} onClose={onClose} />
   if (!isOpen) return null
 

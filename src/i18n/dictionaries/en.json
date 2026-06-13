@@ -83,6 +83,8 @@
     "notifications": "Notifications",
     "messages": "Messages",
     "helpCenter": "Help Center",
+    "helpComingSoonTitle": "Help Center is on the way",
+    "helpComingSoonBody": "We're putting together guides, walkthroughs, and answers to get you up to speed. Check back soon — it'll live right here.",
     "signOut": "Sign Out",
     "editProfile": "Edit Profile",
     "markAllRead": "Mark All as Read",

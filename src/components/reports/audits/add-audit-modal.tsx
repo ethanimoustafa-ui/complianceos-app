@@ -100,11 +100,21 @@ interface AddAuditModalProps {
   mode?: 'audit' | 'template'
   /** Edit target when `mode === 'template'`. */
   template?: AuditTemplate
+  /** Prefill values for CREATING a template (no `template` → on save it
+   *  creates). Used to migrate a legacy entity template into audit_templates. */
+  templateSeed?: {
+    title?: string
+    type?: string
+    category?: string
+    priority?: AuditFormData['priority']
+    frequency?: AuditFrequency
+    description?: string
+  }
   /** Fired after a template is created/updated (so the caller can close). */
   onTemplateSaved?: () => void
 }
 
-export function AddAuditModal({ isOpen, onClose, onSuccess, initialValues, mode = 'audit', template, onTemplateSaved }: AddAuditModalProps) {
+export function AddAuditModal({ isOpen, onClose, onSuccess, initialValues, mode = 'audit', template, templateSeed, onTemplateSaved }: AddAuditModalProps) {
   const { t, isRTL } = useTranslation()
   const isTemplate = mode === 'template'
   const { create, isMutating } = useAuditStore()
@@ -251,6 +261,23 @@ export function AddAuditModal({ isOpen, onClose, onSuccess, initialValues, mode 
       setSchedule(scheduleFromFrequency(template.frequency, template.frequencySchedule))
       setFrameworkIds(template.framework ? [template.framework] : [])
       setAttachments(template.frequencySchedule?.attachments ?? [])
+    } else if (templateSeed) {
+      // Migrating a legacy entity template → prefill, then CREATE on save.
+      reset({
+        title: templateSeed.title || '',
+        type: templateSeed.type || 'internal',
+        status: 'pending',
+        assigneeId: '',
+        scope: '',
+        description: templateSeed.description || '',
+        category: templateSeed.category,
+        frequency: templateSeed.frequency,
+        priority: templateSeed.priority,
+      })
+      setSelectedType(templateSeed.type || 'internal')
+      setSchedule(scheduleFromFrequency(templateSeed.frequency, undefined))
+      setFrameworkIds([])
+      setAttachments([])
     } else {
       reset({
         title: '', type: 'internal', status: 'pending', assigneeId: '',
@@ -262,7 +289,7 @@ export function AddAuditModal({ isOpen, onClose, onSuccess, initialValues, mode 
       setAttachments([])
     }
     setSelectedTemplateId('')
-  }, [isTemplate, template, isOpen, reset])
+  }, [isTemplate, template, templateSeed, isOpen, reset])
 
   const handleTemplateSelect = (templateId: string) => {
     setSelectedTemplateId(templateId)

@@ -322,6 +322,17 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
     const { user } = get()
     if (!user) return
     set({ user: { ...user, ...data } })
+    // Persist to the profiles row so the choice survives reload and stays
+    // consistent everywhere the avatar is rendered from `avatar_seed`.
+    // Best-effort: if RLS blocks it the local update still holds for the session.
+    const patch: Record<string, unknown> = {}
+    if (data.avatarSeed !== undefined) patch.avatar_seed = data.avatarSeed
+    if (data.name !== undefined) patch.name = data.name
+    if (data.phone !== undefined) patch.phone = data.phone
+    if (Object.keys(patch).length > 0) {
+      const supabase = createClient()
+      void supabase.from('profiles').update(patch).eq('id', user.id)
+    }
   },
 
   setUser: (user) =>

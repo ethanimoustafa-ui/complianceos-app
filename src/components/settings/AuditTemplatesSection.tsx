@@ -71,6 +71,8 @@ export function AuditTemplatesSection({ embedded = false }: { embedded?: boolean
   const [sort, setSort] = useState<SortState<SortCol>>(null)
   const [isCreateOpen, setIsCreateOpen] = useState(false)
   const [editId, setEditId] = useState<string | null>(null)
+  // Editing a legacy entity template migrates it into audit_templates.
+  const [editingEntityId, setEditingEntityId] = useState<string | null>(null)
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null)
   const [rowDeleting, setRowDeleting] = useState(false)
 
@@ -124,6 +126,7 @@ export function AuditTemplatesSection({ embedded = false }: { embedded?: boolean
   }
 
   const editTemplate = editId ? templates.find((tm) => tm.id === editId) : null
+  const editingEntity = editingEntityId ? entityTemplates.find((et) => et.id === editingEntityId) : null
   const pendingDeleteRow = pendingDeleteId ? rows.find((r) => r.id === pendingDeleteId) : null
 
   async function confirmRowDelete() {
@@ -202,15 +205,13 @@ export function AuditTemplatesSection({ embedded = false }: { embedded?: boolean
                 <td className="px-8 py-4 text-end">
                   <Gate perm="Manage Audit Templates">
                     <div className="inline-flex items-center gap-1">
-                      {row.source === 'audit' && (
-                        <button
-                          onClick={() => setEditId(row.id)}
-                          className="text-slate-400 hover:text-emerald-600 transition-colors cursor-pointer p-1.5 rounded-md hover:bg-emerald-50"
-                          aria-label={t('common.edit')}
-                        >
-                          <Icon icon="lucide:edit-3" />
-                        </button>
-                      )}
+                      <button
+                        onClick={() => (row.source === 'audit' ? setEditId(row.id) : setEditingEntityId(row.id))}
+                        className="text-slate-400 hover:text-emerald-600 transition-colors cursor-pointer p-1.5 rounded-md hover:bg-emerald-50"
+                        aria-label={t('common.edit')}
+                      >
+                        <Icon icon="lucide:edit-3" />
+                      </button>
                       <button
                         onClick={() => setPendingDeleteId(row.id)}
                         className="text-slate-400 hover:text-rose-600 transition-colors cursor-pointer p-1.5 rounded-md hover:bg-rose-50"
@@ -235,13 +236,36 @@ export function AuditTemplatesSection({ embedded = false }: { embedded?: boolean
         mode="template"
       />
 
-      {/* Edit — same modal, prefilled from the target template (audit rows only). */}
+      {/* Edit — same modal, prefilled from the target template (audit rows). */}
       {editTemplate && (
         <AddAuditModal
           isOpen={!!editId}
           onClose={() => setEditId(null)}
           mode="template"
           template={editTemplate}
+        />
+      )}
+
+      {/* Edit a legacy entity template → prefill + create a real audit_template,
+          then delete the entity (migrate-on-edit). */}
+      {editingEntity && (
+        <AddAuditModal
+          isOpen={!!editingEntityId}
+          onClose={() => setEditingEntityId(null)}
+          mode="template"
+          templateSeed={{
+            title: String((editingEntity.fields as Record<string, unknown>)?.title ?? editingEntity.name),
+            type: (editingEntity.fields as Record<string, unknown>)?.type ? String((editingEntity.fields as Record<string, unknown>).type) : 'internal',
+            category: (editingEntity.fields as Record<string, unknown>)?.category ? String((editingEntity.fields as Record<string, unknown>).category) : undefined,
+            priority: (editingEntity.fields as Record<string, unknown>)?.priority as 'critical' | 'high' | 'medium' | 'low' | undefined,
+            frequency: (editingEntity.fields as Record<string, unknown>)?.frequency as 'annual' | 'semi_annual' | 'quarterly' | 'monthly' | 'ad_hoc' | undefined,
+            description: (editingEntity.fields as Record<string, unknown>)?.description ? String((editingEntity.fields as Record<string, unknown>).description) : undefined,
+          }}
+          onTemplateSaved={() => {
+            const id = editingEntity.id
+            void deleteEntity(id, 'audit')
+            setEditingEntityId(null)
+          }}
         />
       )}
 

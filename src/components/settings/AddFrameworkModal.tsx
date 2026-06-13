@@ -161,6 +161,7 @@ export function AddFrameworkModal({ isOpen, onClose }: Props) {
         <div className="grid grid-cols-2 gap-4">
           <Input
             label={t('settings.nameEnglish')}
+            requiredMark
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder={t('settings.frameworkNamePlaceholder')}
@@ -175,7 +176,9 @@ export function AddFrameworkModal({ isOpen, onClose }: Props) {
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('settings.descriptionEnglish')}</label>
+          <label className="block text-sm font-medium text-slate-700 mb-1.5">
+            {t('settings.descriptionEnglish')}<span className="text-rose-500" aria-hidden="true"> *</span>
+          </label>
           <textarea
             rows={2}
             value={description}
@@ -258,7 +261,7 @@ export function AddFrameworkModal({ isOpen, onClose }: Props) {
           <LoadingButton
             variant="primary"
             className="flex-1"
-            disabled={!name.trim()}
+            disabled={!name.trim() || !description.trim()}
             onClick={handleSubmit}
           >
             {t('settings.createFramework')}
