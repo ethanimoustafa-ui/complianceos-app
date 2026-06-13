@@ -17,6 +17,7 @@ import { useTranslation, type TranslationKey } from '@/i18n'
 import { Button } from '@/components/ui/button'
 import { Modal } from '@/components/ui/modal'
 import { ListSkeleton } from '@/components/ui/skeleton'
+import { HelpTip } from '@/components/ui/tooltip'
 import { useEnumValuesStore, type EnumValue } from '@/stores/enum-values-store'
 import { usePolicyStore } from '@/stores/policy-store'
 import { usePolicyTemplateStore } from '@/stores/policy-template-store'
@@ -219,9 +220,7 @@ export function ApprovalTiersSection({ embedded = false }: { embedded?: boolean 
               <th className="px-6 py-2.5 text-[10px] font-black uppercase tracking-wider text-slate-500">
                 <span className="inline-flex items-center gap-1">
                   {t('settings.enumValues.sortOrder')}
-                  <span className="cursor-help inline-flex" title={t('settings.enumValues.sortOrderHelp' as TranslationKey)}>
-                    <Icon icon="lucide:help-circle" className="text-slate-400 text-xs" />
-                  </span>
+                  <HelpTip content={t('settings.enumValues.sortOrderHelp' as TranslationKey)} className="text-xs" />
                 </span>
               </th>
               <th className="px-6 py-2.5 text-[10px] font-black uppercase tracking-wider text-slate-500 text-end">&nbsp;</th>
@@ -253,7 +252,6 @@ export function ApprovalTiersSection({ embedded = false }: { embedded?: boolean 
                       defaultValue={row.sortOrder}
                       onBlur={(e) => saveSort(row, e.target.value)}
                       className="w-16 h-7 rounded-md border border-slate-200 px-2 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
-                      title={t('settings.enumValues.sortOrderHelp' as TranslationKey)}
                     />
                   </td>
                   <td className="px-6 py-3">

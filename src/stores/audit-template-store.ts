@@ -190,20 +190,30 @@ export const useAuditTemplateStore = create<AuditTemplateState>()((set, get) => 
     }
   },
 
+  // Optimistic delete — drop the row immediately, restore on failure.
   delete: async (id) => {
-    set({ isMutating: true, error: null })
+    const { templates } = get()
+    const idx = templates.findIndex((t) => t.id === id)
+    if (idx === -1) return
+    const removed = templates[idx]
+    set((s) => {
+      const { [id]: _drop, ...rest } = s.byId
+      return { templates: s.templates.filter((t) => t.id !== id), byId: rest, isMutating: true, error: null }
+    })
     try {
       await api.delete(`/audit-templates/${id}`)
+      set({ isMutating: false })
+    } catch (e) {
       set((s) => {
-        const { [id]: _drop, ...rest } = s.byId
+        const next = [...s.templates]
+        next.splice(Math.min(idx, next.length), 0, removed)
         return {
-          templates: s.templates.filter((t) => t.id !== id),
-          byId: rest,
+          templates: next,
+          byId: { ...s.byId, [id]: removed },
+          error: errorMessage(e, 'Failed to delete audit template'),
           isMutating: false,
         }
       })
-    } catch (e) {
-      set({ error: errorMessage(e, 'Failed to delete audit template'), isMutating: false })
       throw e
     }
   },

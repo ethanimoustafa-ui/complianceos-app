@@ -137,20 +137,32 @@ export const useLetterTypeStore = create<LetterTypeState>()((set, get) => ({
     }
   },
 
+  // Optimistic delete — drop the row immediately so the UI doesn't sit on a
+  // stale list while the DELETE round-trips (owner: delete felt laggy). On
+  // failure, restore the row to its original position.
   remove: async (id) => {
-    set({ isMutating: true, error: null })
+    const { types } = get()
+    const idx = types.findIndex((t) => t.id === id)
+    if (idx === -1) return
+    const removed = types[idx]
+    set((s) => {
+      const { [id]: _drop, ...rest } = s.byId
+      return { types: s.types.filter((t) => t.id !== id), byId: rest, isMutating: true, error: null }
+    })
     try {
       await api.delete(`/letter-types/${id}`)
+      set({ isMutating: false })
+    } catch (e) {
       set((s) => {
-        const { [id]: _drop, ...rest } = s.byId
+        const next = [...s.types]
+        next.splice(Math.min(idx, next.length), 0, removed)
         return {
-          types: s.types.filter((t) => t.id !== id),
-          byId: rest,
+          types: next,
+          byId: { ...s.byId, [id]: removed },
+          error: errorMessage(e, 'Failed to delete letter type'),
           isMutating: false,
         }
       })
-    } catch (e) {
-      set({ error: errorMessage(e, 'Failed to delete letter type'), isMutating: false })
       throw e
     }
   },

@@ -1505,6 +1505,16 @@ export interface FrequencySchedule {
   // H1: optional iconify icon ID persisted alongside frequency metadata so no
   // extra DB column is required (the frequency_schedule jsonb absorbs it).
   templateIcon?: string
+  // Reference documents attached to an (audit) template. Stored here in the
+  // frequency_schedule jsonb (no dedicated table/column) — same rationale as
+  // templateIcon. Files are kept as data URLs for local preview/download.
+  attachments?: TemplateAttachment[]
+}
+
+export interface TemplateAttachment {
+  name: string
+  size: number
+  dataUrl: string
 }
 
 export interface AuditTemplate {

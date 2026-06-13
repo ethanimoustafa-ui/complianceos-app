@@ -167,27 +167,34 @@ export const useFrameworkSubCategoryStore = create<FrameworkSubCategoryState>()(
       }
     },
 
+    // Optimistic delete — drop the row immediately, restore on failure.
     remove: async (id) => {
-      set({ isMutating: true, error: null })
+      const { subCategories } = get()
+      const idx = subCategories.findIndex((sc) => sc.id === id)
+      if (idx === -1) return
+      const removed = subCategories[idx]
+      set((s) => ({
+        subCategories: s.subCategories.filter((sc) => sc.id !== id),
+        isMutating: true,
+        error: null,
+      }))
+      // No server row yet → the local removal is the whole job.
+      if (!removed.rowId) {
+        set({ isMutating: false })
+        return
+      }
       try {
-        const target = get().subCategories.find((sc) => sc.id === id)
-        if (!target?.rowId) {
-          // Already absent from server — drop locally and bail.
-          set((s) => ({
-            subCategories: s.subCategories.filter((sc) => sc.id !== id),
-            isMutating: false,
-          }))
-          return
-        }
-        await api.delete(`/letter-sub-categories/${target.rowId}`)
-        set((s) => ({
-          subCategories: s.subCategories.filter((sc) => sc.id !== id),
-          isMutating: false,
-        }))
+        await api.delete(`/letter-sub-categories/${removed.rowId}`)
+        set({ isMutating: false })
       } catch (e) {
-        set({
-          error: errorMessage(e, 'Failed to delete sub-category'),
-          isMutating: false,
+        set((s) => {
+          const next = [...s.subCategories]
+          next.splice(Math.min(idx, next.length), 0, removed)
+          return {
+            subCategories: next,
+            error: errorMessage(e, 'Failed to delete sub-category'),
+            isMutating: false,
+          }
         })
         throw e
       }

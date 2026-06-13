@@ -64,7 +64,7 @@ interface AuditCategoryState {
   clearError(): void
 }
 
-export const useAuditCategoryStore = create<AuditCategoryState>()((set) => ({
+export const useAuditCategoryStore = create<AuditCategoryState>()((set, get) => ({
   categories: [],
   byId: {},
 
@@ -154,20 +154,30 @@ export const useAuditCategoryStore = create<AuditCategoryState>()((set) => ({
     }
   },
 
+  // Optimistic delete — remove the row immediately, restore on failure.
   remove: async (id) => {
-    set({ isMutating: true, error: null })
+    const { categories } = get()
+    const idx = categories.findIndex((c) => c.id === id)
+    if (idx === -1) return
+    const removed = categories[idx]
+    set((s) => {
+      const { [id]: _drop, ...rest } = s.byId
+      return { categories: s.categories.filter((c) => c.id !== id), byId: rest, isMutating: true, error: null }
+    })
     try {
       await api.delete(`/audit-categories/${id}`)
+      set({ isMutating: false })
+    } catch (e) {
       set((s) => {
-        const { [id]: _drop, ...rest } = s.byId
+        const next = [...s.categories]
+        next.splice(Math.min(idx, next.length), 0, removed)
         return {
-          categories: s.categories.filter((c) => c.id !== id),
-          byId: rest,
+          categories: next,
+          byId: { ...s.byId, [id]: removed },
+          error: errorMessage(e, 'Failed to delete audit category'),
           isMutating: false,
         }
       })
-    } catch (e) {
-      set({ error: errorMessage(e, 'Failed to delete audit category'), isMutating: false })
       throw e
     }
   },

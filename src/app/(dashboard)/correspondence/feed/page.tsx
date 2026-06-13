@@ -279,6 +279,17 @@ export default function CorrespondenceFeedPage() {
     [trainingStore.overviewStats.overallCompletion],
   )
 
+  // Per-card first-fetch gates for the metrics strip — mirror the feed/circular/
+  // team skeleton idiom so the four stat cards don't flash "0" while the rest of
+  // the feed shimmers. Submissions span two stores (letters + legacy feed);
+  // saudization/training read the persisted metrics singleton, whose first load
+  // is tracked by the training store's dedicated `metricsLoading` flag.
+  const isSubmissionsLoading =
+    (letterStore.isLoading && letterStore.letters.length === 0) || isFeedLoading
+  const isObservationsLoading =
+    observationStore.isLoading && observationStore.observations.length === 0
+  const isMetricsLoading = trainingStore.metricsLoading
+
   // W43: "Current %" = the MEAN of each policy's approval-workflow ratio
   // (workflow_progress is decorated on GET /api/policies: completed steps /
   // total steps). Policies without a workflow yet fall back to status
@@ -627,6 +638,7 @@ export default function CorrespondenceFeedPage() {
               title={t('correspondence.letterSubmissions')}
               value={String(samaSubmissionCount)}
               subtitle={currentQuarterLabel}
+              loading={isSubmissionsLoading}
               isRTL={isRTL}
             />
             <MetricCard
@@ -638,6 +650,7 @@ export default function CorrespondenceFeedPage() {
               subtitle={t('correspondence.openFindings')}
               progress={openObservationCount > 0 ? Math.min(100, openObservationCount * 8) : 0}
               progressColor="bg-rose-500"
+              loading={isObservationsLoading}
               isRTL={isRTL}
             />
             <MetricCard
@@ -649,6 +662,7 @@ export default function CorrespondenceFeedPage() {
               subtitle={t('correspondence.target', { value: '40%' })}
               progress={saudizationRate > 0 ? Math.min(100, Math.round((saudizationRate / 40) * 100)) : 0}
               progressColor="bg-blue-500"
+              loading={isMetricsLoading}
               isRTL={isRTL}
             />
             <MetricCard
@@ -660,6 +674,7 @@ export default function CorrespondenceFeedPage() {
               subtitle={t('correspondence.employeesCertified')}
               progress={trainingCompletionRate}
               progressColor="bg-amber-500"
+              loading={isMetricsLoading}
               isRTL={isRTL}
             />
           </div>
@@ -1651,6 +1666,7 @@ function MetricCard({
   progress,
   progressColor = 'bg-emerald-500',
   progressSegments,
+  loading = false,
 }: {
   icon: string
   iconColor: 'emerald' | 'rose' | 'blue' | 'amber'
@@ -1661,6 +1677,7 @@ function MetricCard({
   progress?: number
   progressColor?: string
   progressSegments?: { color: string; flex: number }[]
+  loading?: boolean
   isRTL?: boolean
 }) {
   const iconColors = {
@@ -1683,30 +1700,48 @@ function MetricCard({
         <div className={`p-2 ${iconColors[iconColor]} rounded-lg`}>
           <Icon icon={icon} className="text-2xl" />
         </div>
-        <span className={`text-[10px] font-bold ${labelColors[iconColor]} px-2 py-0.5 rounded-full`}>
-          {label}
-        </span>
+        {loading ? (
+          <Skeleton className="h-4 w-14 rounded-full" />
+        ) : (
+          <span className={`text-[10px] font-bold ${labelColors[iconColor]} px-2 py-0.5 rounded-full`}>
+            {label}
+          </span>
+        )}
       </div>
       <h3 className="text-slate-500 text-xs font-bold uppercase tracking-wider mb-1">{title}</h3>
       <div className={`flex items-baseline gap-2`}>
-        <span className="text-2xl font-bold text-slate-900">{value}</span>
-        <span className="text-xs text-slate-400">{subtitle}</span>
+        {loading ? (
+          <Skeleton className="h-7 w-16 my-0.5" />
+        ) : (
+          <>
+            <span className="text-2xl font-bold text-slate-900">{value}</span>
+            <span className="text-xs text-slate-400">{subtitle}</span>
+          </>
+        )}
       </div>
-      {progress !== undefined && (
-        <div className="mt-4 h-1.5 bg-slate-100 rounded-full overflow-hidden">
-          <div className={`h-full ${progressColor}`} style={{ width: `${progress}%` }} />
+      {loading ? (
+        <div className="mt-4">
+          <Skeleton className="h-1.5 w-full rounded-full" />
         </div>
-      )}
-      {progressSegments && (
-        <div className={`mt-4 flex gap-1`}>
-          {progressSegments.map((segment, i) => (
-            <div
-              key={i}
-              className={`h-1.5 ${segment.color} rounded-full`}
-              style={{ flex: segment.flex }}
-            />
-          ))}
-        </div>
+      ) : (
+        <>
+          {progress !== undefined && (
+            <div className="mt-4 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+              <div className={`h-full ${progressColor}`} style={{ width: `${progress}%` }} />
+            </div>
+          )}
+          {progressSegments && (
+            <div className={`mt-4 flex gap-1`}>
+              {progressSegments.map((segment, i) => (
+                <div
+                  key={i}
+                  className={`h-1.5 ${segment.color} rounded-full`}
+                  style={{ flex: segment.flex }}
+                />
+              ))}
+            </div>
+          )}
+        </>
       )}
     </div>
   )

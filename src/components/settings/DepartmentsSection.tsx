@@ -21,12 +21,32 @@ export function DepartmentsSection({ embedded = false }: { embedded?: boolean } 
   const isLoading = useDepartmentStore((s) => s.isLoading)
   const fetchAll = useDepartmentStore((s) => s.fetchAll)
   const updateDepartment = useDepartmentStore((s) => s.updateDepartment)
+  const addDepartment = useDepartmentStore((s) => s.addDepartment)
 
   useEffect(() => { void fetchAll() }, [fetchAll])
 
   const [editingId, setEditingId] = useState<string | null>(null)
   const [draftEmail, setDraftEmail] = useState('')
   const [savingId, setSavingId] = useState<string | null>(null)
+  // Owner: a department can now be created straight from the configurables hub.
+  const [adding, setAdding] = useState(false)
+  const [draftName, setDraftName] = useState('')
+  const [draftNameAr, setDraftNameAr] = useState('')
+  const [savingNew, setSavingNew] = useState(false)
+
+  const handleAdd = async () => {
+    const name = draftName.trim()
+    if (!name || savingNew) return
+    setSavingNew(true)
+    try {
+      await addDepartment(name, draftNameAr.trim() || name)
+      setAdding(false)
+      setDraftName('')
+      setDraftNameAr('')
+    } finally {
+      setSavingNew(false)
+    }
+  }
 
   const startEdit = (id: string, email: string | undefined) => {
     setEditingId(id)
@@ -51,14 +71,46 @@ export function DepartmentsSection({ embedded = false }: { embedded?: boolean } 
 
   return (
     <section className={embedded ? '' : 'bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden'}>
-      {!embedded && (
-        <div className="px-6 py-4 border-b border-slate-100">
-          <h3 className="text-sm font-bold text-slate-900">
-            {t('settings.departments.title' as TranslationKey)}
-          </h3>
-          <p className="text-xs text-slate-500 mt-0.5">
-            {t('settings.departments.description' as TranslationKey)}
-          </p>
+      <div className={embedded ? 'flex items-center justify-between gap-2 pb-3' : 'px-6 py-4 border-b border-slate-100 flex items-center justify-between gap-2'}>
+        {!embedded ? (
+          <div>
+            <h3 className="text-sm font-bold text-slate-900">
+              {t('settings.departments.title' as TranslationKey)}
+            </h3>
+            <p className="text-xs text-slate-500 mt-0.5">
+              {t('settings.departments.description' as TranslationKey)}
+            </p>
+          </div>
+        ) : <span />}
+        <Button size="sm" variant="primary" onClick={() => setAdding((a) => !a)}>
+          <Icon icon="lucide:plus" className="text-sm" />
+          {t('settings.departments.addDepartment' as TranslationKey)}
+        </Button>
+      </div>
+
+      {adding && (
+        <div className={embedded ? 'flex flex-wrap items-center gap-2 pb-3' : 'px-6 py-3 border-b border-slate-100 flex flex-wrap items-center gap-2'}>
+          <Input
+            value={draftName}
+            onChange={(e) => setDraftName(e.target.value)}
+            placeholder={t('settings.departments.name' as TranslationKey)}
+            className="max-w-[200px]"
+            autoFocus
+          />
+          <Input
+            value={draftNameAr}
+            onChange={(e) => setDraftNameAr(e.target.value)}
+            placeholder={t('editableSelect.arabicNameOptional')}
+            className="max-w-[200px]"
+            dir="rtl"
+          />
+          <Button size="sm" variant="primary" onClick={() => void handleAdd()} disabled={!draftName.trim() || savingNew}>
+            {savingNew && <Icon icon="lucide:loader-2" className="animate-spin text-sm" />}
+            {t('common.add')}
+          </Button>
+          <Button size="sm" variant="outline" onClick={() => { setAdding(false); setDraftName(''); setDraftNameAr('') }} disabled={savingNew}>
+            {t('common.cancel')}
+          </Button>
         </div>
       )}
 

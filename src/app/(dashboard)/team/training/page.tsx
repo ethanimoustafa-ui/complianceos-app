@@ -17,6 +17,7 @@ import { useTrainingStore } from '@/stores/training-store'
 import { useDepartmentStore } from '@/stores/department-store'
 import { EditableSelect } from '@/components/ui/editable-select'
 import { ListSkeleton } from '@/components/ui/skeleton'
+import { Tooltip } from '@/components/ui/tooltip'
 import type { TrainingEmployee, TrainingCourse, CourseProgress } from '@/types'
 
 import { TrainingOverviewStats } from '@/components/team/training/training-overview-stats'
@@ -287,7 +288,7 @@ function TeamTrainingPageContent() {
             {/* Excel ingestion ships with the AI parsing back-end later —
                 visibly parked rather than removed, so officers know the
                 manual flows are the intended path for now. */}
-            <span className="inline-flex" title={t('training.uploadComingSoonTooltip' as TranslationKey)}>
+            <Tooltip content={t('training.uploadComingSoonTooltip' as TranslationKey)}>
               <Button
                 size="sm"
                 disabled
@@ -300,7 +301,7 @@ function TeamTrainingPageContent() {
                   {t('settings.comingSoon' as TranslationKey)}
                 </span>
               </Button>
-            </span>
+            </Tooltip>
           </Gate>
         </div>
       </header>

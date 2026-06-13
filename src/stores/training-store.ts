@@ -145,6 +145,12 @@ interface TrainingState {
   isMutating: boolean
   error: string | null
   lastFetched: number | null
+  // First-load gate for the persisted metrics singleton (saudization +
+  // overall-completion). `fetchMetrics` never set `isLoading`, so the
+  // correspondence-feed metric cards had no way to tell "still loading" from a
+  // genuine 0. Starts `true`, cleared once the first `fetchMetrics` settles;
+  // never re-raised, so refetches don't re-flash the skeleton.
+  metricsLoading: boolean
 
   // Compliance-engine actions (local-only shims).
   fetchAll: (force?: boolean) => Promise<void>
@@ -253,6 +259,7 @@ export const useTrainingStore = create<TrainingState>()((set, get) => ({
   isMutating: false,
   error: null,
   lastFetched: null,
+  metricsLoading: true,
 
   // ---------- Compliance-engine slice (local-only) -------------------------
 
@@ -895,6 +902,10 @@ export const useTrainingStore = create<TrainingState>()((set, get) => ({
       }))
     } catch {
       // Non-fatal: the page falls back to computed/local values.
+    } finally {
+      // Clear the first-load skeleton gate for the feed metric cards, whether
+      // the fetch succeeded, returned null, or failed.
+      set({ metricsLoading: false })
     }
   },
 

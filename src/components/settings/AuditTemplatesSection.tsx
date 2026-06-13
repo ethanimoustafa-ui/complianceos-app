@@ -1,27 +1,30 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+// Settings → Audit Templates. Owner decision: create/edit reuses the rich
+// Create-Audit modal (template dropdown to clone, cadence picker, category,
+// framework tags + a real file upload) in `mode="template"`, instead of a
+// stripped-down form. The modal writes to the SAME audit_templates store this
+// table reads, so saves show up here immediately.
+
+import { useEffect, useMemo, useState } from 'react'
 import { Icon } from '@iconify/react'
 import { Button } from '@/components/ui/button'
 import { LoadingButton } from '@/components/ui/loading-button'
 import { ListSkeleton } from '@/components/ui/skeleton'
-import { Input } from '@/components/ui/input'
 import { Modal } from '@/components/ui/modal'
 import { useAuditTemplateStore } from '@/stores/audit-template-store'
-import { useFrameworkConfigStore } from '@/stores/framework-config-store'
+import { useAuditCategoryStore } from '@/stores/audit-category-store'
 import { useTranslation } from '@/i18n'
 import { Gate } from '@/components/auth/gate'
 import { SortHeader, type SortState } from '@/components/ui/sort-header'
-import { EditableSelect } from '@/components/ui/editable-select'
-import type { AuditAuthority, AuditTemplate, AuditTemplateCategory, AuditPriority, AuditFrequency, FrequencySchedule } from '@/types'
+import { formatLocalizedDate } from '@/lib/format-date'
+import { AddAuditModal } from '@/components/reports/audits/add-audit-modal'
+import type { AuditTemplateCategory } from '@/types'
 
 type SortCol = 'name' | 'category' | 'updatedAt' | 'usageCount'
 
-const CATEGORIES: AuditTemplateCategory[] = [
-  'security-compliance', 'financial-compliance', 'regulatory-compliance',
-  'operational-compliance', 'data-privacy', 'sharia-compliance', 'internal-controls', 'custom',
-]
-
+// Enum-label fallback for legacy seeded templates. Unified templates store the
+// audit-category id directly (resolved via the audit-category store).
 const CATEGORY_LABELS: Record<AuditTemplateCategory, string> = {
   'security-compliance': 'templateCategorySecurity',
   'financial-compliance': 'templateCategoryFinancial',
@@ -35,11 +38,29 @@ const CATEGORY_LABELS: Record<AuditTemplateCategory, string> = {
 
 export function AuditTemplatesSection({ embedded = false }: { embedded?: boolean } = {}) {
   const { t, isRTL } = useTranslation()
-  const { templates, create, update, delete: deleteTemplate } = useAuditTemplateStore()
+  const { templates, delete: deleteTemplate } = useAuditTemplateStore()
   const isLoading = useAuditTemplateStore((s) => s.isLoading)
+  const fetchTemplates = useAuditTemplateStore((s) => s.fetchAll)
+  const auditCategoryItems = useAuditCategoryStore((s) => s.categories)
+  // This section is now the primary surface for audit templates (configurables
+  // hub), so it must hydrate itself — nothing else fetches them on mount.
+  useEffect(() => { void fetchTemplates() }, [fetchTemplates])
   const [sort, setSort] = useState<SortState<SortCol>>(null)
   const [isCreateOpen, setIsCreateOpen] = useState(false)
   const [editId, setEditId] = useState<string | null>(null)
+  // Row-level delete (owner: templates couldn't be deleted). delete() is
+  // optimistic, so the row vanishes instantly on confirm.
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null)
+  const [rowDeleting, setRowDeleting] = useState(false)
+
+  // Resolve a template's category to a display label: the audit-category store
+  // first (unified templates store an id), then the legacy enum map, then raw.
+  function categoryLabel(cat: string): string {
+    const byId = auditCategoryItems.find((c) => c.id === cat)
+    if (byId) return isRTL && byId.labelAr ? byId.labelAr : byId.label
+    const key = CATEGORY_LABELS[cat as AuditTemplateCategory]
+    return key ? t(('settings.' + key) as any) : cat
+  }
 
   const sorted = useMemo(() => {
     const list = [...templates]
@@ -63,6 +84,18 @@ export function AuditTemplatesSection({ embedded = false }: { embedded?: boolean
   }
 
   const editTemplate = editId ? templates.find((t) => t.id === editId) : null
+  const pendingDeleteTemplate = pendingDeleteId ? templates.find((t) => t.id === pendingDeleteId) : null
+
+  async function confirmRowDelete() {
+    if (!pendingDeleteId) return
+    setRowDeleting(true)
+    try {
+      await deleteTemplate(pendingDeleteId)
+    } finally {
+      setRowDeleting(false)
+      setPendingDeleteId(null)
+    }
+  }
 
   return (
     <section className={embedded ? '' : 'bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden'}>
@@ -116,7 +149,7 @@ export function AuditTemplatesSection({ embedded = false }: { embedded?: boolean
               <tr key={tmpl.id} className="hover:bg-slate-50/50 transition-colors">
                 <td className="px-8 py-4">
                   <div className="flex items-center gap-3">
-                    {/* H1: show template's custom icon if set, else fall back to category default */}
+                    {/* show template's custom icon if set, else category default */}
                     <Icon
                       icon={tmpl.frequencySchedule?.templateIcon || 'lucide:file-check'}
                       className="text-emerald-500"
@@ -125,20 +158,30 @@ export function AuditTemplatesSection({ embedded = false }: { embedded?: boolean
                   </div>
                 </td>
                 <td className="px-8 py-4 text-xs font-medium text-slate-500">
-                  {t(('settings.' + CATEGORY_LABELS[tmpl.category]) as any)}
+                  {categoryLabel(tmpl.category)}
                 </td>
-                <td className="px-8 py-4 text-xs text-slate-500">{tmpl.updatedAt}</td>
+                <td className="px-8 py-4 text-xs text-slate-500">{formatLocalizedDate(tmpl.updatedAt, isRTL ? 'ar' : 'en')}</td>
                 <td className="px-8 py-4">
                   <span className="text-xs font-bold text-slate-600">{tmpl.usageCount}</span>
                 </td>
                 <td className="px-8 py-4 text-end">
                   <Gate perm="Manage Audit Templates">
-                    <button
-                      onClick={() => setEditId(tmpl.id)}
-                      className="text-slate-400 hover:text-emerald-600 transition-colors cursor-pointer"
-                    >
-                      <Icon icon="lucide:edit-3" />
-                    </button>
+                    <div className="inline-flex items-center gap-1">
+                      <button
+                        onClick={() => setEditId(tmpl.id)}
+                        className="text-slate-400 hover:text-emerald-600 transition-colors cursor-pointer p-1.5 rounded-md hover:bg-emerald-50"
+                        aria-label={t('common.edit')}
+                      >
+                        <Icon icon="lucide:edit-3" />
+                      </button>
+                      <button
+                        onClick={() => setPendingDeleteId(tmpl.id)}
+                        className="text-slate-400 hover:text-rose-600 transition-colors cursor-pointer p-1.5 rounded-md hover:bg-rose-50"
+                        aria-label={t('settings.deleteTemplate')}
+                      >
+                        <Icon icon="lucide:trash-2" />
+                      </button>
+                    </div>
                   </Gate>
                 </td>
               </tr>
@@ -148,368 +191,42 @@ export function AuditTemplatesSection({ embedded = false }: { embedded?: boolean
       </div>
       )}
 
-      {/* Create Modal */}
-      <AuditTemplateFormModal
+      {/* Create — the rich modal in template mode. */}
+      <AddAuditModal
         isOpen={isCreateOpen}
         onClose={() => setIsCreateOpen(false)}
-        onSave={(data) => { create(data); setIsCreateOpen(false) }}
-        t={t}
-        isRTL={isRTL}
+        mode="template"
       />
 
-      {/* Edit Modal */}
+      {/* Edit — same modal, prefilled from the target template. */}
       {editTemplate && (
-        <AuditTemplateFormModal
+        <AddAuditModal
           isOpen={!!editId}
           onClose={() => setEditId(null)}
+          mode="template"
           template={editTemplate}
-          onSave={(data) => { update(editTemplate.id, data); setEditId(null) }}
-          onDelete={() => { deleteTemplate(editTemplate.id); setEditId(null) }}
-          t={t}
-          isRTL={isRTL}
         />
       )}
-    </section>
-  )
-}
 
-// H1: curated icon set for template icon picker — lucide icons via @iconify/react.
-const TEMPLATE_ICONS: { id: string; label: string }[] = [
-  { id: 'lucide:shield-check', label: 'Shield Check' },
-  { id: 'lucide:file-check', label: 'File Check' },
-  { id: 'lucide:clipboard-check', label: 'Clipboard Check' },
-  { id: 'lucide:scale', label: 'Scale' },
-  { id: 'lucide:lock', label: 'Lock' },
-  { id: 'lucide:building-2', label: 'Building' },
-  { id: 'lucide:landmark', label: 'Landmark' },
-  { id: 'lucide:gavel', label: 'Gavel' },
-  { id: 'lucide:search', label: 'Search' },
-  { id: 'lucide:trending-up', label: 'Trending Up' },
-  { id: 'lucide:bar-chart-2', label: 'Bar Chart' },
-  { id: 'lucide:pie-chart', label: 'Pie Chart' },
-  { id: 'lucide:database', label: 'Database' },
-  { id: 'lucide:server', label: 'Server' },
-  { id: 'lucide:cpu', label: 'CPU' },
-  { id: 'lucide:users', label: 'Users' },
-  { id: 'lucide:user-check', label: 'User Check' },
-  { id: 'lucide:briefcase', label: 'Briefcase' },
-  { id: 'lucide:dollar-sign', label: 'Dollar' },
-  { id: 'lucide:credit-card', label: 'Credit Card' },
-  { id: 'lucide:alert-triangle', label: 'Alert' },
-  { id: 'lucide:activity', label: 'Activity' },
-  { id: 'lucide:layers', label: 'Layers' },
-  { id: 'lucide:settings', label: 'Settings' },
-]
-
-function AuditTemplateFormModal({
-  isOpen,
-  onClose,
-  template,
-  onSave,
-  onDelete,
-  t,
-  isRTL,
-}: {
-  isOpen: boolean
-  onClose: () => void
-  template?: AuditTemplate
-  onSave: (data: any) => void
-  onDelete?: () => void
-  t: (key: any) => string
-  isRTL: boolean
-}) {
-  const [name, setName] = useState(template?.name ?? '')
-  const [nameAr, setNameAr] = useState(template?.nameAr ?? '')
-  const [auditType, setAuditType] = useState(template?.auditType ?? 'internal')
-  const [category, setCategory] = useState<AuditTemplateCategory>(template?.category ?? 'security-compliance')
-  const [priority, setPriority] = useState<AuditPriority>(template?.priority ?? 'medium')
-  const [frequency, setFrequency] = useState<AuditFrequency>(template?.frequency ?? 'quarterly')
-  const [dayOfMonth, setDayOfMonth] = useState(template?.frequencySchedule?.dayOfMonth ?? 1)
-  const [monthInQuarter, setMonthInQuarter] = useState<1 | 2 | 3>(template?.frequencySchedule?.monthInQuarter ?? 1)
-  const [monthOfYear, setMonthOfYear] = useState(template?.frequencySchedule?.monthOfYear ?? 1)
-  const [adhocDate, setAdhocDate] = useState(template?.frequencySchedule?.adhocDate ?? '')
-  const [description, setDescription] = useState(template?.defaultDescription ?? '')
-  const [descriptionAr, setDescriptionAr] = useState(template?.defaultDescriptionAr ?? '')
-  const [status, setStatus] = useState<'active' | 'draft'>(template?.status ?? 'active')
-  // H1: icon picker — stored in frequencySchedule.templateIcon (no DB column needed)
-  const [templateIcon, setTemplateIcon] = useState(template?.frequencySchedule?.templateIcon ?? '')
-
-  // Reset on open
-  useState(() => {
-    if (template) {
-      setName(template.name)
-      setNameAr(template.nameAr ?? '')
-      setAuditType(template.auditType)
-      setCategory(template.category)
-      setPriority(template.priority)
-      setFrequency(template.frequency)
-      setDayOfMonth(template.frequencySchedule?.dayOfMonth ?? 1)
-      setMonthInQuarter(template.frequencySchedule?.monthInQuarter ?? 1)
-      setMonthOfYear(template.frequencySchedule?.monthOfYear ?? 1)
-      setAdhocDate(template.frequencySchedule?.adhocDate ?? '')
-      setDescription(template.defaultDescription)
-      setDescriptionAr(template.defaultDescriptionAr ?? '')
-      setStatus(template.status)
-    }
-  })
-
-  function buildSchedule(): FrequencySchedule | undefined {
-    // H1: always embed templateIcon when selected so it persists in the jsonb column.
-    const icon = templateIcon || undefined
-    if (frequency === 'ad_hoc') return adhocDate ? { adhocDate, templateIcon: icon } : (icon ? { templateIcon: icon } : undefined)
-    if (frequency === 'monthly') return { dayOfMonth, templateIcon: icon }
-    if (frequency === 'quarterly') return { monthInQuarter, dayOfMonth, templateIcon: icon }
-    if (frequency === 'semi_annual') return { monthOfYear: Math.min(monthOfYear, 6), dayOfMonth, templateIcon: icon }
-    if (frequency === 'annual') return { monthOfYear, dayOfMonth, templateIcon: icon }
-    return icon ? { templateIcon: icon } : undefined
-  }
-
-  function handleSave() {
-    if (!name.trim()) return
-    onSave({
-      name,
-      nameAr: nameAr || undefined,
-      auditType,
-      category,
-      priority,
-      frequency,
-      frequencySchedule: buildSchedule(),
-      defaultTitle: name,
-      defaultTitleAr: nameAr || undefined,
-      defaultDescription: description,
-      defaultDescriptionAr: descriptionAr || undefined,
-      defaultChecklistItems: template?.defaultChecklistItems ?? [],
-      defaultTeamRoles: template?.defaultTeamRoles ?? [],
-      framework: template?.framework,
-      status,
-    })
-  }
-
-  return (
-    <Modal
-      isOpen={isOpen}
-      onClose={onClose}
-      title={template ? t('settings.editTemplate') : t('settings.createNewTemplate')}
-      subtitle={template ? template.name : t('settings.buildReusableTemplate')}
-      size="md"
-    >
-      <div className="space-y-4">
-        <Input label={t('settings.nameEnglish')} value={name} onChange={(e) => setName(e.target.value)} placeholder={t('settings.templateNamePlaceholder')} />
-        <Input label={t('settings.nameArabic')} value={nameAr} onChange={(e) => setNameAr(e.target.value)} placeholder={t('settings.templateNamePlaceholder')} dir="rtl" />
-        <div className="grid grid-cols-2 gap-4">
-          <AuditTypeSelect auditType={auditType} setAuditType={setAuditType} t={t} isRTL={isRTL} />
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('settings.categoryCol')}</label>
-            <EditableSelect
-              locked
-              value={category}
-              onChange={(id) => setCategory(id as AuditTemplateCategory)}
-              items={CATEGORIES.map((c) => ({ id: c, label: t(('settings.' + CATEGORY_LABELS[c]) as any) }))}
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('settings.templatePriority')}</label>
-            <EditableSelect
-              locked
-              value={priority}
-              onChange={(id) => setPriority(id as AuditPriority)}
-              items={[
-                { id: 'critical', label: t('settings.priorityCritical') },
-                { id: 'high', label: t('settings.priorityHigh') },
-                { id: 'medium', label: t('settings.priorityMedium') },
-                { id: 'low', label: t('settings.priorityLow') },
-              ]}
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('settings.templateFrequency')}</label>
-            <EditableSelect
-              locked
-              value={frequency}
-              onChange={(id) => setFrequency(id as AuditFrequency)}
-              items={[
-                { id: 'quarterly', label: t('settings.freqQuarterly') },
-                { id: 'semi_annual', label: t('settings.freqSemiAnnual') },
-                { id: 'annual', label: t('settings.freqAnnual') },
-                { id: 'monthly', label: t('settings.freqMonthly') },
-                { id: 'ad_hoc', label: t('settings.freqAdHoc') },
-              ]}
-            />
-          </div>
-        </div>
-        {/* Frequency Schedule Picker */}
-        {frequency === 'ad_hoc' && (
-          <div className="bg-slate-50 rounded-xl p-3 space-y-2">
-            <label className="block text-xs font-medium text-slate-500">{t('settings.adhocDateLabel')}</label>
-            <input
-              type="date"
-              value={adhocDate}
-              onChange={(e) => setAdhocDate(e.target.value)}
-              className="h-9 rounded-lg border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-            />
-            <p className="text-[11px] text-slate-400">{t('settings.adhocDateHint')}</p>
-          </div>
-        )}
-        {frequency !== 'ad_hoc' && (
-          <div className="bg-slate-50 rounded-xl p-3 space-y-3">
-            <p className="text-xs font-medium text-slate-500">{t('settings.frequencyScheduleHint')}</p>
-            <div className="flex gap-3 flex-wrap">
-              {(frequency === 'quarterly') && (
-                <div>
-                  <label className="block text-xs font-medium text-slate-500 mb-1">{t('settings.monthInQuarter')}</label>
-                  <EditableSelect
-                    locked
-                    value={String(monthInQuarter)}
-                    onChange={(id) => setMonthInQuarter(Number(id) as 1 | 2 | 3)}
-                    items={[
-                      { id: '1', label: t('settings.firstMonth') },
-                      { id: '2', label: t('settings.secondMonth') },
-                      { id: '3', label: t('settings.thirdMonth') },
-                    ]}
-                  />
-                </div>
-              )}
-              {(frequency === 'semi_annual' || frequency === 'annual') && (
-                <div>
-                  <label className="block text-xs font-medium text-slate-500 mb-1">{t('settings.selectMonth')}</label>
-                  <EditableSelect
-                    locked
-                    value={String(monthOfYear)}
-                    onChange={(id) => setMonthOfYear(Number(id))}
-                    items={Array.from({ length: frequency === 'semi_annual' ? 6 : 12 }, (_, i) => ({
-                      id: String(i + 1),
-                      label: new Date(2026, i, 1).toLocaleString(isRTL ? 'ar' : 'en', { month: 'long' }),
-                    }))}
-                  />
-                </div>
-              )}
-              <div>
-                <label className="block text-xs font-medium text-slate-500 mb-1">{t('settings.dayOfMonth')}</label>
-                <input
-                  type="number"
-                  min={1}
-                  max={28}
-                  value={dayOfMonth}
-                  onChange={(e) => setDayOfMonth(Math.min(28, Math.max(1, Number(e.target.value))))}
-                  className="h-9 w-20 rounded-lg border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                />
-              </div>
-            </div>
-          </div>
-        )}
-        <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('settings.descriptionEnglish')}</label>
-          <textarea
-            rows={3}
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            placeholder={t('settings.describePurposeScope')}
-            className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent resize-none"
-          />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('settings.descriptionArabic')}</label>
-          <textarea
-            rows={3}
-            value={descriptionAr}
-            onChange={(e) => setDescriptionAr(e.target.value)}
-            placeholder={t('settings.describePurposeScope')}
-            dir="rtl"
-            className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent resize-none"
-          />
-        </div>
-        {/* H1: Icon picker — compact SVG icon grid */}
-        <div>
-          <label className="block text-sm font-medium text-slate-700 mb-2">{t('settings.templateIcon')}</label>
-          <div className="grid grid-cols-8 gap-1.5 p-3 bg-slate-50 rounded-xl border border-slate-200">
-            {/* "None" option */}
-            <button
-              type="button"
-              onClick={() => setTemplateIcon('')}
-              title="No icon"
-              className={`w-8 h-8 flex items-center justify-center rounded-lg border text-xs font-bold transition-colors cursor-pointer ${
-                templateIcon === ''
-                  ? 'bg-emerald-100 border-emerald-400 text-emerald-700'
-                  : 'bg-white border-slate-200 text-slate-400 hover:border-slate-400'
-              }`}
-            >
-              —
-            </button>
-            {TEMPLATE_ICONS.map((ic) => (
-              <button
-                key={ic.id}
-                type="button"
-                onClick={() => setTemplateIcon(ic.id)}
-                title={ic.label}
-                className={`w-8 h-8 flex items-center justify-center rounded-lg border transition-colors cursor-pointer ${
-                  templateIcon === ic.id
-                    ? 'bg-emerald-100 border-emerald-400 text-emerald-600'
-                    : 'bg-white border-slate-200 text-slate-500 hover:border-emerald-300 hover:text-emerald-600'
-                }`}
-              >
-                <Icon icon={ic.id} className="text-base" />
-              </button>
-            ))}
-          </div>
-          {templateIcon && (
-            <p className="mt-1 text-[11px] text-slate-400">{t('settings.selectedIcon')}: <span className="font-mono">{templateIcon}</span></p>
-          )}
-        </div>
-        {!name.trim() && (
-          <p className="text-xs text-rose-600 text-end">
-            Missing required: {t('settings.nameEnglish')}
+      {/* Row-level delete confirmation. */}
+      <Modal
+        isOpen={pendingDeleteId !== null}
+        onClose={() => !rowDeleting && setPendingDeleteId(null)}
+        title={t('listsAndCategories.deleteTitle')}
+        size="sm"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-slate-600">
+            {t('listsAndCategories.deleteConfirmSimple', { label: pendingDeleteTemplate?.name ?? '' })}
           </p>
-        )}
-        <div className="flex gap-3 pt-4">
-          <Button variant="outline" onClick={onClose}>{t('common.cancel')}</Button>
-          {onDelete && (
-            <Gate perm="Manage Audit Templates">
-              <button onClick={onDelete} className="px-4 py-2 text-sm font-bold text-rose-600 hover:text-rose-700 hover:bg-rose-50 rounded-xl transition-colors cursor-pointer">
-                {t('settings.deleteTemplate')}
-              </button>
-            </Gate>
-          )}
-          <LoadingButton variant="primary" className="flex-1" disabled={!name.trim()} onClick={handleSave}>
-            {t('common.saveChanges')}
-          </LoadingButton>
+          <div className="flex gap-3 justify-end">
+            <Button variant="outline" onClick={() => setPendingDeleteId(null)} disabled={rowDeleting}>{t('common.cancel')}</Button>
+            <LoadingButton variant="danger" loading={rowDeleting} loadingLabel={t('common.deleting')} onClick={() => void confirmRowDelete()}>
+              {t('listsAndCategories.deleteConfirmAction')}
+            </LoadingButton>
+          </div>
         </div>
-      </div>
-    </Modal>
-  )
-}
-
-// Dynamic audit-type dropdown driven by enabled correspondence-based frameworks.
-function AuditTypeSelect({
-  auditType,
-  setAuditType,
-  t,
-  isRTL,
-}: {
-  auditType: AuditAuthority
-  setAuditType: (v: AuditAuthority) => void
-  t: (key: any) => string
-  isRTL: boolean
-}) {
-  const frameworks = useFrameworkConfigStore((s) => s.frameworks)
-  const enabledCorrespondence = useMemo(
-    () => frameworks.filter((f) => f.enabled && f.correspondenceBased),
-    [frameworks]
-  )
-  return (
-    <div>
-      <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('settings.templateType')}</label>
-      <EditableSelect
-        locked
-        value={auditType}
-        onChange={(id) => setAuditType(id as AuditAuthority)}
-        items={[
-          { id: 'internal', label: t('auditDetail.internalAuditType') },
-          ...enabledCorrespondence.map((fw) => ({
-            id: fw.id,
-            label: isRTL ? fw.nameAr : fw.name,
-          })),
-        ]}
-      />
-    </div>
+      </Modal>
+    </section>
   )
 }

@@ -135,23 +135,32 @@ export const useDepartmentStore = create<DepartmentState>()((set, get) => ({
     }
   },
 
+  // Optimistic delete — remove the row immediately, restore on failure.
   removeDepartment: async (id) => {
-    set({ isMutating: true, error: null })
+    const { departments } = get()
+    const idx = departments.findIndex((d) => d.id === id)
+    if (idx === -1) return
+    const removed = departments[idx]
+    set((s) => {
+      const { [id]: _drop, ...rest } = s.byId
+      return { departments: s.departments.filter((d) => d.id !== id), byId: rest, isMutating: true, error: null }
+    })
     try {
       await api.delete(`/settings/departments/${id}`)
+      set({ isMutating: false })
+    } catch (e) {
+      // The server returns 409 with table-by-table reference counts in
+      // `details` when the row is in use. Roll the row back to its position.
       set((s) => {
-        const { [id]: _drop, ...rest } = s.byId
+        const next = [...s.departments]
+        next.splice(Math.min(idx, next.length), 0, removed)
         return {
-          departments: s.departments.filter((d) => d.id !== id),
-          byId: rest,
+          departments: next,
+          byId: { ...s.byId, [id]: removed },
+          error: errorMessage(e, 'Failed to delete department'),
           isMutating: false,
         }
       })
-    } catch (e) {
-      // The server returns 409 with table-by-table reference counts in
-      // `details` when the row is in use. Pages render the `error` message
-      // and can surface details via the ApiClientError instance.
-      set({ error: errorMessage(e, 'Failed to delete department'), isMutating: false })
       throw e
     }
   },

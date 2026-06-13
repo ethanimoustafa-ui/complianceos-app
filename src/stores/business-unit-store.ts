@@ -63,7 +63,7 @@ interface BusinessUnitState {
   clearError(): void
 }
 
-export const useBusinessUnitStore = create<BusinessUnitState>()((set) => ({
+export const useBusinessUnitStore = create<BusinessUnitState>()((set, get) => ({
   units: [],
   byId: {},
 
@@ -149,22 +149,32 @@ export const useBusinessUnitStore = create<BusinessUnitState>()((set) => ({
     }
   },
 
+  // Optimistic delete — remove the row immediately, restore on failure.
   remove: async (id) => {
-    set({ isMutating: true, error: null })
+    const { units } = get()
+    const idx = units.findIndex((u) => u.id === id)
+    if (idx === -1) return
+    const removed = units[idx]
+    set((s) => {
+      const { [id]: _drop, ...rest } = s.byId
+      return { units: s.units.filter((u) => u.id !== id), byId: rest, isMutating: true, error: null }
+    })
     try {
       await api.delete(`/settings/business-units/${id}`)
+      set({ isMutating: false })
+    } catch (e) {
+      // 409 with `details.byTable` references when in use; system-defaults
+      // raise their own 409. Roll the row back to its original position.
       set((s) => {
-        const { [id]: _drop, ...rest } = s.byId
+        const next = [...s.units]
+        next.splice(Math.min(idx, next.length), 0, removed)
         return {
-          units: s.units.filter((u) => u.id !== id),
-          byId: rest,
+          units: next,
+          byId: { ...s.byId, [id]: removed },
+          error: errorMessage(e, 'Failed to delete business unit'),
           isMutating: false,
         }
       })
-    } catch (e) {
-      // 409 with `details.byTable` references when in use; system-defaults
-      // raise their own 409. Both flow through `error`.
-      set({ error: errorMessage(e, 'Failed to delete business unit'), isMutating: false })
       throw e
     }
   },

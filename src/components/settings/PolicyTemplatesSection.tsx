@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { Icon } from '@iconify/react'
 import { Button } from '@/components/ui/button'
 import { LoadingButton } from '@/components/ui/loading-button'
@@ -12,6 +12,7 @@ import { useTranslation } from '@/i18n'
 import { Gate } from '@/components/auth/gate'
 import { SortHeader, type SortState } from '@/components/ui/sort-header'
 import { EditableSelect } from '@/components/ui/editable-select'
+import { formatLocalizedDate } from '@/lib/format-date'
 import type { PolicyTemplate, PolicyCategory, PolicyApprovalTier, AuditFrequency, FrequencySchedule } from '@/types'
 
 type SortCol = 'name' | 'category' | 'updatedAt' | 'usageCount'
@@ -19,10 +20,20 @@ type SortCol = 'name' | 'category' | 'updatedAt' | 'usageCount'
 const POLICY_CATEGORIES: PolicyCategory[] = ['compliance', 'it', 'operations', 'risk', 'hr', 'finance']
 const APPROVAL_TIERS: PolicyApprovalTier[] = ['board', 'management', 'sharia', 'agm']
 
+// Day-of-month must be a whole number in 1–28 (valid in February). Floors the
+// input and rejects NaN/decimals/exponents so e.g. "2.5" can't slip through.
+function clampDayOfMonth(raw: string): number {
+  const n = Math.floor(Number(raw))
+  return Number.isFinite(n) ? Math.min(28, Math.max(1, n)) : 1
+}
+
 export function PolicyTemplatesSection({ embedded = false }: { embedded?: boolean } = {}) {
   const { t, isRTL } = useTranslation()
   const { templates, create, update, delete: deleteTemplate } = usePolicyTemplateStore()
   const isLoading = usePolicyTemplateStore((s) => s.isLoading)
+  const fetchTemplates = usePolicyTemplateStore((s) => s.fetchAll)
+  // Primary surface for policy templates now (configurables hub) — self-hydrate.
+  useEffect(() => { void fetchTemplates() }, [fetchTemplates])
 
   const CATEGORY_LABELS: Record<PolicyCategory, string> = {
     compliance: t('policies.categoryCompliance'),
@@ -54,6 +65,22 @@ export function PolicyTemplatesSection({ embedded = false }: { embedded?: boolea
   const [sort, setSort] = useState<SortState<SortCol>>(null)
   const [isCreateOpen, setIsCreateOpen] = useState(false)
   const [editId, setEditId] = useState<string | null>(null)
+  // Row-level delete (owner: templates couldn't be deleted without opening the
+  // editor). delete() is optimistic, so the row vanishes instantly on confirm.
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null)
+  const [rowDeleting, setRowDeleting] = useState(false)
+  const pendingDeleteTemplate = pendingDeleteId ? templates.find((t) => t.id === pendingDeleteId) : null
+
+  async function confirmRowDelete() {
+    if (!pendingDeleteId) return
+    setRowDeleting(true)
+    try {
+      await deleteTemplate(pendingDeleteId)
+    } finally {
+      setRowDeleting(false)
+      setPendingDeleteId(null)
+    }
+  }
 
   const sorted = useMemo(() => {
     const list = [...templates]
@@ -143,18 +170,28 @@ export function PolicyTemplatesSection({ embedded = false }: { embedded?: boolea
                 <td className="px-8 py-4 text-xs font-medium text-slate-500 capitalize">{CATEGORY_LABELS[tmpl.category] ?? tmpl.category}</td>
                 <td className="px-8 py-4 text-xs font-medium text-slate-500 capitalize">{TIER_LABELS[tmpl.approvalTier] ?? tmpl.approvalTier}</td>
                 <td className="px-8 py-4 text-xs font-medium text-slate-500">{tmpl.frequency ? FREQ_LABELS[tmpl.frequency] : '—'}</td>
-                <td className="px-8 py-4 text-xs text-slate-500">{tmpl.updatedAt}</td>
+                <td className="px-8 py-4 text-xs text-slate-500">{formatLocalizedDate(tmpl.updatedAt, isRTL ? 'ar' : 'en')}</td>
                 <td className="px-8 py-4">
                   <span className="text-xs font-bold text-slate-600">{tmpl.usageCount}</span>
                 </td>
                 <td className="px-8 py-4 text-end">
                   <Gate perm="Manage Policy Templates">
-                    <button
-                      onClick={() => setEditId(tmpl.id)}
-                      className="text-slate-400 hover:text-emerald-600 transition-colors cursor-pointer"
-                    >
-                      <Icon icon="lucide:edit-3" />
-                    </button>
+                    <div className="inline-flex items-center gap-1">
+                      <button
+                        onClick={() => setEditId(tmpl.id)}
+                        className="text-slate-400 hover:text-emerald-600 transition-colors cursor-pointer p-1.5 rounded-md hover:bg-emerald-50"
+                        aria-label={t('common.edit')}
+                      >
+                        <Icon icon="lucide:edit-3" />
+                      </button>
+                      <button
+                        onClick={() => setPendingDeleteId(tmpl.id)}
+                        className="text-slate-400 hover:text-rose-600 transition-colors cursor-pointer p-1.5 rounded-md hover:bg-rose-50"
+                        aria-label={t('settings.deleteTemplate')}
+                      >
+                        <Icon icon="lucide:trash-2" />
+                      </button>
+                    </div>
                   </Gate>
                 </td>
               </tr>
@@ -189,6 +226,26 @@ export function PolicyTemplatesSection({ embedded = false }: { embedded?: boolea
           isRTL={isRTL}
         />
       )}
+
+      {/* Row-level delete confirmation. */}
+      <Modal
+        isOpen={pendingDeleteId !== null}
+        onClose={() => !rowDeleting && setPendingDeleteId(null)}
+        title={t('listsAndCategories.deleteTitle')}
+        size="sm"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-slate-600">
+            {t('listsAndCategories.deleteConfirmSimple', { label: pendingDeleteTemplate?.name ?? '' })}
+          </p>
+          <div className="flex gap-3 justify-end">
+            <Button variant="outline" onClick={() => setPendingDeleteId(null)} disabled={rowDeleting}>{t('common.cancel')}</Button>
+            <LoadingButton variant="danger" loading={rowDeleting} loadingLabel={t('common.deleting')} onClick={() => void confirmRowDelete()}>
+              {t('listsAndCategories.deleteConfirmAction')}
+            </LoadingButton>
+          </div>
+        </div>
+      </Modal>
     </section>
   )
 }
@@ -399,8 +456,11 @@ function PolicyTemplateFormModal({
                   type="number"
                   min={1}
                   max={28}
+                  step={1}
+                  inputMode="numeric"
                   value={dayOfMonth}
-                  onChange={(e) => setDayOfMonth(Math.min(28, Math.max(1, Number(e.target.value))))}
+                  onChange={(e) => setDayOfMonth(clampDayOfMonth(e.target.value))}
+                  onKeyDown={(e) => { if (['.', 'e', 'E', '+', '-'].includes(e.key)) e.preventDefault() }}
                   className="h-9 w-20 rounded-lg border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
                 />
               </div>

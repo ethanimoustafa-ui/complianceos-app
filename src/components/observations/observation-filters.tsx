@@ -1,15 +1,30 @@
 'use client'
 
-import { useEffect, useMemo } from 'react'
+import { useMemo } from 'react'
 import { Icon } from '@iconify/react'
 import { ObservationSource, ObservationSeverity, ObservationStatus } from './observation-types'
-import { useTranslation } from '@/i18n'
+import { useTranslation, type TranslationKey } from '@/i18n'
 import { EditableSelect } from '@/components/ui/editable-select'
-import { useEnumValuesStore } from '@/stores/enum-values-store'
+import { useFrameworkConfigStore } from '@/stores/framework-config-store'
 
-// W19.7-BUG-1 fix: stable empty reference to prevent useSyncExternalStore loop.
-import type { EnumValue } from '@/stores/enum-values-store'
-const EMPTY_SOURCES: EnumValue[] = []
+// Observation sources derive from enabled correspondence-based frameworks —
+// matching the create/edit picker (observation-form-fields). The standalone
+// "Sources" configurable was removed because it duplicated this signal.
+const SOURCE_ORDER = ['sama', 'cma', 'ia', 'zatca', 'misa', 'safiu', 'citc', 'sharia', 'internal']
+const SOURCE_TO_FRAMEWORK_ID: Record<string, string | null> = {
+  sama: 'sama', cma: 'cma', ia: 'ia', zatca: 'zatca', misa: 'misa', safiu: 'safiu', citc: 'citc', internal: null, sharia: 'sharia-board',
+}
+const SOURCE_LABEL_KEYS: Record<string, string> = {
+  sama: 'observations.sama',
+  cma: 'observations.sources.cma',
+  ia: 'observations.sources.ia',
+  zatca: 'observations.sources.zatca',
+  misa: 'observations.sources.misa',
+  safiu: 'observations.sources.safiu',
+  citc: 'observations.sources.citc',
+  internal: 'observations.sources.internal',
+  sharia: 'observations.sources.sharia',
+}
 
 interface ObservationFiltersProps {
   searchQuery: string
@@ -58,38 +73,26 @@ export function ObservationFilters({
     (dueDateFilter !== undefined && dueDateFilter !== '') ||
     (submissionDueDateFilter !== undefined && submissionDueDateFilter !== '')
 
-  // W24-6c: read source options from the configurable enum store so that
-  // admin-added sources appear here automatically.
-  const sourceEnumRows = useEnumValuesStore((s) => s.byDomain['observation.source'] ?? EMPTY_SOURCES)
-  const fetchEnumValues = useEnumValuesStore((s) => s.fetch)
-  useEffect(() => { void fetchEnumValues('observation.source') }, [fetchEnumValues])
-
+  // Source options = 'all' + enabled correspondence-based frameworks (seed
+  // sources gated by their framework, plus any custom correspondence frameworks).
+  const frameworks = useFrameworkConfigStore((s) => s.frameworks)
   const sourceItems = useMemo(() => {
     const allOption = { id: 'all', label: t('observations.filters.allSources') }
-    if (sourceEnumRows.length === 0) {
-      // Fallback to hard-coded seeds while the fetch is in flight.
-      return [
-        allOption,
-        { id: 'sama',     label: t('observations.sama') },
-        { id: 'cma',      label: t('observations.sources.cma') },
-        { id: 'ia',       label: t('observations.sources.ia') },
-        { id: 'zatca',    label: t('observations.sources.zatca') },
-        { id: 'misa',     label: t('observations.sources.misa') },
-        { id: 'safiu',    label: t('observations.sources.safiu') },
-        { id: 'citc',     label: t('observations.sources.citc') },
-        { id: 'internal', label: t('observations.sources.internal') },
-        { id: 'sharia',   label: t('observations.sources.sharia') },
-      ]
-    }
-    const sorted = sourceEnumRows.slice().sort((a, b) => a.sortOrder - b.sortOrder)
-    return [
-      allOption,
-      ...sorted.map((row) => ({
-        id: row.key,
-        label: language === 'ar' ? row.nameAr : row.nameEn,
-      })),
-    ]
-  }, [sourceEnumRows, language, t])
+    const seedFwIds = new Set(
+      Object.values(SOURCE_TO_FRAMEWORK_ID).filter((v): v is string => !!v),
+    )
+    const seed = SOURCE_ORDER.filter((source) => {
+      if (source === 'internal') return true
+      const fwId = SOURCE_TO_FRAMEWORK_ID[source]
+      if (!fwId) return true
+      const fw = frameworks.find((f) => f.id === fwId)
+      return !!fw?.enabled && !!fw.correspondenceBased
+    }).map((source) => ({ id: source, label: t(SOURCE_LABEL_KEYS[source] as TranslationKey) }))
+    const custom = frameworks
+      .filter((f) => f.enabled && f.correspondenceBased && !seedFwIds.has(f.id))
+      .map((f) => ({ id: f.id, label: language === 'ar' ? f.nameAr : f.name }))
+    return [allOption, ...seed, ...custom]
+  }, [frameworks, language, t])
 
   return (
     <div className={`flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 mb-6 `}>

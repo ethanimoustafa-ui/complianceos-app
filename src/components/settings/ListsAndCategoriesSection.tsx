@@ -13,7 +13,7 @@
 //   orphan-confirm modal that warns when records reference the entry.
 //   `isDefault` survives as a display-only "SEED" badge.
 
-import { useState, useCallback, useMemo, type ReactNode } from 'react'
+import { useState, useEffect, useCallback, useMemo, type ReactNode } from 'react'
 import { Icon } from '@iconify/react'
 import { useTranslation } from '@/i18n'
 import type { TranslationKey } from '@/i18n'
@@ -35,7 +35,6 @@ import { useRiskStore } from '@/stores/risk-store'
 // ── My stores ────────────────────────────────────────────────────────────────
 import { useFrameworkSubCategoryStore } from '@/stores/framework-sub-category-store'
 import { useFrameworkConfigStore } from '@/stores/framework-config-store'
-import { useLetterTypeStore } from '@/stores/letter-type-store'
 import { usePolicyCategoryStore } from '@/stores/policy-category-store'
 import { useTrainingCategoryStore } from '@/stores/training-category-store'
 import { useAuditCategoryStore } from '@/stores/audit-category-store'
@@ -60,15 +59,10 @@ try { useCalendarEventTypeStore = require('@/stores/calendar-event-type-store').
 // chrome + header (the modal supplies the title).
 import { AuditTemplatesSection } from '@/components/settings/AuditTemplatesSection'
 import { PolicyTemplatesSection } from '@/components/settings/PolicyTemplatesSection'
+// Owner: the "Letter Type" configurable now lists the actual letter TEMPLATES.
+import { LetterTemplatesSection } from '@/components/settings/LetterTemplatesSection'
 import { ApprovalTiersSection } from '@/components/settings/ApprovalTiersSection'
 import { DepartmentsSection } from '@/components/settings/DepartmentsSection'
-import { SourcesSection } from '@/components/settings/SourcesSection'
-// Letter type's "inherent function" is a letter TEMPLATE — adding one opens the
-// real template editor (same as the Letters page), per owner request.
-import { TemplateEditForm } from '@/components/correspondence/letters'
-import { useLetterTemplateStore } from '@/stores/letter-template-store'
-import { pushToast } from '@/stores/toast-store'
-import type { LetterTemplate } from '@/types'
 
 // ── Generic shape every editable-list section consumes ───────────────────────
 
@@ -112,6 +106,7 @@ function ListSection({
   const [draftLabel, setDraftLabel] = useState('')
   const [draftLabelAr, setDraftLabelAr] = useState('')
   const [adding, setAdding] = useState(false)
+  const [saving, setSaving] = useState(false)
   const [confirmReset, setConfirmReset] = useState(false)
   const [pendingDelete, setPendingDelete] = useState<{ id: string; label: string; refs: number } | null>(null)
 
@@ -133,13 +128,20 @@ function ListSection({
     setDraftLabel('')
     setDraftLabelAr('')
   }
-  const save = () => {
+  const save = async () => {
     const label = draftLabel.trim()
-    if (!label) return
+    if (!label || saving) return
     const labelAr = draftLabelAr.trim() || undefined
-    if (editingId) onEdit(editingId, label, labelAr)
-    else if (adding) onAdd(label, labelAr)
-    cancel()
+    setSaving(true)
+    try {
+      // Await so the confirm icon shows a spinner across the real request
+      // (add/edit hit the server) before the row commits and the editor closes.
+      if (editingId) await onEdit(editingId, label, labelAr)
+      else if (adding) await onAdd(label, labelAr)
+      cancel()
+    } finally {
+      setSaving(false)
+    }
   }
 
   const requestDelete = (item: ListItem) => {
@@ -226,10 +228,10 @@ function ListSection({
                     <div className={`flex items-center gap-1 ${isRTL ? 'justify-start' : 'justify-end'}`}>
                       {isEditing ? (
                         <>
-                          <button onClick={save} className="text-emerald-600 hover:text-emerald-700 p-1.5 rounded-md hover:bg-emerald-50 cursor-pointer" title={t('editableSelect.save')}>
-                            <Icon icon="lucide:check" className="text-sm" />
+                          <button onClick={() => void save()} disabled={saving} aria-busy={saving || undefined} className="text-emerald-600 hover:text-emerald-700 p-1.5 rounded-md hover:bg-emerald-50 cursor-pointer disabled:opacity-50" title={t('editableSelect.save')}>
+                            <Icon icon={saving ? 'lucide:loader-2' : 'lucide:check'} className={`text-sm ${saving ? 'animate-spin' : ''}`} />
                           </button>
-                          <button onClick={cancel} className="text-slate-400 hover:text-slate-600 p-1.5 rounded-md hover:bg-slate-100 cursor-pointer" title={t('editableSelect.cancel')}>
+                          <button onClick={cancel} disabled={saving} className="text-slate-400 hover:text-slate-600 p-1.5 rounded-md hover:bg-slate-100 cursor-pointer disabled:opacity-50" title={t('editableSelect.cancel')}>
                             <Icon icon="lucide:x" className="text-sm" />
                           </button>
                         </>
@@ -259,10 +261,10 @@ function ListSection({
                 <td className="px-6 py-3"><span className="text-xs text-slate-400">0</span></td>
                 <td className="px-6 py-3">
                   <div className={`flex items-center gap-1 ${isRTL ? 'justify-start' : 'justify-end'}`}>
-                    <button onClick={save} disabled={!draftLabel.trim()} className="text-emerald-600 hover:text-emerald-700 p-1.5 rounded-md hover:bg-emerald-50 cursor-pointer disabled:opacity-40">
-                      <Icon icon="lucide:check" className="text-sm" />
+                    <button onClick={() => void save()} disabled={!draftLabel.trim() || saving} aria-busy={saving || undefined} className="text-emerald-600 hover:text-emerald-700 p-1.5 rounded-md hover:bg-emerald-50 cursor-pointer disabled:opacity-40">
+                      <Icon icon={saving ? 'lucide:loader-2' : 'lucide:check'} className={`text-sm ${saving ? 'animate-spin' : ''}`} />
                     </button>
-                    <button onClick={cancel} className="text-slate-400 hover:text-slate-600 p-1.5 rounded-md hover:bg-slate-100 cursor-pointer">
+                    <button onClick={cancel} disabled={saving} className="text-slate-400 hover:text-slate-600 p-1.5 rounded-md hover:bg-slate-100 cursor-pointer disabled:opacity-50">
                       <Icon icon="lucide:x" className="text-sm" />
                     </button>
                   </div>
@@ -404,7 +406,10 @@ function FrameworkSubCategoryLauncher({ isRTL, t }: FrameworkSubCategoryLauncher
   const [openFrameworkId, setOpenFrameworkId] = useState<string | null>(null)
 
   const enabledFrameworks = useMemo(
-    () => frameworkConfig.frameworks.filter((f) => f.enabled),
+    // Only correspondence-based frameworks carry sub-categories — a
+    // non-correspondence framework has no letters, so a sub-category list is
+    // meaningless for it (owner request).
+    () => frameworkConfig.frameworks.filter((f) => f.enabled && f.correspondenceBased),
     [frameworkConfig.frameworks],
   )
 
@@ -539,46 +544,13 @@ function FrameworkSubCategoryLauncher({ isRTL, t }: FrameworkSubCategoryLauncher
 export function ListsAndCategoriesSection() {
   const { t, isRTL } = useTranslation()
 
-  // Letter-template create flow (letter type's "inherent function").
-  const createLetterTemplate = useLetterTemplateStore((s) => s.create)
-  const [letterTemplateOpen, setLetterTemplateOpen] = useState(false)
-
-  async function handleSaveLetterTemplate(data: Partial<LetterTemplate>) {
-    // Mirrors the Letters page's create branch (type-based icon/color defaults).
-    const typeColors: Record<string, string> = {
-      'non-objection': 'emerald', inquiry: 'blue', submission: 'amber', notification: 'rose',
-    }
-    const typeIcons: Record<string, string> = {
-      'non-objection': 'lucide:user-check', inquiry: 'lucide:help-circle', submission: 'lucide:file-up', notification: 'lucide:alert-triangle',
-    }
-    const resolvedType = data.type || 'non-objection'
-    try {
-      await createLetterTemplate({
-        name: data.name || 'Untitled Template',
-        type: resolvedType,
-        icon: data.icon || typeIcons[resolvedType] || 'lucide:mail',
-        color: data.color || typeColors[resolvedType] || 'slate',
-        description: data.description || '',
-        status: data.status || 'Draft',
-        ...data,
-      } as Omit<LetterTemplate, 'id' | 'createdDate' | 'lastModified' | 'usageCount'>)
-      pushToast(t('configurables.letterTemplateCreated' as TranslationKey), 'success')
-    } catch {
-      pushToast(t('configurables.letterTemplateFailed' as TranslationKey), 'error')
-      return
-    }
-    setLetterTemplateOpen(false)
-  }
-
   // ── My stores
-  const letterType = useLetterTypeStore()
   const policyCat = usePolicyCategoryStore()
   const trainingCat = useTrainingCategoryStore()
   const auditCat = useAuditCategoryStore()
   const riskCat = useRiskCategoryStore()
 
   // ── Counter sources
-  const letters = useLetterStore((s) => s.letters)
   const calendarEvents = useCalendarStore((s) => s.events)
   const advisory = useAdvisoryStore((s) => s.advisoryRequests)
   const policies = usePolicyStore((s) => s.policies)
@@ -591,9 +563,22 @@ export function ListsAndCategoriesSection() {
   const businessUnits = useBusinessUnitStore ? useBusinessUnitStore() : null
   const calendarEventType = useCalendarEventTypeStore ? useCalendarEventTypeStore() : null
 
+  // Hydrate the lookup stores whose lists + launcher counts this hub shows but
+  // that nothing central fetched — so items created elsewhere (advisory business
+  // units, training/audit categories, sub-categories) appear here on first open
+  // instead of only after visiting their owning page (owner bug).
+  const fetchTrainingCat = trainingCat.fetchAll
+  const fetchAuditCat = auditCat.fetchAll
+  const fetchSubCategories = useFrameworkSubCategoryStore((s) => s.fetchAll)
+  const fetchBusinessUnits = businessUnits?.fetchAll
+  useEffect(() => {
+    void fetchTrainingCat?.()
+    void fetchAuditCat?.()
+    void fetchSubCategories?.()
+    void fetchBusinessUnits?.()
+  }, [fetchTrainingCat, fetchAuditCat, fetchSubCategories, fetchBusinessUnits])
+
   // ── Counters ─────────────────────────────────────────────────────────────
-  const countLetterType = useCallback((id: string) =>
-    letters.filter((l) => l.type === id).length, [letters])
   const countCalendarEventType = useCallback((id: string) =>
     calendarEvents.filter((e) => e.type === id).length, [calendarEvents])
   const countAdvisoryBU = useCallback((id: string) =>
@@ -630,22 +615,8 @@ export function ListsAndCategoriesSection() {
             {t('configurables.listingCategoriesDesc')}
           </p>
           <div className="flex flex-wrap gap-2">
-            <ListSectionLauncher
-              title={t('listsAndCategories.sectionLetterType')}
-              description={t('listsAndCategories.sectionLetterTypeDesc')}
-              items={letterType.types}
-              countUsage={countLetterType}
-              onAdd={letterType.add}
-              onEdit={(id, label, labelAr) => letterType.update(id, { label, labelAr })}
-              onDelete={letterType.remove}
-              // A letter type's real "inherent function" is its template — adding
-              // one opens the full template editor (same as the Letters page)
-              // instead of a bare name input. Existing type labels stay editable.
-              onAddClick={() => setLetterTemplateOpen(true)}
-              addLabel={t('configurables.newLetterTemplate' as TranslationKey)}
-              isRTL={isRTL}
-              t={t}
-            />
+            {/* Letter templates live in the Templates group now (owner: the
+                "Letter Type" entry lists the actual letter templates). */}
             {calendarEventType && (
               <ListSectionLauncher
                 title={t('listsAndCategories.sectionCalendarEventType')}
@@ -718,17 +689,10 @@ export function ListsAndCategoriesSection() {
               isRTL={isRTL}
               t={t}
             />
-            {/* Folded in alongside the simple lists (they're list-like too):
-                observation sources, departments, and the policy approval
-                tiers. Each opens its richer manager in a modal. */}
-            <SectionLauncher
-              icon="lucide:radar"
-              label={t('settings.sources.title' as TranslationKey)}
-              title={t('settings.sources.title' as TranslationKey)}
-              size="lg"
-            >
-              <SourcesSection embedded />
-            </SectionLauncher>
+            {/* Folded in alongside the simple lists: departments + the policy
+                approval tiers. (Observation Sources was removed — those options
+                are already derived from correspondence-based frameworks, so a
+                separate configurable just duplicated that signal.) */}
             <SectionLauncher
               icon="lucide:building-2"
               label={t('settings.departments.title' as TranslationKey)}
@@ -781,24 +745,20 @@ export function ListsAndCategoriesSection() {
             >
               <PolicyTemplatesSection embedded />
             </SectionLauncher>
+            <SectionLauncher
+              icon="lucide:mail"
+              label={t('settings.letterTemplates' as TranslationKey)}
+              title={t('settings.letterTemplates' as TranslationKey)}
+              size="2xl"
+            >
+              <LetterTemplatesSection embedded />
+            </SectionLauncher>
           </div>
         </div>
 
       </div>
     </section>
 
-    {/* Letter type's meaningful add: the real letter-template editor (same as
-        the Letters page). Mounted at the hub level so it stacks above the
-        Letter Type list modal; a success toast confirms the save. */}
-    <Modal isOpen={letterTemplateOpen} onClose={() => setLetterTemplateOpen(false)} size="xl">
-      {letterTemplateOpen && (
-        <TemplateEditForm
-          template={null}
-          onClose={() => setLetterTemplateOpen(false)}
-          onSave={handleSaveLetterTemplate}
-        />
-      )}
-    </Modal>
     </Gate>
   )
 }
