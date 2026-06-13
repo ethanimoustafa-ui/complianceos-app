@@ -51,7 +51,7 @@ function UploadZone({
   return (
     <div>
       <label className="block text-sm font-medium text-slate-700 mb-1.5">
-        {label}{required && ' *'}
+        {label}{required && <span className="text-rose-500"> *</span>}
       </label>
       <input
         ref={fileRef}
@@ -354,13 +354,14 @@ export function EditPolicyModal({ isOpen, onClose, policy, onSaved, t, isRTL }: 
           {/* Left column */}
           <div className="space-y-4">
             <Input
-              label={`${t('policies.policyName')} *`}
+              label={t('policies.policyName')}
+              requiredMark
               placeholder={t('policies.policyNamePlaceholder')}
               value={formName}
               onChange={(e) => setFormName(e.target.value)}
             />
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('policies.selectCategory')} *</label>
+              <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('policies.selectCategory')}<span className="text-rose-500"> *</span></label>
               <EditableSelect
                 value={formCategory || null}
                 onChange={(id) => setFormCategory(id as PolicyCategory | '')}
@@ -373,7 +374,7 @@ export function EditPolicyModal({ isOpen, onClose, policy, onSaved, t, isRTL }: 
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('policies.approvalTier')} *</label>
+              <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('policies.approvalTier')}<span className="text-rose-500"> *</span></label>
               <EditableSelect
                 locked
                 value={formTier || null}
@@ -473,7 +474,7 @@ export function EditPolicyModal({ isOpen, onClose, policy, onSaved, t, isRTL }: 
               )}
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('policies.description')} *</label>
+              <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('policies.description')}<span className="text-rose-500"> *</span></label>
               <textarea
                 className="flex w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm min-h-[120px] resize-none focus:ring-2 focus:ring-emerald-500/20 focus:outline-none"
                 placeholder={t('policies.descriptionPlaceholder')}

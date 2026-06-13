@@ -1790,6 +1790,7 @@
       "nameEn": "English Label",
       "nameAr": "Arabic Label",
       "sortOrder": "Sort Order",
+      "sortOrderHelp": "Controls the order this option appears in its dropdown — lower numbers show first.",
       "isDefault": "Seeded",
       "cannotEditDefault": "Seeded entries cannot be renamed — only the sort order is editable.",
       "cannotDeleteDefault": "Seeded entries cannot be deleted.",
@@ -3057,7 +3058,10 @@
     "templates": "Templates",
     "templatesDesc": "Reusable starting points for audits and policies.",
     "structure": "Departments & Tiers",
-    "structureDesc": "Org departments and the policy approval-tier list."
+    "structureDesc": "Org departments and the policy approval-tier list.",
+    "newLetterTemplate": "New Letter Template",
+    "letterTemplateCreated": "Letter template created",
+    "letterTemplateFailed": "Failed to create letter template — please try again"
   },
   "listsAndCategories": {
     "title": "Lists & Categories",

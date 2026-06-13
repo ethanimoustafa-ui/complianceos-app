@@ -592,7 +592,7 @@ export default function AdvisoryPage() {
         <div className="space-y-4">
           <div>
             <label className={`text-xs font-bold text-slate-700 uppercase mb-2 block ${isRTL ? 'text-right' : ''}`}>
-              {t('common.subject')} *
+              {t('common.subject')}<span className="text-rose-500"> *</span>
             </label>
             <input
               type="text"
@@ -605,7 +605,7 @@ export default function AdvisoryPage() {
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className={`text-xs font-bold text-slate-700 uppercase mb-2 block ${isRTL ? 'text-right' : ''}`}>
-                {t('advisory.businessUnit')} *
+                {t('advisory.businessUnit')}<span className="text-rose-500"> *</span>
               </label>
               <EditableSelect
                 value={newAdvBusinessUnit || null}
@@ -620,7 +620,7 @@ export default function AdvisoryPage() {
             </div>
             <div>
               <label className={`text-xs font-bold text-slate-700 uppercase mb-2 block ${isRTL ? 'text-right' : ''}`}>
-                {t('advisory.priority')} *
+                {t('advisory.priority')}<span className="text-rose-500"> *</span>
               </label>
               <EditableSelect
                 locked
@@ -639,7 +639,7 @@ export default function AdvisoryPage() {
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className={`text-xs font-bold text-slate-700 uppercase mb-2 block ${isRTL ? 'text-right' : ''}`}>
-                {t('advisory.requestedBy' as TranslationKey)}
+                {t('advisory.requestedBy' as TranslationKey)} <span className="text-slate-400 font-normal normal-case lowercase">({t('common.optional')})</span>
               </label>
               <input
                 type="text"
@@ -650,7 +650,7 @@ export default function AdvisoryPage() {
             </div>
             <div>
               <label className={`text-xs font-bold text-slate-700 uppercase mb-2 block ${isRTL ? 'text-right' : ''}`}>
-                {t('advisory.assignedTo' as TranslationKey)}
+                {t('advisory.assignedTo' as TranslationKey)} <span className="text-slate-400 font-normal normal-case lowercase">({t('common.optional')})</span>
               </label>
               {/* A2 fix: use m.id (UUID) not m.name so assigned_to passes Uuid validation */}
               <EditableSelect
@@ -664,7 +664,7 @@ export default function AdvisoryPage() {
           </div>
           <div>
             <label className={`text-xs font-bold text-slate-700 uppercase mb-2 block ${isRTL ? 'text-right' : ''}`}>
-              {t('advisory.description')} *
+              {t('advisory.description')}<span className="text-rose-500"> *</span>
             </label>
             <textarea
               rows={4}

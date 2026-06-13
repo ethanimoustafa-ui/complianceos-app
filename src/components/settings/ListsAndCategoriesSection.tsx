@@ -62,6 +62,13 @@ import { AuditTemplatesSection } from '@/components/settings/AuditTemplatesSecti
 import { PolicyTemplatesSection } from '@/components/settings/PolicyTemplatesSection'
 import { ApprovalTiersSection } from '@/components/settings/ApprovalTiersSection'
 import { DepartmentsSection } from '@/components/settings/DepartmentsSection'
+import { SourcesSection } from '@/components/settings/SourcesSection'
+// Letter type's "inherent function" is a letter TEMPLATE — adding one opens the
+// real template editor (same as the Letters page), per owner request.
+import { TemplateEditForm } from '@/components/correspondence/letters'
+import { useLetterTemplateStore } from '@/stores/letter-template-store'
+import { pushToast } from '@/stores/toast-store'
+import type { LetterTemplate } from '@/types'
 
 // ── Generic shape every editable-list section consumes ───────────────────────
 
@@ -87,13 +94,19 @@ interface ListSectionProps {
   onEdit: (id: string, label: string, labelAr?: string) => void
   onDelete: (id: string) => void
   onResetSection?: () => void
+  /** When set, the "Add" button calls this instead of the inline add-row —
+   *  used by Letter Type to open the full letter-template create modal (its
+   *  "inherent function" is a template, not a bare label). */
+  onAddClick?: () => void
+  /** Optional override for the Add button copy (e.g. "New Letter Template"). */
+  addLabel?: string
   isRTL: boolean
   t: (key: TranslationKey, params?: Record<string, string>) => string
 }
 
 function ListSection({
   title, description, items, countUsage, getReferenceCount,
-  onAdd, onEdit, onDelete, onResetSection, isRTL, t,
+  onAdd, onEdit, onDelete, onResetSection, onAddClick, addLabel, isRTL, t,
 }: ListSectionProps) {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [draftLabel, setDraftLabel] = useState('')
@@ -160,9 +173,9 @@ function ListSection({
               {t('listsAndCategories.resetToDefaults')}
             </button>
           )}
-          <Button size="sm" variant="primary" onClick={startAdd}>
+          <Button size="sm" variant="primary" onClick={onAddClick ?? startAdd}>
             <Icon icon="lucide:plus" className="text-sm" />
-            {t('listsAndCategories.addEntry')}
+            {addLabel ?? t('listsAndCategories.addEntry')}
           </Button>
         </div>
       </div>
@@ -173,7 +186,6 @@ function ListSection({
             <tr>
               <th className="px-6 py-2.5 text-[10px] font-black uppercase tracking-wider text-slate-500">{t('listsAndCategories.labelEn')}</th>
               <th className="px-6 py-2.5 text-[10px] font-black uppercase tracking-wider text-slate-500">{t('listsAndCategories.labelAr')}</th>
-              <th className="px-6 py-2.5 text-[10px] font-black uppercase tracking-wider text-slate-500">{t('listsAndCategories.flag')}</th>
               <th className="px-6 py-2.5 text-[10px] font-black uppercase tracking-wider text-slate-500">{t('listsAndCategories.usage')}</th>
               <th className="px-6 py-2.5 text-[10px] font-black uppercase tracking-wider text-slate-500 text-right">{t('listsAndCategories.actions')}</th>
             </tr>
@@ -181,7 +193,7 @@ function ListSection({
           <tbody className="divide-y divide-slate-100">
             {items.length === 0 && !adding && (
               <tr>
-                <td colSpan={5} className="px-6 py-6 text-center text-slate-400 italic text-xs">
+                <td colSpan={4} className="px-6 py-6 text-center text-slate-400 italic text-xs">
                   {t('listsAndCategories.empty')}
                 </td>
               </tr>
@@ -195,14 +207,7 @@ function ListSection({
                     {isEditing ? (
                       <Input value={draftLabel} onChange={(e) => setDraftLabel(e.target.value)} autoFocus />
                     ) : (
-                      <span className="text-xs font-bold text-slate-800 inline-flex items-center gap-2">
-                        {item.label}
-                        {item.isDefault && (
-                          <span className="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-600 tracking-wide">
-                            {t('listsAndCategories.seedBadge')}
-                          </span>
-                        )}
-                      </span>
+                      <span className="text-xs font-bold text-slate-800">{item.label}</span>
                     )}
                   </td>
                   <td className="px-6 py-3">
@@ -210,17 +215,6 @@ function ListSection({
                       <Input value={draftLabelAr} onChange={(e) => setDraftLabelAr(e.target.value)} dir="rtl" />
                     ) : (
                       <span className="text-xs text-slate-600">{item.labelAr ?? '—'}</span>
-                    )}
-                  </td>
-                  <td className="px-6 py-3">
-                    {item.isDefault ? (
-                      <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">
-                        {t('listsAndCategories.seedBadge')}
-                      </span>
-                    ) : (
-                      <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700">
-                        {t('listsAndCategories.customBadge')}
-                      </span>
                     )}
                   </td>
                   <td className="px-6 py-3">
@@ -262,7 +256,6 @@ function ListSection({
               <tr className="bg-emerald-50/40">
                 <td className="px-6 py-3"><Input value={draftLabel} onChange={(e) => setDraftLabel(e.target.value)} placeholder={t('editableSelect.name')} autoFocus /></td>
                 <td className="px-6 py-3"><Input value={draftLabelAr} onChange={(e) => setDraftLabelAr(e.target.value)} placeholder={t('editableSelect.arabicNameOptional')} dir="rtl" /></td>
-                <td className="px-6 py-3"><span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700">{t('listsAndCategories.customBadge')}</span></td>
                 <td className="px-6 py-3"><span className="text-xs text-slate-400">0</span></td>
                 <td className="px-6 py-3">
                   <div className={`flex items-center gap-1 ${isRTL ? 'justify-start' : 'justify-end'}`}>
@@ -546,6 +539,37 @@ function FrameworkSubCategoryLauncher({ isRTL, t }: FrameworkSubCategoryLauncher
 export function ListsAndCategoriesSection() {
   const { t, isRTL } = useTranslation()
 
+  // Letter-template create flow (letter type's "inherent function").
+  const createLetterTemplate = useLetterTemplateStore((s) => s.create)
+  const [letterTemplateOpen, setLetterTemplateOpen] = useState(false)
+
+  async function handleSaveLetterTemplate(data: Partial<LetterTemplate>) {
+    // Mirrors the Letters page's create branch (type-based icon/color defaults).
+    const typeColors: Record<string, string> = {
+      'non-objection': 'emerald', inquiry: 'blue', submission: 'amber', notification: 'rose',
+    }
+    const typeIcons: Record<string, string> = {
+      'non-objection': 'lucide:user-check', inquiry: 'lucide:help-circle', submission: 'lucide:file-up', notification: 'lucide:alert-triangle',
+    }
+    const resolvedType = data.type || 'non-objection'
+    try {
+      await createLetterTemplate({
+        name: data.name || 'Untitled Template',
+        type: resolvedType,
+        icon: data.icon || typeIcons[resolvedType] || 'lucide:mail',
+        color: data.color || typeColors[resolvedType] || 'slate',
+        description: data.description || '',
+        status: data.status || 'Draft',
+        ...data,
+      } as Omit<LetterTemplate, 'id' | 'createdDate' | 'lastModified' | 'usageCount'>)
+      pushToast(t('configurables.letterTemplateCreated' as TranslationKey), 'success')
+    } catch {
+      pushToast(t('configurables.letterTemplateFailed' as TranslationKey), 'error')
+      return
+    }
+    setLetterTemplateOpen(false)
+  }
+
   // ── My stores
   const letterType = useLetterTypeStore()
   const policyCat = usePolicyCategoryStore()
@@ -614,6 +638,11 @@ export function ListsAndCategoriesSection() {
               onAdd={letterType.add}
               onEdit={(id, label, labelAr) => letterType.update(id, { label, labelAr })}
               onDelete={letterType.remove}
+              // A letter type's real "inherent function" is its template — adding
+              // one opens the full template editor (same as the Letters page)
+              // instead of a bare name input. Existing type labels stay editable.
+              onAddClick={() => setLetterTemplateOpen(true)}
+              addLabel={t('configurables.newLetterTemplate' as TranslationKey)}
               isRTL={isRTL}
               t={t}
             />
@@ -689,6 +718,33 @@ export function ListsAndCategoriesSection() {
               isRTL={isRTL}
               t={t}
             />
+            {/* Folded in alongside the simple lists (they're list-like too):
+                observation sources, departments, and the policy approval
+                tiers. Each opens its richer manager in a modal. */}
+            <SectionLauncher
+              icon="lucide:radar"
+              label={t('settings.sources.title' as TranslationKey)}
+              title={t('settings.sources.title' as TranslationKey)}
+              size="lg"
+            >
+              <SourcesSection embedded />
+            </SectionLauncher>
+            <SectionLauncher
+              icon="lucide:building-2"
+              label={t('settings.departments.title' as TranslationKey)}
+              title={t('settings.departments.title' as TranslationKey)}
+              size="lg"
+            >
+              <DepartmentsSection embedded />
+            </SectionLauncher>
+            <SectionLauncher
+              icon="lucide:layers"
+              label={t('settings.enumValues.title')}
+              title={t('settings.enumValues.title')}
+              size="lg"
+            >
+              <ApprovalTiersSection embedded />
+            </SectionLauncher>
           </div>
         </div>
 
@@ -728,35 +784,21 @@ export function ListsAndCategoriesSection() {
           </div>
         </div>
 
-        {/* Structure — departments + the policy approval-tier list. */}
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
-          <h3 className="text-sm font-bold text-slate-900 mb-1">
-            {t('configurables.structure')}
-          </h3>
-          <p className="text-xs text-slate-500 mb-4">
-            {t('configurables.structureDesc')}
-          </p>
-          <div className="flex flex-wrap gap-2">
-            <SectionLauncher
-              icon="lucide:building-2"
-              label={t('settings.departments.title' as TranslationKey)}
-              title={t('settings.departments.title' as TranslationKey)}
-              size="lg"
-            >
-              <DepartmentsSection embedded />
-            </SectionLauncher>
-            <SectionLauncher
-              icon="lucide:layers"
-              label={t('settings.enumValues.title')}
-              title={t('settings.enumValues.title')}
-              size="lg"
-            >
-              <ApprovalTiersSection embedded />
-            </SectionLauncher>
-          </div>
-        </div>
       </div>
     </section>
+
+    {/* Letter type's meaningful add: the real letter-template editor (same as
+        the Letters page). Mounted at the hub level so it stacks above the
+        Letter Type list modal; a success toast confirms the save. */}
+    <Modal isOpen={letterTemplateOpen} onClose={() => setLetterTemplateOpen(false)} size="xl">
+      {letterTemplateOpen && (
+        <TemplateEditForm
+          template={null}
+          onClose={() => setLetterTemplateOpen(false)}
+          onSave={handleSaveLetterTemplate}
+        />
+      )}
+    </Modal>
     </Gate>
   )
 }

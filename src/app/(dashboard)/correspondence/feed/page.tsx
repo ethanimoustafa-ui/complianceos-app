@@ -123,6 +123,9 @@ export default function CorrespondenceFeedPage() {
   const fetchPolicies = usePolicyStore((s) => s.fetchAll)
   const fetchEmployees = useTrainingStore((s) => s.fetchEmployees)
   const fetchCourses = useTrainingStore((s) => s.fetchCourses)
+  // Training/Saudization stat cards read the SAME persisted metrics the
+  // training page shows (saudization_metrics singleton) — hydrate them here.
+  const fetchTrainingMetrics = useTrainingStore((s) => s.fetchMetrics)
   const fetchCorrespondenceTypes = useCorrespondenceTypeStore((s) => s.fetchAll)
   useEffect(() => {
     void fetchCirculars()
@@ -133,6 +136,7 @@ export default function CorrespondenceFeedPage() {
     void fetchPolicies()
     void fetchEmployees()
     void fetchCourses()
+    void fetchTrainingMetrics()
     void fetchCorrespondenceTypes()
     void fetchPolicyCategories()
   }, [
@@ -144,6 +148,7 @@ export default function CorrespondenceFeedPage() {
     fetchPolicies,
     fetchEmployees,
     fetchCourses,
+    fetchTrainingMetrics,
     fetchCorrespondenceTypes,
     fetchPolicyCategories,
   ])
@@ -259,19 +264,20 @@ export default function CorrespondenceFeedPage() {
     [observationStore.observations]
   )
 
-  const saudizationRate = useMemo(() => {
-    const members = teamStore.members
-    if (members.length === 0) return 0
-    const saudiCount = members.filter(m => m.nationality === 'Saudi').length
-    return Math.round((saudiCount / members.length) * 100)
-  }, [teamStore.members])
+  // Single source of truth = the training page's persisted metrics
+  // (saudization_metrics singleton via /api/training/metrics). These used to
+  // diverge: Saudization was recomputed from team roster nationality and
+  // completion was averaged over the empty legacy `trainings` slice, so the
+  // feed never matched the training page. Read the same stored values now.
+  const saudizationRate = useMemo(
+    () => Math.round(Number(trainingStore.saudizationMetrics.actual) || 0),
+    [trainingStore.saudizationMetrics.actual],
+  )
 
-  const trainingCompletionRate = useMemo(() => {
-    const trainings = trainingStore.trainings
-    if (trainings.length === 0) return 0
-    const total = trainings.reduce((sum, t) => sum + t.completionRate, 0)
-    return Math.round(total / trainings.length)
-  }, [trainingStore.trainings])
+  const trainingCompletionRate = useMemo(
+    () => Math.round(Number(trainingStore.overviewStats.overallCompletion) || 0),
+    [trainingStore.overviewStats.overallCompletion],
+  )
 
   // W43: "Current %" = the MEAN of each policy's approval-workflow ratio
   // (workflow_progress is decorated on GET /api/policies: completed steps /

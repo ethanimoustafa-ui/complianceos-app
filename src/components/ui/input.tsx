@@ -4,17 +4,23 @@ import { cn } from '@/lib/utils'
 export interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
   error?: string
   label?: string
+  /** Append a red required asterisk after the label. */
+  requiredMark?: boolean
+  /** Append a muted "(<text>)" optional hint — pass the localized word. */
+  optionalText?: string
 }
 
 export const Input = forwardRef<HTMLInputElement, InputProps>(
   // W38: default type="text" — without it the input renders type-less, which
   // breaks `input[type="text"]` CSS/test selectors and autofill heuristics.
-  ({ className, type = 'text', error, label, ...props }, ref) => {
+  ({ className, type = 'text', error, label, requiredMark, optionalText, ...props }, ref) => {
     return (
       <div className="w-full">
         {label && (
           <label className="block text-sm font-medium text-slate-700 mb-1.5">
             {label}
+            {requiredMark && <span className="text-rose-500"> *</span>}
+            {optionalText && <span className="text-slate-400 font-normal"> ({optionalText})</span>}
           </label>
         )}
         <input

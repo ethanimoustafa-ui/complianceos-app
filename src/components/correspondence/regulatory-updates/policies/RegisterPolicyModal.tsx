@@ -589,7 +589,8 @@ export function RegisterPolicyModal({ isOpen, onClose, onCreated, t, isRTL }: Pr
           {/* Left column */}
           <div className="space-y-4">
             <Input
-              label={`${t('policies.policyName')} *`}
+              label={t('policies.policyName')}
+              requiredMark
               placeholder={t('policies.policyNamePlaceholder')}
               value={formName}
               onChange={(e) => setFormName(e.target.value)}

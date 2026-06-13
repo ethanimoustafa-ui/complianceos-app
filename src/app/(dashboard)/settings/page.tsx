@@ -7,9 +7,8 @@ import { FrameworksSection } from '@/components/settings/FrameworksSection'
 import { NotificationsSection } from '@/components/settings/NotificationsSection'
 import { ConnectedAppsSection } from '@/components/settings/ConnectedAppsSection'
 import { UserPreferencesSection } from '@/components/settings/UserPreferencesSection'
-import { SourcesSection } from '@/components/settings/SourcesSection'
-// Configurables hub — folds in the former Audit Templates, Policy Templates,
-// Approval Tiers, and Departments sections (each opens as a modal).
+// Configurables hub — folds in Audit/Policy Templates, Approval Tiers,
+// Departments, and Observation Sources (each opens as a modal).
 import { ListsAndCategoriesSection } from '@/components/settings/ListsAndCategoriesSection'
 import { Gate } from '@/components/auth/gate'
 import { ForbiddenPanel } from '@/components/auth/forbidden-panel'
@@ -47,7 +46,6 @@ export default function SettingsPage() {
           </div>
 
           <UserPreferencesSection />
-          <SourcesSection />
           <ListsAndCategoriesSection />
         </div>
       </div>

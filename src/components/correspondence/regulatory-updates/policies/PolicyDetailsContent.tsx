@@ -699,7 +699,7 @@ export function PolicyDetailsContent({
                 <div className="mb-4 p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-3">
                   <div>
                     <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">
-                      {t('policies.workflowStepName')} *
+                      {t('policies.workflowStepName')}<span className="text-rose-500"> *</span>
                     </label>
                     <input
                       className="flex h-9 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20"

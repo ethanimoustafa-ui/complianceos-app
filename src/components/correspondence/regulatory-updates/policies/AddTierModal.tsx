@@ -105,7 +105,7 @@ export function AddTierModal({ isOpen, onClose, onSave, existingKeys, editTier, 
       <div className="space-y-4">
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="block text-xs font-bold text-slate-500 mb-1">{t('policies.addTierNameEn')} *</label>
+            <label className="block text-xs font-bold text-slate-500 mb-1">{t('policies.addTierNameEn')}<span className="text-rose-500"> *</span></label>
             <input
               autoFocus
               value={nameEn}
@@ -114,7 +114,7 @@ export function AddTierModal({ isOpen, onClose, onSave, existingKeys, editTier, 
             />
           </div>
           <div>
-            <label className="block text-xs font-bold text-slate-500 mb-1">{t('policies.addTierNameAr')}</label>
+            <label className="block text-xs font-bold text-slate-500 mb-1">{t('policies.addTierNameAr')} <span className="text-slate-400 font-normal normal-case">({t('common.optional')})</span></label>
             <input
               value={nameAr}
               onChange={(e) => setNameAr(e.target.value)}

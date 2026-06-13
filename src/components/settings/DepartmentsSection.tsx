@@ -12,11 +12,13 @@ import { Icon } from '@iconify/react'
 import { useTranslation, type TranslationKey } from '@/i18n'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { ListSkeleton } from '@/components/ui/skeleton'
 import { useDepartmentStore } from '@/stores/department-store'
 
 export function DepartmentsSection({ embedded = false }: { embedded?: boolean } = {}) {
   const { t, isRTL } = useTranslation()
   const departments = useDepartmentStore((s) => s.departments)
+  const isLoading = useDepartmentStore((s) => s.isLoading)
   const fetchAll = useDepartmentStore((s) => s.fetchAll)
   const updateDepartment = useDepartmentStore((s) => s.updateDepartment)
 
@@ -60,6 +62,9 @@ export function DepartmentsSection({ embedded = false }: { embedded?: boolean } 
         </div>
       )}
 
+      {isLoading && departments.length === 0 ? (
+        <div className="p-6"><ListSkeleton rows={4} columns={2} /></div>
+      ) : (
       <div className="overflow-x-auto">
         <table className="w-full text-left text-xs">
           <thead className="bg-slate-50">
@@ -140,6 +145,7 @@ export function DepartmentsSection({ embedded = false }: { embedded?: boolean } 
           </tbody>
         </table>
       </div>
+      )}
     </section>
   )
 }
