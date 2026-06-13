@@ -28,21 +28,33 @@ export function DepartmentsSection({ embedded = false }: { embedded?: boolean } 
   const [editingId, setEditingId] = useState<string | null>(null)
   const [draftEmail, setDraftEmail] = useState('')
   const [savingId, setSavingId] = useState<string | null>(null)
-  // Owner: a department can now be created straight from the configurables hub.
+  // Owner: a department can now be created straight from the configurables hub,
+  // and the create form prompts for the contact email up front (not just name).
   const [adding, setAdding] = useState(false)
   const [draftName, setDraftName] = useState('')
   const [draftNameAr, setDraftNameAr] = useState('')
+  const [draftAddEmail, setDraftAddEmail] = useState('')
   const [savingNew, setSavingNew] = useState(false)
+
+  const resetAddForm = () => {
+    setAdding(false)
+    setDraftName('')
+    setDraftNameAr('')
+    setDraftAddEmail('')
+  }
 
   const handleAdd = async () => {
     const name = draftName.trim()
     if (!name || savingNew) return
     setSavingNew(true)
     try {
-      await addDepartment(name, draftNameAr.trim() || name)
-      setAdding(false)
-      setDraftName('')
-      setDraftNameAr('')
+      const created = await addDepartment(name, draftNameAr.trim() || name)
+      // Persist the email in the same flow (addDepartment posts name only).
+      const email = draftAddEmail.trim()
+      if (email && created?.id) {
+        await updateDepartment(created.id, { email })
+      }
+      resetAddForm()
     } finally {
       setSavingNew(false)
     }
@@ -104,11 +116,20 @@ export function DepartmentsSection({ embedded = false }: { embedded?: boolean } 
             className="max-w-[200px]"
             dir="rtl"
           />
+          <Input
+            type="email"
+            value={draftAddEmail}
+            onChange={(e) => setDraftAddEmail(e.target.value)}
+            placeholder={t('settings.departments.emailPlaceholder' as TranslationKey)}
+            className="max-w-[220px]"
+            dir="ltr"
+            onKeyDown={(e) => { if (e.key === 'Enter') void handleAdd() }}
+          />
           <Button size="sm" variant="primary" onClick={() => void handleAdd()} disabled={!draftName.trim() || savingNew}>
             {savingNew && <Icon icon="lucide:loader-2" className="animate-spin text-sm" />}
             {t('common.add')}
           </Button>
-          <Button size="sm" variant="outline" onClick={() => { setAdding(false); setDraftName(''); setDraftNameAr('') }} disabled={savingNew}>
+          <Button size="sm" variant="outline" onClick={resetAddForm} disabled={savingNew}>
             {t('common.cancel')}
           </Button>
         </div>

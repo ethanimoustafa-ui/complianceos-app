@@ -28,7 +28,6 @@ import { useLetterStore } from '@/stores/letter-store'
 import { useCalendarStore } from '@/stores/calendar-store'
 import { useAdvisoryStore } from '@/stores/advisory-store'
 import { usePolicyStore } from '@/stores/policy-store'
-import { useTrainingStore } from '@/stores/training-store'
 import { useAuditStore } from '@/stores/audit-store'
 import { useRiskStore } from '@/stores/risk-store'
 
@@ -61,8 +60,11 @@ import { AuditTemplatesSection } from '@/components/settings/AuditTemplatesSecti
 import { PolicyTemplatesSection } from '@/components/settings/PolicyTemplatesSection'
 // Owner: the "Letter Type" configurable now lists the actual letter TEMPLATES.
 import { LetterTemplatesSection } from '@/components/settings/LetterTemplatesSection'
+// Owner: the "Training Category" entry manages the actual training COURSES.
+import { TrainingCoursesLauncher } from '@/components/settings/TrainingCoursesSection'
 import { ApprovalTiersSection } from '@/components/settings/ApprovalTiersSection'
 import { DepartmentsSection } from '@/components/settings/DepartmentsSection'
+import { pushToast } from '@/stores/toast-store'
 
 // ── Generic shape every editable-list section consumes ───────────────────────
 
@@ -152,8 +154,14 @@ function ListSection({
   }
 
   const confirmDelete = () => {
-    if (pendingDelete) onDelete(pendingDelete.id)
+    if (!pendingDelete) return
+    const { id, label } = pendingDelete
     setPendingDelete(null)
+    // Surface a failure instead of silently rolling the row back (e.g. trying
+    // to delete a server-guarded default returns without removing it).
+    Promise.resolve(onDelete(id)).catch(() => {
+      pushToast(t('listsAndCategories.deleteFailed' as TranslationKey, { label }), 'error')
+    })
   }
 
   return (
@@ -554,7 +562,6 @@ export function ListsAndCategoriesSection() {
   const calendarEvents = useCalendarStore((s) => s.events)
   const advisory = useAdvisoryStore((s) => s.advisoryRequests)
   const policies = usePolicyStore((s) => s.policies)
-  const trainingCourses = useTrainingStore((s) => s.courses)
   const audits = useAuditStore((s) => s.audits)
   const risks = useRiskStore((s) => s.risks)
 
@@ -563,20 +570,27 @@ export function ListsAndCategoriesSection() {
   const businessUnits = useBusinessUnitStore ? useBusinessUnitStore() : null
   const calendarEventType = useCalendarEventTypeStore ? useCalendarEventTypeStore() : null
 
-  // Hydrate the lookup stores whose lists + launcher counts this hub shows but
-  // that nothing central fetched — so items created elsewhere (advisory business
-  // units, training/audit categories, sub-categories) appear here on first open
-  // instead of only after visiting their owning page (owner bug).
+  // Hydrate EVERY lookup store this hub lists, so items created here (or
+  // elsewhere) survive a reload. Critically this includes the SEEDED stores
+  // (policy/risk categories): they're baked with default seeds and start
+  // "non-empty", so I previously skipped them — but without fetchAll they only
+  // ever show the seeds, and a successfully-POSTed new row vanished on reload
+  // (owner: "create doesn't really work"). fetchAll merges server rows + any
+  // missing seeds, so created rows now appear.
   const fetchTrainingCat = trainingCat.fetchAll
   const fetchAuditCat = auditCat.fetchAll
+  const fetchPolicyCat = policyCat.fetchAll
+  const fetchRiskCat = riskCat.fetchAll
   const fetchSubCategories = useFrameworkSubCategoryStore((s) => s.fetchAll)
   const fetchBusinessUnits = businessUnits?.fetchAll
   useEffect(() => {
     void fetchTrainingCat?.()
     void fetchAuditCat?.()
+    void fetchPolicyCat?.()
+    void fetchRiskCat?.()
     void fetchSubCategories?.()
     void fetchBusinessUnits?.()
-  }, [fetchTrainingCat, fetchAuditCat, fetchSubCategories, fetchBusinessUnits])
+  }, [fetchTrainingCat, fetchAuditCat, fetchPolicyCat, fetchRiskCat, fetchSubCategories, fetchBusinessUnits])
 
   // ── Counters ─────────────────────────────────────────────────────────────
   const countCalendarEventType = useCallback((id: string) =>
@@ -585,8 +599,6 @@ export function ListsAndCategoriesSection() {
     advisory.filter((a) => a.businessUnit === id).length, [advisory])
   const countPolicyCategory = useCallback((id: string) =>
     policies.filter((p) => p.category === id).length, [policies])
-  const countTrainingCategory = useCallback((id: string) =>
-    trainingCourses.filter((c) => c.category === id).length, [trainingCourses])
   const countAuditCategory = useCallback((id: string) =>
     audits.filter((a) => a.category === id).length, [audits])
   const countRiskCategory = useCallback((id: string) =>
@@ -653,18 +665,10 @@ export function ListsAndCategoriesSection() {
               isRTL={isRTL}
               t={t}
             />
-            <ListSectionLauncher
-              title={t('listsAndCategories.sectionTrainingCategory')}
-              description={t('listsAndCategories.sectionTrainingCategoryDesc')}
-              items={trainingCat.categories}
-              countUsage={countTrainingCategory}
-              onAdd={trainingCat.add}
-              onEdit={(id, label, labelAr) => trainingCat.update(id, { label, labelAr })}
-              onDelete={trainingCat.remove}
-              onResetSection={trainingCat.resetToDefaults}
-              isRTL={isRTL}
-              t={t}
-            />
+            {/* Training: the full course manager (name/due date/description/
+                category), not just category labels (categories stay editable
+                inline in its add form). */}
+            <TrainingCoursesLauncher />
             <ListSectionLauncher
               title={t('listsAndCategories.sectionAuditCategory')}
               description={t('listsAndCategories.sectionAuditCategoryDesc')}

@@ -3111,6 +3111,7 @@
     "deleteConfirmSimple": "Are you sure you want to delete \"{{label}}\"?",
     "deleteConfirmOrphan": "{{count}} record(s) reference this entry. Delete it anyway? Records will retain the label as text-only.",
     "deleteConfirmAction": "Delete",
+    "deleteFailed": "Couldn't delete \"{{label}}\" — it may be a protected default or still in use.",
     "subCategoriesTitle": "Sub-categories",
     "subCategoriesDescription": "Configure sub-categories per framework. Letters drafted to each authority will use that framework's list.",
     "configureSubCategoriesFor": "Configure {{framework}} Sub-Categories",

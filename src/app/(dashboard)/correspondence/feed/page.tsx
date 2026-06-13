@@ -274,6 +274,14 @@ export default function CorrespondenceFeedPage() {
     [trainingStore.saudizationMetrics.actual],
   )
 
+  // Target is the SAME persisted value the training page shows (saudization
+  // metrics singleton) — not a hardcoded 40%. Falls back to 40 if unset so the
+  // progress bar still has a sensible denominator.
+  const saudizationTarget = useMemo(
+    () => Math.round(Number(trainingStore.saudizationMetrics.target) || 0),
+    [trainingStore.saudizationMetrics.target],
+  )
+
   const trainingCompletionRate = useMemo(
     () => Math.round(Number(trainingStore.overviewStats.overallCompletion) || 0),
     [trainingStore.overviewStats.overallCompletion],
@@ -656,11 +664,11 @@ export default function CorrespondenceFeedPage() {
             <MetricCard
               icon="lucide:shield-check"
               iconColor="blue"
-              label={saudizationRate > 0 ? t('correspondence.onTarget') : ''}
+              label={saudizationTarget > 0 && saudizationRate >= saudizationTarget ? t('correspondence.onTarget') : ''}
               title={t('correspondence.saudizationRate')}
               value={`${saudizationRate}%`}
-              subtitle={t('correspondence.target', { value: '40%' })}
-              progress={saudizationRate > 0 ? Math.min(100, Math.round((saudizationRate / 40) * 100)) : 0}
+              subtitle={t('correspondence.target', { value: `${saudizationTarget || 40}%` })}
+              progress={saudizationRate > 0 ? Math.min(100, Math.round((saudizationRate / (saudizationTarget || 40)) * 100)) : 0}
               progressColor="bg-blue-500"
               loading={isMetricsLoading}
               isRTL={isRTL}

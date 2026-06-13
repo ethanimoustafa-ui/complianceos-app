@@ -3111,6 +3111,7 @@
     "deleteConfirmSimple": "هل أنت متأكد من حذف \"{{label}}\"؟",
     "deleteConfirmOrphan": "{{count}} سجل يشير إلى هذا الإدخال. هل تريد الحذف على أي حال؟ ستحتفظ السجلات بالتسمية كنص فقط.",
     "deleteConfirmAction": "حذف",
+    "deleteFailed": "تعذّر حذف \"{{label}}\" — قد يكون إعدادًا افتراضيًا محميًا أو ما زال قيد الاستخدام.",
     "subCategoriesTitle": "التصنيفات الفرعية",
     "subCategoriesDescription": "قم بتكوين التصنيفات الفرعية لكل إطار. ستستخدم الخطابات المسودة لكل جهة قائمة ذلك الإطار.",
     "configureSubCategoriesFor": "تكوين التصنيفات الفرعية لـ {{framework}}",

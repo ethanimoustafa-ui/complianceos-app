@@ -518,7 +518,9 @@ export function AddAuditModal({ isOpen, onClose, onSuccess, initialValues, mode 
           </div>
 
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-8">
-            {/* Template Selection */}
+            {/* Template Selection — hidden in template mode (you're creating a
+                template, not cloning from an existing one). */}
+            {!isTemplate && (
             <div>
               <label className="text-xs font-black uppercase text-slate-500 tracking-widest mb-2 block">
                 {t('settings.selectTemplate')}
@@ -596,6 +598,7 @@ export function AddAuditModal({ isOpen, onClose, onSuccess, initialValues, mode 
                 )}
               />
             </div>
+            )}
 
             {/* Audit Type Selection — dynamic from enabled correspondence authorities */}
             <div>
