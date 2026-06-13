@@ -13,7 +13,7 @@
 //   orphan-confirm modal that warns when records reference the entry.
 //   `isDefault` survives as a display-only "SEED" badge.
 
-import { useState, useCallback, useMemo } from 'react'
+import { useState, useCallback, useMemo, type ReactNode } from 'react'
 import { Icon } from '@iconify/react'
 import { useTranslation } from '@/i18n'
 import type { TranslationKey } from '@/i18n'
@@ -53,6 +53,15 @@ let useBusinessUnitStore: any = null
 let useCalendarEventTypeStore: any = null
 try { useBusinessUnitStore = require('@/stores/business-unit-store').useBusinessUnitStore } catch {}
 try { useCalendarEventTypeStore = require('@/stores/calendar-event-type-store').useCalendarEventTypeStore } catch {}
+
+// ── Folded-in managers (Configurables hub) ───────────────────────────────────
+// These used to be standalone Settings sections. They now open from the
+// Configurables hub as modals, rendered `embedded` so they drop their own card
+// chrome + header (the modal supplies the title).
+import { AuditTemplatesSection } from '@/components/settings/AuditTemplatesSection'
+import { PolicyTemplatesSection } from '@/components/settings/PolicyTemplatesSection'
+import { ApprovalTiersSection } from '@/components/settings/ApprovalTiersSection'
+import { DepartmentsSection } from '@/components/settings/DepartmentsSection'
 
 // ── Generic shape every editable-list section consumes ───────────────────────
 
@@ -349,6 +358,39 @@ function ListSectionLauncher(props: ListSectionLauncherProps) {
   )
 }
 
+// ── Generic launcher for a folded-in manager section ─────────────────────────
+//
+// Same "button → modal" entry point as ListSectionLauncher, but hosts an
+// arbitrary manager (templates / departments / approval tiers) rendered
+// `embedded`. Children only mount when the modal is open (Modal returns null
+// while closed), so the heavy section's stores aren't subscribed until needed.
+function SectionLauncher({
+  icon,
+  label,
+  title,
+  size = 'xl',
+  children,
+}: {
+  icon: string
+  label: string
+  title: string
+  size?: 'md' | 'lg' | 'xl' | '2xl'
+  children: ReactNode
+}) {
+  const [open, setOpen] = useState(false)
+  return (
+    <>
+      <Button size="sm" variant="outline" onClick={() => setOpen(true)}>
+        <Icon icon={icon} className="text-sm" />
+        {label}
+      </Button>
+      <Modal isOpen={open} onClose={() => setOpen(false)} title={title} size={size}>
+        {open ? children : null}
+      </Modal>
+    </>
+  )
+}
+
 // ── Per-framework sub-category launcher ─────────────────────────────────────
 //
 // Round-3 §5: sub-categories are scoped per framework. The Settings UI exposes
@@ -546,23 +588,22 @@ export function ListsAndCategoriesSection() {
     <section className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
       <div className="p-8 border-b border-slate-100">
         <h2 className="text-lg font-bold text-slate-900 font-display">
-          {t('listsAndCategories.title')}
+          {t('configurables.title')}
         </h2>
         <p className="text-sm text-slate-500 mt-1">
-          {t('listsAndCategories.subtitle')}
+          {t('configurables.subtitle')}
         </p>
       </div>
       <div className="p-6 space-y-6 bg-slate-50">
-        {/* Compact launcher row — every editable list is one click + modal away,
-            so the Settings page no longer scrolls forever. Per-framework
-            sub-categories keep their own dedicated section below since each
-            framework gets its own button. */}
+        {/* Every configurable is one click + modal away, so the Settings page
+            no longer scrolls forever. Grouped: listing categories, then
+            sub-categories, templates, and structure (departments / tiers). */}
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
           <h3 className="text-sm font-bold text-slate-900 mb-1">
-            {t('listsAndCategories.title')}
+            {t('configurables.listingCategories')}
           </h3>
           <p className="text-xs text-slate-500 mb-4">
-            {t('listsAndCategories.subtitle')}
+            {t('configurables.listingCategoriesDesc')}
           </p>
           <div className="flex flex-wrap gap-2">
             <ListSectionLauncher
@@ -657,6 +698,63 @@ export function ListsAndCategoriesSection() {
           isRTL={isRTL}
           t={t}
         />
+
+        {/* Templates — audit + policy template managers, folded in from their
+            former standalone Settings sections. */}
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
+          <h3 className="text-sm font-bold text-slate-900 mb-1">
+            {t('configurables.templates')}
+          </h3>
+          <p className="text-xs text-slate-500 mb-4">
+            {t('configurables.templatesDesc')}
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <SectionLauncher
+              icon="lucide:clipboard-check"
+              label={t('settings.auditTemplates')}
+              title={t('settings.auditTemplates')}
+              size="2xl"
+            >
+              <AuditTemplatesSection embedded />
+            </SectionLauncher>
+            <SectionLauncher
+              icon="lucide:file-text"
+              label={t('settings.policyTemplates')}
+              title={t('settings.policyTemplates')}
+              size="2xl"
+            >
+              <PolicyTemplatesSection embedded />
+            </SectionLauncher>
+          </div>
+        </div>
+
+        {/* Structure — departments + the policy approval-tier list. */}
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
+          <h3 className="text-sm font-bold text-slate-900 mb-1">
+            {t('configurables.structure')}
+          </h3>
+          <p className="text-xs text-slate-500 mb-4">
+            {t('configurables.structureDesc')}
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <SectionLauncher
+              icon="lucide:building-2"
+              label={t('settings.departments.title' as TranslationKey)}
+              title={t('settings.departments.title' as TranslationKey)}
+              size="lg"
+            >
+              <DepartmentsSection embedded />
+            </SectionLauncher>
+            <SectionLauncher
+              icon="lucide:layers"
+              label={t('settings.enumValues.title')}
+              title={t('settings.enumValues.title')}
+              size="lg"
+            >
+              <ApprovalTiersSection embedded />
+            </SectionLauncher>
+          </div>
+        </div>
       </div>
     </section>
     </Gate>

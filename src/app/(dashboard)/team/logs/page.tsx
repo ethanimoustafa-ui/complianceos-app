@@ -576,10 +576,6 @@ export default function TeamLogsPage() {
           isOpen={isProfileDrawerOpen}
           onClose={() => setIsProfileDrawerOpen(false)}
           onUpdateRole={(memberId, newRole) => storeUpdate(memberId, { role: newRole })}
-          onUpdatePermission={(memberId, label, enabled) => {
-            const m = members.find(x => x.id === memberId)
-            if (m) storeUpdate(memberId, { accessControls: (m.accessControls || []).map(p => p.label === label ? { ...p, enabled } : p) })
-          }}
           onToast={() => {}}
         />
       </div>

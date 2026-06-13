@@ -25,6 +25,9 @@ import { DirectoryStatCards } from '@/components/team/directory/stat-cards'
 import { MemberDetailDrawer } from '@/components/team/directory/member-detail-drawer'
 import { PendingApprovalsCard } from '@/components/team/directory/pending-approvals-card'
 import { BurnoutDetectionCard } from '@/components/team/directory/burnout-detection-card'
+// Access-control matrix — moved here from Settings (this page is already
+// manager/admin-only); self-gates to "Manage Team & Permissions".
+import { AccessMatrixSection } from '@/components/settings/AccessMatrixSection'
 import { dicebearAvatar } from '@/lib/avatar'
 
 // Toast component
@@ -180,15 +183,6 @@ export default function TeamDirectoryPage() {
 
   const handleUpdateRole = (memberId: string, newRole: TeamMember['role']) => {
     storeUpdate(memberId, { role: newRole })
-  }
-
-  const handleUpdatePermission = (memberId: string, permissionLabel: string, enabled: boolean) => {
-    const member = members.find((m) => m.id === memberId)
-    if (!member) return
-    const updatedPermissions = (member.accessControls || []).map((p) =>
-      p.label === permissionLabel ? { ...p, enabled } : p
-    )
-    storeUpdate(memberId, { accessControls: updatedPermissions })
   }
 
   const handleSort = (col: 'name' | 'role' | 'workload' | 'status' | 'lastActive') => {
@@ -398,6 +392,12 @@ export default function TeamDirectoryPage() {
                 </div>
               </div>
             </Card>
+
+            {/* Access Control — full permission matrix, underneath the
+                directory. Self-hides for managers who lack the perm. */}
+            <div className="mt-8">
+              <AccessMatrixSection />
+            </div>
           </div>
         </div>
 
@@ -407,7 +407,6 @@ export default function TeamDirectoryPage() {
           isOpen={isDrawerOpen}
           onClose={() => setIsDrawerOpen(false)}
           onUpdateRole={handleUpdateRole}
-          onUpdatePermission={handleUpdatePermission}
           onToast={showToast}
         />
       </div>

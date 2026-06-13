@@ -19,7 +19,7 @@ type SortCol = 'name' | 'category' | 'updatedAt' | 'usageCount'
 const POLICY_CATEGORIES: PolicyCategory[] = ['compliance', 'it', 'operations', 'risk', 'hr', 'finance']
 const APPROVAL_TIERS: PolicyApprovalTier[] = ['board', 'management', 'sharia', 'agm']
 
-export function PolicyTemplatesSection() {
+export function PolicyTemplatesSection({ embedded = false }: { embedded?: boolean } = {}) {
   const { t, isRTL } = useTranslation()
   const { templates, create, update, delete: deleteTemplate } = usePolicyTemplateStore()
   const isLoading = usePolicyTemplateStore((s) => s.isLoading)
@@ -79,12 +79,14 @@ export function PolicyTemplatesSection() {
   const editTemplate = editId ? templates.find((t) => t.id === editId) : null
 
   return (
-    <section className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-      <div className="p-8 border-b border-slate-100 flex items-center justify-between">
-        <div>
-          <h2 className="text-lg font-bold text-slate-900 font-display">{t('settings.policyTemplates')}</h2>
-          <p className="text-sm text-slate-500">{t('settings.standardizePolicies')}</p>
-        </div>
+    <section className={embedded ? '' : 'bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden'}>
+      <div className={embedded ? 'flex items-center justify-end pb-4' : 'p-8 border-b border-slate-100 flex items-center justify-between'}>
+        {!embedded && (
+          <div>
+            <h2 className="text-lg font-bold text-slate-900 font-display">{t('settings.policyTemplates')}</h2>
+            <p className="text-sm text-slate-500">{t('settings.standardizePolicies')}</p>
+          </div>
+        )}
         <Gate perm="Manage Policy Templates">
           <Button variant="dark" onClick={() => setIsCreateOpen(true)}>
             <Icon icon="lucide:plus" />

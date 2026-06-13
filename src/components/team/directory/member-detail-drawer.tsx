@@ -8,10 +8,8 @@ import { Modal } from '@/components/ui/modal'
 import { useTranslation } from '@/i18n'
 import type { TranslationKey } from '@/i18n'
 import { RoleGuard } from '@/components/auth/role-guard'
-import { Gate } from '@/components/auth/gate'
 import { useAuthStore } from '@/stores/auth-store'
 import { useTeamStore } from '@/stores/team-store'
-import { useUserLogStore } from '@/stores/user-log-store'
 import { useWorkload } from '@/hooks/useWorkload'
 import { EditableSelect } from '@/components/ui/editable-select'
 import type { TeamMember } from '@/types'
@@ -54,33 +52,30 @@ interface MemberDetailDrawerProps {
   isOpen: boolean
   onClose: () => void
   onUpdateRole: (memberId: string, newRole: TeamMember['role']) => void
-  onUpdatePermission: (memberId: string, permissionLabel: string, enabled: boolean) => void
   onToast: (message: string) => void
 }
 
 export function MemberDetailDrawer({
-  member, isOpen, onClose, onUpdateRole, onUpdatePermission, onToast,
+  member, isOpen, onClose, onUpdateRole, onToast,
 }: MemberDetailDrawerProps) {
   const { t } = useTranslation()
   const currentUser = useAuthStore((s) => s.user)
   const isMutating = useTeamStore((s) => s.isMutating)
   const workload = useWorkload(member?.id ?? '', member ?? undefined, member?.name)
   const [roleValue, setRoleValue] = useState(member?.role ?? 'officer')
-  const [stagedPermissions, setStagedPermissions] = useState<{ label: string; enabled: boolean }[]>([])
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false)
   const [deleteConfirmName, setDeleteConfirmName] = useState('')
 
-  useEffect(() => {
-    if (member) setRoleValue(member.role)
-  }, [member?.id, member?.role])
-
+  // Per-member permissions now live in the Access Control matrix beneath the
+  // directory — the drawer only edits the member's role. Reset the role draft
+  // (and the unsaved flag) whenever a different member is opened.
   useEffect(() => {
     if (member) {
-      setStagedPermissions(member.accessControls || [])
+      setRoleValue(member.role)
       setHasUnsavedChanges(false)
     }
-  }, [member?.id])
+  }, [member?.id, member?.role])
 
   const roleColorMap: Record<string, string> = {
     admin: 'text-blue-600',
@@ -261,77 +256,8 @@ export function MemberDetailDrawer({
               </section>
             </RoleGuard>
 
-            {/* Permissions */}
-            <Gate
-              perm="Manage Team & Permissions"
-              fallback={
-                <section>
-                  <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">
-                    {t('team.accessControl')}
-                  </h3>
-                  <ul className="space-y-2">
-                    {stagedPermissions.filter((p) => p.enabled).map((p, i) => (
-                      <li key={i} className="text-xs text-slate-600 px-3 py-2 bg-slate-50 rounded-lg">
-                        {p.label}
-                      </li>
-                    ))}
-                    {stagedPermissions.filter((p) => p.enabled).length === 0 && (
-                      <li className="text-xs text-slate-400 italic">—</li>
-                    )}
-                  </ul>
-                </section>
-              }
-            >
-            <section>
-              <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">
-                {t('team.accessControl')}
-              </h3>
-              <div className="space-y-2">
-                {stagedPermissions.map((permission, index) => {
-                  const PERMISSION_KEYS: Record<string, string> = {
-                    'Approve Policy Reviews': 'team.permissionApproveReviews',
-                    'Approve SAMA Letters': 'team.permissionApproveSAMA',
-                    'Manage Audit Findings': 'team.permissionManageFindings',
-                    'Export Compliance Data': 'team.permissionExportData',
-                    'View Risk Register': 'team.permissionViewRiskRegister',
-                    'Can Act As Approver': 'team.canActAsApprover',
-                    'Manage Training Programs': 'training.manageTrainingPrograms',
-                    'Manage Settings': 'team.permissionManageSettings',
-                    'Manage Team & Permissions': 'team.permissionManageTeamPermissions',
-                    'Configure Frameworks': 'team.permissionConfigureFrameworks',
-                    'Configure Lists & Categories': 'team.permissionConfigureLists',
-                    'Manage Letter Templates': 'team.permissionManageLetterTemplates',
-                    'Manage Policy Templates': 'team.permissionManagePolicyTemplates',
-                    'Manage Audit Templates': 'team.permissionManageAuditTemplates',
-                    'Switch User (Demo)': 'team.permissionSwitchUserDemo',
-                  }
-                  return (
-                  <label
-                    key={index}
-                    className={`flex items-center justify-between p-3 border border-slate-100 rounded-xl cursor-pointer ${
-                      permission.enabled ? 'bg-emerald-50/30' : ''
-                    }`}
-                  >
-                    <span className="text-xs font-medium text-slate-700">{t((PERMISSION_KEYS[permission.label] || permission.label) as TranslationKey)}</span>
-                    <button
-                      onClick={() => {
-                        setStagedPermissions(prev => prev.map((p, i) => i === index ? { ...p, enabled: !p.enabled } : p))
-                        setHasUnsavedChanges(true)
-                      }}
-                      className={`w-8 h-4 rounded-full relative transition-colors ${
-                        permission.enabled ? 'bg-emerald-500' : 'bg-slate-200'
-                      }`}
-                    >
-                      <div className={`absolute top-1 w-2 h-2 bg-white rounded-full transition-all ${
-                        permission.enabled ? 'right-1' : 'left-1'
-                      }`} />
-                    </button>
-                  </label>
-                  )
-                })}
-              </div>
-            </section>
-            </Gate>
+            {/* Access control lives in the matrix beneath the directory now —
+                the drawer is role + assignments only. */}
           </div>
 
           <div className="p-6 border-t border-slate-100 space-y-3">
@@ -351,34 +277,12 @@ export function MemberDetailDrawer({
                 if (roleValue !== member.role) {
                   onUpdateRole(member.id, roleValue)
                 }
-                // RBAC-023: diff stagedPermissions against the pre-staged
-                // baseline (member.accessControls snapshot at open time) so we
-                // can write a single audit-log entry summarising granted /
-                // revoked perms instead of one entry per toggle.
-                const granted: string[] = []
-                const revoked: string[] = []
-                for (const sp of stagedPermissions) {
-                  const orig = (member.accessControls || []).find(p => p.label === sp.label)
-                  if (orig && orig.enabled !== sp.enabled) {
-                    onUpdatePermission(member.id, sp.label, sp.enabled)
-                    if (sp.enabled) granted.push(sp.label)
-                    else revoked.push(sp.label)
-                  }
-                }
-                if (granted.length || revoked.length) {
-                  useUserLogStore.getState().log({
-                    userId: currentUser?.id ?? 'anonymous',
-                    action: 'team.permissions_changed',
-                    target: member.id,
-                    metadata: { granted, revoked, targetMemberName: member.name },
-                  })
-                }
                 setHasUnsavedChanges(false)
-                onToast(t('team.updatePermissions'))
+                onToast(t('team.changesSaved' as TranslationKey))
               }}
             >
-              {t('team.updatePermissions')}
-              <Icon icon="lucide:shield-check" />
+              {t('team.saveChanges' as TranslationKey)}
+              <Icon icon="lucide:check" />
             </LoadingButton>
             <RoleGuard requiredRole="admin" hidden>
               <Button

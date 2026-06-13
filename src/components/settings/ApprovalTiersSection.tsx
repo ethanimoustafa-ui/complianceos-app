@@ -24,7 +24,7 @@ const DOMAIN = 'policy.approval_tier'
 // and infinite-loops with "The result of getSnapshot should be cached".
 const EMPTY_ENUM_VALUES: EnumValue[] = []
 
-export function ApprovalTiersSection() {
+export function ApprovalTiersSection({ embedded = false }: { embedded?: boolean } = {}) {
   const { t, isRTL } = useTranslation()
   const rows = useEnumValuesStore((s) => s.byDomain[DOMAIN] ?? EMPTY_ENUM_VALUES)
   const fetchValues = useEnumValuesStore((s) => s.fetch)
@@ -149,12 +149,14 @@ export function ApprovalTiersSection() {
   }
 
   return (
-    <section className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-      <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
-        <div>
-          <h3 className="text-sm font-bold text-slate-900">{t('settings.enumValues.title')}</h3>
-          <p className="text-xs text-slate-500 mt-0.5">{t('settings.enumValues.description')}</p>
-        </div>
+    <section className={embedded ? '' : 'bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden'}>
+      <div className={embedded ? 'flex items-center justify-end pb-4' : 'px-6 py-4 border-b border-slate-100 flex items-center justify-between'}>
+        {!embedded && (
+          <div>
+            <h3 className="text-sm font-bold text-slate-900">{t('settings.enumValues.title')}</h3>
+            <p className="text-xs text-slate-500 mt-0.5">{t('settings.enumValues.description')}</p>
+          </div>
+        )}
         <Button size="sm" variant="primary" onClick={openAdd}>
           <Icon icon="lucide:plus" className="text-sm" />
           {t('settings.enumValues.addTier')}

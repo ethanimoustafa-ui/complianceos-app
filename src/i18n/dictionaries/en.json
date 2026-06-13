@@ -1498,6 +1498,8 @@
     "tasksPending": "tasks pending",
     "accessControl": "Access Control",
     "updatePermissions": "Update Permissions",
+    "saveChanges": "Save Changes",
+    "changesSaved": "Changes saved",
     "searchLogs": "Search Logs",
     "searchByUserDeviceLocation": "Search by user, device, location...",
     "user": "User",
@@ -3046,6 +3048,16 @@
     "configurePlaceholders": "Configure Placeholders",
     "configureHint": "Edit each placeholder's type (date or reference). Click a chip in the editor to fill it in.",
     "noPlaceholders": "No placeholders yet. Type {{token}} in the body to add one."
+  },
+  "configurables": {
+    "title": "Configurables",
+    "subtitle": "Every editable list, template, and structure in one place — each opens in its own panel to keep this page tidy.",
+    "listingCategories": "Listing Categories",
+    "listingCategoriesDesc": "Editable dropdowns used across the app — letter types, policy / audit / risk / training categories, and more.",
+    "templates": "Templates",
+    "templatesDesc": "Reusable starting points for audits and policies.",
+    "structure": "Departments & Tiers",
+    "structureDesc": "Org departments and the policy approval-tier list."
   },
   "listsAndCategories": {
     "title": "Lists & Categories",

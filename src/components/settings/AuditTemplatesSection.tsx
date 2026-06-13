@@ -33,7 +33,7 @@ const CATEGORY_LABELS: Record<AuditTemplateCategory, string> = {
   'custom': 'templateCategoryCustom',
 }
 
-export function AuditTemplatesSection() {
+export function AuditTemplatesSection({ embedded = false }: { embedded?: boolean } = {}) {
   const { t, isRTL } = useTranslation()
   const { templates, create, update, delete: deleteTemplate } = useAuditTemplateStore()
   const isLoading = useAuditTemplateStore((s) => s.isLoading)
@@ -65,12 +65,14 @@ export function AuditTemplatesSection() {
   const editTemplate = editId ? templates.find((t) => t.id === editId) : null
 
   return (
-    <section className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-      <div className="p-8 border-b border-slate-100 flex items-center justify-between">
-        <div>
-          <h2 className="text-lg font-bold text-slate-900 font-display">{t('settings.auditTemplates')}</h2>
-          <p className="text-sm text-slate-500">{t('settings.standardizeChecks')}</p>
-        </div>
+    <section className={embedded ? '' : 'bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden'}>
+      <div className={embedded ? 'flex items-center justify-end pb-4' : 'p-8 border-b border-slate-100 flex items-center justify-between'}>
+        {!embedded && (
+          <div>
+            <h2 className="text-lg font-bold text-slate-900 font-display">{t('settings.auditTemplates')}</h2>
+            <p className="text-sm text-slate-500">{t('settings.standardizeChecks')}</p>
+          </div>
+        )}
         <Gate perm="Manage Audit Templates">
           <Button variant="dark" onClick={() => setIsCreateOpen(true)}>
             <Icon icon="lucide:plus" />

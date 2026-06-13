@@ -14,7 +14,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { useDepartmentStore } from '@/stores/department-store'
 
-export function DepartmentsSection() {
+export function DepartmentsSection({ embedded = false }: { embedded?: boolean } = {}) {
   const { t, isRTL } = useTranslation()
   const departments = useDepartmentStore((s) => s.departments)
   const fetchAll = useDepartmentStore((s) => s.fetchAll)
@@ -48,15 +48,17 @@ export function DepartmentsSection() {
   const sorted = [...departments].sort((a, b) => a.name.localeCompare(b.name))
 
   return (
-    <section className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-      <div className="px-6 py-4 border-b border-slate-100">
-        <h3 className="text-sm font-bold text-slate-900">
-          {t('settings.departments.title' as TranslationKey)}
-        </h3>
-        <p className="text-xs text-slate-500 mt-0.5">
-          {t('settings.departments.description' as TranslationKey)}
-        </p>
-      </div>
+    <section className={embedded ? '' : 'bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden'}>
+      {!embedded && (
+        <div className="px-6 py-4 border-b border-slate-100">
+          <h3 className="text-sm font-bold text-slate-900">
+            {t('settings.departments.title' as TranslationKey)}
+          </h3>
+          <p className="text-xs text-slate-500 mt-0.5">
+            {t('settings.departments.description' as TranslationKey)}
+          </p>
+        </div>
+      )}
 
       <div className="overflow-x-auto">
         <table className="w-full text-left text-xs">

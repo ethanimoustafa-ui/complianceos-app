@@ -11,7 +11,6 @@ import { useUserLogStore } from '@/stores/user-log-store'
 import { useTranslation } from '@/i18n'
 import type { TranslationKey } from '@/i18n'
 import { Gate } from '@/components/auth/gate'
-import { ForbiddenPanel } from '@/components/auth/forbidden-panel'
 import { PERMISSIONS, type Permission } from '@/lib/permissions-registry'
 import type { TeamMember } from '@/types'
 
@@ -141,7 +140,11 @@ export function AccessMatrixSection() {
   }
 
   return (
-    <Gate perm="Manage Team & Permissions" fallback={<ForbiddenPanel inline />}>
+    // Self-hides when the viewer can't manage permissions — it now lives on the
+    // (manager-visible) Team Directory, where an inline forbidden panel would be
+    // noise. Officers never reach the page; managers without the perm just don't
+    // see the matrix.
+    <Gate perm="Manage Team & Permissions">
       <section className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
         <div className="p-8 border-b border-slate-100 flex items-start justify-between gap-6">
           <div>
