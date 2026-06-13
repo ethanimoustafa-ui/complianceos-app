@@ -20,6 +20,7 @@ import { Gate } from '@/components/auth/gate'
 import { dicebearAvatar } from '@/lib/avatar'
 import { paginate } from '@/lib/pagination'
 import { formatAuditAction } from '@/lib/audit-log-format'
+import { useTeamSectionGuard } from '@/hooks/useTeamSectionGuard'
 
 // Helper Components
 function UserActionBadge({ action, label }: { action: UserLog['action']; label: string }) {
@@ -79,6 +80,8 @@ function LogStatusIndicator({ status, label }: { status: UserLog['status']; labe
 export default function TeamLogsPage() {
   const { t } = useTranslation()
   const pathname = usePathname()
+  // Manager/admin only — officers are redirected to /team/training.
+  const canViewTeamSection = useTeamSectionGuard()
   const [expandedLogs, setExpandedLogs] = useState<number[]>([])
   const [logSearch, setLogSearch] = useState('')
   const [filterUser, setFilterUser] = useState('')
@@ -215,6 +218,9 @@ export default function TeamLogsPage() {
       prev.includes(logId) ? prev.filter((id) => id !== logId) : [...prev, logId]
     )
   }
+
+  // Officers are bounced to /team/training; render nothing meanwhile.
+  if (!canViewTeamSection) return null
 
   return (
     <div className="flex flex-col h-full">

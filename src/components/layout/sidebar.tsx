@@ -16,6 +16,7 @@ import { SignOutModal } from '@/components/auth/sign-out-modal'
 import { ProfileModal } from '@/components/profile/profile-modal'
 import { useNotificationEngine } from '@/hooks/useNotificationEngine'
 import { dicebearAvatar } from '@/lib/avatar'
+import { hasRole } from '@/lib/permissions'
 
 const navigation = [
   { nameKey: 'navigation.dashboard', href: '/dashboard', icon: 'lucide:layout-grid' },
@@ -59,12 +60,17 @@ export function Sidebar() {
         {/* Main Navigation */}
         <nav className="flex-1 flex flex-col gap-4">
           {navigation.map((item) => {
+            // Officers only get the Training sub-page of the Team section —
+            // point their Team icon straight there (directory/logs pages also
+            // bounce officers, this just avoids the redirect hop).
+            const href =
+              item.href === '/team' && !hasRole(user, 'manager') ? '/team/training' : item.href
             const isActive = pathname === item.href || pathname.startsWith(item.href + '/')
             const name = t(item.nameKey as any)
             return (
               <Link
                 key={item.nameKey}
-                href={item.href}
+                href={href}
                 className={cn(
                   'flex items-center justify-center w-12 h-12 rounded-xl transition-all',
                   isActive

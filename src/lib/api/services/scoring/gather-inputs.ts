@@ -410,10 +410,19 @@ export async function gatherScoringInputs(
     // Keep arrays intact; only frameworkConfigs is constrained.
   }
 
-  // Pinned frameworks — only correspondence-based, drop misses.
-  const pinnedFrameworks = pins
+  // Pinned frameworks — only correspondence-based, drop misses. When the org
+  // never explicitly pinned anything (`framework_pins` empty), fall back to
+  // the same defaults the settings UI presents as pinned (framework-config-
+  // store DEFAULT_PINNED), restricted to enabled frameworks — otherwise the
+  // dashboard / Team Score "Framework Scores" gauges render blank even though
+  // the settings page shows three pinned authorities.
+  const explicitPinned = pins
     .map((p) => frameworks.find((f) => f.id === p.framework_id))
     .filter((f): f is FrameworkRow => !!f && f.correspondence_based)
+  const defaultPinned = ['sama', 'cma', 'sharia-board']
+    .map((id) => frameworks.find((f) => f.id === id))
+    .filter((f): f is FrameworkRow => !!f && f.correspondence_based && f.enabled)
+  const pinnedFrameworks = (explicitPinned.length > 0 ? explicitPinned : defaultPinned)
     .map((f) => ({
       id: f.id,
       name: f.name_en ?? f.id,
@@ -475,6 +484,9 @@ export async function gatherScoringInputs(
     fw: frameworkConfigs.length,
     w: componentWeights,
     ts: targetScore,
+    // Pin-set changes must produce a different hash — frameworkScores in the
+    // cached dashboard-health payload depend on it.
+    pins: pinnedFrameworks.map((f) => f.id),
   })
   const inputsHash = simpleHash(hashSource)
 

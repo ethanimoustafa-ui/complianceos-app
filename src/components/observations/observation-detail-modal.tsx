@@ -453,6 +453,7 @@ export const ObservationDetailModal = memo(function ObservationDetailModal({
               parentDeadline={liveObs?.dueDate ?? observation?.dueDate}
               isRTL={isRTL}
               readOnly={isClosed || !isMember}
+              loading={!detailLoaded}
             />
 
             {/* Updates & Discussion — read-only when closed (O4) or for

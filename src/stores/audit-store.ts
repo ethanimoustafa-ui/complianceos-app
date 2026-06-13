@@ -34,7 +34,6 @@ import { useAuditLogStore } from './audit-log-store'
 import { useAuthStore } from './auth-store'
 import { useTeamStore } from './team-store'
 import { requirePermission } from '@/lib/rbac-store-gate'
-import { newTempId } from '@/lib/optimistic'
 
 // ---------- API row shapes (snake_case from Route Handlers) -----------------
 
@@ -596,32 +595,21 @@ export const useAuditStore = create<AuditState>()((set, get) => ({
 
   create: async (data) => {
     requirePermission('Manage Audit Findings', { storeName: 'audit', actionName: 'create' })
-    // OPTIMISTIC: insert a temp row immediately, swap with server row on success.
-    const tempId = newTempId('temp-audit')
-    const now = new Date().toISOString()
-    const optimistic: Audit = {
-      ...(data as Omit<Audit, 'id' | 'createdAt' | 'updatedAt'>),
-      id: tempId,
-      createdAt: now,
-      updatedAt: now,
-    } as Audit
-    set((state) => ({
-      audits: [optimistic, ...state.audits],
-      byId: { ...state.byId, [tempId]: optimistic },
-      isMutating: true,
-      error: null,
-    }))
+    // W54 follow-up: NOT optimistic. The create modal blocks the screen while
+    // its spinner runs, so a temp row spliced in here was visible behind the
+    // overlay ~1s before the spinner settled ("the spinner don't match when it
+    // actually appears"). The row is cached in byId for immediate detail
+    // lookups, but the visible list is only updated by the caller's AWAITED
+    // forced refetch (AddAuditModal onSuccess → fetchAll({force:true})), so the
+    // row appears at the exact moment the spinner ends and the modal closes.
+    set({ isMutating: true, error: null })
     try {
       const row = await api.post<AuditApiRow>('/audits', toCreatePayload(data))
       const created = mapAuditRow(row)
-      set((state) => {
-        const { [tempId]: _drop, ...restById } = state.byId
-        return {
-          audits: state.audits.map((a) => (a.id === tempId ? created : a)),
-          byId: { ...restById, [created.id]: created },
-          isMutating: false,
-        }
-      })
+      set((state) => ({
+        byId: { ...state.byId, [created.id]: created },
+        isMutating: false,
+      }))
 
       const user = getCurrentUser()
       useAuditLogStore.getState().addLog({
@@ -635,20 +623,9 @@ export const useAuditStore = create<AuditState>()((set, get) => ({
         status: 'completed',
       })
 
-      // Pagination may shift — refresh page metadata in the background.
-      void get().fetchAll()
       return created
     } catch (e) {
-      // Roll back the optimistic insert.
-      set((state) => {
-        const { [tempId]: _drop, ...rest } = state.byId
-        return {
-          audits: state.audits.filter((a) => a.id !== tempId),
-          byId: rest,
-          error: errorMessage(e, 'Failed to create audit'),
-          isMutating: false,
-        }
-      })
+      set({ error: errorMessage(e, 'Failed to create audit'), isMutating: false })
       throw e
     }
   },

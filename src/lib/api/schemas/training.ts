@@ -129,3 +129,20 @@ export const AssignCourseSchema = z.object({
   due_date: DateString.optional(),
 })
 export type AssignCourseInput = z.infer<typeof AssignCourseSchema>
+
+// ---------- manual training metrics (saudization_metrics singleton) -----------
+// The training page's "Edit Metrics" modal — all fields optional so a partial
+// manual entry only overwrites what the user actually typed.
+
+export const UpdateTrainingMetricsSchema = z
+  .object({
+    target: z.number().min(0).max(100).optional(),
+    actual: z.number().min(0).max(100).optional(),
+    total_employees: z.number().int().min(0).optional(),
+    saudi_employees: z.number().int().min(0).optional(),
+    overall_completion: z.number().min(0).max(100).nullable().optional(),
+    courses_assigned: z.number().int().min(0).nullable().optional(),
+    last_data_source: z.enum(['manual', 'upload']).optional(),
+  })
+  .strict()
+export type UpdateTrainingMetricsInput = z.infer<typeof UpdateTrainingMetricsSchema>

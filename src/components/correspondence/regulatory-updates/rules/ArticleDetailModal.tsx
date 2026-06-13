@@ -12,6 +12,7 @@ import { useDepartmentStore } from '@/stores/department-store'
 import { useTeamStore } from '@/stores/team-store'
 import { EditableSelect } from '@/components/ui/editable-select'
 import { InlineDeadlinePicker } from '@/components/ui/inline-deadline-picker'
+import { useDeepLinkHighlight } from '@/hooks/useDeepLink'
 import { TimelineMeta } from './CircularDetailsContent'
 import { VersionHistoryList } from './VersionHistoryList'
 import { TimelineLoadMore } from './TimelineLoadMore'
@@ -72,6 +73,14 @@ export function ArticleDetailModal({ circularId, article, mode, onClose, t, isRT
   const [deleteConfirm, setDeleteConfirm] = useState(false)
 
   const isEditable = currentMode === 'edit' || currentMode === 'create'
+
+  // C(#31): calendar → article-checklist deep-link. CircularDetailsContent
+  // auto-opened this modal because the pending highlightId belongs to this
+  // article's checklist; once the Details tab's rows are rendered, scroll to
+  // and glow the exact row (rows carry data-highlight-id below).
+  useDeepLinkHighlight(
+    activeArticleTab === 'details' && (article?.checklist?.length ?? 0) > 0,
+  )
 
   // Side-bug: `assignedTo` is a team-member UUID on the server. Resolve it to a
   // display name for view mode; show "Unassigned" when null/empty.
@@ -310,7 +319,7 @@ export function ArticleDetailModal({ circularId, article, mode, onClose, t, isRT
               </div>
               <div className="bg-slate-50 rounded-xl p-4 space-y-2 mb-3">
                 {(article ? article.checklist : localChecklist).map((item) => (
-                  <div key={item.id} className={`flex items-center gap-3`}>
+                  <div key={item.id} data-highlight-id={item.id} className={`flex items-center gap-3`}>
                     <input
                       type="checkbox"
                       checked={item.completed}

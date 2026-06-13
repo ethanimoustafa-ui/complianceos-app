@@ -10,15 +10,20 @@ import { useDepartmentStore } from '@/stores/department-store'
 import { EditableSelect } from '@/components/ui/editable-select'
 import type { TrainingEmployee, TrainingStatus } from '@/types'
 import { dicebearAvatar } from '@/lib/avatar'
+import { Gate } from '@/components/auth/gate'
 
 interface EmployeeTableProps {
   employees: TrainingEmployee[]
   onViewEmployee: (employee: TrainingEmployee) => void
+  /** Manual single-person enrollment (the Excel bulk import is parked). */
+  onAddEmployee?: () => void
+  /** Remove a person from the training roster (hard delete, confirmed). */
+  onRemoveEmployee?: (employee: TrainingEmployee) => void
   onHrReminder?: () => void
   onExport?: () => void
 }
 
-export function EmployeeTable({ employees, onViewEmployee, onHrReminder, onExport }: EmployeeTableProps) {
+export function EmployeeTable({ employees, onViewEmployee, onAddEmployee, onRemoveEmployee, onHrReminder, onExport }: EmployeeTableProps) {
   const { t, isRTL } = useTranslation()
   const departments = useDepartmentStore(s => s.departments)
   const addDepartment = useDepartmentStore(s => s.addDepartment)
@@ -165,6 +170,14 @@ export function EmployeeTable({ employees, onViewEmployee, onHrReminder, onExpor
                   ]}
                 />
               </div>
+              {onAddEmployee && (
+                <Gate perm="Manage Training Programs">
+                  <button onClick={onAddEmployee} className="px-3 py-1.5 text-xs font-bold text-white bg-emerald-600 rounded-lg flex items-center gap-1.5 hover:bg-emerald-700 transition-colors cursor-pointer">
+                    <Icon icon="lucide:user-plus" className="text-sm" />
+                    {t('training.addPerson' as TranslationKey)}
+                  </button>
+                </Gate>
+              )}
               {onHrReminder && (
                 <button onClick={onHrReminder} className="px-3 py-1.5 text-xs font-bold text-slate-700 bg-white border border-slate-200 rounded-lg flex items-center gap-1.5 hover:bg-slate-50 transition-colors cursor-pointer">
                   <Icon icon="lucide:mail-warning" className="text-amber-500 text-sm" />
@@ -309,12 +322,26 @@ export function EmployeeTable({ employees, onViewEmployee, onHrReminder, onExpor
                         </div>
                       </td>
                       <td className="px-6 py-4">
-                        <button
-                          onClick={() => onViewEmployee(employee)}
-                          className="text-emerald-600 hover:text-emerald-700 p-2 hover:bg-emerald-50 rounded-lg transition-all cursor-pointer"
-                        >
-                          <Icon icon="lucide:eye" className="text-lg" />
-                        </button>
+                        <div className="flex items-center gap-1">
+                          <button
+                            onClick={() => onViewEmployee(employee)}
+                            title={t('common.view')}
+                            className="text-emerald-600 hover:text-emerald-700 p-2 hover:bg-emerald-50 rounded-lg transition-all cursor-pointer"
+                          >
+                            <Icon icon="lucide:eye" className="text-lg" />
+                          </button>
+                          {onRemoveEmployee && (
+                            <Gate perm="Manage Training Programs">
+                              <button
+                                onClick={() => onRemoveEmployee(employee)}
+                                title={t('training.removePerson' as TranslationKey)}
+                                className="text-slate-300 hover:text-rose-600 p-2 hover:bg-rose-50 rounded-lg transition-all cursor-pointer"
+                              >
+                                <Icon icon="lucide:trash-2" className="text-lg" />
+                              </button>
+                            </Gate>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   )

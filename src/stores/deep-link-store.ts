@@ -62,9 +62,13 @@ export function deepLinkTargetFromItemId(
   const circStep = itemId.match(/^circ-step-(.+)$/)
   if (circStep) return { highlightId: circStep[1], tab: 'workflow' }
 
-  // Circular article checklist item (D #32) lives in a nested article modal,
-  // so there's no element to glow at the circular level — just open the
-  // circular cleanly (no tab switch, no highlight).
+  // Circular article checklist item (D #32) → the row lives inside the nested
+  // ArticleDetailModal. Open the Overview tab (where articles render);
+  // CircularDetailsContent matches the pending highlightId against its
+  // hydrated articles' checklists and auto-opens the owning article's modal,
+  // whose own highlight hook then scrolls + glows the row.
+  const circArtCl = itemId.match(/^circ-article-cl-(.+)$/)
+  if (circArtCl) return { highlightId: circArtCl[1], tab: 'overview' }
 
   // Risk mitigation-checklist item → glow the checklist row.
   const riskCl = itemId.match(/^risk-cl-(.+)$/)

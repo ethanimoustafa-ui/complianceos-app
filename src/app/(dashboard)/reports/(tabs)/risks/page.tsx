@@ -25,6 +25,8 @@ import { InlineDeadlinePicker } from '@/components/ui/inline-deadline-picker'
 import { ReviewSchedulePicker } from '@/components/ui/ReviewSchedulePicker'
 import type { ReviewSchedule, RegulatoryBodyId } from '@/types'
 import { FrameworkTagSelector } from '@/components/ui/framework-tag-selector'
+import { useFrameworkConfigStore } from '@/stores/framework-config-store'
+import { FrameworkChips, matchesFrameworkQuery } from '@/components/ui/framework-chips'
 import { exportRisksLocalized } from '@/lib/export'
 import type { TranslationKey } from '@/i18n'
 import { useFormattedDate } from '@/hooks/useFormattedDate'
@@ -85,6 +87,8 @@ interface RiskRegisterItem {
   history: RiskHistoryEntry[]
   createdAt: Date
   updatedAt: Date
+  // Visual framework tags (chips on the row + search assist).
+  frameworkIds?: string[]
 }
 
 // Thin wrapper around the central category-config helper. Always returns a
@@ -316,6 +320,7 @@ export default function ReportsRisksPage() {
         previousValue: h.previousValue, newValue: h.newValue, notes: h.notes,
       })),
       createdAt: new Date(r.createdAt), updatedAt: new Date(r.updatedAt),
+      frameworkIds: r.frameworkIds,
     }
   }, [teamMembers, resolveDeptName])
 
@@ -335,6 +340,11 @@ export default function ReportsRisksPage() {
       return s === 'overdue' || s === 'due-soon'
     }).length
   }, [risks])
+
+  // Framework display names for the row chips + framework-aware search
+  // (static seed metadata — no fetch needed). `allFrameworks` to avoid
+  // clashing with the edit-modal's `frameworkIds` state below.
+  const allFrameworks = useFrameworkConfigStore((s) => s.frameworks)
 
   // State
   const [riskSearchTerm, setRiskSearchTerm] = useState('')
@@ -621,12 +631,14 @@ export default function ReportsRisksPage() {
   const filteredRisks = useMemo(() => {
     return risks.filter(risk => {
       const q = riskSearchTerm.toLowerCase()
-      const matchesSearch = !q || risk.name.toLowerCase().includes(q) || risk.description.toLowerCase().includes(q) || risk.category.toLowerCase().includes(q) || risk.owner.name.toLowerCase().includes(q)
+      // Framework-aware search: typing a framework name (EN/AR) or id pulls
+      // up every risk tagged with it, alongside the usual text fields.
+      const matchesSearch = !q || risk.name.toLowerCase().includes(q) || risk.description.toLowerCase().includes(q) || risk.category.toLowerCase().includes(q) || risk.owner.name.toLowerCase().includes(q) || matchesFrameworkQuery(risk.frameworkIds, allFrameworks, q)
       const matchesCategory = !riskCategoryFilter || risk.category === riskCategoryFilter
       const matchesStatus = !riskStatusFilter || risk.status === riskStatusFilter
       return matchesSearch && matchesCategory && matchesStatus
     })
-  }, [risks, riskSearchTerm, riskCategoryFilter, riskStatusFilter])
+  }, [risks, riskSearchTerm, riskCategoryFilter, riskStatusFilter, allFrameworks])
 
   type RiskSortField = 'name' | 'category' | 'riskScore' | 'status' | 'owner'
   const [riskSortField, setRiskSortField] = useState<RiskSortField | null>(null)
@@ -1003,7 +1015,7 @@ export default function ReportsRisksPage() {
                       >
                         <td className="px-6 py-4">
                           {/* Server rows carry opaque UUIDs — only legacy short codes (RISK-001) are worth showing. */}
-                          <div>{!UUID_RE.test(risk.id) && <span className="text-xs font-bold text-slate-400">{risk.id}</span>}<p className="text-sm font-bold text-slate-900">{risk.name}</p><p className="text-xs text-slate-500 line-clamp-1">{risk.description}</p></div>
+                          <div>{!UUID_RE.test(risk.id) && <span className="text-xs font-bold text-slate-400">{risk.id}</span>}<p className="text-sm font-bold text-slate-900">{risk.name}</p><p className="text-xs text-slate-500 line-clamp-1">{risk.description}</p><FrameworkChips ids={risk.frameworkIds} isRTL={isRTL} className="mt-1" /></div>
                         </td>
                         <td className="px-6 py-4">
                           <span className={cn('text-xs font-bold px-2.5 py-1 rounded-full flex items-center gap-1 w-fit', categoryConfig.color)}>
@@ -1123,6 +1135,10 @@ export default function ReportsRisksPage() {
                     ? t(riskCategoryLabelKeys[selectedRisk.category] as TranslationKey)
                     : (isRTL && selectedCatItem?.labelAr ? selectedCatItem.labelAr : (selectedCatItem?.label ?? categoryConfig.label))
                 }</span></div>
+              {/* Framework tags — same visual language as the list rows. */}
+              {(selectedRisk.frameworkIds ?? []).length > 0 && (
+                <div className="p-4 bg-slate-50 rounded-xl"><p className="text-xs font-bold text-slate-400 uppercase mb-2">{t('regulatoryUpdates.frameworks' as TranslationKey)}</p><FrameworkChips ids={selectedRisk.frameworkIds} isRTL={isRTL} max={0} /></div>
+              )}
               <div className="grid grid-cols-2 gap-4">
                 <div className="p-4 bg-slate-50 rounded-xl"><p className="text-xs font-bold text-slate-400 uppercase mb-1">{t('reports.likelihood' as TranslationKey)}</p><p className="text-lg font-bold text-slate-900">{selectedRisk.likelihood}/5</p><p className="text-xs text-slate-500 mt-0.5">{renderLikelihoodLabel(selectedRisk.likelihood)}</p></div>
                 <div className="p-4 bg-slate-50 rounded-xl"><p className="text-xs font-bold text-slate-400 uppercase mb-1">{t('reports.impact' as TranslationKey)}</p><p className="text-lg font-bold text-slate-900">{selectedRisk.impact}/5</p><p className="text-xs text-slate-500 mt-0.5">{renderImpactLabel(selectedRisk.impact)}</p></div>
@@ -1442,7 +1458,7 @@ export default function ReportsRisksPage() {
                   <div className="flex justify-between items-center mb-1"><span className="text-xs font-bold text-slate-500">{t('reports.progress' as TranslationKey)}</span><span className="text-xs font-bold text-emerald-600">{selectedRisk.mitigationProgress}%</span></div>
                   <div className="h-2 bg-slate-200 rounded-full overflow-hidden"><div className="h-full bg-emerald-500 rounded-full transition-all" style={{ width: `${selectedRisk.mitigationProgress}%` }} /></div>
                 </div>
-                <ChecklistSection items={selectedRisk.mitigationChecklist || []} onAdd={(text) => addMitigationItem(selectedRisk.id, text)} onEdit={(itemId, newText) => editMitigationItem(selectedRisk.id, itemId, newText)} onRemove={(itemId) => removeMitigationItem(selectedRisk.id, itemId)} onToggle={(itemId) => toggleMitigationItem(selectedRisk.id, itemId)} onSetDeadline={(itemId, deadline) => setMitigationItemDeadline(selectedRisk.id, itemId, deadline)} parentDeadline={storeRisks.find((r) => r.id === selectedRisk.id)?.mitigationDeadline} isRTL={isRTL} titleKey="reports.mitigationChecklist" completionKey="reports.mitigationComplete" addPlaceholderKey="reports.addMitigationItem" removeTooltipKey="reports.removeMitigationItem" />
+                <ChecklistSection items={selectedRisk.mitigationChecklist || []} loading={!isDetailLoaded(selectedRisk.id)} onAdd={(text) => addMitigationItem(selectedRisk.id, text)} onEdit={(itemId, newText) => editMitigationItem(selectedRisk.id, itemId, newText)} onRemove={(itemId) => removeMitigationItem(selectedRisk.id, itemId)} onToggle={(itemId) => toggleMitigationItem(selectedRisk.id, itemId)} onSetDeadline={(itemId, deadline) => setMitigationItemDeadline(selectedRisk.id, itemId, deadline)} parentDeadline={storeRisks.find((r) => r.id === selectedRisk.id)?.mitigationDeadline} isRTL={isRTL} titleKey="reports.mitigationChecklist" completionKey="reports.mitigationComplete" addPlaceholderKey="reports.addMitigationItem" removeTooltipKey="reports.removeMitigationItem" />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="p-4 bg-slate-50 rounded-xl"><p className="text-xs font-bold text-slate-400 uppercase mb-1">{t('reports.monitoringFrequency' as TranslationKey)}</p><span className="text-sm font-bold text-slate-700 bg-slate-100 px-2 py-1 rounded">{monitoringFrequencyLabels[selectedRisk.monitoringFrequency]}</span></div>

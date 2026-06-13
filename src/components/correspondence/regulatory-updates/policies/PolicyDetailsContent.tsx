@@ -21,6 +21,7 @@ import { InlineDeadlinePicker } from '@/components/ui/inline-deadline-picker'
 import { useDeepLinkTab, useDeepLinkHighlight } from '@/hooks/useDeepLink'
 // P3 (W29): skeleton loaders for detail sections during initial fetch.
 import { Skeleton } from '@/components/ui/skeleton'
+import { FrameworkChips } from '@/components/ui/framework-chips'
 import {
   formatPolicyStatus,
   formatPolicyApprovalTier,
@@ -164,20 +165,27 @@ export function PolicyDetailsContent({
   const actingUser = authUser?.name ?? fresh.owner.name
   const today = new Date().toISOString().split('T')[0]
 
-  // P6 (W34): detect pre-fetch state — drive the description / policy-document
-  // skeletons off the REAL detail-GET in-flight flag (detailLoading) AND empty
-  // detail fields. The previous heuristic negated fresh.activityLog, which is
-  // always an empty array (mapRow forces it), so the flag was permanently false
-  // and the skeletons never rendered. Gating on detailLoading also means a
-  // genuinely-empty policy never gets stuck showing skeletons after the GET.
-  const isDetailPrefetch = detailLoading && !fresh.description && fresh.workflowTimeline.length === 0
+  // P6 (W34): detect pre-fetch state — drive each section's skeleton off the
+  // REAL detail-GET in-flight flag (detailLoading) AND that section's own
+  // emptiness. The previous combined flag required `!fresh.description`, but
+  // the LIST endpoint ships `description` (POLICY_LIST_COLUMNS), so the flag
+  // was permanently false for any described policy and the workflow/document
+  // skeletons never rendered. Per-section gating keeps already-known fields
+  // (description) visible while detail-only collections show skeletons, and a
+  // genuinely-empty policy never gets stuck (detailLoading clears on settle).
+  const descriptionPrefetch = detailLoading && !fresh.description
+  const documentsPrefetch =
+    detailLoading && (fresh.attachments ?? []).length === 0 && !fresh.attachmentUrl
+  const workflowPrefetch = detailLoading && fresh.workflowTimeline.length === 0
+  const activityPrefetch = detailLoading && (fresh.activityLog ?? []).length === 0
+  const versionsPrefetch = detailLoading && fresh.versionHistory.length === 0
 
   // C(#31)/B(#30): if the user arrived from a calendar workflow-step deadline,
   // switch to the Workflow tab, then (once the steps have rendered) scroll to
   // and glow the targeted step. The sub-item id rides the transient deep-link
   // store, never the URL.
   useDeepLinkTab((tab) => setActiveTab(tab as DetailTab))
-  useDeepLinkHighlight(activeTab === 'workflow' && !isDetailPrefetch && fresh.workflowTimeline.length > 0)
+  useDeepLinkHighlight(activeTab === 'workflow' && !workflowPrefetch && fresh.workflowTimeline.length > 0)
 
   // P1 (W30): archived policies are strictly view-only — hide every mutation
   // affordance (upload zone, edit button, workflow actions, etc.).
@@ -583,7 +591,7 @@ export function PolicyDetailsContent({
               <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-2">
                 {t('policies.description')}
               </h3>
-              {isDetailPrefetch ? (
+              {descriptionPrefetch ? (
                 <div className="space-y-2">
                   <Skeleton className="h-4 w-full rounded" />
                   <Skeleton className="h-4 w-4/5 rounded" />
@@ -600,7 +608,7 @@ export function PolicyDetailsContent({
                 {t('policies.uploadDocument')}
               </h3>
               {/* P9 (W30): skeleton while detail GET is in flight */}
-              {isDetailPrefetch ? (
+              {documentsPrefetch ? (
                 <div className="space-y-2 mb-2">
                   <Skeleton className="h-10 w-full rounded-xl" />
                 </div>
@@ -769,7 +777,7 @@ export function PolicyDetailsContent({
               {/* P3 (W29) / W39: skeleton while the detail GET is in flight —
                   shaped like the real timeline (vertical rail + step dot +
                   label/caption bars) instead of flat anonymous bars. */}
-              {isDetailPrefetch && (
+              {workflowPrefetch && (
                 <div
                   className="space-y-2 relative before:absolute before:start-2 before:top-2 before:bottom-2 before:w-0.5 before:bg-slate-100"
                   data-testid="policy-workflow-skeleton"
@@ -1356,7 +1364,22 @@ export function PolicyDetailsContent({
                         </div>
                       ))}
                       {allEntries.length === 0 && (
-                        <p className="text-xs text-slate-400 italic">{t('policies.noActivityYet')}</p>
+                        activityPrefetch ? (
+                          // Skeleton while the detail GET is in flight — the
+                          // activity log is detail-only, so without this the
+                          // tab shows "no activity yet" then pops in.
+                          <div className="space-y-3" data-skeleton="true" role="status" aria-busy="true" aria-live="polite">
+                            {[1, 2, 3].map((i) => (
+                              <div key={i} className="relative ps-8">
+                                <Skeleton className="absolute start-0 top-1 w-4 h-4 rounded-full" />
+                                <Skeleton className="h-3.5 w-2/3 mb-1.5" />
+                                <Skeleton className="h-2.5 w-32" />
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-xs text-slate-400 italic">{t('policies.noActivityYet')}</p>
+                        )
                       )}
                     </div>
                     {hasMore && (
@@ -1382,6 +1405,12 @@ export function PolicyDetailsContent({
                 {t('policies.versionHistory')}
               </h3>
               <div className="space-y-2">
+                {versionsPrefetch && (
+                  <div className="space-y-2" data-skeleton="true" role="status" aria-busy="true" aria-live="polite">
+                    <Skeleton className="h-12 w-full rounded-xl" />
+                    <Skeleton className="h-12 w-full rounded-xl" />
+                  </div>
+                )}
                 {fresh.versionHistory.map((entry, idx) => (
                   <div key={idx}>
                     <button
@@ -1458,6 +1487,14 @@ export function PolicyDetailsContent({
             {tierLabel}
           </span>
         </div>
+
+        {/* Framework tags — mirrors the circular detail's Frameworks panel. */}
+        {(fresh.frameworkIds ?? []).length > 0 && (
+          <div>
+            <h3 className="text-[10px] font-black text-slate-400 uppercase mb-2">{t('regulatoryUpdates.frameworks')}</h3>
+            <FrameworkChips ids={fresh.frameworkIds} isRTL={isRTL} max={0} />
+          </div>
+        )}
 
         {/* Review schedule */}
         <div>

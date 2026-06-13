@@ -4,6 +4,7 @@ import { memo, useState } from 'react'
 import { Icon } from '@iconify/react'
 import { useTranslation } from '@/i18n'
 import { InlineDeadlinePicker } from '@/components/ui/inline-deadline-picker'
+import { Skeleton } from '@/components/ui/skeleton'
 
 interface ChecklistItem {
   id: string
@@ -28,6 +29,9 @@ export interface ChecklistSectionProps {
   removeTooltipKey?: string
   /** O4: when true the add-input, edit, and remove controls are hidden. */
   readOnly?: boolean
+  /** Detail hydration in flight — render skeleton rows instead of items
+   *  (the checklist is detail-only data; without this it pops in). */
+  loading?: boolean
 }
 
 export const ChecklistSection = memo(function ChecklistSection({
@@ -44,6 +48,7 @@ export const ChecklistSection = memo(function ChecklistSection({
   addPlaceholderKey,
   removeTooltipKey,
   readOnly = false,
+  loading = false,
 }: ChecklistSectionProps) {
   const { t } = useTranslation()
   const [newItemText, setNewItemText] = useState('')
@@ -169,6 +174,21 @@ export const ChecklistSection = memo(function ChecklistSection({
           </button>
         </div>
       )}
+
+      {/* Skeleton while the parent's detail GET hydrates the checklist. Only
+          when no items are present yet — already-hydrated reopens render
+          their rows instantly. */}
+      {loading && items.length === 0 ? (
+        <div className="space-y-3" data-skeleton="true" role="status" aria-busy="true" aria-live="polite">
+          {[1, 2].map((i) => (
+            <div key={i} className="flex items-center gap-3 p-3 border border-slate-100 rounded-xl">
+              <Skeleton className="h-4 w-4 rounded shrink-0" />
+              <Skeleton className="h-4 flex-1" />
+              <Skeleton className="h-3 w-16 shrink-0" />
+            </div>
+          ))}
+        </div>
+      ) : null}
 
       {/* Checklist items */}
       {items.length > 0 ? (

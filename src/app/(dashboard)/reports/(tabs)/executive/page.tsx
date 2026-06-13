@@ -14,6 +14,7 @@ import { useTranslation } from '@/i18n'
 import { useAuditStore } from '@/stores/audit-store'
 import { useRiskStore } from '@/stores/risk-store'
 import { useComplianceScore } from '@/hooks/useComplianceScore'
+import { useDashboardHealth } from '@/hooks/useDashboardHealth'
 import { useFrameworkConfigStore } from '@/stores/framework-config-store'
 import type { PeriodFilter } from '@/lib/compliance-engine.types'
 import { exportExecutiveReport, generatePrintableReport } from '@/lib/export'
@@ -102,7 +103,6 @@ export default function ReportsExecutivePage() {
   const fetchAudits = useAuditStore((s) => s.fetchAll)
   const storeRisks = useRiskStore((s) => s.risks)
   const allFrameworks = useFrameworkConfigStore((s) => s.frameworks)
-  const enabledFrameworks = useMemo(() => allFrameworks.filter((f) => f.enabled), [allFrameworks])
   // Wave-3 skeleton boundary — first-fetch placeholder for the findings table
   // and risk distribution. Avoids the empty "no findings" flash on initial
   // mount (OPTIMIZATION-PATTERNS §2).
@@ -134,6 +134,10 @@ export default function ReportsExecutivePage() {
 
   // Compliance score
   const complianceScore = useComplianceScore(periodFilter as PeriodFilter)
+  // Per-framework scores ride the dashboard-health endpoint (the /compliance/
+  // score cache row has no per-framework breakdown) — same source the
+  // dashboard's framework cards use, so the two surfaces always agree.
+  const dashboardHealth = useDashboardHealth({ period: periodFilter as PeriodFilter })
 
   // Derive risk distribution
   const risks = useMemo(() => storeRisks, [storeRisks])
@@ -214,15 +218,22 @@ export default function ReportsExecutivePage() {
     { key: 'policyCurrency', i18n: 'compPolicyCurrency' },
     { key: 'trainingCompletion', i18n: 'compTrainingCompletion' },
   ]
+  // Render straight from the server's per-framework list (already filtered to
+  // pinned + enabled + correspondence-based). The client framework store only
+  // supplies localized names/icons — intersecting with its `enabled` flags
+  // here re-introduced the blank-card bug whenever the config fetch hadn't
+  // run on this page.
   const frameworkEntries = useMemo(() =>
-    enabledFrameworks
-      .filter((fw) => complianceScore.frameworks[fw.id])
-      .map((fw) => ({
-        key: fw.id,
-        name: isRTL ? fw.nameAr : fw.name,
-        icon: fw.icon,
-      })),
-    [enabledFrameworks, complianceScore.frameworks, isRTL]
+    dashboardHealth.frameworkScores.map((fs) => {
+      const fw = allFrameworks.find((f) => f.id === fs.frameworkId)
+      return {
+        key: fs.frameworkId,
+        name: fw ? (isRTL ? fw.nameAr : fw.name) : fs.frameworkName,
+        icon: fw?.icon ?? 'lucide:shield',
+        score: fs.overall,
+      }
+    }),
+    [dashboardHealth.frameworkScores, allFrameworks, isRTL]
   )
   const miniRadius = 28
   const miniCirc = 2 * Math.PI * miniRadius
@@ -346,34 +357,51 @@ export default function ReportsExecutivePage() {
             </CardContent>
           </Card>
 
-          {/* Framework Scores */}
+          {/* Framework Scores — per-framework gauges from dashboard-health.
+              Skeleton while the health fetch runs; explicit empty state when
+              no enabled framework has a score yet (was a silent blank card). */}
           <Card className="col-span-3">
             <CardContent className="pt-3 pb-3 px-4">
               <h3 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">{t('reports.frameworkScores' as TranslationKey)}</h3>
-              <div className="flex items-center justify-around">
-                {frameworkEntries.map(({ key, name, icon }) => {
-                  const fwData = complianceScore.frameworks[key]
-                  const fwScore = fwData?.overall ?? 0
-                  const fwOffset = miniCirc - (fwScore / 100) * miniCirc
-                  return (
-                    <div key={key} className="flex flex-col items-center gap-1">
-                      <div className="relative" style={{ width: 68, height: 68 }}>
-                        <svg width="68" height="68" className="transform -rotate-90">
-                          <circle cx="34" cy="34" r={miniRadius} fill="none" stroke="#f1f5f9" strokeWidth="5" />
-                          <circle cx="34" cy="34" r={miniRadius} fill="none" stroke={getGaugeColor(fwScore)} strokeWidth="5" strokeLinecap="round" strokeDasharray={miniCirc} strokeDashoffset={fwOffset} className="transition-all duration-700" />
-                        </svg>
-                        <div className="absolute inset-0 flex items-center justify-center">
-                          <span className="text-sm font-bold text-slate-900">{Math.round(fwScore)}%</span>
+              {dashboardHealth.isLoading && frameworkEntries.length === 0 ? (
+                <div className="flex items-center justify-around py-1" data-skeleton="true" role="status" aria-busy="true" aria-live="polite">
+                  {[1, 2, 3].map((i) => (
+                    <div key={i} className="flex flex-col items-center gap-2">
+                      <Skeleton className="h-[60px] w-[60px] !rounded-full" />
+                      <Skeleton className="h-2.5 w-16" />
+                    </div>
+                  ))}
+                </div>
+              ) : frameworkEntries.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-4 text-center">
+                  <Icon icon="lucide:gauge" className="text-2xl text-slate-300 mb-1.5" />
+                  <p className="text-xs text-slate-400 max-w-md">{t('reports.frameworkScoresEmpty' as TranslationKey)}</p>
+                </div>
+              ) : (
+                <div className="flex items-center justify-around">
+                  {frameworkEntries.map(({ key, name, icon, score }) => {
+                    const fwScore = score
+                    const fwOffset = miniCirc - (fwScore / 100) * miniCirc
+                    return (
+                      <div key={key} className="flex flex-col items-center gap-1">
+                        <div className="relative" style={{ width: 68, height: 68 }}>
+                          <svg width="68" height="68" className="transform -rotate-90">
+                            <circle cx="34" cy="34" r={miniRadius} fill="none" stroke="#f1f5f9" strokeWidth="5" />
+                            <circle cx="34" cy="34" r={miniRadius} fill="none" stroke={getGaugeColor(fwScore)} strokeWidth="5" strokeLinecap="round" strokeDasharray={miniCirc} strokeDashoffset={fwOffset} className="transition-all duration-700" />
+                          </svg>
+                          <div className="absolute inset-0 flex items-center justify-center">
+                            <span className="text-sm font-bold text-slate-900">{Math.round(fwScore)}%</span>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <Icon icon={icon} className="w-3 h-3 text-slate-400" />
+                          <span className="text-[10px] font-medium text-slate-600">{name}</span>
                         </div>
                       </div>
-                      <div className="flex items-center gap-1">
-                        <Icon icon={icon} className="w-3 h-3 text-slate-400" />
-                        <span className="text-[10px] font-medium text-slate-600">{name}</span>
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
+                    )
+                  })}
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>

@@ -27,6 +27,7 @@ import { useAuditTaskCategoryStore } from '@/stores/audit-task-category-store'
 import { SEED_TASK_CATEGORIES } from '@/lib/audit-task-seed-categories'
 import { useAuthStore } from '@/stores/auth-store'
 import { useFrameworkConfigStore } from '@/stores/framework-config-store'
+import { FrameworkChips } from '@/components/ui/framework-chips'
 import type { RegulatoryBodyId } from '@/types'
 import { EditAuditModal } from '@/components/reports/audits/edit-audit-modal'
 import { AuditHistoryCard, ArchivedCycleView } from '@/components/reports/audits/AuditHistoryCard'
@@ -413,7 +414,6 @@ export default function AuditDetailPage() {
 
   // Modal states
   const [showEditModal, setShowEditModal] = useState(false)
-  const [showShareModal, setShowShareModal] = useState(false)
   const [showAddTaskModal, setShowAddTaskModal] = useState(false)
   const [showManageTeamModal, setShowManageTeamModal] = useState(false)
   const [showAddMemberModal, setShowAddMemberModal] = useState(false)
@@ -877,10 +877,6 @@ export default function AuditDetailPage() {
             <Icon icon="lucide:trash-2" />
             {t('common.delete')}
           </Button>
-          <Button variant="primary" className="shadow-lg shadow-emerald-100" onClick={() => setShowShareModal(true)}>
-            <Icon icon="lucide:share-2" />
-            {t('auditDetail.shareProgress')}
-          </Button>
         </div>
       </header>
 
@@ -898,6 +894,8 @@ export default function AuditDetailPage() {
                     <p className="text-slate-600 leading-relaxed max-w-2xl">
                       {audit?.description || (audit?.type ? `${auditTypeLabel(audit.type)} - Progress: ${calculatedProgress}%` : '')}
                     </p>
+                    {/* Framework tags — same chips as the audits list rows. */}
+                    <FrameworkChips ids={audit?.frameworkIds} isRTL={isRTL} className="mt-3" max={0} />
                   </div>
                   <Badge variant={statusConfig.variant} className="shrink-0 border border-emerald-100">{statusConfig.label}</Badge>
                 </div>
@@ -1681,60 +1679,6 @@ export default function AuditDetailPage() {
               {t('auditDetail.confirmReschedule')}
             </LoadingButton>
           </div>
-        </div>
-      </Modal>
-
-      {/* Share Progress Modal */}
-      <Modal isOpen={showShareModal} onClose={() => setShowShareModal(false)} title={t('auditDetail.shareAuditProgress')} size="md">
-        <div className="space-y-6">
-          <div>
-            <label className={`block text-sm font-bold text-slate-700 mb-2`}>{t('auditDetail.shareWithTeamMembers')}</label>
-            <div className={`flex flex-wrap gap-2 mb-3`}>
-              <span className={`px-3 py-1.5 bg-emerald-50 text-emerald-700 rounded-full text-sm font-medium flex items-center gap-2`}>
-                Felix H.
-                <button className="text-emerald-600 hover:text-emerald-800"><Icon icon="lucide:x" className="text-xs" /></button>
-              </span>
-              <span className={`px-3 py-1.5 bg-emerald-50 text-emerald-700 rounded-full text-sm font-medium flex items-center gap-2`}>
-                Sarah C.
-                <button className="text-emerald-600 hover:text-emerald-800"><Icon icon="lucide:x" className="text-xs" /></button>
-              </span>
-            </div>
-            <input type="text" placeholder={t('common.email')} className={`w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all`} />
-          </div>
-          <div>
-            <label className={`block text-sm font-bold text-slate-700 mb-2`}>{t('auditDetail.shareableLink')}</label>
-            <div className={`flex gap-2`}>
-              <input type="text" value="https://app.complianceos.com/audit/iso27001-review" readOnly className={`flex-1 px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-slate-600 text-sm`} />
-              <Button variant="secondary" onClick={() => showToast(t('auditDetail.linkCopied'))}>
-                <Icon icon="lucide:copy" />
-                {t('auditDetail.copy')}
-              </Button>
-            </div>
-          </div>
-          <div>
-            <label className={`block text-sm font-bold text-slate-700 mb-2`}>{t('auditDetail.includeInReport')}</label>
-            <div className="space-y-2">
-              <label className={`flex items-center gap-2 cursor-pointer`}>
-                <input type="checkbox" defaultChecked className="w-4 h-4 text-emerald-600 rounded" />
-                <span className="text-sm text-slate-700">{t('auditDetail.taskCompletionStatus')}</span>
-              </label>
-              <label className={`flex items-center gap-2 cursor-pointer`}>
-                <input type="checkbox" defaultChecked className="w-4 h-4 text-emerald-600 rounded" />
-                <span className="text-sm text-slate-700">{t('auditDetail.activityTimeline')}</span>
-              </label>
-              <label className={`flex items-center gap-2 cursor-pointer`}>
-                <input type="checkbox" className="w-4 h-4 text-emerald-600 rounded" />
-                <span className="text-sm text-slate-700">{t('auditDetail.teamMemberDetails')}</span>
-              </label>
-            </div>
-          </div>
-        </div>
-        <div className={`mt-6 pt-6 border-t border-slate-100 flex justify-end gap-3`}>
-          <Button variant="outline" onClick={() => setShowShareModal(false)}>{t('common.cancel')}</Button>
-          <Button variant="primary" onClick={() => { setShowShareModal(false); showToast(t('auditDetail.progressReportSent')) }}>
-            <Icon icon="lucide:send" />
-            {t('auditDetail.sendReport')}
-          </Button>
         </div>
       </Modal>
 

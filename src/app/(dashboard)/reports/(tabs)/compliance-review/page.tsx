@@ -16,6 +16,7 @@ import {
   type ComplianceItemKind,
 } from '@/stores/compliance-evaluation-store'
 import { useAuthStore } from '@/stores/auth-store'
+import { useTeamStore } from '@/stores/team-store'
 import { calculateComplianceReviewScore } from '@/lib/compliance-review-score'
 import { paginate } from '@/lib/pagination'
 import { ListSkeleton, CardSkeleton } from '@/components/ui/skeleton'
@@ -47,6 +48,8 @@ interface ChecklistItem {
 
 const PAGE_SIZE = 10
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
 export default function ComplianceReviewPage() {
   const { t, isRTL, language } = useTranslation()
   const pathname = usePathname()
@@ -72,6 +75,23 @@ export default function ComplianceReviewPage() {
     (departmentsLoading && departmentsLastFetched === null && departments.length === 0)
   const user = useAuthStore((s) => s.user)
   const evaluatorName = user?.name ?? t('complianceReview.evaluatorFallback')
+
+  // "Last marked by …": the server stores the evaluator's user UUID in
+  // `evaluated_by` — resolve it to a display name at render time via the
+  // auth user / team roster (W49 render-side name-resolution pattern).
+  // Legacy/optimistic rows that already hold a plain name pass through.
+  const teamMembers = useTeamStore((s) => s.members)
+  const fetchTeam = useTeamStore((s) => s.fetchAll)
+  useEffect(() => {
+    void fetchTeam()
+  }, [fetchTeam])
+  const resolveEvaluatorName = (v: string | undefined): string => {
+    if (!v) return t('inlineDeadlinePicker.unknown')
+    if (!UUID_RE.test(v)) return v
+    if (user?.id === v) return user.name
+    const member = teamMembers.find((m) => m.id === v)
+    return member?.name ?? t('inlineDeadlinePicker.unknown')
+  }
 
   // Hydrate server-state on mount (Fix-1). The page derives the overall
   // compliance score from circulars, policies, departments and evaluations —
@@ -126,7 +146,11 @@ export default function ComplianceReviewPage() {
         .map((c) => ({ kind: 'rule' as const, id: c.id, title: c.title, reference: c.reference }))
       const policyItems: ChecklistItem[] = policies
         .filter((p) => p.businessOwnerDepartmentId === dept.id)
-        .map((p) => ({ kind: 'policy' as const, id: p.id, title: p.name, reference: p.id }))
+        // `id` must be the server UUID — the evaluations API validates
+        // `item_id` as a UUID, but Policy.id is the display ref_code, so
+        // marking any policy 400'd while rules (UUID ids) worked. The
+        // ref_code stays as the visible `reference` / navigation handle.
+        .map((p) => ({ kind: 'policy' as const, id: p.uuid ?? p.id, title: p.name, reference: p.id }))
       map[dept.id] = [...ruleItems, ...policyItems]
     }
     return map
@@ -182,7 +206,9 @@ export default function ComplianceReviewPage() {
     if (item.kind === 'rule') {
       router.push(`/correspondence/regulatory-updates/rules?id=${encodeURIComponent(item.id)}`)
     } else {
-      router.push(`/correspondence/regulatory-updates/policies?policyId=${encodeURIComponent(item.id)}`)
+      // Policies deep-link by display ref_code (item.reference) — item.id is
+      // now the server UUID reserved for the evaluations API.
+      router.push(`/correspondence/regulatory-updates/policies?policyId=${encodeURIComponent(item.reference)}`)
     }
   }
 
@@ -407,7 +433,8 @@ export default function ComplianceReviewPage() {
                       isDerived = true
                     }
                   } else {
-                    const p = policies.find((x) => x.id === item.id)
+                    // item.id is the policy UUID; Policy.id is the ref_code.
+                    const p = policies.find((x) => (x.uuid ?? x.id) === item.id)
                     if (
                       p &&
                       p.businessOwnerDepartmentId === activeDept.id &&
@@ -452,7 +479,7 @@ export default function ComplianceReviewPage() {
                           {evaluation?.evaluatedAt ? (
                             <p className="text-[10px] text-slate-400 mt-1">
                               {t('complianceReview.lastMarkedBy', {
-                                name: evaluation.evaluatedBy ?? t('inlineDeadlinePicker.unknown'),
+                                name: resolveEvaluatorName(evaluation.evaluatedBy),
                                 date: formatLocalizedDate(evaluation.evaluatedAt, language),
                               })}
                             </p>

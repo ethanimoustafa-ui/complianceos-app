@@ -144,7 +144,10 @@ export function resolveVerdict(args: {
       return { verdict: 'compliant', source: 'derived-workflow' }
     }
   } else {
-    const p = policies.find((x) => x.id === itemId)
+    // Policy evaluations are keyed by the server UUID (`p.uuid`) — Policy.id
+    // is the display ref_code, which the evaluations API rejects (item_id
+    // must be a UUID). Match either so legacy ref-keyed callers still hit.
+    const p = policies.find((x) => (x.uuid ?? x.id) === itemId || x.id === itemId)
     if (
       p &&
       p.businessOwnerDepartmentId === departmentId &&
@@ -193,7 +196,9 @@ export function calculateComplianceReviewScore(
     for (const p of deptPolicies) {
       const { verdict } = resolveVerdict({
         kind: 'policy',
-        itemId: p.id,
+        // UUID key — must match the Compliance Review page's item ids (the
+        // evaluations store keys `policy:<uuid>::<dept>`).
+        itemId: p.uuid ?? p.id,
         departmentId: dept.id,
         departmentName: dept.name,
         evaluations,

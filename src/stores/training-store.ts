@@ -183,6 +183,13 @@ interface TrainingState {
   removeCourse: (id: string) => void
   updateSaudizationMetrics: (data: Partial<SaudizationMetrics>) => void
   updateOverviewStats: (data: Partial<TrainingOverviewStats>) => void
+  // Manual metrics persistence (saudization_metrics singleton via
+  // /api/training/metrics) — "Edit Metrics" numbers must survive reload.
+  fetchMetrics: () => Promise<void>
+  saveManualMetrics: (data: {
+    saudization: Partial<SaudizationMetrics>
+    overviewStats: Partial<TrainingOverviewStats>
+  }) => Promise<void>
   recalculateDepartmentProgress: () => void
   recalculateOverviewStats: () => void
   importUploadData: (data: {
@@ -852,6 +859,79 @@ export const useTrainingStore = create<TrainingState>()((set, get) => ({
     set((state) => ({
       overviewStats: { ...state.overviewStats, ...data },
     })),
+
+  fetchMetrics: async () => {
+    // Hydrate the persisted manual metrics (saudization_metrics singleton).
+    // NULL columns mean "never manually entered" — keep local/computed values.
+    try {
+      const row = await api.get<{
+        target: number | string | null
+        actual: number | string | null
+        total_employees: number | null
+        saudi_employees: number | null
+        overall_completion: number | string | null
+        courses_assigned: number | null
+        last_data_source: string | null
+        last_updated: string | null
+      } | null>('/training/metrics')
+      if (!row) return
+      set((state) => ({
+        saudizationMetrics: {
+          ...state.saudizationMetrics,
+          target: Number(row.target ?? 0),
+          actual: Number(row.actual ?? 0),
+          totalEmployees: row.total_employees ?? 0,
+          saudiEmployees: row.saudi_employees ?? 0,
+          lastDataSource: (row.last_data_source ?? state.saudizationMetrics.lastDataSource) as SaudizationMetrics['lastDataSource'],
+          lastUpdated: row.last_updated ?? state.saudizationMetrics.lastUpdated,
+        },
+        overviewStats: {
+          ...state.overviewStats,
+          ...(row.overall_completion != null
+            ? { overallCompletion: Number(row.overall_completion) }
+            : {}),
+          ...(row.courses_assigned != null ? { coursesAssigned: row.courses_assigned } : {}),
+        },
+      }))
+    } catch {
+      // Non-fatal: the page falls back to computed/local values.
+    }
+  },
+
+  saveManualMetrics: async ({ saudization, overviewStats }) => {
+    // Optimistic local apply + one PATCH for the whole manual-entry payload;
+    // snapshot-rollback on failure. The modal's Save spinner awaits this
+    // (W54 — the spinner spans the full persist).
+    const prevSaudization = get().saudizationMetrics
+    const prevOverview = get().overviewStats
+    set((state) => ({
+      saudizationMetrics: { ...state.saudizationMetrics, ...saudization },
+      overviewStats: { ...state.overviewStats, ...overviewStats },
+      isMutating: true,
+      error: null,
+    }))
+    try {
+      const body: Record<string, unknown> = { last_data_source: 'manual' }
+      if (saudization.target !== undefined) body.target = saudization.target
+      if (saudization.actual !== undefined) body.actual = saudization.actual
+      if (saudization.totalEmployees !== undefined) body.total_employees = saudization.totalEmployees
+      if (saudization.saudiEmployees !== undefined) body.saudi_employees = saudization.saudiEmployees
+      if (overviewStats.overallCompletion !== undefined && overviewStats.overallCompletion !== null)
+        body.overall_completion = overviewStats.overallCompletion
+      if (overviewStats.coursesAssigned !== undefined && overviewStats.coursesAssigned !== null)
+        body.courses_assigned = overviewStats.coursesAssigned
+      await api.patch('/training/metrics', body)
+      set({ isMutating: false })
+    } catch (e) {
+      set({
+        saudizationMetrics: prevSaudization,
+        overviewStats: prevOverview,
+        error: errorMessage(e, 'Failed to save training metrics'),
+        isMutating: false,
+      })
+      throw e
+    }
+  },
 
   recalculateDepartmentProgress: () => {
     const { employees } = get()

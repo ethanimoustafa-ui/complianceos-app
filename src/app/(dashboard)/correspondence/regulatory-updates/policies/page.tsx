@@ -26,6 +26,8 @@ import { usePolicyTemplateStore } from '@/stores/policy-template-store'
 import { usePolicyCategoryStore } from '@/stores/policy-category-store'
 import { exportPoliciesLocalized } from '@/lib/export'
 import { Gate } from '@/components/auth/gate'
+import { useFrameworkConfigStore } from '@/stores/framework-config-store'
+import { matchesFrameworkQuery } from '@/components/ui/framework-chips'
 
 // Toast component (kept inline — single-use, three-second display).
 function Toast({ message, onClose }: { message: string; onClose: () => void }) {
@@ -57,6 +59,9 @@ export default function RegulatoryUpdatesPoliciesPage() {
   // initial Zustand state and never sees server-side rows (reload-survival
   // bug). Pulled in by Fix-B; mirrors the pattern in /reports/audits.
   useEffect(() => { fetchAllPolicies() }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Framework names (static seed metadata) for framework-aware search.
+  const allFrameworks = useFrameworkConfigStore((s) => s.frameworks)
 
   // Wave-2 Agent E: first-fetch skeleton.
   const policiesLoading = usePolicyStore((s) => s.isLoading)
@@ -143,9 +148,12 @@ export default function RegulatoryUpdatesPoliciesPage() {
   const filteredPolicies = useMemo(() => {
     return policies
       .filter((policy) => {
+        // Framework-aware search: a framework name (EN/AR) or id matches every
+        // policy tagged with it — the cards already render the chips.
         const matchesSearch =
           policy.name.toLowerCase().includes(policySearchQuery.toLowerCase()) ||
-          policy.description.toLowerCase().includes(policySearchQuery.toLowerCase())
+          policy.description.toLowerCase().includes(policySearchQuery.toLowerCase()) ||
+          matchesFrameworkQuery(policy.frameworkIds, allFrameworks, policySearchQuery)
         const matchesCategory = policyCategoryFilter === 'all' || policy.category === policyCategoryFilter
         const matchesStatus = policyStatusFilter === 'all' || policy.status === policyStatusFilter
         // P6 (W29): client-side archive filter (belt-and-suspenders with API filter).
@@ -160,7 +168,7 @@ export default function RegulatoryUpdatesPoliciesPage() {
         if (!b.nextReviewDate) return -1
         return a.nextReviewDate.localeCompare(b.nextReviewDate)
       })
-  }, [policies, policySearchQuery, policyCategoryFilter, policyStatusFilter, archiveFilter])
+  }, [policies, policySearchQuery, policyCategoryFilter, policyStatusFilter, archiveFilter, allFrameworks])
 
   // Reset to page 1 when filters change.
   useEffect(() => { setCurrentPage(1) }, [policySearchQuery, policyCategoryFilter, policyStatusFilter, archiveFilter])

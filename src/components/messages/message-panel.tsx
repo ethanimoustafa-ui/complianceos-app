@@ -25,7 +25,17 @@ export function MessagePanel({ isOpen, onClose }: MessagePanelProps) {
   const { t } = useTranslation()
   const user = useAuthStore(s => s.user)
   const { threads, messages, sendMessage, createThread, markThreadAsRead, deleteThread, kickMember, promoteAdmin, demoteAdmin, updateThreadAvatar, addMembersToThread, updateThreadSubject } = useMessageStore()
+  const fetchThreads = useMessageStore(s => s.fetchAll)
+  const fetchMessages = useMessageStore(s => s.fetchMessages)
+  const threadsLoading = useMessageStore(s => s.isLoading)
   const teamMembers = useTeamStore(s => s.members)
+
+  // Hydrate the thread list from the server whenever the panel opens — the
+  // store starts cold after a reload, so without this the panel showed "no
+  // messages" forever (fetchAll existed but nothing ever called it).
+  useEffect(() => {
+    if (isOpen) void fetchThreads()
+  }, [isOpen, fetchThreads])
 
   const [view, setView] = useState<View>('threads')
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null)
@@ -123,6 +133,9 @@ export function MessagePanel({ isOpen, onClose }: MessagePanelProps) {
   const openThread = (threadId: string) => {
     setActiveThreadId(threadId)
     setView('detail')
+    // Pull this thread's messages from the server — the store only holds
+    // messages for threads opened this session.
+    void fetchMessages(threadId)
     markThreadAsRead(threadId)
   }
 
@@ -377,7 +390,21 @@ export function MessagePanel({ isOpen, onClose }: MessagePanelProps) {
         {/* ── THREAD LIST VIEW ── */}
         {view === 'threads' && (
           <div className="flex-1 overflow-y-auto hide-scrollbar">
-            {threads.length === 0 ? (
+            {threadsLoading && threads.length === 0 ? (
+              // First-fetch skeleton (the store's documented gate) — rows
+              // mirror the thread layout: avatar circle + name/preview bars.
+              <div className="divide-y divide-slate-100" data-skeleton="true" role="status" aria-busy="true" aria-live="polite">
+                {[1, 2, 3].map((i) => (
+                  <div key={i} className="flex items-start gap-3 p-4">
+                    <div className="w-10 h-10 rounded-full bg-slate-100 animate-pulse shrink-0" />
+                    <div className="flex-1 space-y-2 pt-1">
+                      <div className="h-3.5 w-1/2 bg-slate-100 animate-pulse rounded" />
+                      <div className="h-3 w-3/4 bg-slate-100 animate-pulse rounded" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : threads.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-64 text-slate-400">
                 <Icon icon="lucide:message-square" className="text-4xl mb-3" />
                 <p className="text-sm font-medium">{t('sidebar.noMessages')}</p>

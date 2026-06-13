@@ -15,6 +15,7 @@ import type { TranslationKey } from '@/i18n'
 import { Gate } from '@/components/auth/gate'
 import { useTeamStore } from '@/stores/team-store'
 import { useWorkload, useTeamWorkloads } from '@/hooks/useWorkload'
+import { useTeamSectionGuard } from '@/hooks/useTeamSectionGuard'
 import { formatDate } from '@/lib/utils'
 import { SortHeader, type SortState } from '@/components/ui/sort-header'
 import { EditableSelect } from '@/components/ui/editable-select'
@@ -104,6 +105,8 @@ function StatusIndicator({ status, label }: { status: 'active' | 'inactive' | 'p
 export default function TeamDirectoryPage() {
   const { t, isRTL } = useTranslation()
   const pathname = usePathname()
+  // Manager/admin only — officers are redirected to /team/training.
+  const canViewTeamSection = useTeamSectionGuard()
 
   // Store data
   const members = useTeamStore((s) => s.members)
@@ -220,6 +223,11 @@ export default function TeamDirectoryPage() {
     })
     return list
   }, [filteredMembers, sortState])
+
+  // Officers are bounced to /team/training (the only Team sub-page they get);
+  // render nothing while the redirect runs so the roster/approvals/burnout
+  // views never flash for them.
+  if (!canViewTeamSection) return null
 
   return (
     <div className="flex flex-col h-full">

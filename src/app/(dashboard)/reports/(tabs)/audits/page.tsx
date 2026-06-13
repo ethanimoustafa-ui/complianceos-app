@@ -25,6 +25,8 @@ import { useAuthStore } from '@/stores/auth-store'
 import { useTeamStore } from '@/stores/team-store'
 import { LETTER_AUTHORITIES, AUTHORITY_COLORS, getAuthorityFullName } from '@/lib/letter-authority'
 import { dicebearAvatar } from '@/lib/avatar'
+import { useFrameworkConfigStore } from '@/stores/framework-config-store'
+import { FrameworkChips, matchesFrameworkQuery } from '@/components/ui/framework-chips'
 
 // Audit type definitions
 // W46: sources ARE the correspondence authorities (sama / cma / zatca / … /
@@ -49,6 +51,8 @@ interface Audit {
   frequency: AuditFrequency
   category: AuditCategory
   closedOverdue?: boolean
+  // Visual framework tags (chips on the row + search assist).
+  frameworkIds?: string[]
 }
 
 // Configs
@@ -176,6 +180,9 @@ export default function ReportsAuditsPage() {
 
   const [showScheduleAuditModal, setShowScheduleAuditModal] = useState(false)
   const [auditSearchTerm, setAuditSearchTerm] = useState('')
+  // Framework display names for the row chips + framework-aware search.
+  // Static seed metadata — available without a server fetch.
+  const frameworks = useFrameworkConfigStore((s) => s.frameworks)
 
   // Audit filter state — W46: every KSA correspondence authority + internal.
   const [selectedSources, setSelectedSources] = useState<Set<AuditSource>>(
@@ -264,6 +271,7 @@ export default function ReportsAuditsPage() {
         frequency: (audit.frequency || 'annual') as AuditFrequency,
         category: (audit.category || 'regulatory_compliance') as AuditCategory,
         closedOverdue: audit.closedOverdue,
+        frameworkIds: audit.frameworkIds,
       }
     })
   }, [storeAudits, teamMembers])
@@ -281,14 +289,21 @@ export default function ReportsAuditsPage() {
     [customAuditCategories],
   )
   const filteredAudits = useMemo(() => {
+    // The search box existed but was never applied to the list — wire it in,
+    // matching the audit title AND its framework tags (EN/AR names or ids),
+    // so typing "sama"/"iso" surfaces every audit tagged with that framework.
+    const q = auditSearchTerm.trim().toLowerCase()
     return pageAudits.filter(audit =>
       selectedSources.has(audit.source) &&
       selectedFrequencies.has(audit.frequency) &&
       (selectedCategories.has(audit.category) || !knownCategoryValues.has(audit.category)) &&
       selectedStatuses.has(audit.status) &&
-      selectedPriorities.has(audit.priority)
+      selectedPriorities.has(audit.priority) &&
+      (!q ||
+        audit.name.toLowerCase().includes(q) ||
+        matchesFrameworkQuery(audit.frameworkIds, frameworks, q))
     )
-  }, [pageAudits, selectedSources, selectedFrequencies, selectedCategories, selectedStatuses, selectedPriorities, knownCategoryValues])
+  }, [pageAudits, selectedSources, selectedFrequencies, selectedCategories, selectedStatuses, selectedPriorities, knownCategoryValues, auditSearchTerm, frameworks])
 
   // Audit sort state
   type AuditSortField = 'auditName' | 'dueDate' | 'status' | 'priority' | 'progress'
@@ -663,6 +678,7 @@ export default function ReportsAuditsPage() {
                             <Link href={`/reports/${audit.id}`} className="block" onClick={(e) => e.stopPropagation()}>
                               <p className="text-sm font-bold text-slate-900 group-hover:text-emerald-600 transition-colors">{audit.name}</p>
                               <p className="text-[11px] text-slate-400">{audit.description}</p>
+                              <FrameworkChips ids={audit.frameworkIds} isRTL={isRTL} className="mt-1" />
                             </Link>
                           </td>
                           <td className="px-6 py-4">

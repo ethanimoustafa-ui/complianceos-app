@@ -57,11 +57,13 @@ export function useCalendarEvents() {
   // /api/calendar/deadlines and merged into the unified item list below.
   const [derivedDeadlines, setDerivedDeadlines] = useState<UnifiedCalendarItem[]>([])
 
-  // K(#39): first-load skeleton gate. The nine source stores + the server
-  // deadlines aggregation hydrate in parallel; `loading` stays true until the
-  // long-pole (the /calendar/deadlines fetch) settles, so the page can show a
-  // skeleton instead of letting items pop in one store at a time over an empty
-  // grid. Cached revisits flip it false almost immediately.
+  // K(#39): skeleton gate. The nine source stores + the server deadlines
+  // aggregation hydrate in parallel; `loading` stays true until EVERY fetch
+  // settles (allSettled below), so the page can show a skeleton instead of
+  // letting items pop in one source at a time over a partially-filled grid —
+  // the owner's complaint was new items "appearing out of nowhere" when a
+  // late fetch (deadlines, or a TTL-expired store) landed after first paint.
+  // TTL-warm revisits settle in one short round-trip (the deadlines GET).
   const [loading, setLoading] = useState(true)
 
   // Hydrate the user-created `calendar_events` collection and its `event_types`
@@ -76,27 +78,35 @@ export function useCalendarEvents() {
   // that module's page. Each fetch is independent + TTL-guarded by its store;
   // one failure doesn't block the others (no Promise.all).
   useEffect(() => {
-    void fetchCalendarEvents()
-    void fetchCalendarEventTypes()
-    void fetchAudits()
-    void fetchObservations()
-    void fetchPolicies()
-    void fetchLetters()
-    void fetchCirculars()
-    void fetchEmployees()
-    void fetchCorrespondence()
-    void fetchAdvisory()
-    void fetchRisks()
-    void (async () => {
-      try {
-        const rows = await api.get<UnifiedCalendarItem[]>('/calendar/deadlines')
-        setDerivedDeadlines(rows)
-      } catch {
-        // Non-fatal: the calendar still renders top-level deadlines + user events.
-      } finally {
-        setLoading(false)
-      }
-    })()
+    let cancelled = false
+    // allSettled (not Promise.all): each fetch is independent + TTL-guarded by
+    // its store; one failure must not block the others or strand `loading`.
+    void Promise.allSettled([
+      fetchCalendarEvents(),
+      fetchCalendarEventTypes(),
+      fetchAudits(),
+      fetchObservations(),
+      fetchPolicies(),
+      fetchLetters(),
+      fetchCirculars(),
+      fetchEmployees(),
+      fetchCorrespondence(),
+      fetchAdvisory(),
+      fetchRisks(),
+      (async () => {
+        try {
+          const rows = await api.get<UnifiedCalendarItem[]>('/calendar/deadlines')
+          if (!cancelled) setDerivedDeadlines(rows)
+        } catch {
+          // Non-fatal: the calendar still renders top-level deadlines + user events.
+        }
+      })(),
+    ]).then(() => {
+      if (!cancelled) setLoading(false)
+    })
+    return () => {
+      cancelled = true
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 

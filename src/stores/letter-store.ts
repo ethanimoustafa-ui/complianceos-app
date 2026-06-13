@@ -372,6 +372,10 @@ interface LetterState {
 
   isLoading: boolean
   isMutating: boolean
+  // Per-letter detail-GET in-flight flag (set by fetchById) — drives the
+  // approval-chain / attachments / timeline skeletons on the letters page.
+  // Mirrors policy-store.detailLoading.
+  detailLoading: Record<string, boolean>
   error: string | null
   lastFetched: number | null
 
@@ -433,6 +437,7 @@ export const useLetterStore = create<LetterState>()((set, get) => ({
   sort: INITIAL_SORT,
   isLoading: false,
   isMutating: false,
+  detailLoading: {},
   error: null,
   lastFetched: null,
 
@@ -494,7 +499,11 @@ export const useLetterStore = create<LetterState>()((set, get) => ({
   },
 
   fetchById: async (id) => {
-    set({ isLoading: true, error: null })
+    set((s) => ({
+      isLoading: true,
+      error: null,
+      detailLoading: { ...s.detailLoading, [id]: true },
+    }))
     try {
       const row = await api.get<LetterApiRow>(`/letters/${id}`)
       const previous = get().byId[id]
@@ -504,13 +513,24 @@ export const useLetterStore = create<LetterState>()((set, get) => ({
         letters: state.letters.some((l) => l.id === id)
           ? state.letters.map((l) => (l.id === id ? letter : l))
           : [letter, ...state.letters],
-        selectedLetter: letter,
+        // Only refresh the selection if THIS letter is still selected — a
+        // late-resolving detail GET must not reopen a letter the user has
+        // closed/deleted meanwhile, nor clobber a newer selection. Mirrors
+        // policy-store / circular-store fetchById.
+        selectedLetter:
+          state.selectedLetter?.id === id ? letter : state.selectedLetter,
         isLoading: false,
+        detailLoading: { ...state.detailLoading, [id]: false },
         lastFetched: Date.now(),
       }))
       return letter
     } catch (e) {
-      set({ error: errorMessage(e, 'Failed to fetch letter'), isLoading: false })
+      set((s) => ({
+        error: errorMessage(e, 'Failed to fetch letter'),
+        isLoading: false,
+        // Clear on failure too, so the skeletons can't stick.
+        detailLoading: { ...s.detailLoading, [id]: false },
+      }))
       if (e instanceof ApiClientError && e.code === 'not_found') return null
       return null
     }

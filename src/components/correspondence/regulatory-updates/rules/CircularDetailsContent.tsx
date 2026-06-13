@@ -15,6 +15,7 @@ import { resolveAuthorityLabel } from '@/lib/authority-display'
 import { InlineDeadlinePicker } from '@/components/ui/inline-deadline-picker'
 // C(#31): consume a calendar deep-link → open the workflow tab + glow the step.
 import { useDeepLinkTab, useDeepLinkHighlight } from '@/hooks/useDeepLink'
+import { useDeepLinkStore } from '@/stores/deep-link-store'
 import { Skeleton } from '@/components/ui/skeleton'
 import { formatTimelineDate, useRelativeTime } from '@/lib/format-date'
 import type { Circular, CircularArticle, CircularWorkflowStep } from '@/types'
@@ -168,6 +169,32 @@ export function CircularDetailsContent({ circular, activeTab, setActiveTab, onCl
   // once the steps have hydrated — scrolls to and glows the targeted step.
   useDeepLinkTab((tab) => setActiveTab(tab as DetailTab))
   useDeepLinkHighlight(activeTab === 'workflow' && detailHydrated && (freshCircular.workflowSteps?.length ?? 0) > 0)
+
+  // Article checklist deep-link (circ-article-cl-*): the targeted row lives
+  // inside the nested ArticleDetailModal, so once the articles hydrate, find
+  // the article owning the pending highlightId and open its modal in view
+  // mode — the modal's own useDeepLinkHighlight then scrolls + glows the row.
+  // One-shot ref so a user-closed modal doesn't keep reopening; targets whose
+  // id matches no article checklist item (workflow steps, stale ids) fall
+  // through untouched for the hook above / the highlight safety-net to clear.
+  const articleDeepLinkRef = useRef(false)
+  const articles = freshCircular.articles
+  useEffect(() => {
+    if (!detailHydrated || articleDeepLinkRef.current) return
+    const target = useDeepLinkStore.getState().peek()
+    if (!target?.highlightId) return
+    const owner = articles.find((a) =>
+      (a.checklist ?? []).some((c) => c.id === target.highlightId),
+    )
+    if (!owner) return
+    // Open on the next frame so the Overview tab commits first; the one-shot
+    // ref is set when the frame actually fires (a canceled frame may retry).
+    const raf = requestAnimationFrame(() => {
+      articleDeepLinkRef.current = true
+      setArticleModal({ open: true, article: owner, mode: 'view' })
+    })
+    return () => cancelAnimationFrame(raf)
+  }, [detailHydrated, articles])
 
   const frameworkChips = (freshCircular.frameworkIds ?? [])
     .map((id) => {

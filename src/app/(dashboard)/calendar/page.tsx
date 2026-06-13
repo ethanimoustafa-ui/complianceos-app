@@ -19,7 +19,7 @@ import { ToastHost } from '@/components/ui/toast-host'
 
 export default function CalendarPage() {
   const { t, isRTL } = useTranslation()
-  const { items, itemsByDate, loading } = useCalendarEvents()
+  const { items, loading } = useCalendarEvents()
 
   // View state
   const [currentDate, setCurrentDate] = useState(() => new Date())
@@ -120,9 +120,12 @@ export default function CalendarPage() {
         />
 
         <div className="flex-1 overflow-auto bg-slate-50 hide-scrollbar">
-          {/* K(#39): cold-load skeleton — only when there's nothing cached yet,
-              so revisits (TTL-warm stores) render instantly without a flash. */}
-          {loading && items.length === 0 ? (
+          {/* K(#39): skeleton until EVERY source fetch has settled — not just
+              on cold cache. Rendering cached items immediately let late fetches
+              (deadlines aggregation, TTL-expired stores) pop new items into an
+              already-painted grid "out of nowhere"; one skeleton pass, then the
+              complete month appears at once. */}
+          {loading ? (
             <CalendarSkeleton />
           ) : (
           <>

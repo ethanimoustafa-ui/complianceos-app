@@ -6,10 +6,16 @@ import Link from 'next/link'
 import { Icon } from '@iconify/react'
 import { Button } from '@/components/ui/button'
 import { Modal } from '@/components/ui/modal'
+import { Input } from '@/components/ui/input'
+import { DeleteConfirmationDialog } from '@/components/ui/delete-confirmation-dialog'
 import { useTranslation } from '@/i18n'
 import type { TranslationKey } from '@/i18n'
 import { Gate } from '@/components/auth/gate'
+import { useAuthStore } from '@/stores/auth-store'
+import { hasRole } from '@/lib/permissions'
 import { useTrainingStore } from '@/stores/training-store'
+import { useDepartmentStore } from '@/stores/department-store'
+import { EditableSelect } from '@/components/ui/editable-select'
 import { ListSkeleton } from '@/components/ui/skeleton'
 import type { TrainingEmployee, TrainingCourse, CourseProgress } from '@/types'
 
@@ -20,7 +26,6 @@ import { EmployeeTable } from '@/components/team/training/employee-table'
 import { EmployeeDetailModal } from '@/components/team/training/employee-detail-modal'
 import { TrainingManageModal } from '@/components/team/training/training-manage-modal'
 import { AssignTrainingModal, BulkAssignModal } from '@/components/team/training/assign-training-modal'
-import { TrainingUploadModal } from '@/components/team/training/training-upload-modal'
 import { TrainingManualEntryModal } from '@/components/team/training/training-manual-entry-modal'
 
 // Toast component
@@ -44,6 +49,10 @@ function TeamTrainingPageContent() {
   const { t } = useTranslation()
   const pathname = usePathname()
   const searchParams = useSearchParams()
+  // Directory/Logs are manager+ views — officers see only the Training tab,
+  // so don't render links they'd just be bounced from.
+  const authUser = useAuthStore((s) => s.user)
+  const canViewTeamSection = hasRole(authUser, 'manager')
 
   // Store data
   const employees = useTrainingStore((s) => s.employees)
@@ -58,20 +67,24 @@ function TeamTrainingPageContent() {
   const updateCourse = useTrainingStore((s) => s.updateCourse)
   const assignCourseToEmployee = useTrainingStore((s) => s.assignCourseToEmployee)
   const bulkAssignCourse = useTrainingStore((s) => s.bulkAssignCourse)
-  const updateSaudizationMetrics = useTrainingStore((s) => s.updateSaudizationMetrics)
-  const updateOverviewStats = useTrainingStore((s) => s.updateOverviewStats)
-  const importUploadData = useTrainingStore((s) => s.importUploadData)
+  const saveManualMetrics = useTrainingStore((s) => s.saveManualMetrics)
   const recalculateDepartmentProgress = useTrainingStore((s) => s.recalculateDepartmentProgress)
   const fetchCourses = useTrainingStore((s) => s.fetchCourses)
   const fetchEmployees = useTrainingStore((s) => s.fetchEmployees)
+  const fetchMetrics = useTrainingStore((s) => s.fetchMetrics)
+  const addEmployee = useTrainingStore((s) => s.addEmployee)
+  const removeEmployee = useTrainingStore((s) => s.removeEmployee)
 
   // Hydrate server-state on mount. Without this the courses / employees lists
   // come from a fresh Zustand store and reload wipes anything created in the
   // current tab. See `training-store.ts` — Phase 5 server-state migration.
+  // fetchMetrics restores the persisted manual numbers (saudization + overall
+  // completion) so "Edit Metrics" entries survive reload.
   useEffect(() => {
     void fetchCourses()
     void fetchEmployees()
-  }, [fetchCourses, fetchEmployees])
+    void fetchMetrics()
+  }, [fetchCourses, fetchEmployees, fetchMetrics])
 
   // Wave-2 Agent E: first-fetch skeleton.
   const trainingLoading = useTrainingStore((s) => s.isLoading)
@@ -87,8 +100,21 @@ function TeamTrainingPageContent() {
   const [selectedEmployee, setSelectedEmployee] = useState<TrainingEmployee | null>(null)
   const [isEmployeeDetailOpen, setIsEmployeeDetailOpen] = useState(false)
   const [isManageModalOpen, setIsManageModalOpen] = useState(false)
-  const [isUploadModalOpen, setIsUploadModalOpen] = useState(false)
   const [isManualEntryOpen, setIsManualEntryOpen] = useState(false)
+  // Manual add-person modal (the Excel import that would bulk-create people
+  // is parked behind "coming soon").
+  const [isAddPersonOpen, setIsAddPersonOpen] = useState(false)
+  const [newPersonName, setNewPersonName] = useState('')
+  const [newPersonEmail, setNewPersonEmail] = useState('')
+  const [newPersonDept, setNewPersonDept] = useState('')
+  const [newPersonIsSaudi, setNewPersonIsSaudi] = useState(false)
+  // Remove-person confirmation (hard delete — cascades the person's enrollments).
+  const [employeeToRemove, setEmployeeToRemove] = useState<TrainingEmployee | null>(null)
+  const departments = useDepartmentStore((s) => s.departments)
+  const fetchDepartments = useDepartmentStore((s) => s.fetchAll)
+  useEffect(() => {
+    void fetchDepartments()
+  }, [fetchDepartments])
 
   // Assignment modal state
   const [isAssignTrainingOpen, setIsAssignTrainingOpen] = useState(false)
@@ -177,16 +203,47 @@ function TeamTrainingPageContent() {
     useTrainingStore.getState().recalculateOverviewStats()
   }
 
-  const handleUploadConfirm = (data: { saudization?: Partial<typeof saudizationMetrics>; overviewStats?: Partial<typeof overviewStats> }) => {
-    importUploadData({ saudization: data.saudization, overviewStats: data.overviewStats })
+  // Persists via /api/training/metrics — the modal's Save spinner awaits this
+  // promise, so it spans the whole round-trip (W54). On failure the store
+  // rolls back and the modal stays open for a retry.
+  const handleManualEntryConfirm = async (data: { saudization: Partial<typeof saudizationMetrics>; overviewStats: Partial<typeof overviewStats> }) => {
+    await saveManualMetrics(data)
+    recalculateDepartmentProgress()
     showToast(t('training.dataImported' as TranslationKey))
   }
 
-  const handleManualEntryConfirm = (data: { saudization: Partial<typeof saudizationMetrics>; overviewStats: Partial<typeof overviewStats> }) => {
-    updateSaudizationMetrics(data.saudization)
-    updateOverviewStats(data.overviewStats)
+  const resetAddPersonForm = () => {
+    setNewPersonName('')
+    setNewPersonEmail('')
+    setNewPersonDept('')
+    setNewPersonIsSaudi(false)
+  }
+
+  const handleAddPerson = () => {
+    if (!newPersonName.trim() || !newPersonEmail.trim()) return
+    addEmployee({
+      id: crypto.randomUUID(),
+      name: newPersonName.trim(),
+      email: newPersonEmail.trim(),
+      department: newPersonDept,
+      isSaudi: newPersonIsSaudi,
+      overallProgress: 0,
+      courses: [],
+    })
     recalculateDepartmentProgress()
-    showToast(t('training.dataImported' as TranslationKey))
+    setIsAddPersonOpen(false)
+    resetAddPersonForm()
+    showToast(t('training.personAdded' as TranslationKey))
+  }
+
+  const handleRemovePerson = () => {
+    if (!employeeToRemove) return
+    // Optimistic hard-delete (store splices it back on server failure). The
+    // dialog's own spinner covers the confirm; the row vanishes immediately.
+    removeEmployee(employeeToRemove.id)
+    recalculateDepartmentProgress()
+    setEmployeeToRemove(null)
+    showToast(t('training.personRemoved' as TranslationKey))
   }
 
   return (
@@ -198,12 +255,16 @@ function TeamTrainingPageContent() {
             <p className="text-xs text-slate-500 font-medium tracking-wide uppercase">{t('team.subtitle' as TranslationKey)}</p>
           </div>
           <div className="flex bg-slate-100 p-1 rounded-lg">
-            <Link href="/team/directory" className={`px-4 py-2 text-xs font-bold rounded-md transition-all cursor-pointer ${pathname.startsWith('/team/directory') ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500 hover:text-slate-900'}`}>
-              {t('team.activeDirectory' as TranslationKey)}
-            </Link>
-            <Link href="/team/logs" className={`px-4 py-2 text-xs font-bold rounded-md transition-all cursor-pointer ${pathname.startsWith('/team/logs') ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500 hover:text-slate-900'}`}>
-              {t('team.userLogs' as TranslationKey)}
-            </Link>
+            {canViewTeamSection && (
+              <>
+                <Link href="/team/directory" className={`px-4 py-2 text-xs font-bold rounded-md transition-all cursor-pointer ${pathname.startsWith('/team/directory') ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500 hover:text-slate-900'}`}>
+                  {t('team.activeDirectory' as TranslationKey)}
+                </Link>
+                <Link href="/team/logs" className={`px-4 py-2 text-xs font-bold rounded-md transition-all cursor-pointer ${pathname.startsWith('/team/logs') ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500 hover:text-slate-900'}`}>
+                  {t('team.userLogs' as TranslationKey)}
+                </Link>
+              </>
+            )}
             <Link href="/team/training" className={`px-4 py-2 text-xs font-bold rounded-md transition-all cursor-pointer ${pathname.startsWith('/team/training') ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500 hover:text-slate-900'}`}>
               {t('team.tabs.training' as TranslationKey)}
             </Link>
@@ -223,10 +284,23 @@ function TeamTrainingPageContent() {
               <Icon icon="lucide:pencil" className="mr-1.5" />
               {t('training.editMetrics' as TranslationKey)}
             </Button>
-            <Button size="sm" onClick={() => setIsUploadModalOpen(true)}>
-              <Icon icon="lucide:upload" className="mr-1.5" />
-              {t('training.uploadFile' as TranslationKey)}
-            </Button>
+            {/* Excel ingestion ships with the AI parsing back-end later —
+                visibly parked rather than removed, so officers know the
+                manual flows are the intended path for now. */}
+            <span className="inline-flex" title={t('training.uploadComingSoonTooltip' as TranslationKey)}>
+              <Button
+                size="sm"
+                disabled
+                aria-disabled="true"
+                className="opacity-60 cursor-not-allowed"
+              >
+                <Icon icon="lucide:upload" className="mr-1.5" />
+                {t('training.uploadFile' as TranslationKey)}
+                <span className="ms-1.5 text-[9px] font-black uppercase tracking-wider bg-white/25 px-1.5 py-0.5 rounded-full">
+                  {t('settings.comingSoon' as TranslationKey)}
+                </span>
+              </Button>
+            </span>
           </Gate>
         </div>
       </header>
@@ -263,6 +337,8 @@ function TeamTrainingPageContent() {
           <EmployeeTable
             employees={employees}
             onViewEmployee={handleViewEmployee}
+            onAddEmployee={() => setIsAddPersonOpen(true)}
+            onRemoveEmployee={setEmployeeToRemove}
             onHrReminder={() => setIsHrReminderOpen(true)}
             onExport={() => {
               import('@/lib/export').then(({ exportTrainingDataLocalized }) => {
@@ -316,10 +392,70 @@ function TeamTrainingPageContent() {
         onToast={showToast}
       />
 
-      <TrainingUploadModal
-        isOpen={isUploadModalOpen}
-        onClose={() => setIsUploadModalOpen(false)}
-        onConfirm={handleUploadConfirm}
+      {/* Add Person — manual single-person enrollment. The bulk Excel import
+          is parked behind the disabled Upload File button until the AI
+          parsing back-end ships. */}
+      <Modal
+        isOpen={isAddPersonOpen}
+        onClose={() => { setIsAddPersonOpen(false); resetAddPersonForm() }}
+        title={t('training.addPersonTitle' as TranslationKey)}
+        size="sm"
+      >
+        <div className="space-y-4">
+          <Input
+            label={t('training.personName' as TranslationKey)}
+            value={newPersonName}
+            onChange={(e) => setNewPersonName(e.target.value)}
+            placeholder={t('training.personNamePlaceholder' as TranslationKey)}
+          />
+          <Input
+            type="email"
+            label={t('training.personEmail' as TranslationKey)}
+            value={newPersonEmail}
+            onChange={(e) => setNewPersonEmail(e.target.value)}
+            placeholder="name@company.com"
+          />
+          <div>
+            <label className="block text-sm font-bold text-slate-700 mb-2">
+              {t('training.personDepartment' as TranslationKey)}
+            </label>
+            <EditableSelect
+              locked
+              value={newPersonDept || null}
+              onChange={(id) => setNewPersonDept(id)}
+              placeholder={t('training.allDepartments' as TranslationKey)}
+              items={departments.map((d) => ({ id: d.name, label: d.name, labelAr: d.nameAr }))}
+            />
+          </div>
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={newPersonIsSaudi}
+              onChange={(e) => setNewPersonIsSaudi(e.target.checked)}
+              className="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500"
+            />
+            <span className="text-sm text-slate-700">{t('training.personIsSaudi' as TranslationKey)}</span>
+          </label>
+          <div className="flex justify-end gap-3 pt-2">
+            <Button variant="secondary" onClick={() => { setIsAddPersonOpen(false); resetAddPersonForm() }}>
+              {t('common.cancel' as TranslationKey)}
+            </Button>
+            <Button onClick={handleAddPerson} disabled={!newPersonName.trim() || !newPersonEmail.trim()}>
+              <Icon icon="lucide:user-plus" className="text-lg" />
+              {t('training.addPerson' as TranslationKey)}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Remove Person — hard delete (cascades the person's course enrollments). */}
+      <DeleteConfirmationDialog
+        isOpen={employeeToRemove !== null}
+        onClose={() => setEmployeeToRemove(null)}
+        onConfirm={handleRemovePerson}
+        itemType={t('training.person' as TranslationKey)}
+        itemName={employeeToRemove?.name}
+        description={t('training.removePersonConfirm' as TranslationKey)}
       />
 
       <TrainingManualEntryModal

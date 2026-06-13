@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { Icon } from '@iconify/react'
 import { Modal } from '@/components/ui/modal'
 import { Button } from '@/components/ui/button'
+import { LoadingButton } from '@/components/ui/loading-button'
 import { Input } from '@/components/ui/input'
 import { useTranslation, type TranslationKey } from '@/i18n'
 import type { SaudizationMetrics, TrainingOverviewStats } from '@/types'
@@ -11,10 +12,12 @@ import type { SaudizationMetrics, TrainingOverviewStats } from '@/types'
 interface TrainingManualEntryModalProps {
   isOpen: boolean
   onClose: () => void
+  // May return a promise (server persist) — the Save spinner awaits it (W54)
+  // and the modal stays open on failure so the user can retry.
   onConfirm: (data: {
     saudization: Partial<SaudizationMetrics>
     overviewStats: Partial<TrainingOverviewStats>
-  }) => void
+  }) => void | Promise<unknown>
   currentSaudization: SaudizationMetrics
   currentOverviewStats: TrainingOverviewStats
 }
@@ -27,7 +30,7 @@ export function TrainingManualEntryModal({ isOpen, onClose, onConfirm, currentSa
   const [saudizationTarget, setSaudizationTarget] = useState('')
   const [overallCompletion, setOverallCompletion] = useState('')
   const [coursesAssigned, setCoursesAssigned] = useState('')
-  const [trainingCompleted, setTrainingCompleted] = useState('')
+  const [saving, setSaving] = useState(false)
 
   useEffect(() => {
     if (isOpen) {
@@ -36,28 +39,38 @@ export function TrainingManualEntryModal({ isOpen, onClose, onConfirm, currentSa
       setSaudizationTarget(currentSaudization.target > 0 ? String(currentSaudization.target) : '')
       setOverallCompletion(currentOverviewStats.overallCompletion != null ? String(currentOverviewStats.overallCompletion) : '')
       setCoursesAssigned(currentOverviewStats.coursesAssigned != null ? String(currentOverviewStats.coursesAssigned) : '')
-      setTrainingCompleted('')
     }
   }, [isOpen, currentSaudization, currentOverviewStats])
 
-  const handleSave = () => {
+  const handleSave = async () => {
+    if (saving) return
     const total = parseInt(totalEmployees) || 0
     const saudi = parseInt(saudiEmployees) || 0
-    onConfirm({
-      saudization: {
-        totalEmployees: total,
-        saudiEmployees: saudi,
-        target: parseFloat(saudizationTarget) || 0,
-        actual: total > 0 ? Math.round((saudi / total) * 100) : 0,
-        lastDataSource: 'manual',
-        lastUpdated: new Date().toISOString(),
-      },
-      overviewStats: {
-        overallCompletion: parseFloat(overallCompletion) || 0,
-        coursesAssigned: parseInt(coursesAssigned) || 0,
-      },
-    })
-    onClose()
+    setSaving(true)
+    try {
+      await Promise.resolve(
+        onConfirm({
+          saudization: {
+            totalEmployees: total,
+            saudiEmployees: saudi,
+            target: parseFloat(saudizationTarget) || 0,
+            actual: total > 0 ? Math.round((saudi / total) * 100) : 0,
+            lastDataSource: 'manual',
+            lastUpdated: new Date().toISOString(),
+          },
+          overviewStats: {
+            overallCompletion: parseFloat(overallCompletion) || 0,
+            coursesAssigned: parseInt(coursesAssigned) || 0,
+          },
+        }),
+      )
+      onClose()
+    } catch {
+      // Store already rolled back + recorded the error; keep the modal open
+      // with the user's input so they can retry.
+    } finally {
+      setSaving(false)
+    }
   }
 
   return (
@@ -111,14 +124,6 @@ export function TrainingManualEntryModal({ isOpen, onClose, onConfirm, currentSa
           placeholder="0"
           min={0}
         />
-        <Input
-          type="number"
-          label={t('training.trainingCompletedLabel' as TranslationKey)}
-          value={trainingCompleted}
-          onChange={(e) => setTrainingCompleted(e.target.value)}
-          placeholder="0"
-          min={0}
-        />
 
         <div className="flex items-start gap-2 p-3 bg-slate-50 border border-slate-200 rounded-xl">
           <Icon icon="lucide:info" className="text-slate-500 text-lg mt-0.5 shrink-0" />
@@ -128,13 +133,13 @@ export function TrainingManualEntryModal({ isOpen, onClose, onConfirm, currentSa
         </div>
 
         <div className="flex justify-end gap-3 pt-2">
-          <Button variant="secondary" onClick={onClose}>
+          <Button variant="secondary" onClick={onClose} disabled={saving}>
             {t('common.cancel' as TranslationKey)}
           </Button>
-          <Button onClick={handleSave}>
+          <LoadingButton onClick={() => void handleSave()} loading={saving}>
             <Icon icon="lucide:save" className="text-lg" />
             {t('common.save' as TranslationKey)}
-          </Button>
+          </LoadingButton>
         </div>
       </div>
     </Modal>

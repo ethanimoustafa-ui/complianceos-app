@@ -81,12 +81,20 @@ export default function LettersPage() {
     : null
   // Detail-loaded boundary: list rows ship minimal data; the full record
   // (approval chain, attachments, timeline) only arrives after fetchById
-  // completes. Approval/attachment/timeline sections defer until then.
-  const isDetailLoaded = !!selectedLetter && (
-    (selectedLetter.timeline?.length ?? 0) > 0 ||
-    (selectedLetter.approvalChain?.length ?? 0) > 0 ||
-    selectedLetter.status !== 'draft'
+  // completes. The old heuristic treated any non-draft letter as "loaded",
+  // so those sections popped in with no skeleton for most letters. Gate each
+  // section on the store's REAL per-letter detail-GET flag AND that section
+  // still being empty — re-opens of an already-hydrated letter render
+  // instantly instead of flashing skeletons over known content.
+  const letterDetailFetching = useLetterStore((s) =>
+    storeSelected ? (s.detailLoading[storeSelected.id] ?? false) : false,
   )
+  const approvalChainPrefetch =
+    !!selectedLetter && letterDetailFetching && (selectedLetter.approvalChain?.length ?? 0) === 0
+  const attachmentsPrefetch =
+    !!selectedLetter && letterDetailFetching && (selectedLetter.attachments?.length ?? 0) === 0
+  const timelinePrefetch =
+    !!selectedLetter && letterDetailFetching && (selectedLetter.timeline?.length ?? 0) === 0
   const isMutating = useLetterStore((s) => s.isMutating)
   const [confirmDeleteLetterId, setConfirmDeleteLetterId] = useState<string | null>(null)
   const [submitBusy, setSubmitBusy] = useState(false)
@@ -2232,7 +2240,7 @@ export default function LettersPage() {
                 )}
 
                 {/* Approval Chain — skeleton until full detail arrives */}
-                {selectedLetter && !isDetailLoaded && (
+                {approvalChainPrefetch && (
                   <section className="glass-card p-6 rounded-2xl space-y-3" data-skeleton="true" role="status" aria-busy="true" aria-live="polite">
                     <Skeleton className="h-3 w-32" />
                     <Skeleton className="h-6 w-full" />
@@ -2376,13 +2384,13 @@ export default function LettersPage() {
                     {t('letters.attachments')} ({selectedLetter?.attachments?.length || 0})
                   </h4>
                   <div className="space-y-3">
-                    {selectedLetter && !isDetailLoaded && (
+                    {attachmentsPrefetch && (
                       <div data-skeleton="true" role="status" aria-busy="true" aria-live="polite" className="space-y-3">
                         <Skeleton className="h-12 w-full" />
                         <Skeleton className="h-12 w-full" />
                       </div>
                     )}
-                    {selectedLetter && isDetailLoaded && (selectedLetter.attachments?.length ?? 0) === 0 && (
+                    {selectedLetter && !attachmentsPrefetch && (selectedLetter.attachments?.length ?? 0) === 0 && (
                       <p className="text-xs text-slate-400 italic text-center py-4">
                         {t('letters.noAttachments' as Parameters<typeof t>[0])}
                       </p>
@@ -2438,7 +2446,7 @@ export default function LettersPage() {
                   <h4 className="text-xs font-black text-slate-500 uppercase tracking-widest mb-6">
                     {t('letters.activityTimeline')}
                   </h4>
-                  {selectedLetter && !isDetailLoaded ? (
+                  {timelinePrefetch ? (
                     <div className="space-y-4" data-skeleton="true" role="status" aria-busy="true" aria-live="polite">
                       <Skeleton className="h-4 w-3/4" />
                       <Skeleton className="h-4 w-2/3" />

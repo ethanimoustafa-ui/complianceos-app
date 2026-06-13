@@ -1058,7 +1058,13 @@ export const useCircularStore = create<CircularState>()((set, get) => ({
         circulars: state.circulars.some((c) => c.id === id)
           ? state.circulars.map((c) => (c.id === id ? circular : c))
           : state.circulars,
-        selectedCircular: circular,
+        // Only refresh the selection if THIS circular is still selected — a
+        // late-resolving detail GET must not resurrect the modal of a
+        // circular the user has since closed or DELETED (the W38 "details
+        // panel of a just-deleted circular reopens" race lived here), nor
+        // clobber a newer selection. Mirrors policy-store.fetchById.
+        selectedCircular:
+          state.selectedCircular?.id === id ? circular : state.selectedCircular,
         // GAP-15: seed the circular timeline pagination from the detail GET —
         // it returned the first page (`timeline`) + `timeline_has_more`.
         circularTimelinePagination: {
