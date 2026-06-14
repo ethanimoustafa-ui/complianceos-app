@@ -1,5 +1,6 @@
 import { forwardRef } from 'react'
 import { cva, type VariantProps } from 'class-variance-authority'
+import { Icon } from '@iconify/react'
 import { cn } from '@/lib/utils'
 
 const buttonVariants = cva(
@@ -29,16 +30,28 @@ const buttonVariants = cva(
 
 export interface ButtonProps
   extends React.ButtonHTMLAttributes<HTMLButtonElement>,
-    VariantProps<typeof buttonVariants> {}
+    VariantProps<typeof buttonVariants> {
+  /**
+   * Show a leading spinner and disable the button while a deferred action
+   * (typically an in-flight navigation) is pending. The button keeps its
+   * label so the user still sees *what* is loading.
+   */
+  loading?: boolean
+}
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ className, variant, size, ...props }, ref) => {
+  ({ className, variant, size, loading = false, disabled, children, ...props }, ref) => {
     return (
       <button
-        className={cn(buttonVariants({ variant, size, className }))}
+        className={cn(buttonVariants({ variant, size, className }), loading && 'cursor-wait')}
         ref={ref}
+        disabled={disabled || loading}
+        aria-busy={loading || undefined}
         {...props}
-      />
+      >
+        {loading && <Icon icon="lucide:loader-2" className="w-4 h-4 animate-spin" />}
+        {children}
+      </button>
     )
   }
 )

@@ -1,7 +1,6 @@
 ﻿'use client'
 
 import { useMemo } from 'react'
-import { useRouter } from 'next/navigation'
 import { Icon } from '@iconify/react'
 import { Card } from '@/components/ui/card'
 import { Badge, getStatusVariant } from '@/components/ui/badge'
@@ -13,7 +12,10 @@ import { useLetterStore } from '@/stores/letter-store'
 import { useNotificationStore } from '@/stores/notification-store'
 import { useComplianceSettingsStore } from '@/stores/compliance-settings-store'
 import { useWorkload } from '@/hooks/useWorkload'
+import { useNavigationLoading } from '@/hooks/useNavigationLoading'
 import { Button } from '@/components/ui/button'
+import { Skeleton } from '@/components/ui/skeleton'
+import { cn } from '@/lib/utils'
 import { CircularProgressRing } from './CircularProgressRing'
 import { formatTimelineDate } from '@/lib/format-date'
 import type { DashboardMetrics } from '@/hooks/useDashboardMetrics'
@@ -24,7 +26,7 @@ interface OfficerViewProps {
 
 export function OfficerView({ metrics }: OfficerViewProps) {
   const { t, isRTL } = useTranslation()
-  const router = useRouter()
+  const { navigate, pendingKey } = useNavigationLoading()
   const targetScore = useComplianceSettingsStore(s => s.targetScore)
   const userId = metrics.currentUser?.id ?? ''
   const userName = metrics.currentUser?.name ?? ''
@@ -34,8 +36,11 @@ export function OfficerView({ metrics }: OfficerViewProps) {
   // The 7-component team-execution score lives elsewhere as Team Score.
   const healthScore = Math.round(metrics.health.businessComplianceScore)
   const healthEvaluated = metrics.health.businessComplianceEvaluated
-  const isPending = healthEvaluated === 0
-  const isAtRisk = !isPending && healthScore < targetScore
+  // Loading (stores still on first fetch) vs. genuine Pending (loaded, nothing
+  // evaluated) — see ExecutiveView for the full rationale.
+  const isHealthLoading = metrics.complianceHealthLoading
+  const isPending = !isHealthLoading && healthEvaluated === 0
+  const isAtRisk = !isHealthLoading && !isPending && healthScore < targetScore
 
   // Personal workload
   const workload = useWorkload(userId, undefined, userName)
@@ -170,16 +175,18 @@ export function OfficerView({ metrics }: OfficerViewProps) {
             {/* Left: status + threshold + personal action counts */}
             <div className="relative z-10 space-y-4 flex-1 min-w-0">
               <div className="flex items-center gap-3">
-                <Badge variant={isPending ? 'warning' : isAtRisk ? 'danger' : 'success'} className="gap-2">
+                <Badge variant={isHealthLoading ? 'neutral' : isPending ? 'warning' : isAtRisk ? 'danger' : 'success'} className="gap-2">
                   <Icon
-                    icon={isPending ? 'lucide:circle-help' : isAtRisk ? 'lucide:alert-triangle' : 'lucide:check-circle'}
-                    className="w-3 h-3"
+                    icon={isHealthLoading ? 'lucide:loader-2' : isPending ? 'lucide:circle-help' : isAtRisk ? 'lucide:alert-triangle' : 'lucide:check-circle'}
+                    className={cn('w-3 h-3', isHealthLoading && 'animate-spin')}
                   />
-                  {isPending
-                    ? t('complianceReview.pendingScoreLabel')
-                    : isAtRisk
-                      ? t('dashboard.statusAtRisk')
-                      : t('dashboard.statusOptimal')}
+                  {isHealthLoading
+                    ? t('common.loading')
+                    : isPending
+                      ? t('complianceReview.pendingScoreLabel')
+                      : isAtRisk
+                        ? t('dashboard.statusAtRisk')
+                        : t('dashboard.statusOptimal')}
                 </Badge>
                 <span className="text-xs font-bold text-slate-400">{t('dashboard.thresholdLabel')}: {targetScore}%</span>
               </div>
@@ -188,7 +195,16 @@ export function OfficerView({ metrics }: OfficerViewProps) {
               </h2>
 
               {/* Threshold progress bar */}
-              {isPending ? (
+              {isHealthLoading ? (
+                <div className="space-y-1.5">
+                  <Skeleton className="h-3 w-full rounded-full" />
+                  <div className="flex justify-between">
+                    <Skeleton className="h-2 w-8" />
+                    <Skeleton className="h-2 w-16" />
+                    <Skeleton className="h-2 w-8" />
+                  </div>
+                </div>
+              ) : isPending ? (
                 <div className="space-y-1.5">
                   <div className="h-3 w-full bg-slate-100 rounded-full relative overflow-hidden border border-dashed border-amber-300" />
                   <div className="flex justify-between text-[10px] font-bold text-amber-700">
@@ -234,9 +250,16 @@ export function OfficerView({ metrics }: OfficerViewProps) {
               </div>
             </div>
 
-            {/* Right: ring (or pending placeholder) */}
-            <div className="relative flex-shrink-0 flex justify-center">
-              {isPending ? (
+            {/* Right: ring (loading / pending placeholder / real ring) */}
+            <div className="relative flex-shrink-0 flex flex-col items-center justify-center gap-2">
+              {isHealthLoading ? (
+                <>
+                  <Skeleton className="h-[152px] w-[152px] rounded-full" />
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                    {t('dashboard.calculatingHealth')}
+                  </p>
+                </>
+              ) : isPending ? (
                 <div className="flex flex-col items-center justify-center w-[152px] h-[152px] rounded-full border-2 border-dashed border-amber-300 bg-amber-50/40">
                   <p className="text-3xl font-bold text-amber-600">—</p>
                   <p className="text-[10px] font-bold text-amber-700 uppercase tracking-widest mt-1">
@@ -252,26 +275,26 @@ export function OfficerView({ metrics }: OfficerViewProps) {
           {/* Dynamic action buttons — direct task actions */}
           <div className="flex flex-wrap gap-3 mt-6 pt-4 border-t border-slate-200/60">
             {myObservations.length > 0 && (
-              <Button variant="dark" onClick={() => router.push('/observations')} className="gap-2 active:scale-[0.98]">
-                <Icon icon="lucide:eye" className="w-4 h-4" />
+              <Button variant="dark" loading={pendingKey === 'off-observations'} onClick={() => navigate('off-observations', '/observations')} className="gap-2 active:scale-[0.98]">
+                {pendingKey !== 'off-observations' && <Icon icon="lucide:eye" className="w-4 h-4" />}
                 {t('dashboard.closeObservations', { count: String(myObservations.length) })}
               </Button>
             )}
             {myAudits.length > 0 && (
-              <Button variant={myObservations.length > 0 ? 'outline' : 'dark'} onClick={() => router.push('/reports')} className="gap-2 active:scale-[0.98]">
-                <Icon icon="lucide:clipboard-check" className="w-4 h-4" />
+              <Button variant={myObservations.length > 0 ? 'outline' : 'dark'} loading={pendingKey === 'off-audits'} onClick={() => navigate('off-audits', '/reports')} className="gap-2 active:scale-[0.98]">
+                {pendingKey !== 'off-audits' && <Icon icon="lucide:clipboard-check" className="w-4 h-4" />}
                 {t('dashboard.completeAudits', { count: String(myAudits.length) })}
               </Button>
             )}
             {myPolicies.length > 0 && (
-              <Button variant="outline" onClick={() => router.push('/correspondence/regulatory-updates/policies')} className="gap-2 active:scale-[0.98]">
-                <Icon icon="lucide:file-check" className="w-4 h-4" />
+              <Button variant="outline" loading={pendingKey === 'off-policies'} onClick={() => navigate('off-policies', '/correspondence/regulatory-updates/policies')} className="gap-2 active:scale-[0.98]">
+                {pendingKey !== 'off-policies' && <Icon icon="lucide:file-check" className="w-4 h-4" />}
                 {t('dashboard.reviewMyPolicies', { count: String(myPolicies.length) })}
               </Button>
             )}
             {actionItems.length > 0 && (
-              <Button variant="outline" onClick={() => router.push('/correspondence')} className="gap-2 active:scale-[0.98]">
-                <Icon icon="lucide:check-circle" className="w-4 h-4" />
+              <Button variant="outline" loading={pendingKey === 'off-resolve'} onClick={() => navigate('off-resolve', '/correspondence')} className="gap-2 active:scale-[0.98]">
+                {pendingKey !== 'off-resolve' && <Icon icon="lucide:check-circle" className="w-4 h-4" />}
                 {t('dashboard.resolveItems', { count: String(actionItems.length) })}
               </Button>
             )}
@@ -364,26 +387,32 @@ export function OfficerView({ metrics }: OfficerViewProps) {
             </h3>
             <Card className="divide-y divide-slate-100">
               {taskQueue.length > 0 ? (
-                taskQueue.slice(0, 10).map(item => (
-                  <button
-                    key={`${item.type}-${item.id}`}
-                    onClick={() => router.push(item.route)}
-                    className="w-full px-5 py-3 flex items-center justify-between hover:bg-slate-50 active:bg-slate-100 transition-colors text-start cursor-pointer"
-                  >
-                    <div className="flex items-center gap-3">
-                      <Icon icon={item.icon} className="text-slate-400" />
-                      <div>
-                        <p className="text-sm font-medium text-slate-900">{item.title}</p>
-                        <p className="text-[10px] text-slate-400">{item.type}</p>
+                taskQueue.slice(0, 10).map(item => {
+                  const key = `off-task-${item.type}-${item.id}`
+                  const loadingThis = pendingKey === key
+                  return (
+                    <button
+                      key={`${item.type}-${item.id}`}
+                      onClick={() => navigate(key, item.route)}
+                      disabled={loadingThis}
+                      aria-busy={loadingThis || undefined}
+                      className="w-full px-5 py-3 flex items-center justify-between hover:bg-slate-50 active:bg-slate-100 transition-colors text-start cursor-pointer disabled:cursor-wait"
+                    >
+                      <div className="flex items-center gap-3">
+                        <Icon icon={loadingThis ? 'lucide:loader-2' : item.icon} className={cn('text-slate-400', loadingThis && 'animate-spin text-emerald-500')} />
+                        <div>
+                          <p className="text-sm font-medium text-slate-900">{item.title}</p>
+                          <p className="text-[10px] text-slate-400">{loadingThis ? t('dashboard.opening') : item.type}</p>
+                        </div>
                       </div>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <span className="text-[10px] text-slate-400">{formatTimelineDate(item.dueDate, isRTL)}</span>
-                      <Badge variant={getStatusVariant(item.status)} size="sm">{resolveStatusLabel(item.status)}</Badge>
-                      <Icon icon="lucide:chevron-right" className="text-slate-300 text-sm" />
-                    </div>
-                  </button>
-                ))
+                      <div className="flex items-center gap-3">
+                        <span className="text-[10px] text-slate-400">{formatTimelineDate(item.dueDate, isRTL)}</span>
+                        <Badge variant={getStatusVariant(item.status)} size="sm">{resolveStatusLabel(item.status)}</Badge>
+                        <Icon icon={loadingThis ? 'lucide:loader-2' : 'lucide:chevron-right'} className={cn('text-sm', loadingThis ? 'text-emerald-500 animate-spin' : 'text-slate-300')} />
+                      </div>
+                    </button>
+                  )
+                })
               ) : (
                 <div className="px-5 py-8 text-center">
                   <p className="text-sm text-slate-400">{t('dashboard.noTasks')}</p>
@@ -401,17 +430,22 @@ export function OfficerView({ metrics }: OfficerViewProps) {
                   {t('dashboard.itemsNeedingAction')}
                 </h3>
                 <div className="space-y-2">
-                  {actionItems.map(item => (
-                    <Card key={`${item.type}-${item.id}`} className="p-4 transition-colors active:bg-slate-100">
-                      <button onClick={() => router.push(item.route)} className="w-full text-start cursor-pointer">
-                        <div className="flex items-center gap-2 mb-1">
-                          <Badge variant="warning" size="sm">{t('dashboard.approvalNeeded')}</Badge>
-                        </div>
-                        <p className="text-sm font-medium text-slate-900">{item.title}</p>
-                        <p className="text-[10px] text-slate-400 mt-1">{item.type}</p>
-                      </button>
-                    </Card>
-                  ))}
+                  {actionItems.map(item => {
+                    const key = `off-action-${item.type}-${item.id}`
+                    const loadingThis = pendingKey === key
+                    return (
+                      <Card key={`${item.type}-${item.id}`} className="p-4 transition-colors active:bg-slate-100">
+                        <button onClick={() => navigate(key, item.route)} disabled={loadingThis} aria-busy={loadingThis || undefined} className="w-full text-start cursor-pointer disabled:cursor-wait">
+                          <div className="flex items-center gap-2 mb-1">
+                            <Badge variant="warning" size="sm">{t('dashboard.approvalNeeded')}</Badge>
+                            {loadingThis && <Icon icon="lucide:loader-2" className="text-xs text-emerald-500 animate-spin" />}
+                          </div>
+                          <p className="text-sm font-medium text-slate-900">{item.title}</p>
+                          <p className="text-[10px] text-slate-400 mt-1">{loadingThis ? t('dashboard.opening') : item.type}</p>
+                        </button>
+                      </Card>
+                    )
+                  })}
                 </div>
               </div>
             )}

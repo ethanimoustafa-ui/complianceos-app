@@ -6,6 +6,10 @@ export interface AlertCardProps {
   message: string
   actionLabel: string
   onAction?: () => void
+  /** While true, the action shows a spinner + `loadingLabel` and is disabled. */
+  loading?: boolean
+  /** Label shown in place of `actionLabel` while navigating (e.g. "Opening…"). */
+  loadingLabel?: string
 }
 
 const styles = {
@@ -29,7 +33,7 @@ const styles = {
   },
 }
 
-export function AlertCard({ type, title, message, actionLabel, onAction }: AlertCardProps) {
+export function AlertCard({ type, title, message, actionLabel, onAction, loading = false, loadingLabel }: AlertCardProps) {
   const s = styles[type]
 
   return (
@@ -45,9 +49,12 @@ export function AlertCard({ type, title, message, actionLabel, onAction }: Alert
       </div>
       <button
         onClick={onAction}
-        className={`text-[10px] font-bold ${s.buttonColor} uppercase tracking-widest px-3 py-1 bg-white border rounded-lg cursor-pointer transition-transform active:scale-[0.97]`}
+        disabled={loading}
+        aria-busy={loading || undefined}
+        className={`inline-flex items-center gap-1.5 text-[10px] font-bold ${s.buttonColor} uppercase tracking-widest px-3 py-1 bg-white border rounded-lg cursor-pointer transition-transform active:scale-[0.97] disabled:cursor-wait`}
       >
-        {actionLabel}
+        {loading && <Icon icon="lucide:loader-2" className="text-xs animate-spin" />}
+        {loading ? (loadingLabel ?? actionLabel) : actionLabel}
       </button>
     </div>
   )

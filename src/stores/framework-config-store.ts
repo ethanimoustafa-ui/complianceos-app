@@ -56,6 +56,29 @@ export function getDefaultWeights(id: RegulatoryBodyId): FrameworkWeights {
   return { ...DEFAULT_WEIGHTS_BALANCED }
 }
 
+// Resolve a framework's compliance threshold to a numeric percent. The named
+// tiers mirror the FrameworkConfigModal labels (Strict 90 / Standard 80 /
+// Relaxed 70); `custom` uses the per-framework value (defaulting to 85 to match
+// the modal's initial custom value when none was persisted). This is the
+// framework's OWN target — distinct from the company-wide `targetScore` that
+// gates the dashboard's headline Compliance Health ring.
+export function frameworkThresholdValue(
+  fw: { threshold: FrameworkConfig['threshold']; customThresholdValue?: number },
+): number {
+  switch (fw.threshold) {
+    case 'strict':
+      return 90
+    case 'standard':
+      return 80
+    case 'relaxed':
+      return 70
+    case 'custom':
+      return fw.customThresholdValue ?? 85
+    default:
+      return 80
+  }
+}
+
 // Static metadata table — display attributes of every framework the app knows.
 // Server-side `framework_config` rows overlay the mutable fields (enabled,
 // threshold, weights) onto these defaults at runtime.

@@ -6,8 +6,12 @@ import { Icon } from '@iconify/react'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Skeleton } from '@/components/ui/skeleton'
+import { cn } from '@/lib/utils'
 import { useTranslation } from '@/i18n'
 import { useComplianceSettingsStore } from '@/stores/compliance-settings-store'
+import { frameworkThresholdValue } from '@/stores/framework-config-store'
+import { useNavigationLoading } from '@/hooks/useNavigationLoading'
 import { AlertCard } from './AlertCard'
 import { CircularProgressRing } from './CircularProgressRing'
 import { ProgressItem } from './ProgressItem'
@@ -26,6 +30,7 @@ interface ExecutiveViewProps {
 export function ExecutiveView({ metrics }: ExecutiveViewProps) {
   const { t, isRTL } = useTranslation()
   const router = useRouter()
+  const { navigate, pendingKey } = useNavigationLoading()
   const targetScore = useComplianceSettingsStore(s => s.targetScore)
   const departments = useDepartmentStore(s => s.departments)
 
@@ -118,8 +123,12 @@ export function ExecutiveView({ metrics }: ExecutiveViewProps) {
   // of a misleading 0% / red "at risk" pill.
   const complianceScore = Math.round(metrics.health.businessComplianceScore)
   const complianceEvaluated = metrics.health.businessComplianceEvaluated
-  const isPending = complianceEvaluated === 0
-  const isAtRisk = !isPending && complianceScore < targetScore
+  // While the underlying stores are still on their first fetch, show a loading
+  // ring rather than a misleading "Pending —" (which means "loaded, but nothing
+  // evaluated"). Only after loading settles does 0-evaluated become "Pending".
+  const isHealthLoading = metrics.complianceHealthLoading
+  const isPending = !isHealthLoading && complianceEvaluated === 0
+  const isAtRisk = !isHealthLoading && !isPending && complianceScore < targetScore
 
   // Policy counts
   const policiesOk = metrics.policies.approved
@@ -159,16 +168,21 @@ export function ExecutiveView({ metrics }: ExecutiveViewProps) {
       {/* Top Alerts */}
       {alerts.length > 0 && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {alerts.map((alert, i) => (
-            <AlertCard
-              key={i}
-              type={alert.type}
-              title={alert.title}
-              message={alert.message}
-              actionLabel={alert.type === 'critical' ? t('dashboard.resolveNow') : t('dashboard.viewDetails')}
-              onAction={() => router.push(alert.route)}
-            />
-          ))}
+          {alerts.map((alert, i) => {
+            const key = `exec-alert-${i}`
+            return (
+              <AlertCard
+                key={i}
+                type={alert.type}
+                title={alert.title}
+                message={alert.message}
+                actionLabel={alert.type === 'critical' ? t('dashboard.resolveNow') : t('dashboard.viewDetails')}
+                loading={pendingKey === key}
+                loadingLabel={t('dashboard.opening')}
+                onAction={() => navigate(key, alert.route)}
+              />
+            )
+          })}
         </div>
       )}
 
@@ -177,16 +191,18 @@ export function ExecutiveView({ metrics }: ExecutiveViewProps) {
         {/* Compliance Health Card */}
         <div className="lg:col-span-8 bg-white border border-slate-200 rounded-[2rem] p-8 health-gradient flex flex-col md:flex-row items-center gap-10 relative overflow-hidden">
           <div className="relative z-10 space-y-4 max-w-md">
-            <Badge variant={isPending ? 'warning' : isAtRisk ? 'danger' : 'success'} className="gap-2">
+            <Badge variant={isHealthLoading ? 'neutral' : isPending ? 'warning' : isAtRisk ? 'danger' : 'success'} className="gap-2">
               <Icon
-                icon={isPending ? 'lucide:circle-help' : isAtRisk ? 'lucide:alert-triangle' : 'lucide:check-circle'}
-                className="w-3 h-3"
+                icon={isHealthLoading ? 'lucide:loader-2' : isPending ? 'lucide:circle-help' : isAtRisk ? 'lucide:alert-triangle' : 'lucide:check-circle'}
+                className={cn('w-3 h-3', isHealthLoading && 'animate-spin')}
               />
-              {isPending
-                ? t('complianceReview.pendingScoreLabel')
-                : isAtRisk
-                  ? t('dashboard.statusAtRisk')
-                  : t('dashboard.statusOptimal')}
+              {isHealthLoading
+                ? t('common.loading')
+                : isPending
+                  ? t('complianceReview.pendingScoreLabel')
+                  : isAtRisk
+                    ? t('dashboard.statusAtRisk')
+                    : t('dashboard.statusOptimal')}
             </Badge>
             <h2 className="text-3xl font-bold font-display text-slate-900 leading-tight">
               {t('dashboard.complianceHealth')}
@@ -196,12 +212,19 @@ export function ExecutiveView({ metrics }: ExecutiveViewProps) {
               <span className="font-bold text-rose-500">{policiesOverdue} {t('dashboard.policiesOverdue')}</span>.
             </p>
             <div className="flex gap-4 pt-2">
-              <Button variant="dark" onClick={() => router.push(primaryAction.route)} className="active:scale-[0.98]">{primaryAction.label}</Button>
-              <Button variant="outline" onClick={() => router.push('/correspondence/regulatory-updates/policies')} className="active:scale-[0.98]">{t('dashboard.policyLibrary')}</Button>
+              <Button variant="dark" loading={pendingKey === 'exec-primary'} onClick={() => navigate('exec-primary', primaryAction.route)} className="active:scale-[0.98]">{primaryAction.label}</Button>
+              <Button variant="outline" loading={pendingKey === 'exec-policy-library'} onClick={() => navigate('exec-policy-library', '/correspondence/regulatory-updates/policies')} className="active:scale-[0.98]">{t('dashboard.policyLibrary')}</Button>
             </div>
           </div>
           <div className="relative flex-1 flex flex-col items-center justify-center gap-2">
-            {isPending ? (
+            {isHealthLoading ? (
+              <div className="flex flex-col items-center justify-center gap-3">
+                <Skeleton className="h-44 w-44 rounded-full" />
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                  {t('dashboard.calculatingHealth')}
+                </p>
+              </div>
+            ) : isPending ? (
               <div className="flex flex-col items-center justify-center w-44 h-44 rounded-full border-2 border-dashed border-amber-300 bg-amber-50/40">
                 <p className="text-4xl font-bold text-amber-600">—</p>
                 <p className="text-[11px] font-bold text-amber-700 uppercase tracking-widest mt-1">
@@ -299,6 +322,13 @@ export function ExecutiveView({ metrics }: ExecutiveViewProps) {
             {metrics.frameworks.pinned.map(fw => {
               const fwHealth = metrics.health.frameworkScores.find(fs => fs.frameworkId === fw.id)
               const score = fwHealth ? Math.round(fwHealth.overall) : null
+              // Each framework is measured against its OWN threshold (set in the
+              // framework config modal), not the company-wide target.
+              const targetValue = frameworkThresholdValue(fw)
+              // Only judge met/below when we actually have a usable score —
+              // an "insufficient" sample shows "awaiting data", not a red miss.
+              const evaluable = score !== null && fwHealth!.confidence !== 'insufficient'
+              const met = evaluable && score! >= targetValue
 
               return (
                 <Card key={fw.id} className="p-5">
@@ -320,6 +350,25 @@ export function ExecutiveView({ metrics }: ExecutiveViewProps) {
                   ) : (
                     <span className="text-sm text-slate-400">N/A</span>
                   )}
+                  {/* Target line: the framework's own threshold + whether it's met. */}
+                  <div className="mt-3 pt-3 border-t border-slate-100 flex items-center justify-between gap-2">
+                    <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                      {t('dashboard.targetLabel')} {targetValue}%
+                    </span>
+                    {!evaluable ? (
+                      <Badge variant="neutral" size="sm">{t('dashboard.targetAwaitingData')}</Badge>
+                    ) : met ? (
+                      <Badge variant="success" size="sm" className="gap-1">
+                        <Icon icon="lucide:check" className="w-3 h-3" />
+                        {t('dashboard.targetMet')}
+                      </Badge>
+                    ) : (
+                      <Badge variant="danger" size="sm" className="gap-1">
+                        <Icon icon="lucide:arrow-down" className="w-3 h-3" />
+                        {t('dashboard.targetBelow')}
+                      </Badge>
+                    )}
+                  </div>
                 </Card>
               )
             })}

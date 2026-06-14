@@ -12,6 +12,12 @@
  * renders that DiceBear collection. A plain seed keeps the default `avataaars`
  * (people) style, so existing seeds are unchanged.
  *
+ * OPTION SUPPORT: an optional `"?key=val&key=val"` suffix carries extra DiceBear
+ * options (e.g. `"avataaars:Layla?top=hijab&clothesColor=262e33"`). This lets
+ * culturally-styled presets (hijab, turban, abaya-toned clothing) round-trip
+ * through the single saved `avatarSeed` string and render identically across
+ * every surface — no per-surface option plumbing required.
+ *
  * @param seed Any string used to deterministically generate the avatar.
  *   Falsy values fall back to "default" so the URL is always valid.
  */
@@ -22,13 +28,26 @@ const DICEBEAR_STYLES = new Set([
 
 export function dicebearAvatar(seed: string | null | undefined): string {
   const s = seed || 'default'
-  const sep = s.indexOf(':')
+
+  // Split off an optional "?options" suffix (already in key=value&... form).
+  const qIdx = s.indexOf('?')
+  const base = qIdx >= 0 ? s.slice(0, qIdx) : s
+  const options = qIdx >= 0 ? s.slice(qIdx + 1) : ''
+
+  // Resolve "<style>:<seed>" — falling back to avataaars (people) for plain
+  // seeds and for any colon that isn't a recognized style prefix.
+  let style = 'avataaars'
+  let rest = base
+  const sep = base.indexOf(':')
   if (sep > 0) {
-    const style = s.slice(0, sep)
-    const rest = s.slice(sep + 1)
-    if (DICEBEAR_STYLES.has(style) && rest) {
-      return `https://api.dicebear.com/7.x/${style}/svg?seed=${encodeURIComponent(rest)}`
+    const maybeStyle = base.slice(0, sep)
+    const maybeRest = base.slice(sep + 1)
+    if (DICEBEAR_STYLES.has(maybeStyle) && maybeRest) {
+      style = maybeStyle
+      rest = maybeRest
     }
   }
-  return `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(s)}`
+
+  const url = `https://api.dicebear.com/7.x/${style}/svg?seed=${encodeURIComponent(rest)}`
+  return options ? `${url}&${options}` : url
 }

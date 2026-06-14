@@ -248,13 +248,17 @@ export function FrameworkConfigModal({ frameworkId, isOpen, onClose }: Props) {
           {threshold === 'custom' && (
             <div className="mt-2">
               <label className="block text-xs font-medium text-slate-500 mb-1">{t('settings.customThreshold')}</label>
+              {/* Plain numeric field — spinner arrows removed per request
+                  ([appearance:textfield] + webkit pseudo-elements). Typed entry
+                  only, clamped to 0–100. */}
               <input
                 type="number"
+                inputMode="numeric"
                 min={0}
                 max={100}
                 value={customThreshold}
-                onChange={(e) => setCustomThreshold(Number(e.target.value))}
-                className="w-24 px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                onChange={(e) => setCustomThreshold(Math.min(100, Math.max(0, Number(e.target.value) || 0)))}
+                className="w-24 px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
               />
               <span className="text-sm text-slate-500 ms-1">%</span>
             </div>

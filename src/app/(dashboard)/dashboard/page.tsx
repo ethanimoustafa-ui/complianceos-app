@@ -24,6 +24,9 @@ import { useLetterStore } from '@/stores/letter-store'
 import { useCorrespondenceStore } from '@/stores/correspondence-store'
 import { useCircularStore } from '@/stores/circular-store'
 import { useTeamStore } from '@/stores/team-store'
+import { useDepartmentStore } from '@/stores/department-store'
+import { useComplianceEvaluationStore } from '@/stores/compliance-evaluation-store'
+import { useComplianceSettingsStore } from '@/stores/compliance-settings-store'
 
 
 const viewConfig: Record<DashboardView, { titleKey: string; subtitleKey: string }> = {
@@ -51,6 +54,16 @@ export default function DashboardPage() {
   const fetchCorrespondence = useCorrespondenceStore((s) => s.fetchAll)
   const fetchCirculars = useCircularStore((s) => s.fetchAll)
   const fetchTeam = useTeamStore((s) => s.fetchAll)
+  // The "Compliance Health" hero score is derived from departments +
+  // evaluations (alongside circulars/policies). These two stores were only
+  // hydrated by /reports/compliance-review, so the hero sat at "Pending —"
+  // until the user visited that page. Prefetch them here so the score is
+  // correct on first dashboard paint.
+  const fetchDepartments = useDepartmentStore((s) => s.fetchAll)
+  const fetchEvaluations = useComplianceEvaluationStore((s) => s.fetchAll)
+  // Hydrate the company compliance target so the hero's "At Risk" line uses the
+  // configured threshold rather than the store's hardcoded 90% default.
+  const fetchComplianceSettings = useComplianceSettingsStore((s) => s.fetch)
   useEffect(() => {
     void fetchAudits()
     void fetchObservations()
@@ -63,6 +76,9 @@ export default function DashboardPage() {
     void fetchCorrespondence()
     void fetchCirculars()
     void fetchTeam()
+    void fetchDepartments()
+    void fetchEvaluations()
+    void fetchComplianceSettings()
   }, [
     fetchAudits,
     fetchObservations,
@@ -73,6 +89,9 @@ export default function DashboardPage() {
     fetchCorrespondence,
     fetchCirculars,
     fetchTeam,
+    fetchDepartments,
+    fetchEvaluations,
+    fetchComplianceSettings,
   ])
 
   const [showFadeIn, setShowFadeIn] = useState(false)

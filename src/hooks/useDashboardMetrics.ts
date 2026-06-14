@@ -10,6 +10,8 @@ import { useLetterStore } from '@/stores/letter-store'
 import { useCorrespondenceStore } from '@/stores/correspondence-store'
 import { useCircularStore } from '@/stores/circular-store'
 import { useTeamStore } from '@/stores/team-store'
+import { useDepartmentStore } from '@/stores/department-store'
+import { useComplianceEvaluationStore } from '@/stores/compliance-evaluation-store'
 import { useFrameworkConfigStore } from '@/stores/framework-config-store'
 import { useAuthStore } from '@/stores/auth-store'
 import { useComplianceScore } from '@/hooks/useComplianceScore'
@@ -88,6 +90,14 @@ export interface DashboardMetrics {
     enabled: FrameworkConfig[]
   }
   currentUser: { id: string; name: string; email: string; role: string; department: string } | null
+  /**
+   * True while any store feeding the "Compliance Health" hero (circulars,
+   * policies, departments, evaluations) is still on its first fetch. The hero
+   * ring renders a loading placeholder instead of a misleading "Pending —"
+   * (0 evaluated) state until these resolve. Distinct from the genuine
+   * pending state (`businessComplianceEvaluated === 0` *after* loading).
+   */
+  complianceHealthLoading: boolean
 }
 
 function countBy<T>(arr: T[], key: (item: T) => string): Record<string, number> {
@@ -125,6 +135,27 @@ export function useDashboardMetrics(): DashboardMetrics {
   const frameworks = useFrameworkConfigStore(s => s.frameworks)
   const pinnedIds = useFrameworkConfigStore(s => s.pinnedIds)
   const currentUser = useAuthStore(s => s.user)
+
+  // First-fetch detector for the Compliance Health hero. Its score is derived
+  // client-side from these four stores (see useDashboardHealth); until every
+  // one has hydrated we can't tell "nothing evaluated" from "not loaded yet".
+  // We use the codebase's standard `isLoading && lastFetched === null` gate
+  // (same as the compliance-review page) so the state settles on *both* a
+  // successful fetch and an error — a bare `lastFetched === null` check would
+  // leave the hero spinning forever if any of these requests failed.
+  const circularsLoading = useCircularStore(s => s.isLoading)
+  const circularsLastFetched = useCircularStore(s => s.lastFetched)
+  const policiesLoading = usePolicyStore(s => s.isLoading)
+  const policiesLastFetched = usePolicyStore(s => s.lastFetched)
+  const departmentsLoading = useDepartmentStore(s => s.isLoading)
+  const departmentsLastFetched = useDepartmentStore(s => s.lastFetched)
+  const evaluationsLoading = useComplianceEvaluationStore(s => s.isLoading)
+  const evaluationsLastFetched = useComplianceEvaluationStore(s => s.lastFetched)
+  const complianceHealthLoading =
+    (circularsLoading && circularsLastFetched === null) ||
+    (policiesLoading && policiesLastFetched === null) ||
+    (departmentsLoading && departmentsLastFetched === null) ||
+    (evaluationsLoading && evaluationsLastFetched === null)
 
   const now = Date.now()
   const thirtyDaysMs = 30 * 24 * 60 * 60 * 1000
@@ -301,5 +332,6 @@ export function useDashboardMetrics(): DashboardMetrics {
     circulars: circularMetrics,
     frameworks: frameworkMetrics,
     currentUser,
+    complianceHealthLoading,
   }
 }

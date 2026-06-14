@@ -6,6 +6,7 @@ import { Icon } from '@iconify/react'
 import { cn } from '@/lib/utils'
 import { formatRelativeTime } from '@/lib/time-utils'
 import { useNotificationStore } from '@/stores/notification-store'
+import { Skeleton } from '@/components/ui/skeleton'
 import { useTranslation } from '@/i18n'
 import type { AppNotification } from '@/types'
 
@@ -39,6 +40,10 @@ export function NotificationPanel({ isOpen, onClose }: NotificationPanelProps) {
   const { t, isRTL } = useTranslation()
   const router = useRouter()
   const { notifications, markAsRead, markAllAsRead, clearAll } = useNotificationStore()
+  const isLoading = useNotificationStore((s) => s.isLoading)
+  const fetchNotifications = useNotificationStore((s) => s.fetchNotifications)
+  // First-fetch gate: show skeletons only on the initial load (empty + loading).
+  const showSkeleton = isLoading && notifications.length === 0
 
   const handleEscape = useCallback((e: KeyboardEvent) => {
     if (e.key === 'Escape') onClose()
@@ -50,6 +55,11 @@ export function NotificationPanel({ isOpen, onClose }: NotificationPanelProps) {
       return () => document.removeEventListener('keydown', handleEscape)
     }
   }, [isOpen, handleEscape])
+
+  // Refresh on open so the panel reflects the latest server state.
+  useEffect(() => {
+    if (isOpen) void fetchNotifications()
+  }, [isOpen, fetchNotifications])
 
   const handleNotificationClick = (notif: AppNotification) => {
     if (!notif.read) markAsRead(notif.id)
@@ -102,7 +112,20 @@ export function NotificationPanel({ isOpen, onClose }: NotificationPanelProps) {
 
         {/* Notification list */}
         <div className="flex-1 overflow-y-auto hide-scrollbar">
-          {notifications.length === 0 ? (
+          {showSkeleton ? (
+            <div className="divide-y divide-slate-100">
+              {Array.from({ length: 5 }).map((_, i) => (
+                <div key={i} className="p-4 flex items-start gap-3">
+                  <Skeleton className="w-8 h-8 rounded-full shrink-0" />
+                  <div className="flex-1 space-y-2">
+                    <Skeleton className="h-3 w-3/5" />
+                    <Skeleton className="h-2.5 w-4/5" />
+                    <Skeleton className="h-2 w-1/4" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : notifications.length === 0 ? (
             <div data-empty-state="true" className="flex flex-col items-center justify-center h-64 text-slate-400">
               <Icon icon="lucide:bell-off" className="text-4xl mb-3" />
               <p className="text-sm font-medium">{t('emptyStates.notifications.title')}</p>

@@ -1,7 +1,6 @@
 ﻿'use client'
 
 import { useMemo } from 'react'
-import { useRouter } from 'next/navigation'
 import { Icon } from '@iconify/react'
 import { Card } from '@/components/ui/card'
 import { Badge, getStatusVariant } from '@/components/ui/badge'
@@ -11,6 +10,9 @@ import { useLetterStore } from '@/stores/letter-store'
 import { usePolicyStore } from '@/stores/policy-store'
 import { useAuditStore } from '@/stores/audit-store'
 import { Button } from '@/components/ui/button'
+import { Skeleton } from '@/components/ui/skeleton'
+import { cn } from '@/lib/utils'
+import { useNavigationLoading } from '@/hooks/useNavigationLoading'
 import { AlertCard } from './AlertCard'
 import { CircularProgressRing } from './CircularProgressRing'
 import { TrainingProgressBar } from './TrainingProgressBar'
@@ -27,7 +29,7 @@ interface ManagerialViewProps {
 
 export function ManagerialView({ metrics }: ManagerialViewProps) {
   const { t, isRTL } = useTranslation()
-  const router = useRouter()
+  const { navigate, pendingKey } = useNavigationLoading()
   const targetScore = useComplianceSettingsStore(s => s.targetScore)
   const departments = useDepartmentStore(s => s.departments)
 
@@ -105,8 +107,11 @@ export function ManagerialView({ metrics }: ManagerialViewProps) {
   // labelled as Team Score.
   const healthScore = Math.round(metrics.health.businessComplianceScore)
   const healthEvaluated = metrics.health.businessComplianceEvaluated
-  const isPending = healthEvaluated === 0
-  const isAtRisk = !isPending && healthScore < targetScore
+  // Loading (stores still on first fetch) vs. genuine Pending (loaded, nothing
+  // evaluated) — see ExecutiveView for the full rationale.
+  const isHealthLoading = metrics.complianceHealthLoading
+  const isPending = !isHealthLoading && healthEvaluated === 0
+  const isAtRisk = !isHealthLoading && !isPending && healthScore < targetScore
 
   // Observations by source
   const obsTotal = metrics.observations.total || 1
@@ -142,16 +147,21 @@ export function ManagerialView({ metrics }: ManagerialViewProps) {
       {/* Smart Alerts */}
       {alerts.length > 0 && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {alerts.map((alert, i) => (
-            <AlertCard
-              key={i}
-              type={alert.type}
-              title={alert.title}
-              message={alert.message}
-              actionLabel={alert.type === 'critical' ? t('dashboard.resolveNow') : t('dashboard.viewDetails')}
-              onAction={() => router.push(alert.route)}
-            />
-          ))}
+          {alerts.map((alert, i) => {
+            const key = `mgr-alert-${i}`
+            return (
+              <AlertCard
+                key={i}
+                type={alert.type}
+                title={alert.title}
+                message={alert.message}
+                actionLabel={alert.type === 'critical' ? t('dashboard.resolveNow') : t('dashboard.viewDetails')}
+                loading={pendingKey === key}
+                loadingLabel={t('dashboard.opening')}
+                onAction={() => navigate(key, alert.route)}
+              />
+            )
+          })}
         </div>
       )}
 
@@ -162,16 +172,18 @@ export function ManagerialView({ metrics }: ManagerialViewProps) {
             {/* Left: status + threshold + issues */}
             <div className="relative z-10 space-y-4 flex-1 min-w-0">
               <div className="flex items-center gap-3">
-                <Badge variant={isPending ? 'warning' : isAtRisk ? 'danger' : 'success'} className="gap-2">
+                <Badge variant={isHealthLoading ? 'neutral' : isPending ? 'warning' : isAtRisk ? 'danger' : 'success'} className="gap-2">
                   <Icon
-                    icon={isPending ? 'lucide:circle-help' : isAtRisk ? 'lucide:alert-triangle' : 'lucide:check-circle'}
-                    className="w-3 h-3"
+                    icon={isHealthLoading ? 'lucide:loader-2' : isPending ? 'lucide:circle-help' : isAtRisk ? 'lucide:alert-triangle' : 'lucide:check-circle'}
+                    className={cn('w-3 h-3', isHealthLoading && 'animate-spin')}
                   />
-                  {isPending
-                    ? t('complianceReview.pendingScoreLabel')
-                    : isAtRisk
-                      ? t('dashboard.statusAtRisk')
-                      : t('dashboard.statusOptimal')}
+                  {isHealthLoading
+                    ? t('common.loading')
+                    : isPending
+                      ? t('complianceReview.pendingScoreLabel')
+                      : isAtRisk
+                        ? t('dashboard.statusAtRisk')
+                        : t('dashboard.statusOptimal')}
                 </Badge>
                 <span className="text-xs font-bold text-slate-400">{t('dashboard.thresholdLabel')}: {targetScore}%</span>
               </div>
@@ -180,7 +192,16 @@ export function ManagerialView({ metrics }: ManagerialViewProps) {
               </h2>
 
               {/* Threshold progress bar */}
-              {isPending ? (
+              {isHealthLoading ? (
+                <div className="space-y-1.5">
+                  <Skeleton className="h-3 w-full rounded-full" />
+                  <div className="flex justify-between">
+                    <Skeleton className="h-2 w-8" />
+                    <Skeleton className="h-2 w-16" />
+                    <Skeleton className="h-2 w-8" />
+                  </div>
+                </div>
+              ) : isPending ? (
                 <div className="space-y-1.5">
                   <div className="h-3 w-full bg-slate-100 rounded-full relative overflow-hidden border border-dashed border-amber-300" />
                   <div className="flex justify-between text-[10px] font-bold text-amber-700">
@@ -224,9 +245,16 @@ export function ManagerialView({ metrics }: ManagerialViewProps) {
               )}
             </div>
 
-            {/* Right: ring (or pending placeholder) */}
-            <div className="relative flex-shrink-0 flex justify-center">
-              {isPending ? (
+            {/* Right: ring (loading / pending placeholder / real ring) */}
+            <div className="relative flex-shrink-0 flex flex-col items-center justify-center gap-2">
+              {isHealthLoading ? (
+                <>
+                  <Skeleton className="h-[152px] w-[152px] rounded-full" />
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                    {t('dashboard.calculatingHealth')}
+                  </p>
+                </>
+              ) : isPending ? (
                 <div className="flex flex-col items-center justify-center w-[152px] h-[152px] rounded-full border-2 border-dashed border-amber-300 bg-amber-50/40">
                   <p className="text-3xl font-bold text-amber-600">—</p>
                   <p className="text-[10px] font-bold text-amber-700 uppercase tracking-widest mt-1">
@@ -242,13 +270,17 @@ export function ManagerialView({ metrics }: ManagerialViewProps) {
           {/* Dynamic action buttons */}
           <div className="flex flex-wrap gap-3 mt-6 pt-4 border-t border-slate-200/60">
             {criticalActions.length > 0 ? (
-              criticalActions.map(action => (
-                <Button key={action.key} variant={action.score < 60 ? 'dark' : 'outline'} onClick={() => router.push(action.route)} className="gap-2 active:scale-[0.98]">
-                  <Icon icon={action.icon} className="w-4 h-4" />
-                  {action.label}
-                  <Badge variant={action.score >= 60 ? 'warning' : 'danger'} size="sm">{action.score}%</Badge>
-                </Button>
-              ))
+              criticalActions.map(action => {
+                const key = `mgr-crit-${action.key}`
+                const loadingThis = pendingKey === key
+                return (
+                  <Button key={action.key} variant={action.score < 60 ? 'dark' : 'outline'} loading={loadingThis} onClick={() => navigate(key, action.route)} className="gap-2 active:scale-[0.98]">
+                    {!loadingThis && <Icon icon={action.icon} className="w-4 h-4" />}
+                    {action.label}
+                    <Badge variant={action.score >= 60 ? 'warning' : 'danger'} size="sm">{action.score}%</Badge>
+                  </Button>
+                )
+              })
             ) : (
               <p className="text-sm text-emerald-600 font-bold">{t('dashboard.noIssues')}</p>
             )}
@@ -376,31 +408,37 @@ export function ManagerialView({ metrics }: ManagerialViewProps) {
         </h3>
         <Card className="divide-y divide-slate-100">
           {pendingApprovals.length > 0 ? (
-            pendingApprovals.slice(0, 8).map(item => (
-              <button
-                key={item.id}
-                onClick={() => router.push(item.route)}
-                className="w-full px-5 py-3 flex items-center justify-between hover:bg-slate-50 active:bg-slate-100 transition-colors text-start cursor-pointer"
-              >
-                <div className="flex items-center gap-3">
-                  <Icon
-                    icon={item.type === 'SAMA Letter' ? 'lucide:file-text' : item.type === 'Policy' ? 'lucide:file-check' : 'lucide:clipboard-check'}
-                    className="text-slate-400"
-                  />
-                  <div>
-                    <p className="text-sm font-medium text-slate-900">{item.title}</p>
-                    <p className="text-[10px] text-slate-400">{item.typeKey}</p>
+            pendingApprovals.slice(0, 8).map(item => {
+              const key = `mgr-approval-${item.id}`
+              const loadingThis = pendingKey === key
+              return (
+                <button
+                  key={item.id}
+                  onClick={() => navigate(key, item.route)}
+                  disabled={loadingThis}
+                  aria-busy={loadingThis || undefined}
+                  className="w-full px-5 py-3 flex items-center justify-between hover:bg-slate-50 active:bg-slate-100 transition-colors text-start cursor-pointer disabled:cursor-wait"
+                >
+                  <div className="flex items-center gap-3">
+                    <Icon
+                      icon={item.type === 'SAMA Letter' ? 'lucide:file-text' : item.type === 'Policy' ? 'lucide:file-check' : 'lucide:clipboard-check'}
+                      className="text-slate-400"
+                    />
+                    <div>
+                      <p className="text-sm font-medium text-slate-900">{item.title}</p>
+                      <p className="text-[10px] text-slate-400">{loadingThis ? t('dashboard.opening') : item.typeKey}</p>
+                    </div>
                   </div>
-                </div>
-                <div className="flex items-center gap-3">
-                  {item.dueDate && (
-                    <span className="text-[10px] text-slate-400">{formatTimelineDate(item.dueDate, isRTL)}</span>
-                  )}
-                  <Badge variant={getStatusVariant(item.status)} size="sm">{item.typeKey}</Badge>
-                  <Icon icon="lucide:chevron-right" className="text-slate-300 text-sm" />
-                </div>
-              </button>
-            ))
+                  <div className="flex items-center gap-3">
+                    {item.dueDate && (
+                      <span className="text-[10px] text-slate-400">{formatTimelineDate(item.dueDate, isRTL)}</span>
+                    )}
+                    <Badge variant={getStatusVariant(item.status)} size="sm">{item.typeKey}</Badge>
+                    <Icon icon={loadingThis ? 'lucide:loader-2' : 'lucide:chevron-right'} className={cn('text-sm', loadingThis ? 'text-emerald-500 animate-spin' : 'text-slate-300')} />
+                  </div>
+                </button>
+              )
+            })
           ) : (
             <div className="px-5 py-8 text-center">
               <p className="text-sm text-slate-400">{t('dashboard.noPendingItems')}</p>

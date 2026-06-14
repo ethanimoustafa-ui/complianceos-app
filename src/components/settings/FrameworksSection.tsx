@@ -1,10 +1,11 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Icon } from '@iconify/react'
 import { Modal } from '@/components/ui/modal'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useFrameworkConfigStore } from '@/stores/framework-config-store'
+import { useComplianceSettingsStore } from '@/stores/compliance-settings-store'
 import { useTranslation } from '@/i18n'
 import { Gate } from '@/components/auth/gate'
 import { FrameworkConfigModal } from './FrameworkConfigModal'
@@ -28,6 +29,28 @@ export function FrameworksSection() {
   const { t, language } = useTranslation()
   const { frameworks, toggleEnabled, pinnedIds, pinFramework, unpinFramework, replacePinned } = useFrameworkConfigStore()
   const isLoadingFrameworks = useFrameworkConfigStore((s) => s.isLoading)
+
+  // Company-wide compliance target (singleton settings row). This is the
+  // dashboard's headline Compliance Health threshold — independent of any
+  // individual framework's own threshold. It had no UI until now, so it sat
+  // pinned at the 90% default; hydrate + expose it here.
+  const targetScore = useComplianceSettingsStore((s) => s.targetScore)
+  const setTargetScore = useComplianceSettingsStore((s) => s.setTargetScore)
+  const fetchComplianceSettings = useComplianceSettingsStore((s) => s.fetch)
+  const isSavingTarget = useComplianceSettingsStore((s) => s.isMutating)
+  useEffect(() => {
+    void fetchComplianceSettings()
+  }, [fetchComplianceSettings])
+  // Commit on blur / Enter (matches the page's auto-save model), clamped 0–100.
+  // The field is uncontrolled and keyed on `targetScore`, so the initial fetch
+  // (or a save) re-seeds it without a state-mirroring effect. We also correct
+  // the DOM value in place to cover the "clamps back to the current value" edge.
+  function commitTargetScore(el: HTMLInputElement) {
+    const next = Math.min(100, Math.max(0, Number(el.value) || 0))
+    el.value = String(next)
+    if (next !== targetScore) void setTargetScore(next)
+  }
+
   const [configureId, setConfigureId] = useState<RegulatoryBodyId | null>(null)
   const [showAllModal, setShowAllModal] = useState(false)
   const [showAddModal, setShowAddModal] = useState(false)
@@ -160,6 +183,40 @@ export function FrameworksSection() {
           <h2 className="text-lg font-bold text-slate-900 font-display">{t('settings.complianceFrameworks')}</h2>
           <p className="text-sm text-slate-500">{t('settings.manageFrameworks')}</p>
         </div>
+      </div>
+
+      {/* Company-wide compliance target — the dashboard's headline Compliance
+          Health threshold, independent of any single framework. */}
+      <div className="mb-8 bg-white border border-slate-200 rounded-2xl p-6 flex items-start justify-between gap-4 flex-wrap">
+        <div className="flex items-start gap-3 min-w-0">
+          <div className="p-2.5 bg-emerald-50 text-emerald-600 rounded-xl shrink-0">
+            <Icon icon="lucide:target" className="text-xl" />
+          </div>
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <h3 className="text-sm font-bold text-slate-900">{t('settings.companyThresholdTitle')}</h3>
+              {isSavingTarget && <Icon icon="lucide:loader-2" className="text-emerald-500 text-sm animate-spin" />}
+            </div>
+            <p className="text-xs text-slate-500 mt-0.5 max-w-md">{t('settings.companyThresholdHelp')}</p>
+          </div>
+        </div>
+        <Gate perm="Configure Frameworks">
+          <div className="flex items-center gap-2 shrink-0">
+            <input
+              key={targetScore}
+              type="number"
+              inputMode="numeric"
+              min={0}
+              max={100}
+              defaultValue={targetScore}
+              onBlur={(e) => commitTargetScore(e.target)}
+              onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
+              aria-label={t('settings.companyThresholdTitle')}
+              className="w-20 px-3 py-2 border border-slate-200 rounded-xl text-sm font-bold text-slate-900 text-center focus:outline-none focus:ring-2 focus:ring-emerald-500/20 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+            />
+            <span className="text-sm font-bold text-slate-400">%</span>
+          </div>
+        </Gate>
       </div>
 
       <p className="text-xs font-medium text-slate-400 mb-3">{t('settings.pinnedFrameworks')} ({pinnedIds.length}/3)</p>
