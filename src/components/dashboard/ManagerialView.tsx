@@ -6,9 +6,8 @@ import { Card } from '@/components/ui/card'
 import { Badge, getStatusVariant } from '@/components/ui/badge'
 import { useTranslation, type TranslationKey } from '@/i18n'
 import { useComplianceSettingsStore } from '@/stores/compliance-settings-store'
-import { useLetterStore } from '@/stores/letter-store'
-import { usePolicyStore } from '@/stores/policy-store'
-import { useAuditStore } from '@/stores/audit-store'
+import { useDashboardApprovals } from '@/hooks/useDashboardApprovals'
+import type { ApprovalItem } from '@/app/api/dashboard/approvals/route'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
@@ -39,36 +38,26 @@ export function ManagerialView({ metrics }: ManagerialViewProps) {
     return name
   }
 
-  // Pending approvals — cross-store
-  const letters = useLetterStore(s => s.letters)
-  const policies = usePolicyStore(s => s.policies)
-  const audits = useAuditStore(s => s.audits)
-
+  // Pending approvals — server-sourced (/api/dashboard/approvals). Was a
+  // client-side scan of the letters/policies/audits stores; the view only maps
+  // entity -> i18n label + route here.
+  const { items: approvalItems, total: pendingApprovalsTotal } = useDashboardApprovals()
   const pendingApprovals = useMemo(() => {
-    const items: Array<{ id: string; type: string; typeKey: string; title: string; status: string; dueDate?: string; route: string }> = []
-
-    for (const l of letters) {
-      if (l.status === 'pending-approval') {
-        items.push({ id: l.id, type: 'SAMA Letter', typeKey: t('letters.title'), title: l.subject, status: l.status, dueDate: l.responseDeadline, route: `/correspondence/letters?id=${l.id}` })
-      }
+    const meta: Record<ApprovalItem['entity'], { type: string; typeKey: string; route: (id: string) => string }> = {
+      letter: { type: 'SAMA Letter', typeKey: t('letters.title'), route: (id) => `/correspondence/letters?id=${id}` },
+      policy: { type: 'Policy', typeKey: t('navigation.regulatoryUpdates'), route: (id) => `/correspondence/regulatory-updates/policies?policyId=${id}&tab=workflow` },
+      audit: { type: 'Audit', typeKey: t('navigation.audits'), route: (id) => `/reports/${id}` },
     }
-    for (const p of policies) {
-      if (p.status === 'under-review') {
-        items.push({ id: p.id, type: 'Policy', typeKey: t('navigation.regulatoryUpdates'), title: p.name, status: p.status, dueDate: p.nextReviewDate, route: `/correspondence/regulatory-updates/policies?policyId=${p.id}&tab=workflow` })
-      }
-    }
-    for (const a of audits) {
-      if (a.status === 'pending') {
-        items.push({ id: a.id, type: 'Audit', typeKey: t('navigation.audits'), title: a.title, status: a.status, dueDate: a.dueDate, route: `/reports/${a.id}` })
-      }
-    }
-
-    return items.sort((a, b) => {
-      if (!a.dueDate) return 1
-      if (!b.dueDate) return -1
-      return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime()
-    })
-  }, [letters, policies, audits])
+    return approvalItems.map((it) => ({
+      id: it.id,
+      type: meta[it.entity].type,
+      typeKey: meta[it.entity].typeKey,
+      title: it.title,
+      status: it.status,
+      dueDate: it.dueDate ?? undefined,
+      route: meta[it.entity].route(it.id),
+    }))
+  }, [approvalItems, t])
 
   // Smart alerts
   const alerts = useMemo(() => {
@@ -305,7 +294,7 @@ export function ManagerialView({ metrics }: ManagerialViewProps) {
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-sm text-slate-600">{t('dashboard.pendingApprovals')}</span>
-                <span className="text-sm font-bold text-slate-900">{pendingApprovals.length}</span>
+                <span className="text-sm font-bold text-slate-900">{pendingApprovalsTotal}</span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-sm text-slate-600">{t('dashboard.openRisks')}</span>
