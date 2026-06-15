@@ -275,6 +275,22 @@ interface ObservationState {
 
   fetchAll: (force?: boolean) => Promise<void>
   fetchById: (id: string) => Promise<Observation | null>
+  /**
+   * Tracker server-side pagination (scalability follow-up). Fetches ONE page
+   * with server-side filters and returns mapped rows + the server total,
+   * WITHOUT mutating the shared `observations` array (which stays
+   * archive_filter:'all' for the dashboard / calendar / compliance-review
+   * consumers that need closed/archived rows).
+   */
+  fetchPage: (params: {
+    page: number
+    pageSize: number
+    archive_filter?: 'active' | 'archived' | 'all'
+    status?: string
+    severity?: string
+    source?: string
+    q?: string
+  }) => Promise<{ items: Observation[]; total: number }>
   fetchTimeline: (id: string) => Promise<ObservationTimelineEntry[]>
   create: (data: Omit<Observation, 'id' | 'createdAt' | 'updatedAt'>, creator?: User) => Promise<Observation>
   update: (id: string, data: Partial<Observation>, editor?: User) => Promise<Observation>
@@ -413,7 +429,11 @@ export const useObservationStore = create<ObservationState>()((set, get) => ({
         pageSize: number
         total: number
         totalPages: number
-      }>('/observations', { page: 1, pageSize: 100 })
+        // archive_filter: 'all' preserves prior behavior — this store feeds both
+        // the dashboard ("closed this quarter" needs closed/archived rows) and
+        // the tracker, which filters archived client-side. The API now defaults
+        // to 'active'; server-side tracker pagination (follow-up) can opt into it.
+      }>('/observations', { page: 1, pageSize: 100, archive_filter: 'all' })
       const previousById = get().byId
       const observations = result.items.map((r) => mapRow(r, previousById[r.reference || r.id]))
       const byId: Record<string, ObservationWithComments> = {}
@@ -433,6 +453,15 @@ export const useObservationStore = create<ObservationState>()((set, get) => ({
     } catch (e) {
       set({ error: errorMessage(e, 'Failed to fetch observations'), isLoading: false })
     }
+  },
+
+  fetchPage: async (params) => {
+    // Server-side filtered page; does NOT touch the shared `observations` array.
+    const result = await api.get<{ items: ObservationApiRow[]; total: number }>(
+      '/observations',
+      params,
+    )
+    return { items: result.items.map((r) => mapRow(r)), total: result.total }
   },
 
   fetchById: async (id) => {

@@ -22,6 +22,7 @@ import type { ObservationFormData } from '@/components/observations/add-observat
 import { EditObservationModal } from '@/components/observations/edit-observation-modal'
 import { DeleteConfirmationDialog } from '@/components/ui/delete-confirmation-dialog'
 import { api } from '@/lib/api-client'
+import { useDashboardSummary } from '@/hooks/useDashboardSummary'
 import type {
   Observation,
   ObservationSource,
@@ -34,34 +35,30 @@ export default function ObservationsPage() {
   const searchParams = useSearchParams()
   const router = useRouter()
 
-  // Zustand store - single source of truth
+  // Zustand store — mutators + the tracker-local server fetch. The tracker no
+  // longer renders the shared `observations` array; it fetches its OWN
+  // server-paginated, server-filtered page via fetchPage (the shared array stays
+  // archive_filter:'all' for the dashboard / calendar / compliance-review
+  // consumers that depend on closed/archived rows). Scalability follow-up to
+  // Part 2: archive filtering + pagination now happen in Postgres.
   const {
-    observations,
     create: createObservation,
     update: updateObservation,
     delete: deleteObservation,
     removeDocument,
     uploadDocument: uploadObservationDocument,
     setSelected: setStoreSelected,
+    fetchPage,
+    fetchById,
   } = useObservationStore()
 
   // Get current user for creator assignment
   const user = useAuthStore((state) => state.user)
   const pushToast = useToastStore((s) => s.pushToast)
 
-  // First-fetch detector (Wave-2 Agent E): show skeleton while the very first
-  // GET is in flight and the list is still empty. Refetches keep stale data
-  // visible (so the user never sees a flash of empty).
-  const isLoading = useObservationStore((s) => s.isLoading)
-  const lastFetched = useObservationStore((s) => s.lastFetched)
-  const showSkeleton = isLoading && observations.length === 0 && lastFetched === null
-
-  // Hydrate server-state on mount (Fix-1). Without this the observation list
-  // is empty after a page reload because Zustand starts cold.
-  const fetchObservations = useObservationStore((s) => s.fetchAll)
-  useEffect(() => {
-    void fetchObservations()
-  }, [fetchObservations])
+  // Org-wide observation KPIs for the metrics strip come from the precomputed
+  // rollup (one indexed read) instead of counting the (now page-scoped) array.
+  const summary = useDashboardSummary()
 
   // State for modals
   const [selectedObservation, setSelectedObservation] = useState<Observation | null>(null)
@@ -85,44 +82,67 @@ export default function ObservationsPage() {
   const [currentPage, setCurrentPage] = useState(1)
   const itemsPerPage = 10
 
-  // Filter observations
+  // Tracker-owned server fetch: the list is fetched per page with server-side
+  // archive/status/severity/source/search filters (the store's fetchPage does
+  // NOT mutate the shared observations array). Date filters stay client-side
+  // over the returned page (the API has no date-range filter yet).
+  const [rows, setRows] = useState<Observation[]>([])
+  const [total, setTotal] = useState(0)
+  const [trackerLoading, setTrackerLoading] = useState(true)
+  const [trackerFetched, setTrackerFetched] = useState(false)
+  const [refetchNonce, setRefetchNonce] = useState(0)
+  const refetchTracker = () => setRefetchNonce((n) => n + 1)
+  const showSkeleton = trackerLoading && rows.length === 0 && !trackerFetched
+
+  useEffect(() => {
+    let cancelled = false
+    setTrackerLoading(true)
+    // Debounce only the text search so typing doesn't fire a request per keystroke.
+    const handle = setTimeout(() => {
+      void (async () => {
+        try {
+          const res = await fetchPage({
+            page: currentPage,
+            pageSize: itemsPerPage,
+            archive_filter: archiveFilter,
+            status: statusFilter !== 'all' ? statusFilter : undefined,
+            severity: severityFilter !== 'all' ? severityFilter : undefined,
+            source: sourceFilter !== 'all' ? sourceFilter : undefined,
+            q: searchQuery || undefined,
+          })
+          if (cancelled) return
+          setRows(res.items)
+          setTotal(res.total)
+          setTrackerFetched(true)
+        } catch (err) {
+          if (!cancelled) {
+            console.error('Failed to fetch observations page:', err)
+            setTrackerFetched(true)
+          }
+        } finally {
+          if (!cancelled) setTrackerLoading(false)
+        }
+      })()
+    }, searchQuery ? 250 : 0)
+    return () => {
+      cancelled = true
+      clearTimeout(handle)
+    }
+  }, [currentPage, archiveFilter, statusFilter, severityFilter, sourceFilter, searchQuery, refetchNonce, fetchPage])
+
+  // Archive / search / source / severity / status are now applied server-side
+  // (via fetchPage). Only the date-range filters remain client-side, over the
+  // current server page `rows`.
   const filteredObservations = useMemo(() => {
-    return observations.filter((obs) => {
-      // O7 / W37: archive filter. A row is "archived" when it has an archived_at
-      // timestamp OR is Closed — closed (verified) observations belong in the
-      // Archive, not the active list. Default hides them; 'archived' shows only them.
-      const isArchivedRow = Boolean(obs.archivedAt) || obs.status === 'closed'
-      const matchesArchive = archiveFilter === 'archived' ? isArchivedRow : !isArchivedRow
-
-      // Search filter (title, subtitle, reference)
-      const matchesSearch =
-        searchQuery === '' ||
-        obs.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (obs.subTitle && obs.subTitle.toLowerCase().includes(searchQuery.toLowerCase())) ||
-        (obs.reference && obs.reference.toLowerCase().includes(searchQuery.toLowerCase()))
-
-      // Source filter
-      const matchesSource = sourceFilter === 'all' || obs.source === sourceFilter
-
-      // Severity filter
-      const matchesSeverity = severityFilter === 'all' || obs.severity === severityFilter
-
-      // Status filter
-      const matchesStatus = statusFilter === 'all' || obs.status === statusFilter
-
-      // Remediation due date filter - show observations due on or before selected date
+    return rows.filter((obs) => {
       const matchesDueDate =
-        !dueDateFilter ||
-        (obs.dueDate && obs.dueDate <= dueDateFilter)
-
-      // Plan submission due date filter - show observations due on or before selected date
+        !dueDateFilter || (obs.dueDate && obs.dueDate <= dueDateFilter)
       const matchesSubmissionDueDate =
         !submissionDueDateFilter ||
         (obs.remediationSubmissionDueDate && obs.remediationSubmissionDueDate <= submissionDueDateFilter)
-
-      return matchesArchive && matchesSearch && matchesSource && matchesSeverity && matchesStatus && matchesDueDate && matchesSubmissionDueDate
+      return matchesDueDate && matchesSubmissionDueDate
     })
-  }, [observations, archiveFilter, searchQuery, sourceFilter, severityFilter, statusFilter, dueDateFilter, submissionDueDateFilter])
+  }, [rows, dueDateFilter, submissionDueDateFilter])
 
   // Handle row click
   const handleRowClick = (observation: Observation) => {
@@ -137,21 +157,34 @@ export default function ObservationsPage() {
   // list refetch (new `observations` array identity) re-ran the effect and the
   // modal reopened itself after the user closed it.
   const deepLinkId = searchParams.get('id')
+  // W38: the deep-linked observation may be on another server page or archived,
+  // so resolve it from the current page first and fall back to fetchById. The
+  // guard reads (not depends on) isDetailModalOpen so closing the modal doesn't
+  // re-run and reopen it.
+  const [deepLinkNotFound, setDeepLinkNotFound] = useState(false)
   useEffect(() => {
-    if (!deepLinkId || isDetailModalOpen) return
-    const obs = observations.find(o => o.id === deepLinkId)
-    if (obs) handleRowClick(obs)
+    if (!deepLinkId) {
+      setDeepLinkNotFound(false)
+      return
+    }
+    if (isDetailModalOpen) return
+    let cancelled = false
+    void (async () => {
+      const onPage = rows.find((o) => o.id === deepLinkId)
+      if (onPage) {
+        if (!cancelled) handleRowClick(onPage)
+        return
+      }
+      const fetched = await fetchById(deepLinkId)
+      if (cancelled) return
+      if (fetched) handleRowClick(fetched)
+      else setDeepLinkNotFound(true)
+    })()
+    return () => {
+      cancelled = true
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [deepLinkId, observations])
-
-  // W38: deep-link to an unknown / hard-deleted observation — surface a
-  // "Not found" panel instead of silently rendering the list. The ?id= param
-  // is preserved (per spec) until the user clicks back to the list.
-  const deepLinkNotFound =
-    !!deepLinkId &&
-    lastFetched !== null &&
-    !isLoading &&
-    !observations.some((o) => o.id === deepLinkId)
+  }, [deepLinkId, rows])
 
   const clearDeepLink = () => router.replace('/correspondence/observations')
 
@@ -210,6 +243,7 @@ export default function ObservationsPage() {
         }
       }
       setIsAddModalOpen(false)
+      refetchTracker()
     } catch (error) {
       console.error('Failed to create observation:', error)
     }
@@ -261,6 +295,7 @@ export default function ObservationsPage() {
 
       setIsEditModalOpen(false)
       setObservationToEdit(null)
+      refetchTracker()
     } catch (error) {
       console.error('Failed to update observation:', error)
     }
@@ -270,7 +305,7 @@ export default function ObservationsPage() {
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; title: string } | null>(null)
 
   const handleDeleteClick = (observationId: string) => {
-    const obs = observations.find((o) => o.id === observationId)
+    const obs = rows.find((o) => o.id === observationId)
     if (!obs) return
     setDeleteTarget({ id: observationId, title: obs.title })
   }
@@ -280,6 +315,7 @@ export default function ObservationsPage() {
     try {
       await deleteObservation(deleteTarget.id)
       pushToast(t('observations.deleteSuccess' as import('@/i18n').TranslationKey), 'success')
+      refetchTracker()
     } catch (error) {
       console.error('Failed to delete observation:', error)
     } finally {
@@ -287,39 +323,19 @@ export default function ObservationsPage() {
     }
   }
 
-  // Calculate stats from observations
-  const observationStats: ObservationStatsData = useMemo(() => {
-    const now = new Date()
-    const openCritical = observations.filter(
-      (o) => o.severity === 'critical' && o.status !== 'closed'
-    ).length
-    const overdue = observations.filter((o) => {
-      if (o.status === 'closed') return false
-      const dueDate = new Date(o.dueDate)
-      return dueDate < now
-    }).length
-    const inRemediation = observations.filter(
-      (o) => o.status === 'in_progress'
-    ).length
-    const drafting = observations.filter(
-      (o) => o.status === 'open'
-    ).length
-    const closedThisQuarter = observations.filter((o) => {
-      if (o.status !== 'closed') return false
-      // Simple quarter check - closed observations
-      return true
-    }).length
-
-    return {
-      total: observations.length,
-      openCritical,
-      overdue,
-      inRemediation,
-      drafting,
-      closedThisQuarter,
-      quarterlyTarget: 30,
-    }
-  }, [observations])
+  // Metrics strip from the precomputed rollup (org-wide, correct at scale, and
+  // independent of the current page). Also fixes the old client placeholder
+  // where "closedThisQuarter" counted ALL closed observations.
+  const obsSummary = summary.data?.observations
+  const observationStats: ObservationStatsData = {
+    total: obsSummary?.total ?? 0,
+    openCritical: obsSummary?.openCritical ?? 0,
+    overdue: obsSummary?.overdueCount ?? 0,
+    inRemediation: obsSummary?.inRemediation ?? 0,
+    drafting: obsSummary?.drafting ?? 0,
+    closedThisQuarter: obsSummary?.closedThisQuarter ?? 0,
+    quarterlyTarget: 30,
+  }
 
   // Check if any filters are active
   const hasActiveFilters = searchQuery !== '' || sourceFilter !== 'all' || severityFilter !== 'all' || statusFilter !== 'all' || dueDateFilter !== '' || submissionDueDateFilter !== '' || archiveFilter !== 'active'
@@ -333,13 +349,29 @@ export default function ObservationsPage() {
     setDueDateFilter('')
     setSubmissionDueDateFilter('')
     setArchiveFilter('active')
+    setCurrentPage(1)
   }
 
   // Export observations with localization
-  const handleExport = () => {
+  const handleExport = async () => {
     const baseFilename = isRTL ? 'ملاحظات' : 'observations'
     const dateStr = new Date().toISOString().split('T')[0]
-    exportObservations(filteredObservations, `${baseFilename}-${dateStr}`, t, isRTL)
+    // The table is server-paginated; export grabs the full filtered set (up to
+    // the server's pageSize cap of 100) so the CSV isn't limited to one page.
+    try {
+      const res = await fetchPage({
+        page: 1,
+        pageSize: 100,
+        archive_filter: archiveFilter,
+        status: statusFilter !== 'all' ? statusFilter : undefined,
+        severity: severityFilter !== 'all' ? severityFilter : undefined,
+        source: sourceFilter !== 'all' ? sourceFilter : undefined,
+        q: searchQuery || undefined,
+      })
+      exportObservations(res.items, `${baseFilename}-${dateStr}`, t, isRTL)
+    } catch (err) {
+      console.error('Failed to export observations:', err)
+    }
   }
 
   return (
@@ -441,19 +473,19 @@ export default function ObservationsPage() {
         <div className="bg-white/80 backdrop-blur-sm border border-slate-100 rounded-3xl p-6">
           <ObservationFilters
             searchQuery={searchQuery}
-            onSearchChange={setSearchQuery}
+            onSearchChange={(v) => { setSearchQuery(v); setCurrentPage(1) }}
             sourceFilter={sourceFilter}
-            onSourceChange={setSourceFilter}
+            onSourceChange={(v) => { setSourceFilter(v); setCurrentPage(1) }}
             severityFilter={severityFilter}
-            onSeverityChange={setSeverityFilter}
+            onSeverityChange={(v) => { setSeverityFilter(v); setCurrentPage(1) }}
             statusFilter={statusFilter}
-            onStatusChange={setStatusFilter}
+            onStatusChange={(v) => { setStatusFilter(v); setCurrentPage(1) }}
             dueDateFilter={dueDateFilter}
             onDueDateChange={setDueDateFilter}
             submissionDueDateFilter={submissionDueDateFilter}
             onSubmissionDueDateChange={setSubmissionDueDateFilter}
             archiveFilter={archiveFilter}
-            onArchiveFilterChange={setArchiveFilter}
+            onArchiveFilterChange={(v) => { setArchiveFilter(v); setCurrentPage(1) }}
             onClearFilters={handleClearFilters}
           />
 
@@ -464,7 +496,7 @@ export default function ObservationsPage() {
               observations={filteredObservations}
               onRowClick={handleRowClick}
               currentPage={currentPage}
-              totalItems={filteredObservations.length}
+              totalItems={total}
               onPageChange={setCurrentPage}
               itemsPerPage={itemsPerPage}
               onClearFilters={handleClearFilters}
