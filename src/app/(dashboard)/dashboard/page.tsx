@@ -15,13 +15,8 @@ import {
 } from '@/components/dashboard/DashboardSkeletons'
 import { generateDashboardPdf } from '@/lib/dashboard-pdf'
 import type { DashboardView } from '@/types'
-import { useAuditStore } from '@/stores/audit-store'
-import { useObservationStore } from '@/stores/observation-store'
-import { useRiskStore } from '@/stores/risk-store'
 import { usePolicyStore } from '@/stores/policy-store'
 import { useTrainingStore } from '@/stores/training-store'
-import { useLetterStore } from '@/stores/letter-store'
-import { useCorrespondenceStore } from '@/stores/correspondence-store'
 import { useCircularStore } from '@/stores/circular-store'
 import { useTeamStore } from '@/stores/team-store'
 import { useDepartmentStore } from '@/stores/department-store'
@@ -44,13 +39,8 @@ export default function DashboardPage() {
 
   // Hydrate every store the dashboard aggregates (Fix-1). Without this, all
   // KPI cards render zeros on a fresh load until the user clicks elsewhere.
-  const fetchAudits = useAuditStore((s) => s.fetchAll)
-  const fetchObservations = useObservationStore((s) => s.fetchAll)
-  const fetchRisks = useRiskStore((s) => s.fetchAll)
   const fetchPolicies = usePolicyStore((s) => s.fetchAll)
   const fetchTrainings = useTrainingStore((s) => s.fetchAll)
-  const fetchLetters = useLetterStore((s) => s.fetchAll)
-  const fetchCorrespondence = useCorrespondenceStore((s) => s.fetchAll)
   const fetchCirculars = useCircularStore((s) => s.fetchAll)
   const fetchTeam = useTeamStore((s) => s.fetchAll)
   // The "Compliance Health" hero still needs departments hydrated (Executive
@@ -62,38 +52,22 @@ export default function DashboardPage() {
   // configured threshold rather than the store's hardcoded 90% default.
   const fetchComplianceSettings = useComplianceSettingsStore((s) => s.fetch)
   useEffect(() => {
-    // The Compliance Health hero (circulars/policies/departments), team
-    // workload, training, and the compliance target feed all three views —
-    // always hydrate them.
+    // All views now read entity data from server endpoints (/api/dashboard/
+    // summary, /workload, /approvals, /my-work, /alerts), so the dashboard only
+    // hydrates the stores still consumed directly: the Compliance Health hero
+    // (circulars/policies/departments), team roster, training, and the
+    // compliance target. The 5 entity stores (audits/observations/risks/
+    // letters/correspondence) are no longer fetched here.
     void fetchPolicies()
     void fetchCirculars()
-    // fetchTrainings() already fans out to fetchCourses() + fetchEmployees();
-    // calling those directly here just duplicated both requests on mount.
+    // fetchTrainings() already fans out to fetchCourses() + fetchEmployees().
     void fetchTrainings()
     void fetchTeam()
     void fetchDepartments()
     void fetchComplianceSettings()
-    // Count-based KPI cards now come from /api/dashboard/summary (the
-    // dashboard_rollup read-model) via useDashboardMetrics, so the Executive
-    // view no longer hydrates these entity stores (audit B1/B2/B3 — kills 5
-    // pageSize=100/10 fetches per paint). The Managerial/Officer views still
-    // render raw entity lists from them, so hydrate only for those views.
-    if (dashboardView !== 'executive') {
-      void fetchAudits()
-      void fetchObservations()
-      void fetchRisks()
-      void fetchLetters()
-      void fetchCorrespondence()
-    }
   }, [
-    dashboardView,
-    fetchAudits,
-    fetchObservations,
-    fetchRisks,
     fetchPolicies,
     fetchTrainings,
-    fetchLetters,
-    fetchCorrespondence,
     fetchCirculars,
     fetchTeam,
     fetchDepartments,
@@ -121,23 +95,13 @@ export default function DashboardPage() {
   // stores has hydrated (`lastFetched != null`). The auto-deduped `apiFetch`
   // means a stale store snapshot is still useful — once one resolves we
   // unwrap the skeleton and let individual widget empty states take over.
-  const auditsLastFetched = useAuditStore((s) => s.lastFetched)
-  const observationsLastFetched = useObservationStore((s) => s.lastFetched)
   const policiesLastFetched = usePolicyStore((s) => s.lastFetched)
-  const risksLastFetched = useRiskStore((s) => s.lastFetched)
-  const lettersLastFetched = useLetterStore((s) => s.lastFetched)
-  const correspondenceLastFetched = useCorrespondenceStore((s) => s.lastFetched)
   const circularsLastFetched = useCircularStore((s) => s.lastFetched)
   const trainingLastFetched = useTrainingStore((s) => s.lastFetched)
   const teamLastFetched = useTeamStore((s) => s.lastFetched)
 
   const anyStoreReady =
-    auditsLastFetched !== null ||
-    observationsLastFetched !== null ||
     policiesLastFetched !== null ||
-    risksLastFetched !== null ||
-    lettersLastFetched !== null ||
-    correspondenceLastFetched !== null ||
     circularsLastFetched !== null ||
     trainingLastFetched !== null ||
     teamLastFetched !== null

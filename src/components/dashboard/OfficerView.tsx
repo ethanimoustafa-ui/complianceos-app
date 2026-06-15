@@ -5,11 +5,8 @@ import { Icon } from '@iconify/react'
 import { Card } from '@/components/ui/card'
 import { Badge, getStatusVariant } from '@/components/ui/badge'
 import { useTranslation } from '@/i18n'
-import { useObservationStore } from '@/stores/observation-store'
-import { useAuditStore } from '@/stores/audit-store'
-import { usePolicyStore } from '@/stores/policy-store'
-import { useLetterStore } from '@/stores/letter-store'
 import { useNotificationStore } from '@/stores/notification-store'
+import { useDashboardMyWork } from '@/hooks/useDashboardMyWork'
 import { useComplianceSettingsStore } from '@/stores/compliance-settings-store'
 import { useWorkload } from '@/hooks/useWorkload'
 import { useNavigationLoading } from '@/hooks/useNavigationLoading'
@@ -45,33 +42,13 @@ export function OfficerView({ metrics }: OfficerViewProps) {
   // Personal workload
   const workload = useWorkload(userId, undefined, userName)
 
-  // Cross-store items
-  const observations = useObservationStore(s => s.observations)
-  const audits = useAuditStore(s => s.audits)
-  const policies = usePolicyStore(s => s.policies)
-  const letters = useLetterStore(s => s.letters)
+  // My work — server-scoped to the JWT user (/api/dashboard/my-work). Was
+  // client-side filtering of the observations/audits/policies/letters stores.
+  const { data: myWork } = useDashboardMyWork()
+  const myObservations = myWork.observations
+  const myAudits = myWork.audits
+  const myPolicies = myWork.policies
   const notifications = useNotificationStore(s => s.notifications)
-
-  // My items
-  const myObservations = useMemo(() =>
-    observations.filter(o => {
-      const assigneeMatch = o.assignee?.id === userId || o.assignee?.name === userName
-        || o.assignees?.some(a => a.id === userId || a.name === userName)
-      const leaderMatch = o.leaderId === userId
-      return (assigneeMatch || leaderMatch) && o.status !== 'closed'
-    }), [observations, userId, userName])
-
-  const myAudits = useMemo(() =>
-    audits.filter(a => {
-      const match = a.assignee?.id === userId || a.assignee?.name === userId || a.assignee?.name === userName
-      return match && ['pending', 'in_progress'].includes(a.status)
-    }), [audits, userId, userName])
-
-  const myPolicies = useMemo(() =>
-    policies.filter(p => {
-      const match = p.owner?.name === userId || p.owner?.name === userName
-      return match && ['under-review', 'pending-approval'].includes(p.status)
-    }), [policies, userId, userName])
 
   // Overdue items
   const now = Date.now()
@@ -125,30 +102,17 @@ export function OfficerView({ metrics }: OfficerViewProps) {
     return map[status] ?? status.replace(/_/g, ' ').replace(/-/g, ' ')
   }
 
-  // Items needing my action (SAMA approval steps)
-  const actionItems = useMemo(() => {
-    const items: Array<{ id: string; title: string; type: string; route: string }> = []
-
-    for (const l of letters) {
-      if (l.status !== 'pending-approval') continue
-      for (const step of l.approvalChain) {
-        if (step.status === 'pending' && (step.assignedTo === userId || step.assignedTo === userName)) {
-          items.push({ id: l.id, title: `${l.subject} — Step ${step.step} (${step.role})`, type: t('letters.title'), route: `/correspondence/letters?id=${l.id}` })
-        }
-      }
-    }
-
-    for (const p of policies) {
-      if (!p.workflowTimeline) continue
-      for (const step of p.workflowTimeline) {
-        if (step.status === 'current' && (step.user === userId || step.user === userName)) {
-          items.push({ id: p.id, title: `${p.name} — ${step.step}`, type: t('policies.approvalWorkflow'), route: `/correspondence/regulatory-updates/policies?policyId=${p.id}&tab=workflow` })
-        }
-      }
-    }
-
-    return items
-  }, [letters, policies, userId, userName])
+  // Items needing my action — server-sourced (letter approval steps + policy
+  // workflow steps assigned to me).
+  const actionItems = useMemo(() =>
+    myWork.actionItems.map((it) => ({
+      id: it.id,
+      title: `${it.name} — ${it.detail}`,
+      type: it.entity === 'letter' ? t('letters.title') : t('policies.approvalWorkflow'),
+      route: it.entity === 'letter'
+        ? `/correspondence/letters?id=${it.id}`
+        : `/correspondence/regulatory-updates/policies?policyId=${it.id}&tab=workflow`,
+    })), [myWork.actionItems, t])
 
   // Upcoming due dates (next 14 days)
   const upcomingDueDates = useMemo(() => {
