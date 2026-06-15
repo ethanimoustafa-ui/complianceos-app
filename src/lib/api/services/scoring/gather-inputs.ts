@@ -16,6 +16,7 @@
 //     RPC).
 
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { getAdminClient, hasServiceRole } from '@/lib/api/admin'
 import {
   getPeriodConfig,
 } from './compliance-engine'
@@ -174,7 +175,14 @@ async function fetchViaRpc(
   fwFilter: string | null,
   departmentId: string | null,
 ): Promise<SliceArrays | null> {
-  const { data, error } = await supabase.rpc('compute_compliance_inputs', {
+  // Security (audit C4): this SECURITY DEFINER aggregator returns org-wide data
+  // bypassing RLS, so migration 103 REVOKEs EXECUTE from `authenticated`/`anon`
+  // to close the direct /rest/v1/rpc exposure. Call it with the service-role
+  // client instead. Falls back to the passed-in user client when no service key
+  // is configured — there the RPC errors post-revoke and gatherScoringInputs
+  // drops to the RLS-scoped multi-select path (fetchViaSelects).
+  const rpcClient = hasServiceRole() ? getAdminClient() : supabase
+  const { data, error } = await rpcClient.rpc('compute_compliance_inputs', {
     p_period_start: startISO,
     p_period_end: endISO,
     p_framework_id: fwFilter,
