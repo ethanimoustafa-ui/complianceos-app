@@ -65,21 +65,32 @@ export default function DashboardPage() {
   // configured threshold rather than the store's hardcoded 90% default.
   const fetchComplianceSettings = useComplianceSettingsStore((s) => s.fetch)
   useEffect(() => {
-    void fetchAudits()
-    void fetchObservations()
-    void fetchRisks()
+    // The Compliance Health hero (circulars/policies/departments/evaluations),
+    // team workload, training, and the compliance target feed all three views —
+    // always hydrate them.
     void fetchPolicies()
+    void fetchCirculars()
     // fetchTrainings() already fans out to fetchCourses() + fetchEmployees();
     // calling those directly here just duplicated both requests on mount.
     void fetchTrainings()
-    void fetchLetters()
-    void fetchCorrespondence()
-    void fetchCirculars()
     void fetchTeam()
     void fetchDepartments()
     void fetchEvaluations()
     void fetchComplianceSettings()
+    // Count-based KPI cards now come from /api/dashboard/summary (the
+    // dashboard_rollup read-model) via useDashboardMetrics, so the Executive
+    // view no longer hydrates these entity stores (audit B1/B2/B3 — kills 5
+    // pageSize=100/10 fetches per paint). The Managerial/Officer views still
+    // render raw entity lists from them, so hydrate only for those views.
+    if (dashboardView !== 'executive') {
+      void fetchAudits()
+      void fetchObservations()
+      void fetchRisks()
+      void fetchLetters()
+      void fetchCorrespondence()
+    }
   }, [
+    dashboardView,
     fetchAudits,
     fetchObservations,
     fetchRisks,
