@@ -8,13 +8,8 @@
 
 'use client'
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { api, ApiClientError } from '@/lib/api-client'
-import { useCircularStore } from '@/stores/circular-store'
-import { usePolicyStore } from '@/stores/policy-store'
-import { useDepartmentStore } from '@/stores/department-store'
-import { useComplianceEvaluationStore } from '@/stores/compliance-evaluation-store'
-import { calculateComplianceReviewScore } from '@/lib/compliance-review-score'
 import type { DashboardHealthResult } from '@/lib/dashboard-health.types'
 
 interface DashboardHealthFetchResponse {
@@ -75,18 +70,10 @@ export function useDashboardHealth(
   const [error, setError] = useState<ApiClientError | null>(null)
   const cancelled = useRef(false)
 
-  // Business-compliance is computed from the evaluation store on the client
-  // and overlaid — the dashboard hero hasn't migrated to a server endpoint
-  // yet, but the algorithm is pure so this stays consistent with Phase 6.
-  const circulars = useCircularStore(s => s.circulars)
-  const policies = usePolicyStore(s => s.policies)
-  const departments = useDepartmentStore(s => s.departments)
-  const evaluations = useComplianceEvaluationStore(s => s.evaluations)
-  const reviewScore = useMemo(
-    () => calculateComplianceReviewScore({ circulars, policies, departments, evaluations }),
-    [circulars, policies, departments, evaluations],
-  )
-
+  // Business-compliance (businessComplianceScore / businessComplianceEvaluated)
+  // is now computed SERVER-side and returned in the dashboard-health response —
+  // see src/lib/api/services/scoring/business-compliance.ts. The hook no longer
+  // downloads circulars/policies/departments/evaluations to compute it.
   useEffect(() => {
     cancelled.current = false
     const key = JSON.stringify({ p: period })
@@ -137,12 +124,7 @@ export function useDashboardHealth(
     }
   }, [period])
 
-  // Overlay client-side business compliance on top of the server result.
-  return {
-    ...result,
-    businessComplianceScore: reviewScore.overallByRecords,
-    businessComplianceEvaluated: reviewScore.totalEvaluatedItems,
-    isLoading,
-    error,
-  }
+  // businessComplianceScore / businessComplianceEvaluated come from the server
+  // (dashboard-health response), already mapped into `result` above.
+  return { ...result, isLoading, error }
 }

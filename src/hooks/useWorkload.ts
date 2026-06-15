@@ -1,14 +1,7 @@
-﻿'use client'
+'use client'
 
-import { useMemo } from 'react'
-import { useObservationStore } from '@/stores/observation-store'
-import { useAuditStore } from '@/stores/audit-store'
-import { usePolicyStore } from '@/stores/policy-store'
-import { useCorrespondenceStore } from '@/stores/correspondence-store'
-import { useAdvisoryStore } from '@/stores/advisory-store'
-import { useLetterStore } from '@/stores/letter-store'
-import { useRiskStore } from '@/stores/risk-store'
-import { useCircularStore } from '@/stores/circular-store'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { api, ApiClientError } from '@/lib/api-client'
 
 export interface WorkloadItem {
   type: 'observation' | 'audit' | 'policy' | 'correspondence' | 'advisory' | 'sama-letter' | 'risk' | 'circular'
@@ -32,145 +25,135 @@ export interface WorkloadResult {
   percentage: number
 }
 
-function computeWorkload(
-  memberId: string,
-  observations: ReturnType<typeof useObservationStore.getState>['observations'],
-  audits: ReturnType<typeof useAuditStore.getState>['audits'],
-  policies: ReturnType<typeof usePolicyStore.getState>['policies'],
-  correspondence: ReturnType<typeof useCorrespondenceStore.getState>['correspondence'],
-  advisoryRequests: ReturnType<typeof useAdvisoryStore.getState>['advisoryRequests'],
-  samaLetters: ReturnType<typeof useLetterStore.getState>['letters'],
-  risks: ReturnType<typeof useRiskStore.getState>['risks'],
-  circulars: ReturnType<typeof useCircularStore.getState>['circulars'],
-  member?: { burnoutSince?: string; assignments?: { title: string; dueDate: string; progress?: number }[] },
-  memberName?: string,
-): WorkloadResult {
-  const matchedObs = observations.filter(o => {
-    const assigneeMatch = o.assignee?.id === memberId || o.assignee?.name === memberName
-      || o.assignees?.some(a => a.id === memberId || a.name === memberName)
-    const leaderMatch = o.leaderId === memberId
-    return (assigneeMatch || leaderMatch) && o.status !== 'closed'
-  })
-  const obsCount = matchedObs.length
+type Breakdown = WorkloadResult['breakdown']
 
-  const matchedAudits = audits.filter(a => {
-    const match = a.assignee?.id === memberId || a.assignee?.name === memberId || a.assignee?.name === memberName
-    return match && ['pending', 'in_progress'].includes(a.status)
-  })
-  const auditCount = matchedAudits.length
+interface WorkloadMember {
+  burnoutSince?: string
+  assignments?: { title: string; dueDate: string; progress?: number }[]
+}
 
-  const matchedPolicies = policies.filter(p => {
-    const ownerMatch = p.owner?.name === memberId || p.owner?.name === memberName
-    return ownerMatch && ['under-review', 'pending-approval'].includes(p.status)
-  })
-  const policyCount = matchedPolicies.length
+const EMPTY_BREAKDOWN: Breakdown = {
+  observations: 0,
+  audits: 0,
+  policies: 0,
+  correspondence: 0,
+  advisory: 0,
+  samaLetters: 0,
+  risks: 0,
+  circulars: 0,
+}
 
-  const matchedCorr = correspondence.filter(c => {
-    return (c.assignee === memberId || c.assignee === memberName) && !c.archived
-  })
-  const corrCount = matchedCorr.length
-
-  const matchedAdvisory = advisoryRequests.filter(a => {
-    return (a.assignedTo === memberId || a.assignedTo === memberName) && a.status !== 'completed'
-  })
-  const advisoryCount = matchedAdvisory.length
-
-  const matchedSama = samaLetters.filter(l => {
-    return (l.assignedTo === memberId || l.assignedTo === memberName) && !['response-received'].includes(l.status)
-  })
-  const samaCount = matchedSama.length
-
-  const matchedRisks = risks.filter(r => {
-    const ownerMatch = r.owner?.id === memberId || r.owner?.name === memberName
-    return ownerMatch && !['mitigated', 'closed'].includes(r.status)
-  })
-  const riskCount = matchedRisks.length
-
-  const matchedCirculars = circulars.filter(c => {
-    return (c.assignedTo === memberId || c.assignedTo === memberName) && !['completed', 'archived'].includes(c.status)
-  })
-  const circularCount = matchedCirculars.length
-
-  const items: WorkloadItem[] = [
-    ...matchedObs.map(o => ({ type: 'observation' as const, id: o.id, title: o.title })),
-    ...matchedAudits.map(a => ({ type: 'audit' as const, id: a.id, title: a.title })),
-    ...matchedPolicies.map(p => ({ type: 'policy' as const, id: p.id, title: p.name })),
-    ...matchedCorr.map(c => ({ type: 'correspondence' as const, id: c.id, title: c.subject })),
-    ...matchedAdvisory.map(a => ({ type: 'advisory' as const, id: a.id, title: a.subject })),
-    ...matchedSama.map(l => ({ type: 'sama-letter' as const, id: l.id, title: l.subject })),
-    ...matchedRisks.map(r => ({ type: 'risk' as const, id: r.id, title: r.title })),
-    ...matchedCirculars.map(c => ({ type: 'circular' as const, id: c.id, title: c.title })),
-  ]
-
+// Apply the capacity % formula to a member's server-computed assignment counts.
+// (Phase B: counts come from /api/dashboard/workload; the rate/discount math
+// stays client-side because it needs per-member burnoutSince + manual
+// assignments, which live on the team member, not in the DB aggregate.)
+function workloadResultFromCounts(breakdown: Breakdown, member?: WorkloadMember): WorkloadResult {
+  const b = breakdown
+  const entityTotal =
+    b.observations + b.audits + b.policies + b.correspondence + b.advisory + b.samaLetters + b.risks + b.circulars
   const manualCount = member?.assignments?.length ?? 0
-  const total = obsCount + auditCount + policyCount + corrCount + advisoryCount + samaCount + riskCount + circularCount + manualCount
+  const total = entityTotal + manualCount
 
-  // Determine rate per assignment based on burnout duration
   let ratePerAssignment = 10
   if (member?.burnoutSince) {
-    const daysSinceBurnout = Math.max(0, Math.floor((Date.now() - new Date(member.burnoutSince).getTime()) / (1000 * 60 * 60 * 24)))
-    if (daysSinceBurnout > 7) {
-      ratePerAssignment = 30
-    } else if (daysSinceBurnout >= 3) {
-      ratePerAssignment = 20
-    }
+    const daysSinceBurnout = Math.max(
+      0,
+      Math.floor((Date.now() - new Date(member.burnoutSince).getTime()) / (1000 * 60 * 60 * 24)),
+    )
+    if (daysSinceBurnout > 7) ratePerAssignment = 30
+    else if (daysSinceBurnout >= 3) ratePerAssignment = 20
   }
 
   const base = total * ratePerAssignment
-  const discountCount = (member?.assignments ?? []).filter(a => (a.progress ?? 0) >= 75).length
-  const discount = discountCount * 5
-  const percentage = Math.max(0, base - discount)
-
-  return {
-    totalAssignments: total,
-    breakdown: {
-      observations: obsCount,
-      audits: auditCount,
-      policies: policyCount,
-      correspondence: corrCount,
-      advisory: advisoryCount,
-      samaLetters: samaCount,
-      risks: riskCount,
-      circulars: circularCount,
-    },
-    items,
-    percentage,
-  }
+  const discount = (member?.assignments ?? []).filter((a) => (a.progress ?? 0) >= 75).length * 5
+  return { totalAssignments: total, breakdown: b, items: [], percentage: Math.max(0, base - discount) }
 }
 
-export function useWorkload(memberId: string, member?: { burnoutSince?: string; assignments?: { title: string; dueDate: string; progress?: number }[] }, memberName?: string): WorkloadResult {
-  const observations = useObservationStore(s => s.observations)
-  const audits = useAuditStore(s => s.audits)
-  const policies = usePolicyStore(s => s.policies)
-  const correspondence = useCorrespondenceStore(s => s.correspondence)
-  const advisoryRequests = useAdvisoryStore(s => s.advisoryRequests)
-  const samaLetters = useLetterStore(s => s.letters)
-  const risks = useRiskStore(s => s.risks)
-  const circulars = useCircularStore(s => s.circulars)
+// Shared, deduped fetch of the server per-member counts map. Mirrors
+// useDashboardSummary's in-flight coalescing so the multiple workload hooks on a
+// page hit the wire once.
+const inflight = new Map<string, Promise<Record<string, Breakdown>>>()
 
+function useDashboardWorkload(): { counts: Record<string, Breakdown> | null; isLoading: boolean } {
+  const [counts, setCounts] = useState<Record<string, Breakdown> | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const cancelled = useRef(false)
+
+  useEffect(() => {
+    cancelled.current = false
+    const key = 'all'
+    let promise = inflight.get(key)
+    if (!promise) {
+      promise = api
+        .get<{ workloads: Record<string, Breakdown> }>('/dashboard/workload')
+        .then((r) => r.workloads ?? {})
+      inflight.set(key, promise)
+      promise.finally(() => {
+        if (inflight.get(key) === promise) inflight.delete(key)
+      })
+    }
+    setIsLoading(true)
+    promise.then(
+      (data) => {
+        if (cancelled.current) return
+        setCounts(data)
+        setIsLoading(false)
+      },
+      (err: unknown) => {
+        if (cancelled.current) return
+        // Degrade to "no data" (callers fall back to the member's stored
+        // workload) rather than throwing inside a render-path hook.
+        if (!(err instanceof ApiClientError)) {
+          // eslint-disable-next-line no-console
+          console.warn('[useWorkload] failed to load team workload', err)
+        }
+        setCounts({})
+        setIsLoading(false)
+      },
+    )
+    return () => {
+      cancelled.current = true
+    }
+  }, [])
+
+  return { counts, isLoading }
+}
+
+/**
+ * Single-member workload. Counts come from the server; the % formula is applied
+ * with the member's burnout/manual-assignment context. Returns zeros until the
+ * server counts resolve. (`memberName` is retained for call-site compatibility;
+ * server matching is by user id.)
+ */
+export function useWorkload(
+  memberId: string,
+  member?: WorkloadMember,
+  _memberName?: string,
+): WorkloadResult {
+  const { counts } = useDashboardWorkload()
   return useMemo(
-    () => computeWorkload(memberId, observations, audits, policies, correspondence, advisoryRequests, samaLetters, risks, circulars, member, memberName),
-    [memberId, observations, audits, policies, correspondence, advisoryRequests, samaLetters, risks, circulars, member, memberName],
+    () => workloadResultFromCounts(counts?.[memberId] ?? EMPTY_BREAKDOWN, member),
+    [counts, memberId, member],
   )
 }
 
-export function useTeamWorkloads(members: Array<{ id: string; name: string; burnoutSince?: string; assignments?: { title: string; dueDate: string; progress?: number }[] }>): Record<string, WorkloadResult> {
-  const observations = useObservationStore(s => s.observations)
-  const audits = useAuditStore(s => s.audits)
-  const policies = usePolicyStore(s => s.policies)
-  const correspondence = useCorrespondenceStore(s => s.correspondence)
-  const advisoryRequests = useAdvisoryStore(s => s.advisoryRequests)
-  const samaLetters = useLetterStore(s => s.letters)
-  const risks = useRiskStore(s => s.risks)
-  const circulars = useCircularStore(s => s.circulars)
-
+/**
+ * Per-member workload map for a team. Returns `{}` until the server counts
+ * resolve so callers can fall back to each member's stored `workload` during
+ * load (the views already do `workloads[m.id]?.percentage ?? m.workload`).
+ */
+export function useTeamWorkloads(
+  members: Array<{ id: string; name: string; burnoutSince?: string; assignments?: { title: string; dueDate: string; progress?: number }[] }>,
+): Record<string, WorkloadResult> {
+  const { counts } = useDashboardWorkload()
   return useMemo(() => {
+    if (!counts) return {}
     const result: Record<string, WorkloadResult> = {}
     for (const m of members) {
-      result[m.id] = computeWorkload(m.id, observations, audits, policies, correspondence, advisoryRequests, samaLetters, risks, circulars, m, m.name)
+      result[m.id] = workloadResultFromCounts(counts[m.id] ?? EMPTY_BREAKDOWN, m)
     }
     return result
-  }, [members, observations, audits, policies, correspondence, advisoryRequests, samaLetters, risks, circulars])
+  }, [counts, members])
 }
 
 export interface BurnoutMember {
@@ -182,7 +165,7 @@ export interface BurnoutMember {
 }
 
 export function useBurnoutDetection(
-  members: Array<{ id: string; name: string; avatar?: string; department: string; workload: number; burnoutSince?: string; assignments?: { title: string; dueDate: string; progress?: number }[] }>
+  members: Array<{ id: string; name: string; avatar?: string; department: string; workload: number; burnoutSince?: string; assignments?: { title: string; dueDate: string; progress?: number }[] }>,
 ): BurnoutMember[] {
   const workloads = useTeamWorkloads(members)
 

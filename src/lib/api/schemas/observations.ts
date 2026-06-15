@@ -93,6 +93,11 @@ export const ListObservationsQuerySchema = z.object({
   leader_id: Uuid.optional(),
   audit_id: Uuid.optional(),
   q: z.string().max(200).optional(),
+  // Scalability audit D3 / migration 076: 'active' (default) = archived_at IS
+  // NULL; 'archived' = archived_at IS NOT NULL; 'all' = no filter. Mirrors the
+  // policies list (ListPoliciesQuerySchema). Default 'active' matches 076's
+  // intent that archived observations are hidden from the default tracker list.
+  archive_filter: z.enum(['active', 'archived', 'all']).default('active'),
 })
 export type ListObservationsQuery = z.infer<typeof ListObservationsQuerySchema>
 

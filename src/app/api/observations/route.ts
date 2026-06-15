@@ -47,6 +47,11 @@ export async function GET(req: NextRequest) {
     if (q.leader_id) query = query.eq('leader_id', q.leader_id)
     if (q.framework_id) query = query.contains('framework_ids', [q.framework_id])
     if (q.q) query = query.ilike('title', `%${q.q}%`)
+    // Scalability audit D3 / migration 076: archive filter — default 'active'
+    // hides archived rows (mirrors policies route). 'all' returns everything
+    // (the dashboard + tracker request 'all' since they filter client-side).
+    if (q.archive_filter === 'active') query = query.is('archived_at', null)
+    else if (q.archive_filter === 'archived') query = query.not('archived_at', 'is', null)
 
     if (q.department_id) {
       const { data: dept } = await supabase

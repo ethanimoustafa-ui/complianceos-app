@@ -55,93 +55,81 @@ interface AppMetadataClaims {
 }
 
 /**
- * Read `role` + `permissions[]` from the JWT's `app_metadata` claims if the
- * custom access token hook (migration 028) is enabled.
- *
- * IMPORTANT: We parse the access token's JWT payload directly rather than
- * read `user.app_metadata` returned by `supabase.auth.getUser()`. The reason:
- * `getUser()` validates against `/auth/v1/user` which returns the user's
- * `app_metadata` from `auth.users.raw_app_meta_data` (DB record) — the
- * hook-injected claims live ONLY in the JWT, not in that DB column. Reading
- * the JWT payload is the only way to see them server-side.
- *
- * Returns `null` when the hook hasn't been toggled yet, or hasn't fired for
- * this token (e.g. pre-hook session). Caller falls back to DB queries.
+ * Extract `role` + `permissions[]` from the JWT's verified `app_metadata`
+ * claims (custom access token hook, migration 028). Returns `null` when the
+ * hook hasn't populated them (pre-hook session / hook disabled), in which case
+ * the caller falls back to the RBAC table lookup.
  */
-function decodeBase64Url(s: string): string {
-  const padded = s.replace(/-/g, '+').replace(/_/g, '/') + '==='.slice((s.length + 3) % 4)
-  return Buffer.from(padded, 'base64').toString('utf8')
-}
-
-function readClaimsFromToken(accessToken: string | undefined): { role: string; permissions: string[] } | null {
-  if (!accessToken) return null
-  const parts = accessToken.split('.')
-  if (parts.length !== 3) return null
-  try {
-    const payload = JSON.parse(decodeBase64Url(parts[1])) as { app_metadata?: AppMetadataClaims }
-    const meta = payload.app_metadata ?? {}
-    const role = typeof meta.role === 'string' ? meta.role : null
-    const perms = Array.isArray(meta.permissions)
-      ? meta.permissions.filter((p): p is string => typeof p === 'string')
-      : null
-    if (!role || !perms) return null
-    return { role, permissions: perms }
-  } catch {
-    return null
-  }
+function rbacFromAppMetadata(meta: unknown): { role: string; permissions: string[] } | null {
+  if (!meta || typeof meta !== 'object') return null
+  const m = meta as AppMetadataClaims
+  const role = typeof m.role === 'string' ? m.role : null
+  const perms = Array.isArray(m.permissions)
+    ? m.permissions.filter((p): p is string => typeof p === 'string')
+    : null
+  if (!role || !perms) return null
+  return { role, permissions: perms }
 }
 
 /**
  * Memoized per-request. Throws ApiError('unauthenticated', 401) if no session.
  *
- * Claims-first: when the JWT carries `app_metadata.role` + `permissions[]`
- * (custom access token hook enabled) we skip the 3 RBAC queries entirely.
- * Falls back to the legacy 3-query path when claims are absent so the app
- * keeps working before the hook is enabled.
+ * Auth is resolved from the access-token claims via `getClaims()`, which
+ * verifies the JWT signature LOCALLY against the project's asymmetric (ES256)
+ * JWKS — no network round-trip to the auth server. (Audit B1: the previous
+ * `getUser()` call hit `/auth/v1/user` on EVERY route handler, and React
+ * `cache()` does not span concurrent handlers, so a single dashboard paint paid
+ * that auth-server hop ~15x.)
+ *
+ * Claims-first: when the verified JWT carries `app_metadata.role` +
+ * `permissions[]` (custom access token hook, migration 028) we skip the RBAC
+ * queries entirely. Falls back to the table lookup when claims are absent so
+ * the app keeps working before the hook is enabled.
  */
 export const requireUser = cache(async (): Promise<AuthedRequest> => {
   const supabase = await createClient()
-  const {
-    data: { user },
-    error,
-  } = await supabase.auth.getUser()
-  if (error || !user) throw Unauthenticated()
 
-  // Read claims from the JWT payload, not user.app_metadata (which is sourced
-  // from the DB record and won't reflect hook-injected claims).
-  const { data: sessionData } = await supabase.auth.getSession()
-  const claims = readClaimsFromToken(sessionData.session?.access_token)
+  // Local JWT verification against the JWKS (fetched once, cached) — no
+  // auth-server round-trip, unlike getUser().
+  const { data, error } = await supabase.auth.getClaims()
+  const claims = (data?.claims ?? null) as Record<string, unknown> | null
+  if (error || !claims || typeof claims.sub !== 'string') throw Unauthenticated()
+  const userId = claims.sub
 
-  if (claims) {
-    // Fast path — JWT carries role+perms. Still need profile metadata
-    // (department_id, preferred_language, name, email) for downstream
-    // localization and routing. One query instead of three.
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('id, email, name, role, department_id, preferred_language')
-      .eq('id', user.id)
-      .maybeSingle<Profile>()
+  // Reconstruct the minimal supabase `User` shape downstream handlers rely on
+  // (`.id` everywhere; `.email` in a couple of spots) from the verified claims,
+  // so we don't need the getUser() network call to obtain it.
+  const user = {
+    id: userId,
+    email: typeof claims.email === 'string' ? claims.email : undefined,
+    phone: typeof claims.phone === 'string' ? claims.phone : undefined,
+    app_metadata: (claims.app_metadata ?? {}) as Record<string, unknown>,
+    user_metadata: (claims.user_metadata ?? {}) as Record<string, unknown>,
+    aud: typeof claims.aud === 'string' ? claims.aud : 'authenticated',
+    role: typeof claims.role === 'string' ? claims.role : undefined,
+    created_at: '',
+  } as unknown as User
 
-    if (!profile) {
-      throw new ApiError('unauthenticated', 401, 'Profile not found for user')
-    }
+  const rbac = rbacFromAppMetadata(claims.app_metadata)
 
-    return { supabase, user, profile, permissions: claims.permissions }
-  }
-
-  // Fallback path — JWT claims unavailable (hook not enabled, or stale token).
-  // Identical to the pre-Phase-11 implementation.
+  // Profile metadata (department_id, preferred_language, name, email) is needed
+  // downstream regardless of which RBAC path we take — one query either way.
   const { data: profile } = await supabase
     .from('profiles')
     .select('id, email, name, role, department_id, preferred_language')
-    .eq('id', user.id)
+    .eq('id', userId)
     .maybeSingle<Profile>()
-
   if (!profile) {
     throw new ApiError('unauthenticated', 401, 'Profile not found for user')
   }
 
-  const permissions = await loadPermissions(supabase, user.id)
+  if (rbac) {
+    // Fast path — permissions straight from the verified JWT, zero RBAC queries.
+    return { supabase, user, profile, permissions: rbac.permissions }
+  }
+
+  // Fallback — claims lack role/permissions (hook disabled / stale token).
+  const permissions = await loadPermissions(supabase, userId)
   return { supabase, user, profile, permissions }
 })
 
