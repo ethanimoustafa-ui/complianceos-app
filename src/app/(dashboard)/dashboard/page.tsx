@@ -25,7 +25,6 @@ import { useCorrespondenceStore } from '@/stores/correspondence-store'
 import { useCircularStore } from '@/stores/circular-store'
 import { useTeamStore } from '@/stores/team-store'
 import { useDepartmentStore } from '@/stores/department-store'
-import { useComplianceEvaluationStore } from '@/stores/compliance-evaluation-store'
 import { useComplianceSettingsStore } from '@/stores/compliance-settings-store'
 
 
@@ -54,19 +53,17 @@ export default function DashboardPage() {
   const fetchCorrespondence = useCorrespondenceStore((s) => s.fetchAll)
   const fetchCirculars = useCircularStore((s) => s.fetchAll)
   const fetchTeam = useTeamStore((s) => s.fetchAll)
-  // The "Compliance Health" hero score is derived from departments +
-  // evaluations (alongside circulars/policies). These two stores were only
-  // hydrated by /reports/compliance-review, so the hero sat at "Pending —"
-  // until the user visited that page. Prefetch them here so the score is
-  // correct on first dashboard paint.
+  // The "Compliance Health" hero still needs departments hydrated (Executive
+  // getDeptLabel + the team roster). Business-compliance is now computed
+  // server-side (dashboard-health), so the evaluations store is no longer
+  // fetched here — compliance-review hydrates it on its own page.
   const fetchDepartments = useDepartmentStore((s) => s.fetchAll)
-  const fetchEvaluations = useComplianceEvaluationStore((s) => s.fetchAll)
   // Hydrate the company compliance target so the hero's "At Risk" line uses the
   // configured threshold rather than the store's hardcoded 90% default.
   const fetchComplianceSettings = useComplianceSettingsStore((s) => s.fetch)
   useEffect(() => {
-    // The Compliance Health hero (circulars/policies/departments/evaluations),
-    // team workload, training, and the compliance target feed all three views —
+    // The Compliance Health hero (circulars/policies/departments), team
+    // workload, training, and the compliance target feed all three views —
     // always hydrate them.
     void fetchPolicies()
     void fetchCirculars()
@@ -75,7 +72,6 @@ export default function DashboardPage() {
     void fetchTrainings()
     void fetchTeam()
     void fetchDepartments()
-    void fetchEvaluations()
     void fetchComplianceSettings()
     // Count-based KPI cards now come from /api/dashboard/summary (the
     // dashboard_rollup read-model) via useDashboardMetrics, so the Executive
@@ -101,7 +97,6 @@ export default function DashboardPage() {
     fetchCirculars,
     fetchTeam,
     fetchDepartments,
-    fetchEvaluations,
     fetchComplianceSettings,
   ])
 

@@ -16,6 +16,7 @@ import { DashboardHealthQuerySchema } from '@/lib/api/schemas/reports'
 import { enqueueRecompute, readScoreCache } from '@/lib/api/services/compliance'
 import { gatherScoringInputs } from '@/lib/api/services/scoring/gather-inputs'
 import { calculateDashboardHealth } from '@/lib/api/services/scoring/dashboard-health'
+import { computeBusinessCompliance } from '@/lib/api/services/scoring/business-compliance'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -70,6 +71,11 @@ export async function GET(req: NextRequest) {
       })
       const result = calculateDashboardHealth(gathered.dashboardInput)
 
+      // Phase A: compute the business-compliance overlay server-side (was
+      // computed in the browser from 4 full-table downloads). Reuses the same
+      // pure lib as the Compliance Review page so the two can't drift.
+      const biz = await computeBusinessCompliance(supabase)
+
       // The dashboard-health engine returns a richer shape than the
       // compliance-score one. We pack the full shape into `components`
       // (jsonb) so consumers can read it back as a single blob without a
@@ -78,8 +84,8 @@ export async function GET(req: NextRequest) {
       const componentsPayload = {
         components: result.components,
         frameworkScores: result.frameworkScores,
-        businessComplianceScore: result.businessComplianceScore,
-        businessComplianceEvaluated: result.businessComplianceEvaluated,
+        businessComplianceScore: biz.businessComplianceScore,
+        businessComplianceEvaluated: biz.businessComplianceEvaluated,
       }
 
       const expiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString()

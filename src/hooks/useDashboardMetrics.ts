@@ -3,10 +3,6 @@
 import { useMemo } from 'react'
 import { useTrainingStore } from '@/stores/training-store'
 import { useTeamStore } from '@/stores/team-store'
-import { useCircularStore } from '@/stores/circular-store'
-import { usePolicyStore } from '@/stores/policy-store'
-import { useDepartmentStore } from '@/stores/department-store'
-import { useComplianceEvaluationStore } from '@/stores/compliance-evaluation-store'
 import { useFrameworkConfigStore } from '@/stores/framework-config-store'
 import { useAuthStore } from '@/stores/auth-store'
 import { useComplianceScore } from '@/hooks/useComplianceScore'
@@ -147,22 +143,10 @@ export function useDashboardMetrics(): DashboardMetrics {
   const pinnedIds = useFrameworkConfigStore(s => s.pinnedIds)
   const currentUser = useAuthStore(s => s.user)
 
-  // First-fetch detector for the Compliance Health hero. Its score is derived
-  // client-side from these four stores (see useDashboardHealth); until every
-  // one has hydrated we can't tell "nothing evaluated" from "not loaded yet".
-  const circularsLoading = useCircularStore(s => s.isLoading)
-  const circularsLastFetched = useCircularStore(s => s.lastFetched)
-  const policiesLoading = usePolicyStore(s => s.isLoading)
-  const policiesLastFetched = usePolicyStore(s => s.lastFetched)
-  const departmentsLoading = useDepartmentStore(s => s.isLoading)
-  const departmentsLastFetched = useDepartmentStore(s => s.lastFetched)
-  const evaluationsLoading = useComplianceEvaluationStore(s => s.isLoading)
-  const evaluationsLastFetched = useComplianceEvaluationStore(s => s.lastFetched)
-  const complianceHealthLoading =
-    (circularsLoading && circularsLastFetched === null) ||
-    (policiesLoading && policiesLastFetched === null) ||
-    (departmentsLoading && departmentsLastFetched === null) ||
-    (evaluationsLoading && evaluationsLastFetched === null)
+  // The Compliance Health hero's score (incl. business-compliance) is now fully
+  // server-computed (useDashboardHealth -> /api/compliance/dashboard-health), so
+  // its loading state is just the health request's own loading flag.
+  const complianceHealthLoading = health.isLoading
 
   const trainingMetrics = useMemo(() => ({
     overallCompletion: overviewStats.overallCompletion ?? 0,
