@@ -1,0 +1,16 @@
+{
+  "name": "complianceos-latex-renderer",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Brand-agnostic xelatex tex->pdf microservice for ComplianceOS PDF generation.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "express": "^4.21.2"
+  }
+}
