@@ -95,6 +95,13 @@ export interface DashboardMetrics {
    * pending state (`businessComplianceEvaluated === 0` *after* loading).
    */
   complianceHealthLoading: boolean
+  /**
+   * True while the count-based KPI summary (/api/dashboard/summary) is still on
+   * its first fetch. The page gates its composed skeleton on this so the alert
+   * cards / metric tiles / hero don't pop in with zeros and then fill — they
+   * stay under the skeleton until the real counts land.
+   */
+  summaryLoading: boolean
 }
 
 const ZERO_SEV = { total: 0, critical: 0, high: 0, medium: 0, low: 0 }
@@ -205,5 +212,6 @@ export function useDashboardMetrics(): DashboardMetrics {
     frameworks: frameworkMetrics,
     currentUser,
     complianceHealthLoading,
+    summaryLoading: summary.isLoading,
   }
 }

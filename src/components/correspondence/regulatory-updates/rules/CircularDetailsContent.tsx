@@ -476,25 +476,13 @@ export function CircularDetailsContent({ circular, activeTab, setActiveTab, onCl
             <section>
               <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-3">{t('regulatoryUpdates.implementationProgress')}</h3>
               <div className="p-4 bg-slate-50 rounded-xl border border-slate-100 space-y-2">
-                {detailHydrated ? (
-                  <>
-                    <div className={`flex justify-between text-sm font-bold`}>
-                      <span className="text-slate-600">{freshCircular.progress}%</span>
-                      <span className="text-slate-400">{t('regulatoryUpdates.due')}: {freshCircular.dueDate}</span>
-                    </div>
-                    <div className="h-2 bg-slate-200 rounded-full overflow-hidden">
-                      <div className="h-full bg-emerald-500 rounded-full transition-all" style={{ width: `${freshCircular.progress}%` }} />
-                    </div>
-                  </>
-                ) : (
-                  <div className="space-y-2" role="status" aria-busy="true" data-skeleton="true" aria-live="polite">
-                    <div className="flex justify-between">
-                      <Skeleton className="h-4 w-10" />
-                      <Skeleton className="h-4 w-32" />
-                    </div>
-                    <Skeleton className="h-2 w-full" />
-                  </div>
-                )}
+                <div className={`flex justify-between text-sm font-bold`}>
+                  <span className="text-slate-600">{freshCircular.progress}%</span>
+                  <span className="text-slate-400">{t('regulatoryUpdates.due')}: {freshCircular.dueDate}</span>
+                </div>
+                <div className="h-2 bg-slate-200 rounded-full overflow-hidden">
+                  <div className="h-full bg-emerald-500 rounded-full transition-all" style={{ width: `${freshCircular.progress}%` }} />
+                </div>
               </div>
             </section>
 

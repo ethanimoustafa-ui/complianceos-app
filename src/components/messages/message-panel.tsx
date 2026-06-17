@@ -8,6 +8,7 @@ import { useMessageStore } from '@/stores/message-store'
 import { useAuthStore } from '@/stores/auth-store'
 import { useTeamStore } from '@/stores/team-store'
 import { useTranslation } from '@/i18n'
+import { Skeleton } from '@/components/ui/skeleton'
 
 type View = 'threads' | 'detail' | 'compose' | 'members'
 
@@ -28,6 +29,7 @@ export function MessagePanel({ isOpen, onClose }: MessagePanelProps) {
   const fetchThreads = useMessageStore(s => s.fetchAll)
   const fetchMessages = useMessageStore(s => s.fetchMessages)
   const threadsLoading = useMessageStore(s => s.isLoading)
+  const messagesLoading = useMessageStore(s => s.isLoadingMessages)
   const teamMembers = useTeamStore(s => s.members)
 
   // Hydrate the thread list from the server whenever the panel opens — the
@@ -687,7 +689,24 @@ export function MessagePanel({ isOpen, onClose }: MessagePanelProps) {
         {view === 'detail' && (
           <>
             <div className="flex-1 overflow-y-auto hide-scrollbar p-4 space-y-4">
-              {threadMessages.map((msg) => {
+              {messagesLoading && threadMessages.length === 0 ? (
+                // First-fetch skeleton for an opened thread — alternating
+                // incoming/outgoing bubble placeholders so the body doesn't
+                // flash blank before messages arrive. Stale messages stay
+                // visible on refetch (gated on threadMessages.length === 0).
+                <div className="space-y-4" data-skeleton="true" role="status" aria-busy="true" aria-live="polite">
+                  <div className="flex justify-start">
+                    <Skeleton className="h-12 w-3/5 rounded-2xl rounded-bl-md" />
+                  </div>
+                  <div className="flex justify-end">
+                    <Skeleton className="h-10 w-2/5 rounded-2xl rounded-br-md" />
+                  </div>
+                  <div className="flex justify-start">
+                    <Skeleton className="h-14 w-2/3 rounded-2xl rounded-bl-md" />
+                  </div>
+                </div>
+              ) : (
+                threadMessages.map((msg) => {
                 const isMe = msg.senderId === user?.id
                 return (
                   <div key={msg.id} className={cn('flex', isMe ? 'justify-end' : 'justify-start')}>
@@ -707,7 +726,8 @@ export function MessagePanel({ isOpen, onClose }: MessagePanelProps) {
                     </div>
                   </div>
                 )
-              })}
+                })
+              )}
               <div ref={messagesEndRef} />
             </div>
 

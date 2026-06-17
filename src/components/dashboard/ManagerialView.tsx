@@ -41,7 +41,7 @@ export function ManagerialView({ metrics }: ManagerialViewProps) {
   // Pending approvals — server-sourced (/api/dashboard/approvals). Was a
   // client-side scan of the letters/policies/audits stores; the view only maps
   // entity -> i18n label + route here.
-  const { items: approvalItems, total: pendingApprovalsTotal } = useDashboardApprovals()
+  const { items: approvalItems, total: pendingApprovalsTotal, isLoading: approvalsLoading } = useDashboardApprovals()
   const pendingApprovals = useMemo(() => {
     const meta: Record<ApprovalItem['entity'], { type: string; typeKey: string; route: (id: string) => string }> = {
       letter: { type: 'SAMA Letter', typeKey: t('letters.title'), route: (id) => `/correspondence/letters?id=${id}` },
@@ -396,7 +396,20 @@ export function ManagerialView({ metrics }: ManagerialViewProps) {
           {t('dashboard.pendingApprovals')}
         </h3>
         <Card className="divide-y divide-slate-100">
-          {pendingApprovals.length > 0 ? (
+          {approvalsLoading && pendingApprovals.length === 0 ? (
+            Array.from({ length: 4 }).map((_, i) => (
+              <div key={`approval-skel-${i}`} className="px-5 py-3 flex items-center justify-between">
+                <div className="flex items-center gap-3 flex-1">
+                  <Skeleton className="h-4 w-4 rounded" />
+                  <div className="flex-1 space-y-2">
+                    <Skeleton className="h-3 w-3/5" />
+                    <Skeleton className="h-2 w-1/4" />
+                  </div>
+                </div>
+                <Skeleton className="h-5 w-16 rounded-full" />
+              </div>
+            ))
+          ) : pendingApprovals.length > 0 ? (
             pendingApprovals.slice(0, 8).map(item => {
               const key = `mgr-approval-${item.id}`
               const loadingThis = pendingKey === key

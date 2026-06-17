@@ -20,6 +20,8 @@ import { Gate } from '@/components/auth/gate'
 import { dicebearAvatar } from '@/lib/avatar'
 import { paginate } from '@/lib/pagination'
 import { formatAuditAction } from '@/lib/audit-log-format'
+import { formatTimelineDate } from '@/lib/format-date'
+import { isUuid } from '@/lib/user-activity-meta'
 import { useTeamSectionGuard } from '@/hooks/useTeamSectionGuard'
 
 // Helper Components
@@ -78,7 +80,7 @@ function LogStatusIndicator({ status, label }: { status: UserLog['status']; labe
 }
 
 export default function TeamLogsPage() {
-  const { t } = useTranslation()
+  const { t, isRTL } = useTranslation()
   const pathname = usePathname()
   // Manager/admin only — officers are redirected to /team/training.
   const canViewTeamSection = useTeamSectionGuard()
@@ -105,6 +107,35 @@ export default function TeamLogsPage() {
     void fetchUserLogs()
     void fetchTeam()
   }, [fetchUserLogs, fetchTeam])
+
+  // Resolve each log to a real identity: the server may store a raw uuid in
+  // `user_name` (legacy mirror rows), so we match by userId / name against the
+  // team roster to recover the display name + avatar seed. Memoised per
+  // (logs, members) and keyed by the synthetic numeric log id.
+  const identityById = useMemo(() => {
+    const byId = new Map<string, TeamMember>()
+    const byName = new Map<string, TeamMember>()
+    for (const m of members) {
+      byId.set(m.id, m)
+      byName.set(m.name, m)
+    }
+    const cache = new Map<number, { name: string; avatarSeed: string; member: TeamMember | null }>()
+    for (const log of userLogs) {
+      const member =
+        (log.userId ? byId.get(log.userId) : undefined) ??
+        byId.get(log.user) ??
+        byName.get(log.user) ??
+        null
+      const name = member?.name ?? (isUuid(log.user) ? t('team.unknownUser' as TranslationKey) : log.user)
+      const avatarSeed =
+        member?.avatarSeed || member?.avatar || member?.name || (isUuid(log.user) ? 'unknown' : log.user)
+      cache.set(log.id, { name, avatarSeed, member })
+    }
+    return cache
+  }, [userLogs, members, t])
+
+  const idOf = (log: UserLog) =>
+    identityById.get(log.id) ?? { name: log.user, avatarSeed: log.user, member: null }
 
   // Translated action labels. Phase 6 adds raw English fallbacks for the
   // RBAC/auth events; Phase 7 will replace these with proper i18n keys.
@@ -157,13 +188,14 @@ export default function TeamLogsPage() {
   }
 
   const filteredLogs = userLogs.filter((log) => {
+    const resolvedName = idOf(log).name
     const translatedDetails = describeLog(log)
     const matchSearch = !logSearch ||
-      log.user.toLowerCase().includes(logSearch.toLowerCase()) ||
+      resolvedName.toLowerCase().includes(logSearch.toLowerCase()) ||
       translatedDetails.toLowerCase().includes(logSearch.toLowerCase()) ||
       log.device.toLowerCase().includes(logSearch.toLowerCase()) ||
       log.location.toLowerCase().includes(logSearch.toLowerCase())
-    const matchUser = !filterUser || log.user === filterUser
+    const matchUser = !filterUser || resolvedName === filterUser
     const matchAction = !filterAction || log.action === filterAction
     const matchStatus = !filterStatus || log.status === filterStatus
     return matchSearch && matchUser && matchAction && matchStatus
@@ -189,14 +221,15 @@ export default function TeamLogsPage() {
     if (!logSort) return filteredLogs
     const list = [...filteredLogs]
     const { col, dir } = logSort
+    const nameOf = (l: UserLog) => identityById.get(l.id)?.name ?? l.user
     list.sort((a, b) => {
       const cmp = col === 'timestamp'
         ? a.timestamp.localeCompare(b.timestamp)
-        : a.user.localeCompare(b.user)
+        : nameOf(a).localeCompare(nameOf(b))
       return dir === 'desc' ? -cmp : cmp
     })
     return list
-  }, [filteredLogs, logSort])
+  }, [filteredLogs, logSort, identityById])
 
   const { items: pagedLogs, totalPages } = useMemo(
     () => paginate(sortedLogs, currentPage, LOGS_PER_PAGE),
@@ -280,7 +313,7 @@ export default function TeamLogsPage() {
                 placeholder={t('team.allUsers')}
                 items={[
                   { id: '', label: t('team.allUsers') },
-                  ...Array.from(new Set(userLogs.map(l => l.user))).map(name => ({ id: name, label: name })),
+                  ...Array.from(new Set(userLogs.map(l => idOf(l).name))).map(name => ({ id: name, label: name })),
                 ]}
               />
             </div>
@@ -411,16 +444,16 @@ export default function TeamLogsPage() {
                       )}
                     >
                       <td className="px-6 py-4 text-xs font-medium text-slate-600">
-                        {log.timestamp}
+                        {formatTimelineDate(log.timestamp, isRTL)}
                       </td>
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-2">
                           <img
-                            src={dicebearAvatar(log.user.split(' ')[0])}
+                            src={dicebearAvatar(idOf(log).avatarSeed)}
                             className="w-6 h-6 rounded-full border border-slate-200"
-                            alt={log.user}
+                            alt={idOf(log).name}
                           />
-                          <span className="text-sm font-bold text-slate-900">{log.user}</span>
+                          <span className="text-sm font-bold text-slate-900">{idOf(log).name}</span>
                         </div>
                       </td>
                       <td className="px-6 py-4">
@@ -428,8 +461,8 @@ export default function TeamLogsPage() {
                       </td>
                       <td className="px-6 py-4">
                         <div>
-                          <p className="text-xs font-medium text-slate-700">{log.device}</p>
-                          <p className="text-[10px] text-slate-400">{log.location}</p>
+                          <p className="text-xs font-medium text-slate-700">{log.device || '—'}</p>
+                          <p className="text-[10px] text-slate-400">{log.location || '—'}</p>
                         </div>
                       </td>
                       <td className="px-6 py-4 text-xs text-slate-500 max-w-xs truncate">
@@ -453,13 +486,13 @@ export default function TeamLogsPage() {
                             <div className="grid grid-cols-4 gap-6">
                               <div className="flex items-center gap-3">
                                 <img
-                                  src={dicebearAvatar(log.user.split(' ')[0])}
+                                  src={dicebearAvatar(idOf(log).avatarSeed)}
                                   className="w-10 h-10 rounded-full border-2 border-white shadow-sm"
-                                  alt={log.user}
+                                  alt={idOf(log).name}
                                 />
                                 <div>
                                   <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{t('team.user')}</p>
-                                  <p className="text-sm font-bold text-slate-900">{log.user}</p>
+                                  <p className="text-sm font-bold text-slate-900">{idOf(log).name}</p>
                                 </div>
                               </div>
                               <div>
@@ -468,22 +501,22 @@ export default function TeamLogsPage() {
                               </div>
                               <div>
                                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">{t('team.device')}</p>
-                                <p className="text-sm font-bold text-slate-900">{log.device}</p>
+                                <p className="text-sm font-bold text-slate-900">{log.device || '—'}</p>
                               </div>
                               <div>
                                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">{t('team.location')}</p>
-                                <p className="text-sm text-slate-600">{log.location}</p>
+                                <p className="text-sm text-slate-600">{log.location || '—'}</p>
                               </div>
                             </div>
                             <div className="mt-4 pt-4 border-t border-slate-100">
                               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">{t('team.fullContext')}</p>
                               <p className="text-sm text-slate-700 leading-relaxed">{describeLog(log)}</p>
-                              <p className="text-xs text-slate-500 mt-2">{t('team.ipAddress')}: {log.ipAddress}</p>
+                              <p className="text-xs text-slate-500 mt-2">{t('team.ipAddress')}: {log.ipAddress || '—'}</p>
                             </div>
                             <div className="flex gap-3 mt-4 pt-4 border-t border-slate-100">
                               <Button variant="outline" size="sm" onClick={(e) => {
                                 e.stopPropagation()
-                                const member = members.find(m => m.name === log.user)
+                                const member = idOf(log).member
                                 if (member) {
                                   setSelectedLogMember(member)
                                   setIsProfileDrawerOpen(true)

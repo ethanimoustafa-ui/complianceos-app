@@ -9,6 +9,22 @@ export interface WorkloadItem {
   title: string
 }
 
+/**
+ * Fetch the actual open work items assigned to one member (id + title + type)
+ * from /api/dashboard/workload/items. The team-workload hooks only return
+ * COUNTS (the server `compute_team_workload` aggregate), so this is the source
+ * the Burnout Detection card's reassignment drawer uses to list reassignable
+ * items. Returns [] on any failure so the drawer degrades to "no items".
+ */
+export async function fetchMemberWorkloadItems(memberId: string): Promise<WorkloadItem[]> {
+  try {
+    const res = await api.get<{ items: WorkloadItem[] }>('/dashboard/workload/items', { memberId })
+    return res.items ?? []
+  } catch {
+    return []
+  }
+}
+
 export interface WorkloadResult {
   totalAssignments: number
   breakdown: {
@@ -117,6 +133,16 @@ function useDashboardWorkload(): { counts: Record<string, Breakdown> | null; isL
   }, [])
 
   return { counts, isLoading }
+}
+
+/**
+ * True while the shared per-member workload counts are still on their first
+ * fetch. Lets widgets (Burnout Detection, workload distribution) render a
+ * skeleton instead of a misleading "nothing overloaded" empty state during
+ * load. Shares the deduped in-flight request with the other workload hooks.
+ */
+export function useWorkloadLoading(): boolean {
+  return useDashboardWorkload().isLoading
 }
 
 /**

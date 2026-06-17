@@ -108,6 +108,7 @@ interface MessageState {
   threads: MessageThread[]
   messages: Message[]
   isLoading: boolean
+  isLoadingMessages: boolean
   isMutating: boolean
   error: string | null
   lastFetched: number | null
@@ -141,6 +142,7 @@ export const useMessageStore = create<MessageState>()((set, get) => ({
   threads: [],
   messages: [],
   isLoading: false,
+  isLoadingMessages: false,
   isMutating: false,
   error: null,
   lastFetched: null,
@@ -180,6 +182,7 @@ export const useMessageStore = create<MessageState>()((set, get) => ({
   },
 
   fetchMessages: async (threadId) => {
+    set({ isLoadingMessages: true })
     try {
       const result = await api.get<{
         items: MessageApiRow[]
@@ -195,6 +198,8 @@ export const useMessageStore = create<MessageState>()((set, get) => ({
       }))
     } catch (e) {
       set({ error: errorMessage(e, 'Failed to fetch messages') })
+    } finally {
+      set({ isLoadingMessages: false })
     }
   },
 

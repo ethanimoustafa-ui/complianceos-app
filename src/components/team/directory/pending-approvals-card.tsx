@@ -1,8 +1,9 @@
 ﻿'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { Icon } from '@iconify/react'
 import { Card } from '@/components/ui/card'
+import { Skeleton } from '@/components/ui/skeleton'
 import { Modal } from '@/components/ui/modal'
 import { Button } from '@/components/ui/button'
 import { useTranslation } from '@/i18n'
@@ -42,6 +43,19 @@ export function PendingApprovalsCard() {
   const letters = useLetterStore((s) => s.letters)
   const approveLetterStep = useLetterStore((s) => s.approveStep)
   const rejectLetterStep = useLetterStore((s) => s.rejectStep)
+
+  // This card scans the policy + letter stores client-side, but the directory
+  // page only hydrates the team store — so without this the stores were empty
+  // on a fresh load and the card always showed "no approvals pending". Hydrate
+  // both here (fetches are deduped) and track first-fetch for the skeleton.
+  const fetchPolicies = usePolicyStore((s) => s.fetchAll)
+  const fetchLetters = useLetterStore((s) => s.fetchAll)
+  const policiesFetched = usePolicyStore((s) => s.lastFetched)
+  const lettersFetched = useLetterStore((s) => s.lastFetched)
+  useEffect(() => {
+    void fetchPolicies()
+    void fetchLetters()
+  }, [fetchPolicies, fetchLetters])
 
   const [page, setPage] = useState(0)
   const [selectedItem, setSelectedItem] = useState<ApprovalItem | null>(null)
@@ -104,6 +118,10 @@ export function PendingApprovalsCard() {
 
   const totalPages = Math.ceil(items.length / perPage)
   const pageItems = items.slice(page * perPage, (page + 1) * perPage)
+  // Show the skeleton until BOTH source stores have completed their first fetch
+  // (and only while we have nothing to show yet) — never flash the empty state
+  // mid-load.
+  const isLoading = (policiesFetched === null || lettersFetched === null) && items.length === 0
 
   const typeIcons: Record<string, { icon: string; color: string }> = {
     policy: { icon: 'lucide:file-text', color: 'text-blue-600 bg-blue-50' },
@@ -177,7 +195,19 @@ export function PendingApprovalsCard() {
         )}
       </h3>
 
-      {items.length === 0 ? (
+      {isLoading ? (
+        <div className="space-y-3" aria-busy="true">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className="p-3 rounded-xl border border-slate-100 bg-slate-50 flex items-start gap-3">
+              <Skeleton className="h-8 w-8 rounded-lg" />
+              <div className="flex-1 space-y-2">
+                <Skeleton className="h-3 w-3/4" />
+                <Skeleton className="h-2 w-1/3" />
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : items.length === 0 ? (
         <div className="text-center py-8">
           <Icon icon="lucide:check-circle" className="text-3xl text-emerald-400 mx-auto mb-2" />
           <p className="text-sm text-slate-500 font-medium">{t('team.noApprovalsPending' as TranslationKey)}</p>

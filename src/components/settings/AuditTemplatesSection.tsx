@@ -54,12 +54,13 @@ type DisplayRow = {
 export function AuditTemplatesSection({ embedded = false }: { embedded?: boolean } = {}) {
   const { t, isRTL } = useTranslation()
   const { templates, delete: deleteTemplate } = useAuditTemplateStore()
-  const isLoading = useAuditTemplateStore((s) => s.isLoading)
+  const auditLoading = useAuditTemplateStore((s) => s.isLoading)
   const fetchTemplates = useAuditTemplateStore((s) => s.fetchAll)
   const auditCategoryItems = useAuditCategoryStore((s) => s.categories)
   // Entity templates (Schedule-Audit "Save as template" footer) surface here too.
   const fetchEntity = useEntityTemplateStore((s) => s.fetchByType)
   const entityByType = useEntityTemplateStore((s) => s.byType)
+  const entityLoading = useEntityTemplateStore((s) => s.isLoading)
   const deleteEntity = useEntityTemplateStore((s) => s.deleteTemplate)
   // Primary surface now (configurables hub), so hydrate both sources on mount.
   useEffect(() => {
@@ -157,7 +158,7 @@ export function AuditTemplatesSection({ embedded = false }: { embedded?: boolean
           </Button>
         </Gate>
       </div>
-      {isLoading && rows.length === 0 ? (
+      {(auditLoading || entityLoading) && rows.length === 0 ? (
         <div className="p-6"><ListSkeleton rows={4} columns={5} /></div>
       ) : (
       <div className="overflow-x-auto">

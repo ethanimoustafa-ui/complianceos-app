@@ -151,6 +151,12 @@ interface TrainingState {
   // genuine 0. Starts `true`, cleared once the first `fetchMetrics` settles;
   // never re-raised, so refetches don't re-flash the skeleton.
   metricsLoading: boolean
+  // Dedicated first-load gate for `fetchEmployees`. The shared `isLoading` /
+  // `lastFetched` are flipped by whichever of fetchCourses/fetchEmployees
+  // resolves first, so when courses wins the race the employee table's
+  // skeleton would clear while `employees` is still []. This flag is owned
+  // solely by `fetchEmployees`, so the EmployeeTable can gate on it instead.
+  employeesLoading: boolean
 
   // Compliance-engine actions (local-only shims).
   fetchAll: (force?: boolean) => Promise<void>
@@ -260,6 +266,7 @@ export const useTrainingStore = create<TrainingState>()((set, get) => ({
   error: null,
   lastFetched: null,
   metricsLoading: true,
+  employeesLoading: true,
 
   // ---------- Compliance-engine slice (local-only) -------------------------
 
@@ -401,9 +408,17 @@ export const useTrainingStore = create<TrainingState>()((set, get) => ({
           employees: result.items.map((row) => mapEmployeeRow(row, previousById.get(row.id))),
           isLoading: false,
           lastFetched: Date.now(),
+          // Dedicated employees first-load gate: clear it on the employees
+          // fetch specifically, so a faster fetchCourses doesn't prematurely
+          // drop the EmployeeTable skeleton.
+          employeesLoading: false,
         })
       } catch (e) {
-        set({ error: errorMessage(e, 'Failed to fetch training employees'), isLoading: false })
+        set({
+          error: errorMessage(e, 'Failed to fetch training employees'),
+          isLoading: false,
+          employeesLoading: false,
+        })
       } finally {
         employeesInFlight = null
       }

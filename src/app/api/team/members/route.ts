@@ -5,7 +5,6 @@ import { requireUser } from '@/lib/api/auth'
 import { handle } from '@/lib/api/errors'
 import { ok, paginate } from '@/lib/api/response'
 import { rangeFor } from '@/lib/api/pagination'
-import { cacheTags } from '@/lib/api/cache'
 import { ListMembersQuerySchema } from '@/lib/api/schemas/team'
 import { PROFILE_LIST_COLUMNS } from '@/lib/api/services/team'
 
@@ -34,8 +33,14 @@ export async function GET(req: NextRequest) {
       .range(from, to)
     if (error) throw error
 
+    // No browser/CDN caching: the roster is per-user (RLS-filtered) and is
+    // mutated through this same admin UI (role changes, invites, removals). A
+    // `public, s-maxage, stale-while-revalidate` header let the browser serve a
+    // STALE roster on the reload right after a role change — the change looked
+    // like it "didn't work" even though the DB persisted it. `force-dynamic`
+    // already re-queries on every request, so there is nothing to gain here.
     return ok(paginate(data ?? [], q.page, q.pageSize, count ?? 0), {
-      cache: { sMaxAge: 60, staleWhileRevalidate: 300, tags: [cacheTags.team()] },
+      cache: 'no-store',
     })
   } catch (e) {
     return handle(e)

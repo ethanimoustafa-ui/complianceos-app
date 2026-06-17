@@ -24,9 +24,10 @@ export async function GET(_req: NextRequest, { params }: Params) {
     const { userId } = await params
     const { supabase } = await requireUser()
     const detail = await getMemberDetail(supabase, userId)
-    return ok(detail, {
-      cache: { sMaxAge: 60, staleWhileRevalidate: 300, tags: [cacheTags.team(userId)] },
-    })
+    // No browser/CDN caching — same reason as the list route: this carries the
+    // member's role/permissions and is mutated through the team UI, so a cached
+    // copy would show a stale role right after a change.
+    return ok(detail, { cache: 'no-store' })
   } catch (e) {
     return handle(e)
   }

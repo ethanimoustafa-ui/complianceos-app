@@ -44,7 +44,7 @@ export function OfficerView({ metrics }: OfficerViewProps) {
 
   // My work — server-scoped to the JWT user (/api/dashboard/my-work). Was
   // client-side filtering of the observations/audits/policies/letters stores.
-  const { data: myWork } = useDashboardMyWork()
+  const { data: myWork, isLoading: myWorkLoading } = useDashboardMyWork()
   const myObservations = myWork.observations
   const myAudits = myWork.audits
   const myPolicies = myWork.policies
@@ -238,6 +238,13 @@ export function OfficerView({ metrics }: OfficerViewProps) {
 
           {/* Dynamic action buttons — direct task actions */}
           <div className="flex flex-wrap gap-3 mt-6 pt-4 border-t border-slate-200/60">
+            {myWorkLoading ? (
+              <>
+                <Skeleton className="h-10 w-44 rounded-lg" />
+                <Skeleton className="h-10 w-40 rounded-lg" />
+              </>
+            ) : (
+            <>
             {myObservations.length > 0 && (
               <Button variant="dark" loading={pendingKey === 'off-observations'} onClick={() => navigate('off-observations', '/observations')} className="gap-2 active:scale-[0.98]">
                 {pendingKey !== 'off-observations' && <Icon icon="lucide:eye" className="w-4 h-4" />}
@@ -264,6 +271,8 @@ export function OfficerView({ metrics }: OfficerViewProps) {
             )}
             {myObservations.length === 0 && myAudits.length === 0 && myPolicies.length === 0 && actionItems.length === 0 && (
               <p className="text-sm text-emerald-600 font-bold">{t('dashboard.noIssues')}</p>
+            )}
+            </>
             )}
           </div>
         </div>
@@ -336,7 +345,43 @@ export function OfficerView({ metrics }: OfficerViewProps) {
         )
       })()}
 
-      {!hasAnyData ? (
+      {myWorkLoading ? (
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+          <div className="lg:col-span-8">
+            <Skeleton className="h-3 w-40 mb-4" />
+            <Card className="divide-y divide-slate-100">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <div key={i} className="px-5 py-3 flex items-center justify-between">
+                  <div className="flex items-center gap-3 flex-1">
+                    <Skeleton className="h-4 w-4 rounded" />
+                    <div className="flex-1 space-y-2">
+                      <Skeleton className="h-3 w-3/5" />
+                      <Skeleton className="h-2 w-1/4" />
+                    </div>
+                  </div>
+                  <Skeleton className="h-5 w-20 rounded-full" />
+                </div>
+              ))}
+            </Card>
+          </div>
+          <div className="lg:col-span-4 space-y-6">
+            <div>
+              <Skeleton className="h-3 w-40 mb-4" />
+              <Card className="p-4 space-y-3">
+                {Array.from({ length: 4 }).map((_, i) => (
+                  <div key={i} className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 flex-1">
+                      <Skeleton className="h-3 w-3 rounded" />
+                      <Skeleton className="h-3 w-3/4" />
+                    </div>
+                    <Skeleton className="h-2 w-12" />
+                  </div>
+                ))}
+              </Card>
+            </div>
+          </div>
+        </div>
+      ) : !hasAnyData ? (
         <Card className="p-12 text-center">
           <Icon icon="lucide:check-circle" className="text-4xl text-emerald-500 mx-auto mb-3" />
           <p className="text-lg font-bold text-slate-900">{t('dashboard.allCaughtUp')}</p>

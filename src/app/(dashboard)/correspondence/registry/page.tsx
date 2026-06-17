@@ -10,6 +10,7 @@ import { useCircularStore } from '@/stores/circular-store'
 import { usePolicyStore } from '@/stores/policy-store'
 import type { Circular, Policy } from '@/types'
 import { EditableSelect } from '@/components/ui/editable-select'
+import { Skeleton } from '@/components/ui/skeleton'
 import { formatLocalizedDate } from '@/lib/format-date'
 
 type RegistryRow = {
@@ -51,6 +52,14 @@ export default function RegistryPage() {
     void fetchCirculars()
     void fetchPolicies()
   }, [fetchCirculars, fetchPolicies])
+
+  // First-fetch skeleton gate: show skeleton rows while either store is on its
+  // initial fetch (isLoading && empty). Refetches keep the stale table visible.
+  const circularsLoading = useCircularStore((s) => s.isLoading)
+  const policiesLoading = usePolicyStore((s) => s.isLoading)
+  const isLoading =
+    (circularsLoading && circulars.length === 0) ||
+    (policiesLoading && policies.length === 0)
 
   // Registry view filters
   const [searchTerm, setSearchTerm] = useState('')
@@ -297,7 +306,20 @@ export default function RegistryPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredRegistryRows.map((row) => (
+                  {isLoading && Array.from({ length: 6 }).map((_, r) => (
+                    <tr key={`skeleton-${r}`} className="border-b border-slate-100">
+                      <td className="p-4"><Skeleton className="h-4 w-20" /></td>
+                      <td className="p-4 w-64"><Skeleton className="h-4 w-48" /></td>
+                      <td className="p-4"><Skeleton className="h-4 w-16 rounded-full" /></td>
+                      <td className="p-4"><Skeleton className="h-4 w-14 rounded-full" /></td>
+                      <td className="p-4"><Skeleton className="h-4 w-16 rounded-full" /></td>
+                      <td className="p-4"><Skeleton className="h-4 w-16 rounded-full" /></td>
+                      <td className="p-4"><Skeleton className="h-4 w-20" /></td>
+                      <td className="p-4 min-w-[120px]"><Skeleton className="h-1.5 w-full rounded-full" /></td>
+                      <td className="p-4"><Skeleton className="h-4 w-12" /></td>
+                    </tr>
+                  ))}
+                  {!isLoading && filteredRegistryRows.map((row) => (
                     <tr key={`${row.kind}-${row.id}`} className="border-b border-slate-100 hover:bg-slate-50 transition-colors">
                       <td className="p-4 text-xs font-mono text-slate-500">{row.reference}</td>
                       <td className="p-4 w-64 max-w-64">
@@ -351,7 +373,7 @@ export default function RegistryPage() {
                       </td>
                     </tr>
                   ))}
-                  {filteredRegistryRows.length === 0 && (
+                  {!isLoading && filteredRegistryRows.length === 0 && (
                     <tr>
                       <td colSpan={9} className="p-8 text-center text-sm text-slate-400">{t('common.noResults')}</td>
                     </tr>

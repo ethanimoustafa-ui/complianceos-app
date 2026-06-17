@@ -94,6 +94,11 @@ export default function CorrespondenceFeedPage() {
   // F3: skeleton gating — show shimmer on first fetch (isLoading + empty list).
   const isFeedLoading = correspondenceStore.isLoading && correspondenceStore.correspondence.length === 0
   const isCircularsLoading = circularStore.isLoading && circularStore.circulars.length === 0
+  // Regulatory Tracker renders BOTH circular AND policy rows, so its skeleton
+  // must wait on both stores' first fetch — otherwise circulars resolving first
+  // clears the shimmer while policy rows are still loading and pop in late.
+  const isPoliciesLoading = policyStore.isLoading && policyStore.policies.length === 0
+  const isTrackerLoading = isCircularsLoading || isPoliciesLoading
   const isTeamLoading = teamStore.isLoading && teamStore.members.length === 0
 
   // W29.3-R1: framework list needed to resolve letter authority codes/names so
@@ -711,8 +716,9 @@ export default function CorrespondenceFeedPage() {
                 </div>
 
                 <div className="space-y-4">
-                  {/* F3: skeleton while circulars are first-loading */}
-                  {isCircularsLoading && Array.from({ length: 3 }).map((_, i) => (
+                  {/* F3: skeleton while circulars OR policies are first-loading
+                      (the tracker renders both, so gate on both stores). */}
+                  {isTrackerLoading && Array.from({ length: 3 }).map((_, i) => (
                     <div key={i} className="flex items-center gap-4 p-4 rounded-xl border border-slate-100 bg-slate-50">
                       <Skeleton className="w-10 h-10 rounded-lg shrink-0" />
                       <div className="flex-1 space-y-2">
@@ -722,7 +728,7 @@ export default function CorrespondenceFeedPage() {
                       <Skeleton className="h-5 w-16 rounded-full shrink-0" />
                     </div>
                   ))}
-                  {!isCircularsLoading && topCirculars.map((circ) => (
+                  {!isTrackerLoading && topCirculars.map((circ) => (
                     <CircularRow
                       key={circ.id}
                       circular={circ}
@@ -734,7 +740,7 @@ export default function CorrespondenceFeedPage() {
                   {/* F3: always show policies alongside circulars (not just as
                       a fallback). topPolicies is always rendered so the tracker
                       is never empty when policies exist even if circulars do too. */}
-                  {!isCircularsLoading && topPolicies.map((policy) => (
+                  {!isTrackerLoading && topPolicies.map((policy) => (
                     <div
                       key={policy.id}
                       onClick={() => router.push(`/correspondence/regulatory-updates/policies`)}
@@ -758,7 +764,7 @@ export default function CorrespondenceFeedPage() {
                       </span>
                     </div>
                   ))}
-                  {!isCircularsLoading && topCirculars.length === 0 && topPolicies.length === 0 && (
+                  {!isTrackerLoading && topCirculars.length === 0 && topPolicies.length === 0 && (
                     <p className="text-sm text-slate-400 text-center py-4">{t('correspondence.noRequirements')}</p>
                   )}
                 </div>

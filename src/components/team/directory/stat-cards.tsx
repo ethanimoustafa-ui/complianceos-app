@@ -1,7 +1,9 @@
 ﻿'use client'
 
+import { useEffect } from 'react'
 import { Icon } from '@iconify/react'
 import { Card } from '@/components/ui/card'
+import { Skeleton } from '@/components/ui/skeleton'
 import { useTranslation } from '@/i18n'
 import type { TranslationKey } from '@/i18n'
 import { usePolicyStore } from '@/stores/policy-store'
@@ -14,6 +16,7 @@ function StatCard({
   label,
   badge,
   badgeColor,
+  loading = false,
 }: {
   icon: string
   iconColor: 'emerald' | 'blue' | 'orange' | 'purple' | 'rose'
@@ -21,6 +24,7 @@ function StatCard({
   label: string
   badge: string
   badgeColor: 'emerald' | 'blue' | 'orange' | 'purple' | 'rose'
+  loading?: boolean
 }) {
   const iconColorClasses: Record<string, string> = {
     emerald: 'bg-emerald-50 text-emerald-600',
@@ -44,11 +48,19 @@ function StatCard({
         <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${iconColorClasses[iconColor]}`}>
           <Icon icon={icon} className="text-xl" />
         </div>
-        <span className={`text-[10px] font-bold px-2 py-1 rounded-md ${badgeColorClasses[badgeColor]}`}>
-          {badge}
-        </span>
+        {loading ? (
+          <Skeleton className="h-6 w-16 rounded-md" />
+        ) : (
+          <span className={`text-[10px] font-bold px-2 py-1 rounded-md ${badgeColorClasses[badgeColor]}`}>
+            {badge}
+          </span>
+        )}
       </div>
-      <p className="text-2xl font-bold text-slate-900">{value}</p>
+      {loading ? (
+        <Skeleton className="h-8 w-12 mb-1" />
+      ) : (
+        <p className="text-2xl font-bold text-slate-900">{value}</p>
+      )}
       <p className="text-xs font-medium text-slate-500">{label}</p>
     </Card>
   )
@@ -64,6 +76,20 @@ interface DirectoryStatCardsProps {
 
 export function DirectoryStatCards({ totalMembers, adminCount, assignedTasks, capacityPct }: DirectoryStatCardsProps) {
   const { t } = useTranslation()
+
+  // Defensive hydration: the "Pending Approvals" card derives from the policy
+  // and letter stores, which the team page does not fetch. Trigger both here
+  // (fetches are deduped/safe) so the card doesn't depend on a sibling, and
+  // track first-fetch for the skeleton gate.
+  const fetchPolicies = usePolicyStore((s) => s.fetchAll)
+  const fetchLetters = useLetterStore((s) => s.fetchAll)
+  const policiesFetched = usePolicyStore((s) => s.lastFetched)
+  const lettersFetched = useLetterStore((s) => s.lastFetched)
+  useEffect(() => {
+    void fetchPolicies()
+    void fetchLetters()
+  }, [fetchPolicies, fetchLetters])
+  const pendingLoading = policiesFetched === null || lettersFetched === null
 
   const now = Date.now()
   const thirtyDaysMs = 30 * 24 * 60 * 60 * 1000
@@ -121,6 +147,7 @@ export function DirectoryStatCards({ totalMembers, adminCount, assignedTasks, ca
         label={t('team.pendingApprovals' as TranslationKey)}
         badge={urgentCount > 0 ? `${urgentCount} ${t('team.urgent' as TranslationKey)}` : t('team.allClear' as TranslationKey)}
         badgeColor={urgentCount > 0 ? 'rose' : 'emerald'}
+        loading={pendingLoading}
       />
     </div>
   )

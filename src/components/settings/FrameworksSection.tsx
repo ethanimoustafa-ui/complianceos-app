@@ -29,6 +29,7 @@ export function FrameworksSection() {
   const { t, language } = useTranslation()
   const { frameworks, toggleEnabled, pinnedIds, pinFramework, unpinFramework, replacePinned } = useFrameworkConfigStore()
   const isLoadingFrameworks = useFrameworkConfigStore((s) => s.isLoading)
+  const lastFetched = useFrameworkConfigStore((s) => s.lastFetched)
 
   // Company-wide compliance target (singleton settings row). This is the
   // dashboard's headline Compliance Health threshold — independent of any
@@ -221,7 +222,7 @@ export function FrameworksSection() {
 
       <p className="text-xs font-medium text-slate-400 mb-3">{t('settings.pinnedFrameworks')} ({pinnedIds.length}/3)</p>
 
-      {isLoadingFrameworks && frameworks.length === 0 ? (
+      {isLoadingFrameworks && lastFetched === null ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {Array.from({ length: 3 }).map((_, i) => (
             <div key={i} className="bg-white border border-slate-200 p-6 rounded-2xl space-y-4">

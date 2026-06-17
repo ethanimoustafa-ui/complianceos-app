@@ -16,7 +16,7 @@ import { hasRole } from '@/lib/permissions'
 import { useTrainingStore } from '@/stores/training-store'
 import { useDepartmentStore } from '@/stores/department-store'
 import { EditableSelect } from '@/components/ui/editable-select'
-import { ListSkeleton } from '@/components/ui/skeleton'
+import { Skeleton, ListSkeleton } from '@/components/ui/skeleton'
 import { Tooltip } from '@/components/ui/tooltip'
 import type { TrainingEmployee, TrainingCourse, CourseProgress } from '@/types'
 
@@ -88,13 +88,18 @@ function TeamTrainingPageContent() {
   }, [fetchCourses, fetchEmployees, fetchMetrics])
 
   // Wave-2 Agent E: first-fetch skeleton.
-  const trainingLoading = useTrainingStore((s) => s.isLoading)
-  const trainingLastFetched = useTrainingStore((s) => s.lastFetched)
-  const showTrainingSkeleton =
-    trainingLoading
-    && employees.length === 0
-    && courses.length === 0
-    && trainingLastFetched === null
+  // fetchCourses + fetchEmployees share isLoading/lastFetched, so whichever
+  // resolves first clears them while the other resource may still be empty.
+  // Gate the EmployeeTable on the dedicated employees first-load flag so the
+  // skeleton tracks the data this section actually renders (`employees`).
+  const employeesLoading = useTrainingStore((s) => s.employeesLoading)
+  const showTrainingSkeleton = employeesLoading && employees.length === 0
+
+  // First-load gate for the metrics-derived cards (overview / department /
+  // saudization). These render seeded 0/empty values from the store until
+  // fetchMetrics settles; gate on `metricsLoading` so they don't flash 0.
+  const metricsLoading = useTrainingStore((s) => s.metricsLoading)
+  const showMetricsSkeleton = metricsLoading && overviewStats.coursesAssigned === 0
 
   // UI state
   const [toastMessage, setToastMessage] = useState<string | null>(null)
@@ -319,16 +324,61 @@ function TeamTrainingPageContent() {
         </div>
 
         {/* Overview Stats */}
-        <TrainingOverviewStats stats={overviewStats} />
+        {showMetricsSkeleton ? (
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className="glass-card p-6 rounded-2xl">
+                <div className="flex items-center gap-4">
+                  <Skeleton className="h-12 w-12 rounded-xl" />
+                  <div className="space-y-2">
+                    <Skeleton className="h-7 w-16" />
+                    <Skeleton className="h-3 w-24" />
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <TrainingOverviewStats stats={overviewStats} />
+        )}
 
         {/* Department Progress & Saudization */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
-          <DepartmentProgressCard departments={departmentProgress} />
-          <SaudizationCard
-            metrics={saudizationMetrics}
-            employees={employees}
-            onEmployeeClick={handleViewEmployee}
-          />
+          {showMetricsSkeleton ? (
+            <>
+              <div className="bg-white rounded-2xl p-6 border border-slate-100 space-y-4">
+                <Skeleton className="h-5 w-40" />
+                {Array.from({ length: 4 }).map((_, i) => (
+                  <div key={i} className="space-y-2">
+                    <Skeleton className="h-4 w-full" />
+                    <Skeleton className="h-2 w-full rounded-full" />
+                  </div>
+                ))}
+              </div>
+              <div className="bg-white rounded-2xl p-6 border border-slate-100 space-y-4">
+                <Skeleton className="h-5 w-44" />
+                <div className="flex items-center gap-6">
+                  <Skeleton className="h-24 w-24 rounded-full" />
+                  <div className="flex-1 space-y-2">
+                    <Skeleton className="h-4 w-32" />
+                    <Skeleton className="h-6 w-40" />
+                  </div>
+                </div>
+                {Array.from({ length: 3 }).map((_, i) => (
+                  <Skeleton key={i} className="h-4 w-full" />
+                ))}
+              </div>
+            </>
+          ) : (
+            <>
+              <DepartmentProgressCard departments={departmentProgress} />
+              <SaudizationCard
+                metrics={saudizationMetrics}
+                employees={employees}
+                onEmployeeClick={handleViewEmployee}
+              />
+            </>
+          )}
         </div>
 
         {/* Employee Table */}

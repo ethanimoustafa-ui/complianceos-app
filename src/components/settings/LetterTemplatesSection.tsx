@@ -10,7 +10,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Icon } from '@iconify/react'
 import { Button } from '@/components/ui/button'
 import { LoadingButton } from '@/components/ui/loading-button'
-import { ListSkeleton } from '@/components/ui/skeleton'
+import { ListSkeleton, Skeleton } from '@/components/ui/skeleton'
 import { Modal } from '@/components/ui/modal'
 import { Gate } from '@/components/auth/gate'
 import { SortHeader, type SortState } from '@/components/ui/sort-header'
@@ -41,6 +41,10 @@ export function LetterTemplatesSection({ embedded = false }: { embedded?: boolea
   // Letter TYPE labels resolve the type column to a friendly name.
   const letterTypes = useLetterTypeStore((s) => s.types)
   const fetchTypes = useLetterTypeStore((s) => s.fetchAll)
+  // First-fetch detector for the TYPE store: while types are still loading and
+  // none have resolved yet, the type cell shows a placeholder rather than the
+  // raw typeId, so labels don't flash from raw keys ('non-objection') to names.
+  const typesFirstLoad = useLetterTypeStore((s) => s.isLoading && s.types.length === 0)
 
   useEffect(() => {
     void fetchTemplates()
@@ -53,10 +57,13 @@ export function LetterTemplatesSection({ embedded = false }: { embedded?: boolea
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null)
   const [rowDeleting, setRowDeleting] = useState(false)
 
-  function typeLabel(typeId: string): string {
+  // Returns the friendly label, or `null` when the type can't be resolved yet
+  // (so the cell can render a placeholder instead of flashing the raw typeId
+  // while the letter-TYPE store is still on its first fetch).
+  function typeLabel(typeId: string): string | null {
     const match = letterTypes.find((lt) => lt.key === typeId || lt.id === typeId)
     if (match) return isRTL && match.labelAr ? match.labelAr : match.label
-    return typeId
+    return typesFirstLoad ? null : typeId
   }
 
   const sorted = useMemo(() => {
@@ -171,7 +178,9 @@ export function LetterTemplatesSection({ embedded = false }: { embedded?: boolea
                       <span className="text-sm font-bold text-slate-700">{tmpl.name}</span>
                     </div>
                   </td>
-                  <td className="px-8 py-4 text-xs font-medium text-slate-500">{typeLabel(String(tmpl.type))}</td>
+                  <td className="px-8 py-4 text-xs font-medium text-slate-500">
+                    {typeLabel(String(tmpl.type)) ?? <Skeleton className="h-3 w-16" />}
+                  </td>
                   <td className="px-8 py-4 text-xs text-slate-500">{tmpl.lastModified}</td>
                   <td className="px-8 py-4"><span className="text-xs font-bold text-slate-600">{tmpl.usageCount}</span></td>
                   <td className="px-8 py-4 text-end">
