@@ -30,6 +30,7 @@ import { FrameworkChips, matchesFrameworkQuery } from '@/components/ui/framework
 import { exportRisksLocalized } from '@/lib/export'
 import { downloadPdf } from '@/lib/pdf-client'
 import type { TranslationKey } from '@/i18n'
+import { ExportMenu } from '@/components/ui/export-menu'
 import { useFormattedDate } from '@/hooks/useFormattedDate'
 import { ChecklistSection } from '@/components/observations/detail/checklist-section'
 // C(#31): glow a mitigation-checklist item opened from the calendar.
@@ -757,21 +758,22 @@ export default function ReportsRisksPage() {
           </div>
         </div>
         <div className={`flex items-center gap-4`}>
-          <button
-            className="p-2.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-all cursor-pointer"
-            title={t('reports.exportReports')}
-            onClick={() => exportRisksLocalized(sortedRisks, 'risk-register', t, isRTL)}
-          >
-            <Icon icon="lucide:download-cloud" className="text-lg" />
-          </button>
-          <button
-            className="p-2.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-all cursor-pointer disabled:opacity-50"
-            title={isRTL ? 'تصدير PDF' : 'Export PDF'}
-            onClick={handleExportPdf}
-            disabled={pdfBusy}
-          >
-            <Icon icon={pdfBusy ? 'lucide:loader-2' : 'lucide:file-text'} className={`text-lg ${pdfBusy ? 'animate-spin' : ''}`} />
-          </button>
+          <ExportMenu
+            iconOnly
+            options={[
+              {
+                label: t('common.exportCsv'),
+                icon: 'lucide:table',
+                onSelect: () => exportRisksLocalized(sortedRisks, 'risk-register', t, isRTL),
+              },
+              {
+                label: t('common.exportPdf'),
+                icon: 'lucide:file-text',
+                onSelect: handleExportPdf,
+                loading: pdfBusy,
+              },
+            ]}
+          />
           <Gate perm="Manage Audit Findings">
             <Button className="shadow-lg shadow-emerald-100" onClick={() => setShowAddRiskModal(true)}>
               <Icon icon="lucide:plus" />

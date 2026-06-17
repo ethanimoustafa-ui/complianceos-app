@@ -18,6 +18,7 @@ import type { Audit as AuditType } from '@/types'
 import { exportAuditsLocalized } from '@/lib/export'
 import { downloadPdf } from '@/lib/pdf-client'
 import type { TranslationKey } from '@/i18n'
+import { ExportMenu } from '@/components/ui/export-menu'
 import { useFormattedDate } from '@/hooks/useFormattedDate'
 import { useDashboardHealth } from '@/hooks/useDashboardHealth'
 import { Gate } from '@/components/auth/gate'
@@ -600,21 +601,22 @@ export default function ReportsAuditsPage() {
               className={`${isRTL ? 'pr-10 pl-4' : 'pl-10 pr-4'} py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 w-64 transition-all`}
             />
           </div>
-          <button
-            className="p-2.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-all cursor-pointer"
-            title={t('reports.exportReports')}
-            onClick={() => exportAuditsLocalized(sortedAudits, 'audits', t, isRTL)}
-          >
-            <Icon icon="lucide:download-cloud" className="text-lg" />
-          </button>
-          <button
-            className="p-2.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-all cursor-pointer disabled:opacity-50"
-            title={isRTL ? 'تصدير PDF' : 'Export PDF'}
-            onClick={handleExportPdf}
-            disabled={pdfBusy}
-          >
-            <Icon icon={pdfBusy ? 'lucide:loader-2' : 'lucide:file-text'} className={`text-lg ${pdfBusy ? 'animate-spin' : ''}`} />
-          </button>
+          <ExportMenu
+            iconOnly
+            options={[
+              {
+                label: t('common.exportCsv'),
+                icon: 'lucide:table',
+                onSelect: () => exportAuditsLocalized(sortedAudits, 'audits', t, isRTL),
+              },
+              {
+                label: t('common.exportPdf'),
+                icon: 'lucide:file-text',
+                onSelect: handleExportPdf,
+                loading: pdfBusy,
+              },
+            ]}
+          />
           <Gate perm="Manage Audit Findings">
             <Button className="shadow-lg shadow-emerald-100" onClick={() => setShowScheduleAuditModal(true)}>
               <Icon icon="lucide:plus" />

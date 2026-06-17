@@ -15,6 +15,7 @@ import {
 } from '@/components/dashboard/DashboardSkeletons'
 import { downloadPdf } from '@/lib/pdf-client'
 import { toComplianceReportData } from '@/lib/compliance-report-data'
+import { ExportMenu } from '@/components/ui/export-menu'
 import type { DashboardView } from '@/types'
 import { usePolicyStore } from '@/stores/policy-store'
 import { useTrainingStore } from '@/stores/training-store'
@@ -145,7 +146,22 @@ export default function DashboardPage() {
 
   return (
     <div className={showFadeIn ? 'dashboard-fade-in' : ''}>
-      <Header title={t(titleKey as any)} subtitle={t(subtitleKey as any)} onExport={handleExport} exportLabel={pdfBusy ? (language === 'ar' ? 'جارٍ الإنشاء…' : 'Generating…') : t('common.exportPdf' as any)} />
+      <Header
+        title={t(titleKey as any)}
+        subtitle={t(subtitleKey as any)}
+        exportSlot={
+          <ExportMenu
+            options={[
+              {
+                label: t('common.exportPdf' as any),
+                icon: 'lucide:file-text',
+                onSelect: handleExport,
+                loading: pdfBusy,
+              },
+            ]}
+          />
+        }
+      />
 
       {/* W44: persona view switcher (persists via user-preferences store). */}
       <div className="px-8 pt-6 flex items-center gap-2">

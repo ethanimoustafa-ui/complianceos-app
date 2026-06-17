@@ -24,6 +24,7 @@ import { DeleteConfirmationDialog } from '@/components/ui/delete-confirmation-di
 import { api } from '@/lib/api-client'
 import { useDashboardSummary } from '@/hooks/useDashboardSummary'
 import { downloadPdf } from '@/lib/pdf-client'
+import { ExportMenu } from '@/components/ui/export-menu'
 import type {
   Observation,
   ObservationSource,
@@ -471,29 +472,24 @@ export default function ObservationsPage() {
         </div>
 
         <div className={`flex items-center gap-4`}>
-          {/* Export CSV Button */}
+          {/* Export Menu — CSV + PDF */}
           <Gate perm="Export Compliance Data">
-            <Button
-              variant="outline"
-              onClick={handleExport}
-              className={`hidden md:flex`}
-            >
-              <Icon icon="lucide:download" />
-              {t('common.exportCsv')}
-            </Button>
-          </Gate>
-
-          {/* Export PDF Button */}
-          <Gate perm="Export Compliance Data">
-            <Button
-              variant="outline"
-              onClick={handleExportPdf}
-              loading={pdfBusy}
-              className={`hidden md:flex`}
-            >
-              <Icon icon="lucide:file-text" />
-              {t('letters.exportPdf' as import('@/i18n').TranslationKey)}
-            </Button>
+            <ExportMenu
+              className="hidden md:inline-block"
+              options={[
+                {
+                  label: t('common.exportCsv'),
+                  icon: 'lucide:table',
+                  onSelect: handleExport,
+                },
+                {
+                  label: t('common.exportPdf'),
+                  icon: 'lucide:file-text',
+                  onSelect: handleExportPdf,
+                  loading: pdfBusy,
+                },
+              ]}
+            />
           </Gate>
 
           {/* Add Observation Button */}

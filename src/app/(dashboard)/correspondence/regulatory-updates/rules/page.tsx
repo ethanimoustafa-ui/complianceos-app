@@ -20,6 +20,7 @@ import { paginate } from '@/lib/pagination'
 import { downloadPdf } from '@/lib/pdf-client'
 import type { TranslationKey } from '@/i18n'
 import { useAuthStore } from '@/stores/auth-store'
+import { ExportMenu } from '@/components/ui/export-menu'
 
 import { StatCard } from '@/components/correspondence/regulatory-updates/rules/StatCard'
 import { RegisterCircularModal } from '@/components/correspondence/regulatory-updates/rules/RegisterCircularModal'
@@ -223,26 +224,23 @@ function RegulatoryUpdatesRulesPageContent() {
           </div>
         </div>
         <div className={`flex items-center gap-4`}>
-          <button
-            type="button"
-            className="p-2.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-all cursor-pointer"
-            title={t('regulatoryUpdates.exportRules')}
-            onClick={() => exportRulesLocalized(filteredCirculars, 'rules', t, isRTL)}
-          >
-            <Icon icon="lucide:download-cloud" className="text-lg" />
-          </button>
-          {/* Export PDF — generates a circulars list report. Distinct from the
-              per-circular "Download Source PDF" button in CircularDetailsContent
-              which downloads the user-uploaded pdfUrl file. */}
+          {/* Export Menu — CSV + PDF */}
           <Gate perm="Export Compliance Data">
-            <Button
-              variant="outline"
-              loading={pdfBusy}
-              onClick={handleExportPdf}
-            >
-              <Icon icon="lucide:file-text" />
-              {t('letters.exportPdf' as TranslationKey)}
-            </Button>
+            <ExportMenu
+              options={[
+                {
+                  label: t('common.exportCsv'),
+                  icon: 'lucide:table',
+                  onSelect: () => exportRulesLocalized(filteredCirculars, 'rules', t, isRTL),
+                },
+                {
+                  label: t('common.exportPdf'),
+                  icon: 'lucide:file-text',
+                  onSelect: handleExportPdf,
+                  loading: pdfBusy,
+                },
+              ]}
+            />
           </Gate>
           <Gate perm="Manage Audit Findings">
             <Button

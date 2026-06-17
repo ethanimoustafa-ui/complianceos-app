@@ -30,6 +30,7 @@ import { useFrameworkConfigStore } from '@/stores/framework-config-store'
 import { matchesFrameworkQuery } from '@/components/ui/framework-chips'
 import { downloadPdf } from '@/lib/pdf-client'
 import type { TranslationKey } from '@/i18n'
+import { ExportMenu } from '@/components/ui/export-menu'
 
 // Toast component (kept inline — single-use, three-second display).
 function Toast({ message, onClose }: { message: string; onClose: () => void }) {
@@ -282,30 +283,28 @@ export default function RegulatoryUpdatesPoliciesPage() {
           </div>
         </div>
         <div className={`flex items-center gap-4`}>
-          <button
-            type="button"
-            className="p-2.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-all cursor-pointer"
-            title={t('policies.exportPolicies')}
-            onClick={() => {
-              const depts = useDepartmentStore.getState().departments
-              const resolveDept = (id: string | undefined) =>
-                id ? depts.find((d) => d.id === id)?.name ?? '' : ''
-              exportPoliciesLocalized(filteredPolicies, 'policies', t, isRTL, resolveDept)
-            }}
-          >
-            <Icon icon="lucide:download-cloud" className="text-lg" />
-          </button>
-          {/* Export PDF — generates a policy register report. Distinct from any
-              per-policy uploaded-source-PDF download inside PolicyDetailsContent. */}
+          {/* Export Menu — CSV + PDF */}
           <Gate perm="Export Compliance Data">
-            <Button
-              variant="outline"
-              loading={pdfBusy}
-              onClick={handleExportPdf}
-            >
-              <Icon icon="lucide:file-text" />
-              {t('letters.exportPdf' as TranslationKey)}
-            </Button>
+            <ExportMenu
+              options={[
+                {
+                  label: t('common.exportCsv'),
+                  icon: 'lucide:table',
+                  onSelect: () => {
+                    const depts = useDepartmentStore.getState().departments
+                    const resolveDept = (id: string | undefined) =>
+                      id ? depts.find((d) => d.id === id)?.name ?? '' : ''
+                    exportPoliciesLocalized(filteredPolicies, 'policies', t, isRTL, resolveDept)
+                  },
+                },
+                {
+                  label: t('common.exportPdf'),
+                  icon: 'lucide:file-text',
+                  onSelect: handleExportPdf,
+                  loading: pdfBusy,
+                },
+              ]}
+            />
           </Gate>
           <Gate perm="Approve Policy Reviews">
             <Button

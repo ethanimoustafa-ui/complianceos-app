@@ -13,6 +13,7 @@ import type { TranslationKey } from '@/i18n'
 import { downloadPdf } from '@/lib/pdf-client'
 import { Gate } from '@/components/auth/gate'
 import { useAuthStore } from '@/stores/auth-store'
+import { ExportMenu } from '@/components/ui/export-menu'
 import { hasRole } from '@/lib/permissions'
 import { useTrainingStore } from '@/stores/training-store'
 import { useDepartmentStore } from '@/stores/department-store'
@@ -324,20 +325,28 @@ function TeamTrainingPageContent() {
           </div>
         </div>
         <div className="flex items-center gap-3">
-          <Button variant="outline" size="sm" onClick={() => {
-            import('@/lib/export').then(({ exportTrainingDataLocalized }) => {
-              exportTrainingDataLocalized(employees, courses, 'training-data', t)
-            })
-          }}>
-            <Icon icon="lucide:download" className="mr-1.5" />
-            {t('training.exportReport' as TranslationKey)}
-          </Button>
-          {/* Export PDF — generates a training compliance LaTeX report. */}
+          {/* Export Menu — CSV + PDF */}
           <Gate perm="Export Compliance Data">
-            <Button variant="outline" size="sm" loading={pdfBusy} onClick={handleExportPdf}>
-              <Icon icon="lucide:file-text" className="mr-1.5" />
-              {t('letters.exportPdf' as TranslationKey)}
-            </Button>
+            <ExportMenu
+              size="sm"
+              options={[
+                {
+                  label: t('common.exportCsv'),
+                  icon: 'lucide:table',
+                  onSelect: () => {
+                    void import('@/lib/export').then(({ exportTrainingDataLocalized }) => {
+                      exportTrainingDataLocalized(employees, courses, 'training-data', t)
+                    })
+                  },
+                },
+                {
+                  label: t('common.exportPdf'),
+                  icon: 'lucide:file-text',
+                  onSelect: handleExportPdf,
+                  loading: pdfBusy,
+                },
+              ]}
+            />
           </Gate>
           <Gate perm="Manage Training Programs">
             <Button variant="outline" size="sm" onClick={() => setIsManualEntryOpen(true)}>
