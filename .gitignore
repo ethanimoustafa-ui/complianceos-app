@@ -83,3 +83,6 @@ Thumbs.db
 !yarn-error.log*
 # Generated sample PDFs (regenerate via scripts/gen-letter-sample.mts)
 /letter-*.pdf
+
+# Letterhead design source (docx + images); base64 is inlined in assets.ts
+/letter-assets/
