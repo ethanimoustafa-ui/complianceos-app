@@ -202,6 +202,15 @@ export default function ReportsExecutivePage() {
   const criticalCount = auditFindings.filter((f) => f.severity === 'critical').length
   const currentTrend = complianceScore.trend
 
+  // Score first-load gates — mirror the framework-card / findings / risks
+  // skeleton pattern (gate on THIS section's own data being empty so a
+  // period-filter refetch keeps the prior values visible). useComplianceScore
+  // returns emptyResult() while in flight: confidence='insufficient',
+  // deductions=[], trend=[]. (OPTIMIZATION-PATTERNS §2)
+  const scoreLoading = complianceScore.isLoading && complianceScore.confidence === 'insufficient'
+  const deductionsLoading = complianceScore.isLoading && complianceScore.deductions.length === 0
+  const trendLoading = complianceScore.isLoading && complianceScore.trend.length === 0
+
   // Executive view variables
   const healthStatus = getHealthStatus(complianceScore.overall)
   const conf = confidenceConfig[complianceScore.confidence]
@@ -319,6 +328,17 @@ export default function ReportsExecutivePage() {
           {/* Hero Compliance Score */}
           <Card className="col-span-2">
             <CardContent className="pt-4 pb-3 px-4">
+              {scoreLoading ? (
+                <div className="flex items-center gap-4" data-skeleton="true" role="status" aria-busy="true" aria-live="polite">
+                  <Skeleton className="h-[108px] w-[108px] !rounded-full flex-shrink-0" />
+                  <div className="flex flex-col gap-1.5 min-w-0 flex-1">
+                    <Skeleton className="h-4 w-3/4" />
+                    <Skeleton className="h-4 w-24 !rounded-full" />
+                    <Skeleton className="h-3.5 w-28" />
+                    <Skeleton className="h-3 w-20 !rounded-full" />
+                  </div>
+                </div>
+              ) : (
               <div className="flex items-center gap-4">
                 <div className="relative flex-shrink-0" style={{ width: 108, height: 108 }}>
                   <svg width="108" height="108" className="transform -rotate-90">
@@ -354,6 +374,7 @@ export default function ReportsExecutivePage() {
                   </div>
                 </div>
               </div>
+              )}
             </CardContent>
           </Card>
 
@@ -409,8 +430,19 @@ export default function ReportsExecutivePage() {
         {/* ROW 2: Component Breakdown */}
         <div>
           <h3 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">{t('reports.componentBreakdown' as TranslationKey)}</h3>
-          <div className="grid grid-cols-5 gap-2">
-            {componentKeys.map(({ key, i18n }) => {
+          <div className="grid grid-cols-5 gap-2" data-skeleton={scoreLoading ? 'true' : undefined} role={scoreLoading ? 'status' : undefined} aria-busy={scoreLoading || undefined} aria-live={scoreLoading ? 'polite' : undefined}>
+            {scoreLoading ? (
+              [1, 2, 3, 4, 5].map((i) => (
+                <Card key={i}>
+                  <CardContent className="pt-3 pb-2 px-3 flex flex-col items-center gap-1">
+                    <Skeleton className="h-[56px] w-[56px] !rounded-full" />
+                    <Skeleton className="h-2.5 w-14 mt-1" />
+                    <Skeleton className="h-2 w-10" />
+                  </CardContent>
+                </Card>
+              ))
+            ) : (
+              componentKeys.map(({ key, i18n }) => {
               const comp = complianceScore.components[key]
               const isWarning = comp.score < 75
               const compRadius = 24
@@ -438,7 +470,8 @@ export default function ReportsExecutivePage() {
                   </CardContent>
                 </Card>
               )
-            })}
+            })
+            )}
           </div>
         </div>
 
@@ -464,6 +497,18 @@ export default function ReportsExecutivePage() {
                 </div>
               </div>
               {(() => {
+                if (trendLoading) {
+                  return (
+                    <div className="relative h-36" data-skeleton="true" role="status" aria-busy="true" aria-live="polite">
+                      <Skeleton className="absolute inset-x-0 bottom-6 h-28" />
+                      <div className="absolute inset-x-0 bottom-0 flex justify-between px-2">
+                        {[1, 2, 3, 4, 5, 6].map((i) => (
+                          <Skeleton key={i} className="h-2 w-6" />
+                        ))}
+                      </div>
+                    </div>
+                  )
+                }
                 if (currentTrend.length === 0) {
                   return (
                     <div className="h-32 flex items-center justify-center text-[11px] text-slate-400">
@@ -544,17 +589,32 @@ export default function ReportsExecutivePage() {
           <Card>
             <CardContent className="pt-3 pb-3 px-4">
               <h3 className="text-xs font-bold text-slate-900 mb-2">{t('reports.whatsImpactingScore' as TranslationKey)}</h3>
-              <div className="space-y-1">
-                {complianceScore.deductions.slice(0, 5).map((d, idx) => (
-                  <div key={idx} className={cn('flex items-center gap-2 px-2 py-1.5 rounded border-l-[3px] bg-slate-50/50 transition-colors hover:bg-slate-50', deductionSeverityBorder[d.severity])}>
-                    <span className={cn('text-[10px] font-bold min-w-[40px] text-center rounded px-1 py-0.5', deductionSeverityColors[d.severity])}>{d.points}</span>
-                    <span className="text-[11px] text-slate-600 leading-tight">{d.descriptionKey ? t(d.descriptionKey as TranslationKey, d.descriptionParams) : d.description}</span>
-                  </div>
-                ))}
-              </div>
+              {deductionsLoading ? (
+                <div className="space-y-1" data-skeleton="true" role="status" aria-busy="true" aria-live="polite">
+                  {[1, 2, 3, 4, 5].map((i) => (
+                    <div key={i} className="flex items-center gap-2 px-2 py-1.5 rounded border-l-[3px] border-l-slate-200 bg-slate-50/50">
+                      <Skeleton className="h-5 w-10 flex-shrink-0" />
+                      <Skeleton className="h-3 flex-1" />
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="space-y-1">
+                  {complianceScore.deductions.slice(0, 5).map((d, idx) => (
+                    <div key={idx} className={cn('flex items-center gap-2 px-2 py-1.5 rounded border-l-[3px] bg-slate-50/50 transition-colors hover:bg-slate-50', deductionSeverityBorder[d.severity])}>
+                      <span className={cn('text-[10px] font-bold min-w-[40px] text-center rounded px-1 py-0.5', deductionSeverityColors[d.severity])}>{d.points}</span>
+                      <span className="text-[11px] text-slate-600 leading-tight">{d.descriptionKey ? t(d.descriptionKey as TranslationKey, d.descriptionParams) : d.description}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
               <div className="flex items-center justify-between mt-2 pt-2 border-t border-slate-100">
                 <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{t('reports.totalImpact' as TranslationKey)}</span>
-                <span className="text-xs font-bold text-rose-600">{totalDeduction} {t('reports.pts' as TranslationKey)}</span>
+                {deductionsLoading ? (
+                  <Skeleton className="h-3.5 w-12" />
+                ) : (
+                  <span className="text-xs font-bold text-rose-600">{totalDeduction} {t('reports.pts' as TranslationKey)}</span>
+                )}
               </div>
               {complianceScore.deductions.length > 5 && (
                 <button

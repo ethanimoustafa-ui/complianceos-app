@@ -7,10 +7,11 @@ import { Icon } from '@iconify/react'
 import { Button } from '@/components/ui/button'
 import { useTranslation } from '@/i18n'
 import { exportObservations } from '@/lib/export'
+import { downloadPdf } from '@/lib/pdf-client'
 import { Gate } from '@/components/auth/gate'
 import { useObservationStore } from '@/stores/observation-store'
 import { useToastStore } from '@/stores/toast-store'
-import { ListSkeleton } from '@/components/ui/skeleton'
+import { ListSkeleton, CardSkeleton, Skeleton } from '@/components/ui/skeleton'
 import { useAuthStore } from '@/stores/auth-store'
 import { ObservationStats } from '@/components/observations/observation-stats'
 import type { ObservationStatsData } from '@/components/observations/observation-stats'
@@ -374,6 +375,63 @@ export default function ObservationsPage() {
     }
   }
 
+  // PDF: branded executive "Observations Report" via the xelatex microservice
+  // (engine: 'latex'). Fetches the full filtered set, maps list rows to the
+  // report contract, and enqueues a `pdf.latex` job.
+  const [pdfBusy, setPdfBusy] = useState(false)
+  const handleExportPdf = async () => {
+    if (pdfBusy) return
+    setPdfBusy(true)
+    try {
+      const res = await fetchPage({
+        page: 1,
+        pageSize: 500,
+        archive_filter: archiveFilter,
+        status: statusFilter !== 'all' ? statusFilter : undefined,
+        severity: severityFilter !== 'all' ? severityFilter : undefined,
+        source: sourceFilter !== 'all' ? sourceFilter : undefined,
+        q: searchQuery || undefined,
+      })
+      const fmtDate = (iso?: string) =>
+        iso ? new Date(iso).toLocaleDateString(isRTL ? 'ar-SA' : 'en-GB') : undefined
+      const observations = res.items.map((o) => ({
+        reference: o.reference,
+        title: o.title,
+        severity: o.severity,
+        source: o.source,
+        status: o.status,
+        assignee: o.assignee?.name || o.assignees?.[0]?.name || '',
+        dueDate: fmtDate(o.dueDate),
+        isOverdue: o.isOverdue,
+      }))
+      await downloadPdf(
+        {
+          template: 'observation-list',
+          locale: isRTL ? 'ar' : 'en',
+          options: { engine: 'latex' },
+          data: {
+            organization: isRTL
+              ? 'الشركة المتحدة للخدمات المالية'
+              : 'United Company for Financial Services',
+            generatedBy: user?.name ?? '',
+            date: new Date().toLocaleDateString(isRTL ? 'ar-SA' : 'en-GB', {
+              year: 'numeric',
+              month: 'long',
+              day: 'numeric',
+            }),
+            subtitle: `${observations.length} ${isRTL ? 'ملاحظة' : 'observations'}`,
+            observations,
+          },
+        },
+        'Observations-Report.pdf',
+      )
+    } catch (err) {
+      console.error('Failed to export observations PDF:', err)
+    } finally {
+      setPdfBusy(false)
+    }
+  }
+
   return (
     <>
       {/* Custom Header with Add Observation button */}
@@ -431,6 +489,17 @@ export default function ObservationsPage() {
               {t('common.exportCsv')}
             </Button>
           </Gate>
+          <Gate perm="Export Compliance Data">
+            <Button
+              variant="outline"
+              onClick={handleExportPdf}
+              disabled={pdfBusy}
+              className={`hidden md:flex`}
+            >
+              <Icon icon="lucide:file-text" />
+              {pdfBusy ? (isRTL ? 'جارٍ الإنشاء…' : 'Generating…') : (isRTL ? 'تصدير PDF' : 'Export PDF')}
+            </Button>
+          </Gate>
 
           {/* Add Observation Button */}
           <Gate perm="Manage Audit Findings">
@@ -467,7 +536,24 @@ export default function ObservationsPage() {
         )}
 
         {/* Metrics Strip */}
-        <ObservationStats stats={observationStats} />
+        {summary.isLoading && !summary.data ? (
+          <CardSkeleton className="gap-6 mb-8">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div
+                key={i}
+                className="bg-white/80 backdrop-blur-sm border border-slate-100 p-6 rounded-2xl"
+              >
+                <div className="flex justify-between items-start mb-4">
+                  <Skeleton className="h-10 w-10 rounded-lg" />
+                </div>
+                <Skeleton className="h-3 w-2/3 mb-2" />
+                <Skeleton className="h-6 w-1/3" />
+              </div>
+            ))}
+          </CardSkeleton>
+        ) : (
+          <ObservationStats stats={observationStats} />
+        )}
 
         {/* Filters and List */}
         <div className="bg-white/80 backdrop-blur-sm border border-slate-100 rounded-3xl p-6">

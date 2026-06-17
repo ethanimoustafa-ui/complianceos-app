@@ -28,6 +28,7 @@ import { FrameworkTagSelector } from '@/components/ui/framework-tag-selector'
 import { useFrameworkConfigStore } from '@/stores/framework-config-store'
 import { FrameworkChips, matchesFrameworkQuery } from '@/components/ui/framework-chips'
 import { exportRisksLocalized } from '@/lib/export'
+import { downloadPdf } from '@/lib/pdf-client'
 import type { TranslationKey } from '@/i18n'
 import { useFormattedDate } from '@/hooks/useFormattedDate'
 import { ChecklistSection } from '@/components/observations/detail/checklist-section'
@@ -679,6 +680,52 @@ export default function ReportsRisksPage() {
 
   useEffect(() => { setRiskPage(1) }, [riskSearchTerm, riskCategoryFilter, riskStatusFilter])
 
+  // Branded executive "Risk Register" PDF via the xelatex microservice
+  // (engine: 'latex'). Maps the current sorted/filtered risks to the report
+  // contract (heat-map counts + detail table) and enqueues a `pdf.latex` job.
+  const [pdfBusy, setPdfBusy] = useState(false)
+  const handleExportPdf = async () => {
+    if (pdfBusy) return
+    setPdfBusy(true)
+    try {
+      const risks = sortedRisks.map((r, idx) => ({
+        id: `R-${String(idx + 1).padStart(2, '0')}`,
+        name: r.name,
+        category: getRiskCatConfig(r.category).label,
+        likelihood: r.likelihood,
+        impact: r.impact,
+        score: r.likelihood * r.impact,
+        owner: r.owner?.name || '',
+        status: r.status,
+      }))
+      await downloadPdf(
+        {
+          template: 'risk-register',
+          locale: isRTL ? 'ar' : 'en',
+          options: { engine: 'latex' },
+          data: {
+            organization: isRTL
+              ? 'الشركة المتحدة للخدمات المالية'
+              : 'United Company for Financial Services',
+            generatedBy: actingUser,
+            date: new Date().toLocaleDateString(isRTL ? 'ar-SA' : 'en-GB', {
+              year: 'numeric',
+              month: 'long',
+              day: 'numeric',
+            }),
+            subtitle: `${risks.length} ${isRTL ? 'خطر' : 'risks'}`,
+            risks,
+          },
+        },
+        'Risk-Register.pdf',
+      )
+    } catch (err) {
+      console.error('Failed to export risk register PDF:', err)
+    } finally {
+      setPdfBusy(false)
+    }
+  }
+
   return (
     <div className={`flex flex-col h-full ${isRTL ? 'rtl' : ''}`}>
       <header className="h-20 bg-white border-b border-slate-200 px-8 flex items-center justify-between shrink-0">
@@ -716,6 +763,14 @@ export default function ReportsRisksPage() {
             onClick={() => exportRisksLocalized(sortedRisks, 'risk-register', t, isRTL)}
           >
             <Icon icon="lucide:download-cloud" className="text-lg" />
+          </button>
+          <button
+            className="p-2.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-all cursor-pointer disabled:opacity-50"
+            title={isRTL ? 'تصدير PDF' : 'Export PDF'}
+            onClick={handleExportPdf}
+            disabled={pdfBusy}
+          >
+            <Icon icon={pdfBusy ? 'lucide:loader-2' : 'lucide:file-text'} className={`text-lg ${pdfBusy ? 'animate-spin' : ''}`} />
           </button>
           <Gate perm="Manage Audit Findings">
             <Button className="shadow-lg shadow-emerald-100" onClick={() => setShowAddRiskModal(true)}>

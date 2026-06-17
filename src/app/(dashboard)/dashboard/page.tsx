@@ -13,7 +13,8 @@ import {
   ManagerialSkeleton,
   OfficerSkeleton,
 } from '@/components/dashboard/DashboardSkeletons'
-import { generateDashboardPdf } from '@/lib/dashboard-pdf'
+import { downloadPdf } from '@/lib/pdf-client'
+import { toComplianceReportData } from '@/lib/compliance-report-data'
 import type { DashboardView } from '@/types'
 import { usePolicyStore } from '@/stores/policy-store'
 import { useTrainingStore } from '@/stores/training-store'
@@ -30,7 +31,7 @@ const viewConfig: Record<DashboardView, { titleKey: string; subtitleKey: string 
 }
 
 export default function DashboardPage() {
-  const { t } = useTranslation()
+  const { t, language } = useTranslation()
   const dashboardView = useUserPreferencesStore(s => s.dashboardView)
   // W44: in-page persona switcher — the view could previously only be changed
   // from /settings, which made the three dashboards undiscoverable.
@@ -84,9 +85,34 @@ export default function DashboardPage() {
     }
   }, [])
 
-  const handleExport = useCallback(() => {
-    generateDashboardPdf(metrics, dashboardView, t)
-  }, [metrics, dashboardView, t])
+  // Executive Compliance Status Report — rendered server-side via the xelatex
+  // microservice (engine: 'latex'), enqueued as a `pdf.latex` job. Replaces the
+  // legacy jsPDF dashboard export (src/lib/dashboard-pdf.ts).
+  const [pdfBusy, setPdfBusy] = useState(false)
+  const handleExport = useCallback(async () => {
+    if (pdfBusy) return
+    setPdfBusy(true)
+    try {
+      const data = toComplianceReportData(metrics, {
+        locale: language,
+        t: t as unknown as (k: string, p?: Record<string, string>) => string,
+        date: new Date().toLocaleDateString(language === 'ar' ? 'ar-SA' : 'en-GB', {
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric',
+        }),
+        period: language === 'ar' ? 'آخر ١٢ شهراً' : 'Last 12 months',
+      })
+      await downloadPdf(
+        { template: 'compliance-report', locale: language, options: { engine: 'latex' }, data },
+        'Compliance-Report.pdf',
+      )
+    } catch (e) {
+      console.error('[dashboard] PDF export failed:', e)
+    } finally {
+      setPdfBusy(false)
+    }
+  }, [metrics, language, t, pdfBusy])
 
   const { titleKey, subtitleKey } = viewConfig[dashboardView]
 
@@ -106,9 +132,20 @@ export default function DashboardPage() {
     trainingLastFetched !== null ||
     teamLastFetched !== null
 
+  // Keep the composed skeleton up until the *server-driven* data the widgets
+  // actually render is ready too — not just the first store. Previously the
+  // skeleton cleared the moment any store hydrated (team resolves fast), while
+  // the count summary + health (which drive the alert cards, metric tiles and
+  // the hero ring) were still in flight, so those elements popped in a beat
+  // later. Gating on both their first-fetch flags makes the whole view appear
+  // at once. Both flags always settle to false (summary/health resolve, error,
+  // or "computing"), so this can't hang.
+  const showSkeleton =
+    !anyStoreReady || metrics.summaryLoading || metrics.complianceHealthLoading
+
   return (
     <div className={showFadeIn ? 'dashboard-fade-in' : ''}>
-      <Header title={t(titleKey as any)} subtitle={t(subtitleKey as any)} onExport={handleExport} exportLabel={t('common.exportPdf' as any)} />
+      <Header title={t(titleKey as any)} subtitle={t(subtitleKey as any)} onExport={handleExport} exportLabel={pdfBusy ? (language === 'ar' ? 'جارٍ الإنشاء…' : 'Generating…') : t('common.exportPdf' as any)} />
 
       {/* W44: persona view switcher (persists via user-preferences store). */}
       <div className="px-8 pt-6 flex items-center gap-2">
@@ -129,7 +166,7 @@ export default function DashboardPage() {
       </div>
 
       <div className="flex-1 overflow-auto hide-scrollbar p-8">
-        {!anyStoreReady ? (
+        {showSkeleton ? (
           <>
             {dashboardView === 'executive' && <ExecutiveSkeleton />}
             {dashboardView === 'managerial' && <ManagerialSkeleton />}

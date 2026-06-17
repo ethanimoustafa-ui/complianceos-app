@@ -41,6 +41,7 @@ import {
   renderTemplate,
 } from '@/lib/letter-placeholders'
 import { downloadPdf, PdfError } from '@/lib/pdf-client'
+import { formatDualDates } from '@/lib/pdf/latex/hijri'
 import type { PlaceholderDef, PlaceholderValue } from '@/types'
 import {
   Toast,
@@ -760,11 +761,11 @@ export default function LettersPage() {
     // L4: show a spinner on the button while the (slow) PDF job-queue pipeline runs.
     setPdfBusy(true)
     try {
-    // Phase 7: server-side rendered via @react-pdf/renderer.
-    // The legacy html2canvas+jsPDF path captured a screenshot of the live DOM;
-    // the new pipeline renders from a structured payload via the `sama-letter`
-    // template (lib/pdf/templates/sama-letter.tsx) so Arabic text, signatures,
-    // and page numbering all come out properly typeset.
+    // PDF is rendered server-side by the xelatex microservice (engine: 'latex')
+    // via the `sama-letter` LaTeX template (src/lib/pdf/latex). The job is
+    // enqueued as `pdf.latex`; the cron worker (or the dev-inline path) compiles
+    // it, so Arabic text, the Tasheel letterhead, dual Hijri/Gregorian dates,
+    // signature block and page numbering all come out properly typeset.
     const subjectRaw = language === 'ar' ? (selectedLetter.subjectAr || selectedLetter.subject) : selectedLetter.subject
     const bodyRaw    = language === 'ar' ? (selectedLetter.bodyAr    || selectedLetter.body)    : selectedLetter.body
     const subject = renderTemplate(subjectRaw, selectedLetter.placeholderValues ?? {})
@@ -772,33 +773,31 @@ export default function LettersPage() {
 
     const recipientName = (language === 'ar' ? selectedLetter.recipientNameAr : selectedLetter.recipientName) ?? ''
     const recipientOrg  = (language === 'ar' ? selectedLetter.recipientOrgAr  : selectedLetter.recipientOrg)  ?? undefined
+    const recipientCity = (language === 'ar' ? selectedLetter.recipientCityAr : selectedLetter.recipientCity) ?? undefined
     const signerName    = (language === 'ar' ? selectedLetter.signerNameAr    : selectedLetter.signerName)    ?? currentUser
     const signerTitle   = (language === 'ar' ? selectedLetter.signerTitleAr   : selectedLetter.signerTitle)   ?? undefined
 
-    const orgName = 'ComplianceOS'
+    // Dual Hijri (Umm al-Qura) + Gregorian dating, matching the real SAMA letter.
+    const { hijriDate, gregorianDate } = formatDualDates(new Date(selectedLetter.createdAt))
 
     try {
       await downloadPdf(
         {
           template: 'sama-letter',
           locale: language,
+          options: { engine: 'latex' },
           data: {
-            organizationName: orgName,
-            letterReference: selectedLetter.reference,
-            letterDate: new Date(selectedLetter.createdAt).toLocaleDateString(
-              language === 'ar' ? 'ar-SA' : 'en-US',
-              { year: 'numeric', month: 'long', day: 'numeric' },
-            ),
+            reference: selectedLetter.reference,
+            hijriDate,
+            gregorianDate,
             recipientName,
             recipientOrg,
+            recipientCity,
             subject,
             body,
-            attachments: (selectedLetter.attachments ?? []).map((a) => ({
-              name: a.name,
-              size: a.size,
-            })),
-            signatoryName: signerName,
-            signatoryTitle: signerTitle,
+            attachments: (selectedLetter.attachments ?? []).map((a) => a.name),
+            signerName,
+            signerTitle,
           },
         },
         `Letter-${selectedLetter.reference}-${language}.pdf`,

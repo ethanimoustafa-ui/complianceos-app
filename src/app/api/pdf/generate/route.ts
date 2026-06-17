@@ -16,6 +16,7 @@ import { ok } from '@/lib/api/response'
 import { parseJson } from '@/lib/api/validate'
 import { TEMPLATE_KEYS } from '@/lib/pdf/render'
 import { runPdfGenerateJob, type PdfJobPayload } from '@/lib/pdf/run-job'
+import { runLatexGenerateJob, type LatexJobPayload } from '@/lib/pdf/latex/run-latex-job'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -34,6 +35,9 @@ const GeneratePdfBodySchema = z.object({
       includeSummary: z.boolean().optional(),
       watermark: z.string().max(40).optional(),
       filenameHint: z.string().max(200).optional(),
+      // 'latex' routes to the xelatex microservice (kind 'pdf.latex');
+      // default/absent stays on the @react-pdf renderer (kind 'pdf.generate').
+      engine: z.enum(['latex', 'react-pdf']).optional(),
     })
     .partial()
     .optional(),
@@ -54,9 +58,14 @@ export async function POST(req: NextRequest) {
       requested_by: user.id,
     }
 
+    // Engine selection: 'latex' routes to the xelatex microservice via a
+    // separate job kind; default stays on the @react-pdf renderer.
+    const engine = body.options?.engine === 'latex' ? 'latex' : 'react-pdf'
+    const kind = engine === 'latex' ? 'pdf.latex' : 'pdf.generate'
+
     const { data: job, error } = await supabase
       .from('jobs')
-      .insert({ kind: 'pdf.generate', payload })
+      .insert({ kind, payload })
       .select('id')
       .single<{ id: string }>()
 
@@ -70,7 +79,11 @@ export async function POST(req: NextRequest) {
     // as the cron worker); if absent we leave it queued (no regression).
     if (!process.env.VERCEL && hasServiceRole()) {
       try {
-        await runPdfGenerateJob(job.id, payload as PdfJobPayload)
+        if (engine === 'latex') {
+          await runLatexGenerateJob(job.id, payload as unknown as LatexJobPayload)
+        } else {
+          await runPdfGenerateJob(job.id, payload as PdfJobPayload)
+        }
       } catch (e) {
         // Mark the job failed so pollJob returns a clean terminal error in a
         // couple of seconds instead of hanging until the 60s timeout.

@@ -31,6 +31,8 @@ export interface PdfRequestOptions {
     includeSummary?: boolean
     watermark?: string
     filenameHint?: string
+    /** 'latex' renders via the xelatex microservice instead of @react-pdf. */
+    engine?: 'latex' | 'react-pdf'
   }
 }
 

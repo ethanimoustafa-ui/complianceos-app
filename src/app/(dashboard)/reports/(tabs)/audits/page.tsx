@@ -10,12 +10,13 @@ import { MultiSelectFilter, FilterOption } from '@/components/ui/multi-select-fi
 import { cn } from '@/lib/utils'
 import { useTranslation } from '@/i18n'
 import { useAuditStore } from '@/stores/audit-store'
-import { ListSkeleton } from '@/components/ui/skeleton'
+import { ListSkeleton, Skeleton } from '@/components/ui/skeleton'
 import { AddAuditModal } from '@/components/reports/audits/add-audit-modal'
 import { EditAuditModal } from '@/components/reports/audits/edit-audit-modal'
 import { DeleteConfirmationDialog } from '@/components/ui/delete-confirmation-dialog'
 import type { Audit as AuditType } from '@/types'
 import { exportAuditsLocalized } from '@/lib/export'
+import { downloadPdf } from '@/lib/pdf-client'
 import type { TranslationKey } from '@/i18n'
 import { useFormattedDate } from '@/hooks/useFormattedDate'
 import { useComplianceScore } from '@/hooks/useComplianceScore'
@@ -384,6 +385,54 @@ export default function ReportsAuditsPage() {
   const currentUserId = useAuthStore((s) => s.user?.id) ?? 'anon'
   const overridesKey = `audit-filter-colors:${currentUserId}`
   const [colorOverrides, setColorOverrides] = useState<Record<string, string>>({})
+
+  // Branded executive "Audits Report" PDF via the xelatex microservice
+  // (engine: 'latex'). Maps the current sorted/filtered audits to the report
+  // contract and enqueues a `pdf.latex` job.
+  const userName = useAuthStore((s) => s.user?.name) ?? 'Compliance Officer'
+  const [pdfBusy, setPdfBusy] = useState(false)
+  const handleExportPdf = async () => {
+    if (pdfBusy) return
+    setPdfBusy(true)
+    try {
+      const auditsData = sortedAudits.map((a, idx) => ({
+        id: `A-${String(idx + 1).padStart(2, '0')}`,
+        name: a.name,
+        type: a.source,
+        priority: a.priority,
+        status: a.status,
+        owner: a.responsible?.name || '',
+        dueDate: a.dueDate ? a.dueDate.toLocaleDateString(isRTL ? 'ar-SA' : 'en-GB') : undefined,
+        progress: a.progress,
+      }))
+      await downloadPdf(
+        {
+          template: 'audit-report',
+          locale: isRTL ? 'ar' : 'en',
+          options: { engine: 'latex' },
+          data: {
+            organization: isRTL
+              ? 'الشركة المتحدة للخدمات المالية'
+              : 'United Company for Financial Services',
+            generatedBy: userName,
+            date: new Date().toLocaleDateString(isRTL ? 'ar-SA' : 'en-GB', {
+              year: 'numeric',
+              month: 'long',
+              day: 'numeric',
+            }),
+            subtitle: `${auditsData.length} ${isRTL ? 'مراجعة' : 'audits'}`,
+            audits: auditsData,
+          },
+        },
+        'Audits-Report.pdf',
+      )
+    } catch (err) {
+      console.error('Failed to export audits PDF:', err)
+    } finally {
+      setPdfBusy(false)
+    }
+  }
+
   useEffect(() => {
     try {
       setColorOverrides(JSON.parse(localStorage.getItem(overridesKey) ?? '{}'))
@@ -555,6 +604,14 @@ export default function ReportsAuditsPage() {
           >
             <Icon icon="lucide:download-cloud" className="text-lg" />
           </button>
+          <button
+            className="p-2.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-all cursor-pointer disabled:opacity-50"
+            title={isRTL ? 'تصدير PDF' : 'Export PDF'}
+            onClick={handleExportPdf}
+            disabled={pdfBusy}
+          >
+            <Icon icon={pdfBusy ? 'lucide:loader-2' : 'lucide:file-text'} className={`text-lg ${pdfBusy ? 'animate-spin' : ''}`} />
+          </button>
           <Gate perm="Manage Audit Findings">
             <Button className="shadow-lg shadow-emerald-100" onClick={() => setShowScheduleAuditModal(true)}>
               <Icon icon="lucide:plus" />
@@ -587,7 +644,11 @@ export default function ReportsAuditsPage() {
             </div>
             <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">{t('reports.complianceScore')}</p>
-              <p className="text-2xl font-bold text-blue-600">{Math.round(complianceResult.overall)}%</p>
+              {complianceResult.isLoading ? (
+                <Skeleton className="h-8 w-16" />
+              ) : (
+                <p className="text-2xl font-bold text-blue-600">{Math.round(complianceResult.overall)}%</p>
+              )}
             </div>
           </div>
 

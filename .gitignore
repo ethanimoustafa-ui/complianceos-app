@@ -81,3 +81,5 @@ Thumbs.db
 !npm-debug.log*
 !yarn-debug.log*
 !yarn-error.log*
+# Generated sample PDFs (regenerate via scripts/gen-letter-sample.mts)
+/letter-*.pdf
