@@ -103,7 +103,7 @@ function ReferencePicker({
     if (activeKind === 'observation') {
       list = observations.map((o) => ({ kind: 'observation', id: o.id, reference: o.reference, title: o.title }))
     } else if (activeKind === 'audit') {
-      list = audits.map((a) => ({ kind: 'audit', id: a.id, reference: a.id, title: a.title }))
+      list = audits.map((a) => ({ kind: 'audit', id: a.id, reference: a.title, title: a.title }))
     } else if (activeKind === 'letter') {
       list = letters.map((l) => ({ kind: 'letter', id: l.id, reference: l.reference, title: l.subject }))
     } else if (activeKind === 'rule') {

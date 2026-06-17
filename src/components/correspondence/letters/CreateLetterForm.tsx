@@ -83,6 +83,8 @@ export function CreateLetterForm({
   )
   const createAttachFileRef = useRef<HTMLInputElement>(null)
   const [draftAttachments, setDraftAttachments] = useState<Attachment[]>([])
+  // Parallel list of raw File objects so we can upload them after letter creation.
+  const [draftAttachmentFiles, setDraftAttachmentFiles] = useState<File[]>([])
   const [placeholderValues, setPlaceholderValues] = useState<Record<string, PlaceholderValue | undefined>>({})
   const placeholderDefs = useMemo(
     () => reconcilePlaceholderDefs(template?.placeholderDefs ?? [], bodyEn, subjectEn),
@@ -99,6 +101,14 @@ export function CreateLetterForm({
   // create payload (template_id) so the server increments usage_count.
   const effectiveTemplateId = selectedTemplateId || template?.id || undefined
 
+  // Track the signature URL from the currently effective template so
+  // letterBaseData() uses the right template even when the user picks a
+  // different template from the in-modal "Choose Template" select (in that
+  // case the `template` prop still points to the original createFromTemplate).
+  const [effectiveSignatureImageUrl, setEffectiveSignatureImageUrl] = useState<string | undefined>(
+    template?.defaultSignatureImageUrl,
+  )
+
   // Apply template defaults — shared by both the initial-template prop path
   // and the in-modal template-select path.
   const applyTemplate = useCallback((t: LetterTemplate | undefined) => {
@@ -111,6 +121,10 @@ export function CreateLetterForm({
     if (t.defaultSamaDepartment) setSamaDepartment(t.defaultSamaDepartment)
     // W41: templates carry a default sub-category.
     if (t.defaultSubCategory) setSubCategory(t.defaultSubCategory)
+    // Bug-3 fix: carry the template's signature URL into state so
+    // letterBaseData() always reads from the EFFECTIVE template, not the
+    // stale original `template` prop.
+    setEffectiveSignatureImageUrl(t.defaultSignatureImageUrl || undefined)
     // Reset placeholder values — they belong to the previous template.
     setPlaceholderValues({})
   }, [])
@@ -189,7 +203,8 @@ export function CreateLetterForm({
   const handleDraftAttach = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files
     if (!files) return
-    const newAtts: Attachment[] = Array.from(files).map(f => ({
+    const fileArray = Array.from(files)
+    const newAtts: Attachment[] = fileArray.map(f => ({
       id: `att-${Date.now()}-${Math.random().toString(36).slice(2)}`,
       name: f.name,
       url: URL.createObjectURL(f),
@@ -199,6 +214,8 @@ export function CreateLetterForm({
       uploadedBy: user?.name || 'Unknown',
     }))
     setDraftAttachments(prev => [...prev, ...newAtts])
+    // Keep the raw File refs so we can upload them after the letter is persisted.
+    setDraftAttachmentFiles(prev => [...prev, ...fileArray])
     e.target.value = ''
   }
 
@@ -233,7 +250,10 @@ export function CreateLetterForm({
       signerTitle:          template?.defaultSignerTitle || undefined,
       signerNameAr:         template?.defaultSignerNameAr || undefined,
       signerTitleAr:        template?.defaultSignerTitleAr || undefined,
-      signatureImageUrl:    template?.defaultSignatureImageUrl || undefined,
+      // Bug-3 fix: use effectiveSignatureImageUrl (updated by applyTemplate)
+      // so the in-modal "Choose Template" select also carries the signature,
+      // not just the initial `template` prop.
+      signatureImageUrl:    effectiveSignatureImageUrl || undefined,
       recipientName:        template?.defaultRecipientName || recipientDefaults.en.name,
       recipientOrg:         template?.defaultRecipientOrg  || recipientDefaults.en.org,
       recipientCity:        template?.defaultRecipientCity || recipientDefaults.en.city,
@@ -262,7 +282,20 @@ export function CreateLetterForm({
   const handleSaveDraft = async () => {
     setIsSavingDraft(true)
     try {
-      await store.create(letterBaseData())
+      const newLetter = await store.create(letterBaseData())
+      // Upload any attachments the user selected before hitting Save Draft.
+      // The create payload can't carry blob URLs — we persist the real files now
+      // via the attachment API (storage upload + metadata row).
+      if (draftAttachmentFiles.length > 0) {
+        for (const file of draftAttachmentFiles) {
+          try {
+            await store.uploadAttachment(newLetter.id, file)
+          } catch (uploadErr) {
+            console.error('[CreateLetterForm] attachment upload failed', uploadErr)
+            // Non-fatal: letter was saved; surface only in console.
+          }
+        }
+      }
       if (effectiveTemplateId) await templateStore.incrementUsage(effectiveTemplateId)
       // W25-A1: only call onSuccess on the happy path — avoids the dual-toast
       // (optimistic-success + API-error) that occurred when both branches ran.
@@ -280,6 +313,16 @@ export function CreateLetterForm({
     setIsSubmitting(true)
     try {
       const newLetter = await store.create(letterBaseData())
+      // Upload attachments before submitting for approval so approvers see them.
+      if (draftAttachmentFiles.length > 0) {
+        for (const file of draftAttachmentFiles) {
+          try {
+            await store.uploadAttachment(newLetter.id, file)
+          } catch (uploadErr) {
+            console.error('[CreateLetterForm] attachment upload failed', uploadErr)
+          }
+        }
+      }
       store.submitForApproval(newLetter.id)
       if (effectiveTemplateId) await templateStore.incrementUsage(effectiveTemplateId)
       // W25-A1: only call onSuccess on the happy path.
