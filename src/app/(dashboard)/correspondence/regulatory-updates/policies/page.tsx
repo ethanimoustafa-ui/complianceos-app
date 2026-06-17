@@ -286,6 +286,7 @@ export default function RegulatoryUpdatesPoliciesPage() {
           {/* Export Menu — CSV + PDF */}
           <Gate perm="Export Compliance Data">
             <ExportMenu
+              iconOnly
               options={[
                 {
                   label: t('common.exportCsv'),

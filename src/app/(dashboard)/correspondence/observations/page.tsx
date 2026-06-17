@@ -475,7 +475,7 @@ export default function ObservationsPage() {
           {/* Export Menu — CSV + PDF */}
           <Gate perm="Export Compliance Data">
             <ExportMenu
-              className="hidden md:inline-block"
+              iconOnly
               options={[
                 {
                   label: t('common.exportCsv'),

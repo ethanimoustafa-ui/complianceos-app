@@ -328,7 +328,7 @@ function TeamTrainingPageContent() {
           {/* Export Menu — CSV + PDF */}
           <Gate perm="Export Compliance Data">
             <ExportMenu
-              size="sm"
+              iconOnly
               options={[
                 {
                   label: t('common.exportCsv'),
