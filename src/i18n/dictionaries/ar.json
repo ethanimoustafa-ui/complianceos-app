@@ -425,6 +425,7 @@
   },
   "letters": {
     "title": "الخطابات",
+    "exportPdf": "تصدير PDF",
     "draftNewLetter": "صياغة خطاب جديد",
     "totalLettersYTD": "إجمالي الخطابات (منذ بداية السنة)",
     "sentThisQuarter": "المرسل هذا الربع",

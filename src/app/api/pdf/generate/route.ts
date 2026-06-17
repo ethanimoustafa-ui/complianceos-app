@@ -16,12 +16,16 @@ import { ok } from '@/lib/api/response'
 import { parseJson } from '@/lib/api/validate'
 import { TEMPLATE_KEYS } from '@/lib/pdf/render'
 import { runPdfGenerateJob, type PdfJobPayload } from '@/lib/pdf/run-job'
-import { runLatexGenerateJob, type LatexJobPayload } from '@/lib/pdf/latex/run-latex-job'
+import { runLatexGenerateJob, type LatexJobPayload, LATEX_TEMPLATE_KEYS } from '@/lib/pdf/latex/run-latex-job'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
-const TemplateKeySchema = z.enum(TEMPLATE_KEYS as [string, ...string[]])
+// Accept BOTH @react-pdf template keys and latex-only builder keys (the latter
+// render via engine:'latex' / the pdf.latex job; they aren't in the react-pdf
+// REGISTRY that TEMPLATE_KEYS derives from).
+const ALL_TEMPLATE_KEYS = Array.from(new Set([...TEMPLATE_KEYS, ...LATEX_TEMPLATE_KEYS]))
+const TemplateKeySchema = z.enum(ALL_TEMPLATE_KEYS as [string, ...string[]])
 
 const GeneratePdfBodySchema = z.object({
   template: TemplateKeySchema,

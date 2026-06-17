@@ -83,7 +83,7 @@ export type UpdateObservationInput = z.infer<typeof UpdateObservationSchema>
 
 export const ListObservationsQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
-  pageSize: z.coerce.number().int().min(1).max(100).default(10),
+  pageSize: z.coerce.number().int().min(1).max(500).default(10),
   id: Uuid.optional(),
   status: ObservationStatus.optional(),
   severity: ObservationSeverity.optional(),

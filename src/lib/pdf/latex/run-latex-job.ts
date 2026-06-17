@@ -52,6 +52,13 @@ const BUILDERS: Record<string, (data: unknown, locale?: LatexLocale) => BuiltTex
 }
 
 /**
+ * Template keys the LaTeX engine can render. Used by /api/pdf/generate to
+ * validate `engine:'latex'` requests independently of the @react-pdf REGISTRY
+ * (which doesn't contain the latex-only report templates).
+ */
+export const LATEX_TEMPLATE_KEYS = Object.keys(BUILDERS)
+
+/**
  * Resolve an uploaded signature image (https URL from the `letter_signatures`
  * bucket, or a data: URI) to a base64 asset for the renderer. Validates PNG/JPEG
  * magic bytes + a size cap; returns null on any failure so the caller skips the

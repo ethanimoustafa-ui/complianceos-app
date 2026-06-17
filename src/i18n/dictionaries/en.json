@@ -425,6 +425,7 @@
   },
   "letters": {
     "title": "Letters",
+    "exportPdf": "Export PDF",
     "draftNewLetter": "Draft New Letter",
     "totalLettersYTD": "Total Letters (YTD)",
     "sentThisQuarter": "Sent This Quarter",
