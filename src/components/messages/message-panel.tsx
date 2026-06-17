@@ -70,7 +70,7 @@ export function MessagePanel({ isOpen, onClose }: MessagePanelProps) {
     if (!recipientSearch) return base
     const q = recipientSearch.toLowerCase()
     return base.filter(m =>
-      m.name.toLowerCase().includes(q) || m.department.toLowerCase().includes(q)
+      m.name.toLowerCase().includes(q) || m.email.toLowerCase().includes(q)
     )
   }, [teamMembers, recipientSearch, user?.id, composeRecipients])
 
@@ -80,7 +80,7 @@ export function MessagePanel({ isOpen, onClose }: MessagePanelProps) {
     const base = teamMembers.filter(m => m.status === 'active' && !existingIds.has(m.id))
     if (!addMemberSearch) return base
     const q = addMemberSearch.toLowerCase()
-    return base.filter(m => m.name.toLowerCase().includes(q) || m.department.toLowerCase().includes(q))
+    return base.filter(m => m.name.toLowerCase().includes(q) || m.email.toLowerCase().includes(q))
   }, [teamMembers, activeThread, user?.id, addMemberSearch])
 
   const handleAddMember = (member: { id: string; name: string }) => {
@@ -341,9 +341,11 @@ export function MessagePanel({ isOpen, onClose }: MessagePanelProps) {
                         <div className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center text-slate-600 font-bold text-xs shrink-0">
                           {member.name.charAt(0)}
                         </div>
-                        <div>
-                          <p className="text-sm font-medium text-slate-900">{member.name}</p>
-                          <p className="text-[10px] text-slate-400">{member.department} &middot; {member.role}</p>
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-slate-900 truncate">{member.name}</p>
+                          <p className="text-[10px] text-slate-400 truncate">
+                            {member.email ? <>{member.email} &middot; </> : null}{member.role}
+                          </p>
                         </div>
                       </button>
                     ))
@@ -560,9 +562,11 @@ export function MessagePanel({ isOpen, onClose }: MessagePanelProps) {
                             <div className="w-7 h-7 rounded-full bg-slate-200 flex items-center justify-center text-slate-600 font-bold text-xs shrink-0">
                               {member.name.charAt(0)}
                             </div>
-                            <div>
-                              <p className="text-sm font-medium text-slate-900">{member.name}</p>
-                              <p className="text-[10px] text-slate-400">{member.department}</p>
+                            <div className="min-w-0">
+                              <p className="text-sm font-medium text-slate-900 truncate">{member.name}</p>
+                              <p className="text-[10px] text-slate-400 truncate">
+                                {member.email ? <>{member.email} &middot; </> : null}{member.role}
+                              </p>
                             </div>
                           </button>
                         ))
