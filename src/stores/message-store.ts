@@ -124,6 +124,7 @@ interface MessageState {
     senderName: string,
     avatarUrl?: string,
     groupName?: string,
+    onReconciled?: (realId: string) => void,
   ) => string
   markThreadAsRead: (threadId: string) => void
   deleteThread: (threadId: string) => void
@@ -244,14 +245,20 @@ export const useMessageStore = create<MessageState>()((set, get) => ({
     })()
   },
 
-  createThread: (participantNames, participantIds, firstMessage, senderId, senderName, avatarUrl, groupName) => {
+  createThread: (participantNames, participantIds, firstMessage, senderId, senderName, avatarUrl, groupName, onReconciled) => {
     const tempId = `local-${crypto.randomUUID()}`
     const now = new Date().toISOString()
     const isGroup = participantIds.length > 1
+    // Keep `participants` aligned with `participantIds` AND include the creator,
+    // matching the shape `fetchAll` produces. Misaligning them (ids incl self,
+    // names excl self) shifts every member row by one → wrong creator/admin
+    // badges on the wrong person and a phantom "?" trailing member.
+    const allIds = [senderId, ...participantIds]
+    const allNames = [senderName, ...participantNames]
     const newThread: MessageThread = {
       id: tempId,
-      participants: participantNames,
-      participantIds,
+      participants: allNames,
+      participantIds: allIds,
       isGroup,
       avatarUrl,
       subject: groupName,
@@ -285,14 +292,9 @@ export const useMessageStore = create<MessageState>()((set, get) => ({
           avatar_url: avatarUrl,
           initial_message: firstMessage,
         })
-        const persisted = mapThreadRow(
-          row,
-          newThread,
-          Array.from(new Set([senderId, ...participantIds])),
-          [senderId],
-        )
-        // Preserve display names the caller supplied.
-        persisted.participants = participantNames
+        const persisted = mapThreadRow(row, newThread, allIds, [senderId])
+        // Keep the caller-supplied display names, aligned with allIds (incl self).
+        persisted.participants = allNames
         set((s) => ({
           threads: s.threads.map((t) => (t.id === tempId ? persisted : t)),
           messages: s.messages.map((m) =>
@@ -300,6 +302,10 @@ export const useMessageStore = create<MessageState>()((set, get) => ({
           ),
           isMutating: false,
         }))
+        // The thread id just changed tempId → real uuid; let the caller follow it
+        // (the panel's activeThreadId would otherwise point at the dead temp id,
+        // hiding the just-created thread's messages until it's reopened).
+        onReconciled?.(persisted.id)
       } catch (e) {
         set((s) => ({
           threads: s.threads.filter((t) => t.id !== tempId),

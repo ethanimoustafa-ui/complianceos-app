@@ -9,6 +9,7 @@ import { useAuthStore } from '@/stores/auth-store'
 import { useTeamStore } from '@/stores/team-store'
 import { useTranslation } from '@/i18n'
 import { Skeleton } from '@/components/ui/skeleton'
+import { createClient } from '@/lib/supabase/client'
 
 type View = 'threads' | 'detail' | 'compose' | 'members'
 
@@ -63,6 +64,21 @@ export function MessagePanel({ isOpen, onClose }: MessagePanelProps) {
   const isCurrentUserAdmin = activeThread
     ? activeThread.admins.includes(user?.id ?? '')
     : false
+
+  const selfId = user?.id
+  // Names of everyone in a thread EXCEPT the current user, in participantIds
+  // order (participants stays index-aligned with participantIds in the store).
+  const otherNamesOf = (thread: typeof threads[0]): string[] => {
+    const out: string[] = []
+    thread.participantIds.forEach((id, i) => {
+      if (id !== selfId) out.push(thread.participants[i] ?? id)
+    })
+    return out
+  }
+  // Thread title: explicit group name, else the OTHER members' names — so a 1:1
+  // shows the contact, not "you, them".
+  const titleOf = (thread: typeof threads[0]): string =>
+    thread.subject || otherNamesOf(thread).join(', ') || thread.participants.join(', ')
 
   const filteredMembers = useMemo(() => {
     const selectedIds = new Set(composeRecipients.map(r => r.id))
@@ -151,19 +167,17 @@ export function MessagePanel({ isOpen, onClose }: MessagePanelProps) {
     if (composeRecipients.length === 0 || !composeMessage.trim() || !user) return
     const names = composeRecipients.map(r => r.name)
     const ids = composeRecipients.map(r => r.id)
-    const threadId = createThread(names, ids, composeMessage.trim(), user.id, user.name)
-    // If group name was provided, update the thread subject
-    if (composeGroupName.trim() && composeRecipients.length > 1) {
-      const store = useMessageStore.getState()
-      const thread = store.threads.find(t => t.id === threadId)
-      if (thread) {
-        useMessageStore.setState(state => ({
-          threads: state.threads.map(t => t.id === threadId ? { ...t, subject: composeGroupName.trim() } : t)
-        }))
-      }
-    }
+    // Only groups (2+ recipients) carry a name; pass it to the server so it
+    // actually persists — before, it was set only in local state and lost on refresh.
+    const groupName = composeRecipients.length > 1 ? (composeGroupName.trim() || undefined) : undefined
+    const tempId = createThread(
+      names, ids, composeMessage.trim(), user.id, user.name, undefined, groupName,
+      // Follow the real thread id once the server reconciles, so the detail view
+      // keeps showing this thread's messages instead of going blank.
+      (realId) => setActiveThreadId(prev => (prev === tempId ? realId : prev)),
+    )
     resetCompose()
-    setActiveThreadId(threadId)
+    setActiveThreadId(tempId)
     setView('detail')
   }
 
@@ -178,20 +192,31 @@ export function MessagePanel({ isOpen, onClose }: MessagePanelProps) {
   }
 
   const handleAvatarUpload = () => {
-    if (!activeThread || !isCurrentUserAdmin) return
+    if (!activeThread || !isCurrentUserAdmin || !user) return
+    const thread = activeThread
     const input = document.createElement('input')
     input.type = 'file'
     input.accept = 'image/*'
-    input.onchange = (e) => {
+    input.onchange = async (e) => {
       const file = (e.target as HTMLInputElement).files?.[0]
       if (!file) return
-      const reader = new FileReader()
-      reader.onload = () => {
-        if (typeof reader.result === 'string') {
-          updateThreadAvatar(activeThread.id, reader.result)
-        }
+      // Upload to the public avatars bucket (own-folder RLS) and persist the URL.
+      // A base64 data URL blows past the avatar_url max(2000) schema, so the
+      // group photo never saved (didn't survive refresh).
+      try {
+        const supabase = createClient()
+        const safeName = file.name.replace(/[^A-Za-z0-9._-]/g, '_')
+        const path = `${user.id}/group-${thread.id}-${Date.now()}-${safeName}`
+        const { error: upErr } = await supabase.storage
+          .from('avatars')
+          .upload(path, file, { cacheControl: '31536000', upsert: true, contentType: file.type || 'image/png' })
+        if (upErr) throw upErr
+        const { data: pub } = supabase.storage.from('avatars').getPublicUrl(path)
+        if (!pub?.publicUrl) throw new Error('No public URL')
+        updateThreadAvatar(thread.id, pub.publicUrl)
+      } catch (err) {
+        console.error('[MessagePanel] group avatar upload failed:', err)
       }
-      reader.readAsDataURL(file)
     }
     input.click()
   }
@@ -222,7 +247,7 @@ export function MessagePanel({ isOpen, onClose }: MessagePanelProps) {
     }
     return (
       <div className={cn(dim, 'rounded-full bg-slate-200 flex items-center justify-center text-slate-600 font-bold shrink-0')}>
-        {thread.participants[0]?.charAt(0) || '?'}
+        {otherNamesOf(thread)[0]?.charAt(0) || '?'}
       </div>
     )
   }
@@ -254,7 +279,7 @@ export function MessagePanel({ isOpen, onClose }: MessagePanelProps) {
                   : view === 'members'
                     ? t('sidebar.members')
                     : activeThread
-                      ? (activeThread.subject || activeThread.participants.join(', '))
+                      ? titleOf(activeThread)
                       : t('sidebar.messages')}
               </h2>
               {view === 'threads' && (
@@ -453,7 +478,7 @@ export function MessagePanel({ isOpen, onClose }: MessagePanelProps) {
                               <div className="flex items-center justify-between gap-2">
                                 <div className="flex items-center gap-1.5 min-w-0">
                                   <p className={cn('text-sm truncate', thread.unreadCount > 0 ? 'font-bold text-slate-900' : 'font-medium text-slate-700')}>
-                                    {thread.subject || thread.participants.join(', ')}
+                                    {titleOf(thread)}
                                   </p>
                                   {thread.isGroup && (
                                     <Icon icon="lucide:users" className="text-[10px] text-slate-400 shrink-0" />
@@ -466,10 +491,10 @@ export function MessagePanel({ isOpen, onClose }: MessagePanelProps) {
                                 )}
                               </div>
                               {thread.isGroup && (
-                                <p className="text-xs text-slate-500 mt-0.5">{thread.participants.join(', ')}</p>
+                                <p className="text-xs text-slate-500 mt-0.5">{otherNamesOf(thread).join(', ')}</p>
                               )}
                               {!thread.isGroup && (
-                                <p className="text-xs text-slate-500 mt-0.5">{thread.participants[0]}</p>
+                                <p className="text-xs text-slate-500 mt-0.5">{otherNamesOf(thread)[0]}</p>
                               )}
                               <p className="text-xs text-slate-400 mt-1 truncate">{thread.lastMessage}</p>
                               <p className="text-[10px] text-slate-400 mt-1">{formatRelativeTime(thread.lastMessageAt, t)}</p>
@@ -525,11 +550,11 @@ export function MessagePanel({ isOpen, onClose }: MessagePanelProps) {
                   />
                 ) : (
                   <button
-                    onClick={() => { setGroupNameDraft(activeThread.subject || activeThread.participants.join(', ')); setEditingGroupName(true) }}
+                    onClick={() => { setGroupNameDraft(activeThread.subject || otherNamesOf(activeThread).join(', ')); setEditingGroupName(true) }}
                     className="flex items-center gap-1.5 text-sm font-bold text-slate-900 hover:text-emerald-600 transition-colors cursor-pointer"
                     title={t('sidebar.editGroupName')}
                   >
-                    {activeThread.subject || activeThread.participants.join(', ')}
+                    {activeThread.subject || otherNamesOf(activeThread).join(', ')}
                     <Icon icon="lucide:pencil" className="text-xs text-slate-400" />
                   </button>
                 )}
@@ -611,8 +636,9 @@ export function MessagePanel({ isOpen, onClose }: MessagePanelProps) {
                 </div>
               </div>
 
-              {/* Other participants */}
+              {/* Other participants (the current user is shown above) */}
               {activeThread.participantIds.map((memberId, idx) => {
+                if (memberId === selfId) return null
                 const memberName = activeThread.participants[idx]
                 const isMemberAdmin = activeThread.admins.includes(memberId)
                 const isCreator = activeThread.createdBy === memberId
