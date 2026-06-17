@@ -37,6 +37,7 @@ type ProfileRow = {
   department_id: string | null
   phone: string | null
   avatar_seed: string | null
+  avatar_url: string | null
   workload: number | null
   last_login: string | null
   created_at: string | null
@@ -63,6 +64,7 @@ function mapProfileToUser(row: ProfileRow): User {
     role,
     department: row.department_id ?? '',
     phone: row.phone ?? undefined,
+    avatar: row.avatar_url ?? undefined,
     avatarSeed: row.avatar_seed ?? row.name ?? row.email ?? 'user',
     workload: row.workload ?? 0,
     lastLogin: row.last_login ?? undefined,
@@ -74,7 +76,7 @@ async function fetchProfile(userId: string): Promise<User | null> {
   const supabase = createClient()
   const { data, error } = await supabase
     .from('profiles')
-    .select('id, email, name, role, department_id, phone, avatar_seed, workload, last_login, created_at')
+    .select('id, email, name, role, department_id, phone, avatar_seed, avatar_url, workload, last_login, created_at')
     .eq('id', userId)
     .maybeSingle()
   if (error) {
@@ -331,7 +333,9 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
     const patch: Record<string, unknown> = {}
     if (data.avatarSeed !== undefined) patch.avatar_seed = data.avatarSeed
     if (data.name !== undefined) patch.name = data.name
-    if (data.phone !== undefined) patch.phone = data.phone
+    // Empty string clears the column (so a phone/photo can be removed, not just changed).
+    if (data.phone !== undefined) patch.phone = data.phone || null
+    if (data.avatar !== undefined) patch.avatar_url = data.avatar || null
     if (Object.keys(patch).length === 0) return
     // supabase-js query builders are LAZY thenables: the HTTP request only fires
     // when the builder is awaited / `.then()`-ed. A bare `void supabase…update()`

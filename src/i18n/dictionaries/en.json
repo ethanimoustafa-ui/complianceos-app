@@ -96,6 +96,8 @@
     "phoneNumber": "Phone Number",
     "uploadPhoto": "Upload Photo",
     "chooseAvatar": "Choose Avatar",
+    "avatarUploadFailed": "Photo upload failed. Please try again.",
+    "emailReadOnlyHint": "Email is your sign-in identity and can't be changed here.",
     "changeAvatar": "Change Avatar",
     "clearAll": "Clear All",
     "noNotifications": "No notifications",

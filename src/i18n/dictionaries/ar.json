@@ -96,6 +96,8 @@
     "phoneNumber": "رقم الهاتف",
     "uploadPhoto": "رفع صورة",
     "chooseAvatar": "اختر صورة رمزية",
+    "avatarUploadFailed": "فشل رفع الصورة. حاول مرة أخرى.",
+    "emailReadOnlyHint": "البريد الإلكتروني هو هوية تسجيل الدخول ولا يمكن تغييره من هنا.",
     "changeAvatar": "تغيير الصورة الرمزية",
     "clearAll": "مسح الكل",
     "noNotifications": "لا توجد إشعارات",
