@@ -38,7 +38,6 @@ import { useDeepLinkHighlight } from '@/hooks/useDeepLink'
 import { Gate } from '@/components/auth/gate'
 import { dicebearAvatar } from '@/lib/avatar'
 import { paginate } from '@/lib/pagination'
-import { ToastHost } from '@/components/ui/toast-host'
 import { FieldLabel } from '@/components/ui/field-label'
 import { FileUpload, type UploadedFile } from '@/components/ui/file-upload'
 import { supabase as supabaseClient } from '@/lib/supabase/client'
@@ -413,11 +412,18 @@ export default function ReportsRisksPage() {
         const safeName = f.name.replace(/[^a-zA-Z0-9._-]+/g, '_')
         const storagePath = `risks/${riskId}/${Date.now()}-${safeName}`
         const { error: upErr } = await supabaseClient.storage.from('risk_plan_documents').upload(storagePath, f.file)
-        if (upErr) { pushToast(apiErrorMessage(upErr, t('reports.failedToSaveRisk' as TranslationKey)), 'error'); continue }
+        if (upErr) {
+          // Storage upload failed — keep the copy user-facing (no raw Supabase
+          // text) and name the file so the user knows which one to retry.
+          pushToast({ key: 'errors.reports.planDocumentUploadFailed', params: { name: f.name } }, 'error')
+          continue
+        }
         try {
           await addPlanDocument(riskId, { name: f.name, type: fileType, storage_path: storagePath })
-        } catch (e) {
-          pushToast(apiErrorMessage(e, t('reports.failedToSaveRisk' as TranslationKey)), 'error')
+        } catch {
+          // The file reached storage but couldn't be registered — distinct from
+          // an upload failure so the user knows it may not be retrievable later.
+          pushToast({ key: 'errors.reports.planDocumentRegisterFailed', params: { name: f.name } }, 'error')
         }
       }
     } finally {
@@ -1705,9 +1711,6 @@ export default function ReportsRisksPage() {
             : undefined
         }
       />
-
-      {/* Error/success toasts (create/update failures surface here). */}
-      <ToastHost />
     </div>
   )
 }

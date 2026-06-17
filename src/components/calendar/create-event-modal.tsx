@@ -1,12 +1,14 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Icon } from '@iconify/react'
 import { useTranslation } from '@/i18n'
+import type { TranslationKey } from '@/i18n'
 import { useCalendarStore } from '@/stores/calendar-store'
 import { useCalendarEventTypeStore } from '@/stores/calendar-event-type-store'
 import { EditableSelect } from '@/components/ui/editable-select'
 import { LoadingButton } from '@/components/ui/loading-button'
+import { pushToast } from '@/stores/toast-store'
 
 interface CreateEventModalProps {
   isOpen: boolean
@@ -17,6 +19,11 @@ interface CreateEventModalProps {
 export function CreateEventModal({ isOpen, onClose, onSuccess }: CreateEventModalProps) {
   const { t, isRTL } = useTranslation()
   const createEvent = useCalendarStore((s) => s.createEvent)
+  // The create is optimistic and this modal closes before the request settles,
+  // so a failed create only shows up later as `error` on the store (after the
+  // optimistic row is rolled back). Watch it and surface a retry toast.
+  const calendarError = useCalendarStore((s) => s.error)
+  const clearCalendarError = useCalendarStore((s) => s.clearError)
   // Pull `isMutating` from the store (not local state) so the same in-flight
   // create disables every trigger pointing at it. Pattern matches the
   // circular / policy create modals.
@@ -37,14 +44,30 @@ export function CreateEventModal({ isOpen, onClose, onSuccess }: CreateEventModa
     startTime: '',
     endTime: '',
   })
+  // Inline hint telling the user which required fields are still empty.
+  const [formError, setFormError] = useState<string | null>(null)
+
+  // Surface a failed create (network/500) as an error toast, then clear the
+  // store flag so a later failure surfaces again.
+  useEffect(() => {
+    if (calendarError) {
+      pushToast({ key: 'errors.cal.eventCreateFailed' }, 'error')
+      clearCalendarError()
+    }
+  }, [calendarError, clearCalendarError])
 
   const handleClose = () => {
     setForm({ title: '', date: '', type: 'meeting', description: '', startTime: '', endTime: '' })
+    setFormError(null)
     onClose()
   }
 
   const handleSubmit = () => {
-    if (!form.title || !form.date) return
+    if (!form.title || !form.date) {
+      setFormError(t('errors.cal.eventRequiredFields' as TranslationKey))
+      return
+    }
+    setFormError(null)
 
     createEvent({
       title: form.title,
@@ -150,6 +173,11 @@ export function CreateEventModal({ isOpen, onClose, onSuccess }: CreateEventModa
             />
           </div>
         </div>
+        {formError && (
+          <p role="alert" className={`px-6 -mt-2 pb-1 text-xs font-semibold text-rose-600 ${isRTL ? 'text-right' : ''}`}>
+            {formError}
+          </p>
+        )}
         <div className={`p-6 bg-slate-50 flex gap-3`}>
           <button
             onClick={handleClose}

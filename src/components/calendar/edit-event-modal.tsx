@@ -13,18 +13,26 @@ import { useCalendarStore } from '@/stores/calendar-store'
 import { useCalendarEventTypeStore } from '@/stores/calendar-event-type-store'
 import { EditableSelect } from '@/components/ui/editable-select'
 import { useTranslation } from '@/i18n'
+import type { TranslationKey } from '@/i18n'
 import type { CalendarEvent } from '@/types'
 
-const eventSchema = z.object({
-  title: z.string().min(3, 'Title must be at least 3 characters'),
-  // Type ids are managed via useCalendarEventTypeStore; widened to plain string.
-  type: z.string().min(1, 'Type is required'),
-  date: z.string().min(1, 'Date is required'),
-  startTime: z.string().optional(),
-  endTime: z.string().optional(),
-  description: z.string().optional(),
-  location: z.string().optional(),
-})
+const eventSchema = z
+  .object({
+    title: z.string().min(3, 'Title must be at least 3 characters'),
+    // Type ids are managed via useCalendarEventTypeStore; widened to plain string.
+    type: z.string().min(1, 'Type is required'),
+    date: z.string().min(1, 'Date is required'),
+    startTime: z.string().optional(),
+    endTime: z.string().optional(),
+    // Messages carry i18n keys, resolved to copy via t() at the render site.
+    description: z.string().max(2000, 'errors.cal.eventDescriptionTooLong').optional(),
+    location: z.string().max(200, 'errors.cal.eventLocationTooLong').optional(),
+  })
+  // Guard against an end time that falls before the start time on the same day.
+  .refine(
+    (d) => !d.startTime || !d.endTime || d.endTime >= d.startTime,
+    { message: 'errors.cal.eventEndBeforeStart', path: ['endTime'] },
+  )
 
 type EventFormData = z.infer<typeof eventSchema>
 
@@ -40,7 +48,7 @@ export function EditEventModal({ isOpen, onClose, event, onSuccess }: EditEventM
   // update — circular/policy parity. `isLoading` reflects refetches.
   const updateEvent = useCalendarStore((s) => s.updateEvent)
   const isMutating = useCalendarStore((s) => s.isMutating)
-  const { isRTL } = useTranslation()
+  const { t, isRTL } = useTranslation()
   const eventTypes = useCalendarEventTypeStore((s) => s.types)
   const addEventType = useCalendarEventTypeStore((s) => s.add)
   const updateEventType = useCalendarEventTypeStore((s) => s.update)
@@ -220,6 +228,9 @@ export function EditEventModal({ isOpen, onClose, event, onSuccess }: EditEventM
                     />
                   )}
                 />
+                {errors.endTime && (
+                  <p className="text-rose-500 text-xs mt-1">{t(errors.endTime.message as TranslationKey)}</p>
+                )}
               </div>
             </div>
 
@@ -245,6 +256,9 @@ export function EditEventModal({ isOpen, onClose, event, onSuccess }: EditEventM
                   )}
                 />
               </div>
+              {errors.location && (
+                <p className="text-rose-500 text-xs mt-1">{t(errors.location.message as TranslationKey)}</p>
+              )}
             </div>
 
             <div>
@@ -263,6 +277,9 @@ export function EditEventModal({ isOpen, onClose, event, onSuccess }: EditEventM
                   />
                 )}
               />
+              {errors.description && (
+                <p className="text-rose-500 text-xs mt-1">{t(errors.description.message as TranslationKey)}</p>
+              )}
             </div>
           </form>
         </div>

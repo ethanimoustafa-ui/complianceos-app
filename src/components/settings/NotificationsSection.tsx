@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Modal } from '@/components/ui/modal'
 import { useUserPreferencesStore } from '@/stores/user-preferences-store'
 import { api } from '@/lib/api-client'
+import { pushToast } from '@/stores/toast-store'
 import { useTranslation, type TranslationKey } from '@/i18n'
 import type { NotificationModule, NotificationEvent, NotificationScope } from '@/types'
 
@@ -75,7 +76,11 @@ export function NotificationsSection() {
 
   const handleEmailDigestToggle = (next: boolean) => {
     setEmailDigest(next) // optimistic
-    api.patch('/team/me', { email_digest_enabled: next }).catch(() => setEmailDigest(!next))
+    api.patch('/team/me', { email_digest_enabled: next }).catch(() => {
+      // Revert the optimistic flip and tell the user why it snapped back.
+      setEmailDigest(!next)
+      pushToast({ key: 'errors.settings.emailDigestSaveFailed' }, 'error')
+    })
   }
 
   function handleMasterToggle() {

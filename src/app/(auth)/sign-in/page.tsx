@@ -2,24 +2,30 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { Icon } from '@iconify/react'
 import { Button } from '@/components/ui/button'
 import { useTranslation } from '@/i18n'
+import type { TranslationKey } from '@/i18n'
 import { useAuthStore } from '@/stores/auth-store'
+import { pushToast } from '@/stores/toast-store'
 
-const signInSchema = z.object({
-  email: z.string().email('Please enter a valid email'),
-  password: z.string().min(8, 'Password must be at least 8 characters'),
-})
+// i18n-aware schema factory: refine messages are resolved through `t()` so
+// Arabic users see localized validation copy instead of hardcoded English.
+const makeSignInSchema = (t: (key: TranslationKey) => string) =>
+  z.object({
+    email: z.string().email(t('errors.authPages.emailInvalid' as TranslationKey)),
+    password: z.string().min(8, t('errors.authPages.passwordTooShort' as TranslationKey)),
+  })
 
-type SignInInput = z.infer<typeof signInSchema>
+type SignInInput = z.infer<ReturnType<typeof makeSignInSchema>>
 
 export default function SignInPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const [showPassword, setShowPassword] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
@@ -31,6 +37,15 @@ export default function SignInPage() {
   useEffect(() => {
     setHasMounted(true)
   }, [])
+
+  // Surface a failed auth callback (expired/invalid reset or confirmation link).
+  // The callback route redirects here with `?error=auth_callback_failed` but
+  // otherwise gives the user no explanation — show a clear toast on mount.
+  useEffect(() => {
+    if (searchParams.get('error') === 'auth_callback_failed') {
+      pushToast({ key: 'errors.authPages.linkExpired' }, 'error')
+    }
+  }, [searchParams])
 
   // Already authenticated → bounce to dashboard.
   useEffect(() => {
@@ -44,7 +59,7 @@ export default function SignInPage() {
     handleSubmit,
     formState: { errors },
   } = useForm<SignInInput>({
-    resolver: zodResolver(signInSchema),
+    resolver: zodResolver(makeSignInSchema(t)),
   })
 
   // Real sign-in via Supabase. On success, the AuthListener hook syncs state
@@ -58,7 +73,12 @@ export default function SignInPage() {
       router.push('/dashboard')
       router.refresh()
     } else {
-      setSubmitError(result.error ?? 'Invalid credentials')
+      // The auth store already mapped the raw Supabase error to a stable i18n
+      // key (see stores/auth-store signIn). Resolve it for clear, localized,
+      // non-blaming copy; fall back to the generic key if none was returned.
+      const errorKey = (result.error ?? 'errors.authPages.signInGeneric') as TranslationKey
+      pushToast({ key: errorKey }, 'error')
+      setSubmitError(t(errorKey))
     }
   }
 

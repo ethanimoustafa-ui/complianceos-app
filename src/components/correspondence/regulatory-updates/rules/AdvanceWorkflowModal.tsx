@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Modal } from '@/components/ui/modal'
 import { useCircularStore } from '@/stores/circular-store'
+import { pushToast } from '@/stores/toast-store'
 import type { Circular } from '@/types'
 
 async function notifyAuthority(circ: Circular) {
@@ -33,6 +34,7 @@ async function notifyAuthority(circ: Circular) {
     URL.revokeObjectURL(url)
   } catch (err) {
     console.error('ZIP generation failed', err)
+    pushToast({ key: 'errors.rules.evidenceFileFailed' }, 'error')
   }
 }
 

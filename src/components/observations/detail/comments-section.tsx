@@ -3,6 +3,7 @@
 import { memo, useState } from 'react'
 import { Icon } from '@iconify/react'
 import { useTranslation } from '@/i18n'
+import { pushToast } from '@/stores/toast-store'
 import { formatTimelineDate } from '@/lib/format-date'
 import { canEditComment, canDeleteComment } from '@/lib/permissions'
 import { dicebearAvatar } from '@/lib/avatar'
@@ -60,6 +61,7 @@ export const CommentsSection = memo(function CommentsSection({
       setUpdateText('')
     } catch (error) {
       console.error('Failed to add comment:', error)
+      pushToast({ key: 'errors.obsModals.addComment' }, 'error')
     } finally {
       setIsSubmitting(false)
     }
@@ -74,6 +76,7 @@ export const CommentsSection = memo(function CommentsSection({
       setEditingCommentText('')
     } catch (error) {
       console.error('Failed to edit comment:', error)
+      pushToast({ key: 'errors.obsModals.editComment' }, 'error')
     } finally {
       setSavingEditId(null)
     }
@@ -85,6 +88,7 @@ export const CommentsSection = memo(function CommentsSection({
       await onDelete(commentId)
     } catch (error) {
       console.error('Failed to delete comment:', error)
+      pushToast({ key: 'errors.obsModals.deleteComment' }, 'error')
     } finally {
       setDeletingCommentId(null)
     }

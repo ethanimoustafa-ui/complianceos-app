@@ -11,13 +11,31 @@ import { cn } from '@/lib/utils'
 import { useReportStore } from '@/stores/report-store'
 import type { Report, ReportType, ReportFormat, ReportPeriod } from '@/types'
 import { EditableSelect } from '@/components/ui/editable-select'
+import { pushToast } from '@/stores/toast-store'
+import { useTranslation } from '@/i18n'
+import type { TranslationKey } from '@/i18n'
+
+// Simple email shape check for the comma-separated recipients field.
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
 const reportSchema = z.object({
   name: z.string().min(3, 'Name must be at least 3 characters'),
   type: z.enum(['compliance', 'audit', 'risk', 'observation', 'sama', 'custom']),
   format: z.enum(['pdf', 'excel', 'word', 'csv']),
   period: z.enum(['daily', 'weekly', 'monthly', 'quarterly', 'annual', 'custom']),
-  recipients: z.string().min(1, 'At least one recipient is required'),
+  // Validation messages carry i18n keys (resolved to copy via t() at render).
+  recipients: z
+    .string()
+    .min(1, 'errors.required')
+    .refine(
+      (val) =>
+        val
+          .split(',')
+          .map((r) => r.trim())
+          .filter((r) => r.length > 0)
+          .every((r) => EMAIL_RE.test(r)),
+      'errors.reports.recipientsInvalid'
+    ),
   scheduledFor: z.string().optional(),
 })
 
@@ -56,6 +74,7 @@ const reportPeriods: { id: ReportPeriod; label: string }[] = [
 
 export function ScheduleReportModal({ isOpen, onClose, onSuccess }: ScheduleReportModalProps) {
   const { create, isLoading } = useReportStore()
+  const { t } = useTranslation()
   const [selectedType, setSelectedType] = useState<ReportType>('compliance')
   const [selectedFormat, setSelectedFormat] = useState<ReportFormat>('pdf')
 
@@ -104,6 +123,8 @@ export function ScheduleReportModal({ isOpen, onClose, onSuccess }: ScheduleRepo
       handleClose()
     } catch (error) {
       console.error('Failed to schedule report:', error)
+      // Surface the failure and keep the modal open so the user can retry.
+      pushToast({ key: 'errors.reports.scheduleFailed' }, 'error')
     }
   }
 
@@ -248,7 +269,9 @@ export function ScheduleReportModal({ isOpen, onClose, onSuccess }: ScheduleRepo
                   )}
                 />
                 {errors.recipients && (
-                  <p className="text-rose-500 text-xs mt-1">{errors.recipients.message}</p>
+                  <p className="text-rose-500 text-xs mt-1">
+                    {t(errors.recipients.message as TranslationKey)}
+                  </p>
                 )}
               </div>
 

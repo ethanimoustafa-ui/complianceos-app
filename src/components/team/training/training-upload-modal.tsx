@@ -158,7 +158,7 @@ export function TrainingUploadModal({ isOpen, onClose, onConfirm }: TrainingUplo
             </div>
             {!atLeastOneSelected && (
               <p className="text-xs text-rose-500 mt-2">
-                {t('training.atLeastOneRequired' as TranslationKey)}
+                {t('errors.misc.selectDataTypeToUpload' as TranslationKey)}
               </p>
             )}
           </div>

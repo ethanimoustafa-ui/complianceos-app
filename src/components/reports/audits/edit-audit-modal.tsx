@@ -13,14 +13,32 @@ import { useAuditStore } from '@/stores/audit-store'
 import { useTeamStore } from '@/stores/team-store'
 import { useAuthStore } from '@/stores/auth-store'
 import { useDepartmentStore } from '@/stores/department-store'
-import { useTranslation } from '@/i18n'
+import { useTranslation, type TranslationKey } from '@/i18n'
 import type { Audit, AuditAuthority, ReviewSchedule, RegulatoryBodyId } from '@/types'
+import { pushToast } from '@/stores/toast-store'
+import { ApiClientError } from '@/lib/api-client'
 import { ReviewSchedulePicker } from '@/components/ui/ReviewSchedulePicker'
 import { computeNextReview } from '@/lib/review-schedule'
 import { useFrameworkConfigStore, frameworkIconTextClass } from '@/stores/framework-config-store'
 import { FrameworkTagSelector } from '@/components/ui/framework-tag-selector'
 import { useAuditCategoryStore } from '@/stores/audit-category-store'
 import { EditableSelect } from '@/components/ui/editable-select'
+
+// Surface the FIRST Zod issue from a 400 (e.g. "title: …") instead of a generic
+// fallback, so the user knows exactly which field to fix. Falls back to the
+// supplied message for network / unknown failures.
+function apiErrorMessage(e: unknown, fallback: string): string {
+  if (e instanceof ApiClientError) {
+    const details = e.details as Array<{ message?: string; path?: Array<string | number> }> | undefined
+    const first = Array.isArray(details) ? details[0] : undefined
+    if (first?.message) {
+      const path = Array.isArray(first.path) && first.path.length > 0 ? `${first.path.join('.')}: ` : ''
+      return `${path}${first.message}`
+    }
+    return e.message
+  }
+  return e instanceof Error && e.message ? e.message : fallback
+}
 
 const auditSchema = z.object({
   title: z.string().min(3, 'Title must be at least 3 characters'),
@@ -191,6 +209,9 @@ export function EditAuditModal({ isOpen, onClose, audit, onSuccess, calculatedPr
       handleClose()
     } catch (error) {
       console.error('Failed to update audit:', error)
+      // Surface the failure (the store rolls back / re-throws but never toasts)
+      // so the user knows the change didn't save; modal stays open to retry.
+      pushToast(apiErrorMessage(error, t('errors.auditModals.updateFailed' as TranslationKey)), 'error')
     }
   }
 

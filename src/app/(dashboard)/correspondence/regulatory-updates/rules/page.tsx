@@ -28,7 +28,6 @@ import { BusinessOwnerModal } from '@/components/correspondence/regulatory-updat
 import { DeleteConfirmModal } from '@/components/correspondence/regulatory-updates/rules/DeleteConfirmModal'
 import { EditCircularModal } from '@/components/correspondence/regulatory-updates/rules/EditCircularModal'
 import { CircularDetailsContent } from '@/components/correspondence/regulatory-updates/rules/CircularDetailsContent'
-import { ToastHost } from '@/components/ui/toast-host'
 import { pushToast } from '@/stores/toast-store'
 
 // ── Main page ─────────────────────────────────────────────────────────────────
@@ -479,9 +478,6 @@ function RegulatoryUpdatesRulesPageContent() {
         }}
         t={t}
       />
-
-      {/* Toast host — renders success + optimistic-revert error toasts. */}
-      <ToastHost />
     </div>
   )
 }

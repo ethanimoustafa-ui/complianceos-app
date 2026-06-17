@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { Icon } from '@iconify/react'
 import { Modal } from '@/components/ui/modal'
 import { Button } from '@/components/ui/button'
+import { pushToast } from '@/stores/toast-store'
 import { useTranslation } from '@/i18n'
 
 interface DeleteConfirmationDialogProps {
@@ -53,6 +54,9 @@ export function DeleteConfirmationDialog({
       onClose()
     } catch (error) {
       console.error('Delete failed:', error)
+      // Keep the dialog open and tell the user it didn't go through so they can
+      // try again — previously the failure was only logged to the console.
+      pushToast({ key: 'errors.deleteFailed' }, 'error')
     } finally {
       setIsDeleting(false)
       setConfirmationInput('')

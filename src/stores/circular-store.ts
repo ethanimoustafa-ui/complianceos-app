@@ -1417,6 +1417,7 @@ export const useCircularStore = create<CircularState>()((set, get) => ({
       const seedItems = article.checklist ?? []
       if (seedItems.length > 0) {
         const persisted: { tempId: string; row: { id: string; text: string; completed: boolean; sort_order: number } }[] = []
+        let seedFailures = 0
         for (const item of seedItems) {
           try {
             const liveItem = get()
@@ -1429,8 +1430,17 @@ export const useCircularStore = create<CircularState>()((set, get) => ({
             )
             persisted.push({ tempId: item.id, row })
           } catch {
-            // Swallow per-item errors so the parent succeeds; user can retry.
+            // The article itself saved; only some seed checklist items failed to
+            // persist. Don't fail the whole create — count failures and surface a
+            // single toast below so the user knows to re-add them manually.
+            seedFailures += 1
           }
+        }
+        if (seedFailures > 0) {
+          pushToast(
+            { key: 'errors.rules.checklistItemsNotSaved', params: { count: String(seedFailures) } },
+            'error',
+          )
         }
         if (persisted.length > 0) {
           set((state) =>

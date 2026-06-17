@@ -22,13 +22,29 @@ export function FileUploadModal({
   const [isDragging, setIsDragging] = useState(false)
   // O1: track upload in-flight state to show spinner
   const [isUploading, setIsUploading] = useState(false)
+  // Inline error for a rejected file (too large) or a failed upload.
+  const [error, setError] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   // The parent mounts this modal only while open, so state starts fresh on each
   // open (a new mount) — no reset effect needed.
 
+  // 50 MB ceiling — mirrors the observation_documents Storage bucket
+  // (migration 025). Pre-checking here gives the user a clear message before the
+  // upload starts instead of an invisible failure once the bucket rejects it.
+  const MAX_DOC_BYTES = 52_428_800
+
   const handleFilesSelect = (files: FileList | File[]) => {
-    const newFiles = Array.from(files)
-    setSelectedFiles((prev) => [...prev, ...newFiles])
+    const valid: File[] = []
+    let rejection: string | null = null
+    for (const file of Array.from(files)) {
+      if (file.size > MAX_DOC_BYTES) {
+        rejection = rejection ?? t('upload.tooLargeNamed', { name: file.name, max: formatBytes(MAX_DOC_BYTES, 0) })
+        continue
+      }
+      valid.push(file)
+    }
+    if (valid.length > 0) setSelectedFiles((prev) => [...prev, ...valid])
+    setError(rejection)
   }
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -63,11 +79,17 @@ export function FileUploadModal({
 
   const handleConfirm = async () => {
     if (selectedFiles.length === 0) return
+    setError(null)
     setIsUploading(true)
     try {
       await onConfirm(selectedFiles)
       // Reset state after successful upload
       setSelectedFiles([])
+    } catch (err) {
+      // Surface a friendly, actionable message instead of letting the failure
+      // bubble up invisibly (uploadDocument rejects on a too-large/blocked file).
+      console.error('[FileUploadModal] upload failed:', err)
+      setError(t('upload.filesFailed'))
     } finally {
       setIsUploading(false)
     }
@@ -75,6 +97,7 @@ export function FileUploadModal({
 
   const handleClose = () => {
     setSelectedFiles([])
+    setError(null)
     onClose()
   }
 
@@ -122,7 +145,7 @@ export function FileUploadModal({
             type="file"
             multiple
             onChange={handleInputChange}
-            accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.gif,.webp"
+            accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.jpg,.jpeg,.png,.webp"
             className="hidden"
           />
           <Icon icon="lucide:cloud-upload" className="text-4xl text-slate-400 mx-auto mb-3" />
@@ -159,6 +182,17 @@ export function FileUploadModal({
                 </button>
               </div>
             ))}
+          </div>
+        )}
+
+        {/* Inline error — rejected file (too large) or a failed upload. */}
+        {error && (
+          <div
+            role="alert"
+            className={`mt-4 flex items-center gap-2 rounded-lg bg-rose-50 border border-rose-200 px-3 py-2.5 text-sm text-rose-700 ${isRTL ? 'flex-row-reverse text-right' : ''}`}
+          >
+            <Icon icon="lucide:alert-circle" className="text-base shrink-0" />
+            <span className="flex-1">{error}</span>
           </div>
         )}
 

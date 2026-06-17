@@ -15,6 +15,11 @@ import { Input } from '@/components/ui/input'
 import { ListSkeleton } from '@/components/ui/skeleton'
 import { useDepartmentStore } from '@/stores/department-store'
 
+// Pragmatic email shape check (mirrors the browser's type="email" expectation):
+// non-empty local part, "@", a dotted domain. Kept deliberately simple — the
+// server is the source of truth; this just gives instant, friendly feedback.
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
 export function DepartmentsSection({ embedded = false }: { embedded?: boolean } = {}) {
   const { t, isRTL } = useTranslation()
   const departments = useDepartmentStore((s) => s.departments)
@@ -27,6 +32,7 @@ export function DepartmentsSection({ embedded = false }: { embedded?: boolean } 
 
   const [editingId, setEditingId] = useState<string | null>(null)
   const [draftEmail, setDraftEmail] = useState('')
+  const [editError, setEditError] = useState<string | null>(null)
   const [savingId, setSavingId] = useState<string | null>(null)
   // Owner: a department can now be created straight from the configurables hub,
   // and the create form prompts for the contact email up front (not just name).
@@ -63,17 +69,29 @@ export function DepartmentsSection({ embedded = false }: { embedded?: boolean } 
   const startEdit = (id: string, email: string | undefined) => {
     setEditingId(id)
     setDraftEmail(email ?? '')
+    setEditError(null)
   }
   const cancelEdit = () => {
     setEditingId(null)
     setDraftEmail('')
+    setEditError(null)
   }
   const saveEdit = async (id: string) => {
+    const email = draftEmail.trim()
+    // The email is optional, but if one is entered it must be well-formed —
+    // it powers the "inform the department" mailto actions.
+    if (email && !EMAIL_RE.test(email)) {
+      setEditError(t('errors.settings.departmentEmailInvalid' as TranslationKey))
+      return
+    }
+    setEditError(null)
     setSavingId(id)
     try {
-      await updateDepartment(id, { email: draftEmail.trim() })
+      await updateDepartment(id, { email })
       setEditingId(null)
       setDraftEmail('')
+    } catch {
+      setEditError(t('errors.settings.departmentEmailSaveFailed' as TranslationKey))
     } finally {
       setSavingId(null)
     }
@@ -167,15 +185,19 @@ export function DepartmentsSection({ embedded = false }: { embedded?: boolean } 
                   </td>
                   <td className="px-6 py-3 align-middle">
                     {isEditing ? (
-                      <Input
-                        type="email"
-                        value={draftEmail}
-                        onChange={(e) => setDraftEmail(e.target.value)}
-                        placeholder={t('settings.departments.emailPlaceholder' as TranslationKey)}
-                        className="max-w-xs"
-                        dir="ltr"
-                        autoFocus
-                      />
+                      <div className="max-w-xs">
+                        <Input
+                          type="email"
+                          value={draftEmail}
+                          onChange={(e) => { setDraftEmail(e.target.value); if (editError) setEditError(null) }}
+                          placeholder={t('settings.departments.emailPlaceholder' as TranslationKey)}
+                          dir="ltr"
+                          autoFocus
+                        />
+                        {editError && (
+                          <p role="alert" className="mt-1 text-xs font-semibold text-rose-600">{editError}</p>
+                        )}
+                      </div>
                     ) : d.email ? (
                       <span className="text-slate-600" dir="ltr">{d.email}</span>
                     ) : (

@@ -8,7 +8,7 @@ import { LoadingButton } from '@/components/ui/loading-button'
 import { Input } from '@/components/ui/input'
 import { useFrameworkConfigStore } from '@/stores/framework-config-store'
 import { useDepartmentStore } from '@/stores/department-store'
-import { useTranslation } from '@/i18n'
+import { useTranslation, type TranslationKey } from '@/i18n'
 import type { RegulatoryBodyId } from '@/types'
 
 interface Props {
@@ -251,7 +251,7 @@ export function AddFrameworkModal({ isOpen, onClose }: Props) {
           if (!description.trim()) missing.push(t('settings.descriptionEnglish'))
           return missing.length > 0 ? (
             <p className="text-xs text-rose-600 self-end text-end">
-              Missing required: {missing.join(', ')}
+              {t('errors.settings.missingRequiredFields' as TranslationKey, { fields: missing.join(', ') })}
             </p>
           ) : null
         })()}

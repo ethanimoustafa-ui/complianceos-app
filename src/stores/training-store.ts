@@ -45,6 +45,7 @@ import type {
   RegulatoryBodyId,
 } from '@/types'
 import { api, ApiClientError } from '@/lib/api-client'
+import { pushToast } from '@/stores/toast-store'
 
 // ---------- API row shapes --------------------------------------------------
 
@@ -481,6 +482,9 @@ export const useTrainingStore = create<TrainingState>()((set, get) => ({
           error: errorMessage(e, 'Failed to add training employee'),
           isMutating: false,
         }))
+        // The optimistic row disappears on rollback — without a toast the user
+        // never learns the add was rejected.
+        pushToast({ key: 'errors.misc.employeeAddFailed' }, 'error')
       }
     })()
   },
@@ -647,6 +651,9 @@ export const useTrainingStore = create<TrainingState>()((set, get) => ({
         })
       } catch (e) {
         set({ error: errorMessage(e, 'Failed to assign course'), isMutating: false })
+        // The bulk assignment shows optimistically but the server rejected it —
+        // notify the user so they know the change wasn't saved.
+        pushToast({ key: 'errors.misc.courseAssignFailed' }, 'error')
       }
     })()
   },

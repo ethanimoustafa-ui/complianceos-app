@@ -7,7 +7,7 @@ import { LoadingButton } from '@/components/ui/loading-button'
 import { Input } from '@/components/ui/input'
 import { Modal } from '@/components/ui/modal'
 import { useUserPreferencesStore } from '@/stores/user-preferences-store'
-import { useTranslation } from '@/i18n'
+import { useTranslation, type TranslationKey } from '@/i18n'
 import { EditableSelect } from '@/components/ui/editable-select'
 import type { DashboardView, DateFormatPreference } from '@/types'
 import { dicebearAvatar } from '@/lib/avatar'
@@ -165,7 +165,7 @@ export function UserPreferencesSection() {
             if (!profileEmail.trim()) missing.push(t('sidebar.emailAddress'))
             return missing.length > 0 ? (
               <p className="text-xs text-rose-600 text-end">
-                Missing required: {missing.join(', ')}
+                {t('errors.settings.missingRequiredFields' as TranslationKey, { fields: missing.join(', ') })}
               </p>
             ) : null
           })()}

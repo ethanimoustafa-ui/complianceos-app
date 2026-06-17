@@ -16,6 +16,7 @@ import {
 import { downloadPdf } from '@/lib/pdf-client'
 import { toComplianceReportData } from '@/lib/compliance-report-data'
 import { ExportMenu } from '@/components/ui/export-menu'
+import { pushToast } from '@/stores/toast-store'
 import type { DashboardView } from '@/types'
 import { usePolicyStore } from '@/stores/policy-store'
 import { useTrainingStore } from '@/stores/training-store'
@@ -110,6 +111,9 @@ export default function DashboardPage() {
       )
     } catch (e) {
       console.error('[dashboard] PDF export failed:', e)
+      // The spinner just stops on failure, leaving the user unsure whether the
+      // report downloaded — tell them it didn't and to try again.
+      pushToast({ key: 'errors.misc.reportExportFailed' }, 'error')
     } finally {
       setPdfBusy(false)
     }

@@ -15,7 +15,6 @@ import { EventDrawer } from '@/components/calendar/event-drawer'
 import { DatePickerModal } from '@/components/calendar/date-picker-modal'
 import { CreateEventModal } from '@/components/calendar/create-event-modal'
 import { EditEventModal } from '@/components/calendar/edit-event-modal'
-import { ToastHost } from '@/components/ui/toast-host'
 
 export default function CalendarPage() {
   const { t, isRTL } = useTranslation()
@@ -213,8 +212,6 @@ export default function CalendarPage() {
         }}
       />
 
-      {/* Surfaces calendar mutation/rollback errors as toasts (see EventDrawer). */}
-      <ToastHost />
     </div>
   )
 }

@@ -8,6 +8,7 @@ import { useTranslation } from '@/i18n'
 import type { TranslationKey } from '@/i18n'
 import { dicebearAvatar } from '@/lib/avatar'
 import { createClient } from '@/lib/supabase/client'
+import { validateFile, IMAGE_UPLOAD_RULE, IMAGE_ALLOWED_TYPES } from '@/lib/upload-validation'
 
 // Public Storage bucket for uploaded profile photos (migration 113).
 const AVATAR_BUCKET = 'avatars'
@@ -97,6 +98,14 @@ export function ProfileModal({ isOpen, onClose }: ProfileModalProps) {
     e.target.value = ''
     setAvatarError(null)
     setShowAvatarPicker(false)
+    // Pre-check size + type so the user gets a specific, actionable message
+    // BEFORE the bytes are uploaded — instead of a generic failure after the
+    // 5 MB avatars bucket rejects them.
+    const invalid = validateFile(file, IMAGE_UPLOAD_RULE)
+    if (invalid) {
+      setAvatarError(typeof invalid === 'string' ? invalid : t(invalid.key as TranslationKey, invalid.params))
+      return
+    }
     setIsUploadingAvatar(true)
     // Instant local preview while the upload runs.
     setCustomAvatar(URL.createObjectURL(file))
@@ -118,7 +127,7 @@ export function ProfileModal({ isOpen, onClose }: ProfileModalProps) {
       setCustomAvatar(publicData.publicUrl)
     } catch (err) {
       console.error('[ProfileModal] avatar upload failed:', err)
-      setAvatarError(t('sidebar.avatarUploadFailed' as TranslationKey))
+      setAvatarError(t('upload.failed' as TranslationKey))
       setCustomAvatar(user.avatar || null)
     } finally {
       setIsUploadingAvatar(false)
@@ -164,7 +173,7 @@ export function ProfileModal({ isOpen, onClose }: ProfileModalProps) {
           <input
             ref={fileInputRef}
             type="file"
-            accept="image/*"
+            accept={IMAGE_ALLOWED_TYPES.join(',')}
             className="hidden"
             onChange={handleAvatarUpload}
           />

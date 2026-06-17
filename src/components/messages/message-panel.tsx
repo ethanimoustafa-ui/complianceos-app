@@ -7,9 +7,12 @@ import { formatRelativeTime } from '@/lib/time-utils'
 import { useMessageStore } from '@/stores/message-store'
 import { useAuthStore } from '@/stores/auth-store'
 import { useTeamStore } from '@/stores/team-store'
+import { pushToast } from '@/stores/toast-store'
 import { useTranslation } from '@/i18n'
+import type { TranslationKey } from '@/i18n'
 import { Skeleton } from '@/components/ui/skeleton'
 import { createClient } from '@/lib/supabase/client'
+import { validateFile, IMAGE_UPLOAD_RULE, IMAGE_ALLOWED_TYPES } from '@/lib/upload-validation'
 
 type View = 'threads' | 'detail' | 'compose' | 'members'
 
@@ -31,7 +34,20 @@ export function MessagePanel({ isOpen, onClose }: MessagePanelProps) {
   const fetchMessages = useMessageStore(s => s.fetchMessages)
   const threadsLoading = useMessageStore(s => s.isLoading)
   const messagesLoading = useMessageStore(s => s.isLoadingMessages)
+  const messageError = useMessageStore(s => s.error)
+  const clearMessageError = useMessageStore(s => s.clearError)
   const teamMembers = useTeamStore(s => s.members)
+
+  // A failed send / create-thread sets `error` on the store but the optimistic
+  // row vanishes on rollback, so without this the message just disappears with
+  // no explanation. Surface a toast and clear the flag so the next failure
+  // shows too. (mirrors the event-drawer pattern)
+  useEffect(() => {
+    if (messageError) {
+      pushToast({ key: 'errors.misc.messageActionFailed' }, 'error')
+      clearMessageError()
+    }
+  }, [messageError, clearMessageError])
 
   // Hydrate the thread list from the server whenever the panel opens — the
   // store starts cold after a reload, so without this the panel showed "no
@@ -49,6 +65,9 @@ export function MessagePanel({ isOpen, onClose }: MessagePanelProps) {
   const [addMemberSearch, setAddMemberSearch] = useState('')
   const [editingGroupName, setEditingGroupName] = useState(false)
   const [groupNameDraft, setGroupNameDraft] = useState('')
+  // Inline error for the group-photo upload (size/type rejection or a failed
+  // upload). Shown right under the avatar in the members view.
+  const [avatarError, setAvatarError] = useState<string | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   // Compose state — multi-recipient
@@ -57,6 +76,9 @@ export function MessagePanel({ isOpen, onClose }: MessagePanelProps) {
   const [composeMessage, setComposeMessage] = useState('')
   const [recipientSearch, setRecipientSearch] = useState('')
   const [showRecipientDropdown, setShowRecipientDropdown] = useState(false)
+  // Inline guidance shown under the compose form when the user tries to start a
+  // conversation before picking a recipient or typing a message.
+  const [composeError, setComposeError] = useState<string | null>(null)
 
   const activeThread = activeThreadId ? threads.find(th => th.id === activeThreadId) : null
   const threadMessages = activeThreadId ? messages.filter(m => m.threadId === activeThreadId) : []
@@ -135,6 +157,12 @@ export function MessagePanel({ isOpen, onClose }: MessagePanelProps) {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [threadMessages.length])
 
+  // Clear the group-photo upload error when leaving the members view so a stale
+  // message never lingers on the next visit.
+  useEffect(() => {
+    if (view !== 'members') setAvatarError(null)
+  }, [view])
+
   useEffect(() => {
     if (!isOpen) { resetCompose(); setView('threads'); setActiveThreadId(null) }
   }, [isOpen])
@@ -146,6 +174,7 @@ export function MessagePanel({ isOpen, onClose }: MessagePanelProps) {
     setComposeMessage('')
     setRecipientSearch('')
     setShowRecipientDropdown(false)
+    setComposeError(null)
   }
 
   const openThread = (threadId: string) => {
@@ -164,7 +193,14 @@ export function MessagePanel({ isOpen, onClose }: MessagePanelProps) {
   }
 
   const handleComposeSend = () => {
-    if (composeRecipients.length === 0 || !composeMessage.trim() || !user) return
+    if (!user) return
+    // Tell the user exactly what's missing instead of leaving the button
+    // silently disabled with no explanation.
+    if (composeRecipients.length === 0 || !composeMessage.trim()) {
+      setComposeError(t('errors.misc.composeIncomplete' as TranslationKey))
+      return
+    }
+    setComposeError(null)
     const names = composeRecipients.map(r => r.name)
     const ids = composeRecipients.map(r => r.id)
     // Only groups (2+ recipients) carry a name; pass it to the server so it
@@ -196,10 +232,21 @@ export function MessagePanel({ isOpen, onClose }: MessagePanelProps) {
     const thread = activeThread
     const input = document.createElement('input')
     input.type = 'file'
-    input.accept = 'image/*'
+    // Restrict the picker to the formats the avatars bucket accepts.
+    input.accept = IMAGE_ALLOWED_TYPES.join(',')
     input.onchange = async (e) => {
       const file = (e.target as HTMLInputElement).files?.[0]
       if (!file) return
+      setAvatarError(null)
+      // Pre-check size + type so the user gets a clear, specific message before
+      // the bytes ever leave the browser. The avatars bucket caps uploads at
+      // 5 MB (migration 113) — without this guard a too-big image just failed
+      // with a silent console error and no on-screen feedback.
+      const invalid = validateFile(file, IMAGE_UPLOAD_RULE)
+      if (invalid) {
+        setAvatarError(typeof invalid === 'string' ? invalid : t(invalid.key as TranslationKey, invalid.params))
+        return
+      }
       // Upload to the public avatars bucket (own-folder RLS) and persist the URL.
       // A base64 data URL blows past the avatar_url max(2000) schema, so the
       // group photo never saved (didn't survive refresh).
@@ -215,7 +262,9 @@ export function MessagePanel({ isOpen, onClose }: MessagePanelProps) {
         if (!pub?.publicUrl) throw new Error('No public URL')
         updateThreadAvatar(thread.id, pub.publicUrl)
       } catch (err) {
+        // Surface a friendly, actionable message instead of failing silently.
         console.error('[MessagePanel] group avatar upload failed:', err)
+        setAvatarError(t('upload.failed' as TranslationKey))
       }
     }
     input.click()
@@ -404,6 +453,11 @@ export function MessagePanel({ isOpen, onClose }: MessagePanelProps) {
 
             {/* Send */}
             <div className="px-6 py-4 border-t border-slate-200">
+              {(composeError || composeRecipients.length === 0 || !composeMessage.trim()) && (
+                <p role="alert" className="text-xs font-semibold text-rose-600 mb-2 text-center">
+                  {composeError || t('errors.misc.composeIncomplete' as TranslationKey)}
+                </p>
+              )}
               <button
                 onClick={handleComposeSend}
                 disabled={composeRecipients.length === 0 || !composeMessage.trim()}
@@ -536,6 +590,13 @@ export function MessagePanel({ isOpen, onClose }: MessagePanelProps) {
                   </div>
                 </button>
                 <p className="text-xs text-slate-500">{t('sidebar.changeGroupAvatar')}</p>
+
+                {avatarError && (
+                  <p role="alert" className="text-xs font-semibold text-rose-600 text-center max-w-[220px] flex items-center gap-1.5 justify-center">
+                    <Icon icon="lucide:alert-circle" className="text-sm shrink-0" />
+                    <span>{avatarError}</span>
+                  </p>
+                )}
 
                 {/* Editable group name */}
                 {editingGroupName ? (

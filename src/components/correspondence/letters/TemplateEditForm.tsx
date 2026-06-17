@@ -10,6 +10,7 @@ import { PlaceholderDefEditor } from '@/components/correspondence/letter-placeho
 import { getDefaultDepartmentId } from '@/lib/letter-authority'
 import { reconcilePlaceholderDefs } from '@/lib/letter-placeholders'
 import { supabase as supabaseClient } from '@/lib/supabase/client'
+import { pushToast } from '@/stores/toast-store'
 import type {
   LetterTemplate,
   TemplateStatus,
@@ -25,6 +26,11 @@ import { getRecipientDefaults } from './letter-helpers'
 // bucket expired/re-minted unpredictably, which is what produced the broken
 // "Couldn't load the signature image" state.
 const SIGNATURE_BUCKET = 'letter_signatures'
+
+// Signature image guardrails — surfaced to the user BEFORE upload so they get a
+// clear "this is too big / wrong type" message instead of a generic failure.
+const SIGNATURE_MAX_BYTES = 5 * 1024 * 1024 // 5 MB
+const SIGNATURE_ACCEPTED_TYPES = ['image/png', 'image/jpeg', 'image/jpg']
 
 // Template Edit Form Component
 export function TemplateEditForm({
@@ -145,6 +151,18 @@ export function TemplateEditForm({
     e.target.value = ''
     setSigError(null)
     setSignaturePreviewSrc('')
+    // Validate type + size up front so the user gets a specific, actionable
+    // message instead of a generic upload failure after the round-trip.
+    if (file.type && !SIGNATURE_ACCEPTED_TYPES.includes(file.type)) {
+      setSigError(t('errors.lettersTemplate.signatureWrongType' as Parameters<typeof t>[0]))
+      pushToast({ key: 'errors.lettersTemplate.signatureWrongType' }, 'error')
+      return
+    }
+    if (file.size > SIGNATURE_MAX_BYTES) {
+      setSigError(t('errors.lettersTemplate.signatureTooLarge' as Parameters<typeof t>[0]))
+      pushToast({ key: 'errors.lettersTemplate.signatureTooLarge' }, 'error')
+      return
+    }
     setIsUploadingSig(true)
     try {
       const safeName = file.name.replace(/[^A-Za-z0-9._-]/g, '_')
@@ -185,7 +203,12 @@ export function TemplateEditForm({
       // broken image. Surface a clear error and keep the field empty instead, so
       // the user knows to retry rather than shipping a letter with no signature.
       setDefaultSignatureImageUrl('')
-      setSigError(t('letters.signatureUploadFailed' as Parameters<typeof t>[0]))
+      // Specific, actionable copy (format + size + retry) — the generic
+      // "Signature upload failed" didn't tell the user what to fix.
+      setSigError(t('errors.lettersTemplate.signatureUploadFailed' as Parameters<typeof t>[0]))
+      // Also surface a dismissible toast so the error is visible even if the
+      // inline message is scrolled out of view or the form re-renders.
+      pushToast({ key: 'errors.lettersTemplate.signatureUploadFailed' }, 'error')
     } finally {
       setIsUploadingSig(false)
     }

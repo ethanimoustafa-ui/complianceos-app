@@ -10,7 +10,9 @@ import Link from 'next/link'
 import { Icon } from '@iconify/react'
 import { Button } from '@/components/ui/button'
 import { useTranslation } from '@/i18n'
+import type { TranslationKey } from '@/i18n'
 import { createClient } from '@/lib/supabase/client'
+import { mapAuthError } from '@/lib/supabase/auth-errors'
 
 function VerifyEmailContent() {
   const searchParams = useSearchParams()
@@ -37,7 +39,9 @@ function VerifyEmailContent() {
       const { error } = await supabase.auth.exchangeCodeForSession(code)
       if (cancelled) return
       if (error) {
-        setErrorMessage(error.message)
+        // Translate the raw Supabase error into clear, localized guidance.
+        const mapped = mapAuthError(error)
+        setErrorMessage(t(mapped.key as TranslationKey, mapped.params))
         setStatus('error')
         return
       }
@@ -51,7 +55,7 @@ function VerifyEmailContent() {
     return () => {
       cancelled = true
     }
-  }, [code, next, router])
+  }, [code, next, router, t])
 
   return (
     <div className="flex min-h-[calc(100vh-5rem)] items-center justify-center px-6 py-12">
@@ -80,9 +84,11 @@ function VerifyEmailContent() {
               <Icon icon="lucide:loader-2" className="text-emerald-600 text-5xl animate-spin" />
             </div>
             <h1 className="text-2xl font-display font-bold text-slate-900 mb-3">
-              Verifying your email…
+              {t('errors.authPages.verifyingEmail' as TranslationKey)}
             </h1>
-            <p className="text-slate-500">Please wait while we confirm your account.</p>
+            <p className="text-slate-500">
+              {t('errors.authPages.confirmingAccount' as TranslationKey)}
+            </p>
           </div>
         ) : status === 'error' ? (
           <div className="animate-fade-in">
@@ -90,10 +96,10 @@ function VerifyEmailContent() {
               <Icon icon="lucide:alert-circle" className="text-rose-600 text-5xl" />
             </div>
             <h1 className="text-2xl font-display font-bold text-slate-900 mb-3">
-              Verification failed
+              {t('errors.authPages.verificationFailed' as TranslationKey)}
             </h1>
             <p className="text-slate-500 mb-8">
-              {errorMessage ?? 'Invalid or expired verification link. Please request a new one.'}
+              {errorMessage ?? t('errors.authPages.linkExpired' as TranslationKey)}
             </p>
             <Link href="/sign-in">
               <Button variant="outline" className="w-full">

@@ -27,6 +27,23 @@ import { FieldLabel } from '@/components/ui/field-label'
 import { FileUpload, type UploadedFile } from '@/components/ui/file-upload'
 import { formatBytes } from '@/lib/format'
 import { pushToast } from '@/stores/toast-store'
+import { ApiClientError } from '@/lib/api-client'
+
+// Surface the FIRST Zod issue from a 400 (e.g. "category: …") instead of a
+// generic fallback, so the user knows exactly which field to fix. Falls back to
+// the supplied message for network / unknown failures.
+function apiErrorMessage(e: unknown, fallback: string): string {
+  if (e instanceof ApiClientError) {
+    const details = e.details as Array<{ message?: string; path?: Array<string | number> }> | undefined
+    const first = Array.isArray(details) ? details[0] : undefined
+    if (first?.message) {
+      const path = Array.isArray(first.path) && first.path.length > 0 ? `${first.path.join('.')}: ` : ''
+      return `${path}${first.message}`
+    }
+    return e.message
+  }
+  return e instanceof Error && e.message ? e.message : fallback
+}
 
 const auditSchema = z.object({
   title: z.string().min(3, 'Title must be at least 3 characters'),
@@ -458,6 +475,9 @@ export function AddAuditModal({ isOpen, onClose, onSuccess, initialValues, mode 
       handleClose()
     } catch (error) {
       console.error('Failed to create audit:', error)
+      // Surface the failure (the store rolls back / re-throws but never toasts)
+      // so the user knows why the audit wasn't created; modal stays open to retry.
+      pushToast(apiErrorMessage(error, t('errors.auditModals.createFailed' as TranslationKey)), 'error')
     } finally {
       setSubmitBusy(false)
     }
@@ -477,12 +497,18 @@ export function AddAuditModal({ isOpen, onClose, onSuccess, initialValues, mode 
 
   // Append newly-dropped files (as data URLs) to the template's attachments.
   const handleFilesAdded = async (incoming: UploadedFile[]) => {
-    const added = await Promise.all(
-      incoming
-        .filter((f) => f.file)
-        .map(async (f) => ({ name: f.name, size: f.size, dataUrl: await readFileAsDataUrl(f.file!) })),
-    )
-    if (added.length) setAttachments((prev) => [...prev, ...added])
+    try {
+      const added = await Promise.all(
+        incoming
+          .filter((f) => f.file)
+          .map(async (f) => ({ name: f.name, size: f.size, dataUrl: await readFileAsDataUrl(f.file!) })),
+      )
+      if (added.length) setAttachments((prev) => [...prev, ...added])
+    } catch {
+      // A file failed to read (e.g. unreadable / removed mid-read) — without
+      // this the document silently never attached. Tell the user so they retry.
+      pushToast({ key: 'errors.auditModals.referenceDocReadFailed' }, 'error')
+    }
   }
 
   // "Save as template" from the create-audit dropdown footer. Persists to the
@@ -516,8 +542,10 @@ export function AddAuditModal({ isOpen, onClose, onSuccess, initialValues, mode 
       pushToast(t('settings.templateCreated' as TranslationKey), 'success')
       setAuditTemplateNameInput('')
       setShowSaveAuditTemplateForm(false)
-    } catch {
-      pushToast(t('settings.templateSaveFailed' as TranslationKey), 'error')
+    } catch (error) {
+      // Surface the specific reason (validation detail, duplicate name) instead
+      // of a generic message so the user knows what to change before retrying.
+      pushToast(apiErrorMessage(error, t('errors.auditModals.templateSaveFailed' as TranslationKey)), 'error')
     } finally {
       setIsSavingAuditTemplate(false)
     }

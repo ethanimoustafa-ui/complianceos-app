@@ -15,6 +15,7 @@ import { Modal } from '@/components/ui/modal'
 import { EditableSelect } from '@/components/ui/editable-select'
 import { ReviewSchedulePicker } from '@/components/ui/ReviewSchedulePicker'
 import { computeNextReview, cadenceToReviewCycleDays } from '@/lib/review-schedule'
+import { pushToast } from '@/stores/toast-store'
 import { usePolicyStore } from '@/stores/policy-store'
 import { usePolicyCategoryStore } from '@/stores/policy-category-store'
 import { useTeamStore } from '@/stores/team-store'
@@ -33,6 +34,26 @@ import type {
   PolicyActivityEntry,
   ReviewSchedule,
 } from '@/types'
+
+// Client-side limits for the policy document (mirrors RegisterPolicyModal).
+// The size cap gives the user a friendly message BEFORE a large file is read
+// and submitted with the policy PATCH.
+const POLICY_DOC_MAX_BYTES = 25 * 1024 * 1024
+const POLICY_DOC_EXTENSIONS = ['pdf', 'doc', 'docx', 'xlsx', 'pptx'] as const
+
+// Returns a translation spec when the file is rejected, or null when it passes.
+// Extension is checked before size so the message names the more fundamental
+// problem first.
+function validatePolicyDoc(file: File): { key: string; params?: Record<string, string> } | null {
+  const ext = file.name.split('.').pop()?.toLowerCase() ?? ''
+  if (!(POLICY_DOC_EXTENSIONS as readonly string[]).includes(ext)) {
+    return { key: 'errors.policies.documentWrongType' }
+  }
+  if (file.size > POLICY_DOC_MAX_BYTES) {
+    return { key: 'errors.policies.documentTooLarge', params: { name: file.name } }
+  }
+  return null
+}
 
 // Shared upload zone (kept local to the modal — same UX as the inline form).
 function UploadZone({
@@ -153,6 +174,7 @@ export function EditPolicyModal({ isOpen, onClose, policy, onSaved, t, isRTL }: 
   const [formOwnerIdx, setFormOwnerIdx] = useState(0)
   const [formDescription, setFormDescription] = useState('')
   const [formDocFile, setFormDocFile] = useState<File | null>(null)
+  const [docError, setDocError] = useState<string | null>(null)
   const [formAffectedDepartments, setFormAffectedDepartments] = useState<string[]>([])
   const [formBusinessOwnerDepartmentId, setFormBusinessOwnerDepartmentId] = useState<string>('')
   const formDocFileRef = useRef<HTMLInputElement>(null)
@@ -175,18 +197,33 @@ export function EditPolicyModal({ isOpen, onClose, policy, onSaved, t, isRTL }: 
     setFormOwnerIdx(idx >= 0 ? idx : 0)
     setFormDescription(policy.description)
     setFormDocFile(null)
+    setDocError(null)
     setFormAffectedDepartments(policy.affectedDepartments ?? [])
     setFormBusinessOwnerDepartmentId(policy.businessOwnerDepartmentId ?? '')
   }, [isOpen, policy, OWNERS])
 
-  // Wire file input onChange via ref.
+  // Wire file input onChange via ref. Validate size/type before storing the file
+  // so the user gets a clear inline message instead of the document being added
+  // to state and only rejected (if at all) when the policy PATCH is submitted.
   useEffect(() => {
     const el = formDocFileRef.current
     if (!el) return
-    const handler = () => { const f = el.files?.[0]; if (f) setFormDocFile(f) }
+    const handler = () => {
+      const f = el.files?.[0]
+      if (!f) return
+      const err = validatePolicyDoc(f)
+      if (err) {
+        setDocError(t(err.key, err.params))
+        setFormDocFile(null)
+        el.value = ''
+        return
+      }
+      setDocError(null)
+      setFormDocFile(f)
+    }
     el.addEventListener('change', handler)
     return () => el.removeEventListener('change', handler)
-  }, [isOpen])
+  }, [isOpen, t])
 
   const formValid = !!(formName && formCategory && formTier && formDescription)
 
@@ -265,13 +302,20 @@ export function EditPolicyModal({ isOpen, onClose, policy, onSaved, t, isRTL }: 
     // W37: when the tier changed and the user opted to reset, reseed the
     // workflow FIRST (the reseed route owns steps + status), then apply the
     // field edits on top — its reconcile reads the freshly-seeded steps.
-    if (reseedSteps) {
-      setIsReseeding(true)
-      try {
+    // Guard the whole save tail: if the reseed throws unexpectedly the modal
+    // would otherwise stay stuck behind a spinner with no feedback, so reset the
+    // reseed flag in finally and surface a clear toast on failure.
+    try {
+      if (reseedSteps) {
+        setIsReseeding(true)
         await reseedWorkflowFromTier(policy.id, formTier as string)
-      } finally {
-        setIsReseeding(false)
       }
+    } catch (e) {
+      console.error('Failed to reset policy workflow on tier change', e)
+      pushToast({ key: 'errors.policies.updateFailed' }, 'error')
+      return
+    } finally {
+      setIsReseeding(false)
     }
 
     update(policy.id, {
@@ -489,6 +533,7 @@ export function EditPolicyModal({ isOpen, onClose, policy, onSaved, t, isRTL }: 
               existingName={policy.attachments?.[0]?.name ?? (policy.attachmentUrl || undefined)}
               t={t}
             />
+            {docError && <p role="alert" className="text-xs font-semibold text-rose-600 mt-1.5">{docError}</p>}
           </div>
         </div>
 

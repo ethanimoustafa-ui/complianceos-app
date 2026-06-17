@@ -3,6 +3,7 @@
 import { useRef, useState, useCallback } from 'react'
 import { Icon } from '@iconify/react'
 import { cn } from '@/lib/utils'
+import { useTranslation } from '@/i18n'
 
 export interface UploadedFile {
   id: string
@@ -63,6 +64,7 @@ export function FileUpload({
   label,
   helperText,
 }: FileUploadProps) {
+  const { t } = useTranslation()
   const inputRef = useRef<HTMLInputElement>(null)
   const [isDragging, setIsDragging] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -81,9 +83,10 @@ export function FileUpload({
       const newFiles: UploadedFile[] = []
 
       Array.from(fileList).forEach((file) => {
-        // Check file size
+        // Check file size — a clear, non-blaming message that names the file and
+        // the limit, and tells the user what to do next.
         if (file.size > maxSize) {
-          setError(`${file.name} exceeds maximum size of ${formatFileSize(maxSize)}`)
+          setError(t('upload.tooLargeNamed', { name: file.name, max: formatFileSize(maxSize) }))
           return
         }
 
@@ -105,7 +108,7 @@ export function FileUpload({
         onChange?.(updatedFiles)
       }
     },
-    [files, maxSize, multiple, onChange]
+    [files, maxSize, multiple, onChange, t]
   )
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {

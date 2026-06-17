@@ -12,6 +12,7 @@ import { cn } from '@/lib/utils'
 import { useTeamStore } from '@/stores/team-store'
 import { useDepartmentStore } from '@/stores/department-store'
 import { useFrameworkConfigStore } from '@/stores/framework-config-store'
+import { pushToast } from '@/stores/toast-store'
 import { useTranslation } from '@/i18n'
 import type { TeamMember, RegulatoryBodyId } from '@/types'
 import { FrameworkTagSelector } from '@/components/ui/framework-tag-selector'
@@ -218,9 +219,11 @@ export const EditObservationModal = memo(function EditObservationModal({
         documents,
         frameworkIds,
       })
+      // Only close on success — keep the modal open on failure so edits aren't lost.
       handleClose()
     } catch (error) {
       console.error('Failed to update observation:', error)
+      pushToast({ key: 'errors.obsModals.saveObservation' }, 'error')
     } finally {
       setIsLoading(false)
     }

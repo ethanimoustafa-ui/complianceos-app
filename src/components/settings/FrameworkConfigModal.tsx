@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { LoadingButton } from '@/components/ui/loading-button'
 import { useFrameworkConfigStore, getDefaultWeights } from '@/stores/framework-config-store'
 import { useDepartmentStore } from '@/stores/department-store'
+import { pushToast } from '@/stores/toast-store'
 import { useTranslation } from '@/i18n'
 import { EditableSelect } from '@/components/ui/editable-select'
 import type { RegulatoryBodyId, ComplianceThreshold, FrameworkWeights } from '@/types'
@@ -95,17 +96,23 @@ export function FrameworkConfigModal({ frameworkId, isOpen, onClose }: Props) {
     setWeights(getDefaultWeights(frameworkId))
   }
 
-  function handleSave() {
+  async function handleSave() {
     if (!framework) return
-    if (framework.enabled !== enabled) toggleEnabled(frameworkId)
-    updateConfig(frameworkId, {
-      threshold,
-      customThresholdValue: threshold === 'custom' ? customThreshold : undefined,
-      alertOnNonCompliance: alertOn,
-      departments,
-      weights,
-    })
-    onClose()
+    // Await persistence so a failed PATCH keeps the modal open and tells the
+    // user nothing was saved — instead of closing on an un-awaited rejection.
+    try {
+      if (framework.enabled !== enabled) await toggleEnabled(frameworkId)
+      await updateConfig(frameworkId, {
+        threshold,
+        customThresholdValue: threshold === 'custom' ? customThreshold : undefined,
+        alertOnNonCompliance: alertOn,
+        departments,
+        weights,
+      })
+      onClose()
+    } catch {
+      pushToast({ key: 'errors.settings.frameworkConfigSaveFailed' }, 'error')
+    }
   }
 
   return (

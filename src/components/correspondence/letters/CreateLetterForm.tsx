@@ -9,6 +9,7 @@ import { useLetterTemplateStore } from '@/stores/letter-template-store'
 import { useLetterTypeStore } from '@/stores/letter-type-store'
 import { useFrameworkSubCategoryStore } from '@/stores/framework-sub-category-store'
 import { useAuthStore } from '@/stores/auth-store'
+import { pushToast } from '@/stores/toast-store'
 import { EditableSelect } from '@/components/ui/editable-select'
 import {
   getAuthorityDepartments,
@@ -287,13 +288,18 @@ export function CreateLetterForm({
       // The create payload can't carry blob URLs — we persist the real files now
       // via the attachment API (storage upload + metadata row).
       if (draftAttachmentFiles.length > 0) {
+        let attachmentUploadFailed = false
         for (const file of draftAttachmentFiles) {
           try {
             await store.uploadAttachment(newLetter.id, file)
           } catch (uploadErr) {
             console.error('[CreateLetterForm] attachment upload failed', uploadErr)
-            // Non-fatal: letter was saved; surface only in console.
+            // Non-fatal: the letter was saved; warn the user so they can re-attach.
+            attachmentUploadFailed = true
           }
+        }
+        if (attachmentUploadFailed) {
+          pushToast({ key: 'errors.lettersCreate.attachmentUploadFailed' }, 'error')
         }
       }
       if (effectiveTemplateId) await templateStore.incrementUsage(effectiveTemplateId)
@@ -304,6 +310,7 @@ export function CreateLetterForm({
       console.error('Failed to save letter draft', err)
       // onSuccess is NOT called on error — the form stays open so the user can
       // correct any issues. The store surfaces the error via store.error.
+      pushToast({ key: 'errors.lettersCreate.draftSaveFailed' }, 'error')
     } finally {
       setIsSavingDraft(false)
     }
@@ -315,12 +322,17 @@ export function CreateLetterForm({
       const newLetter = await store.create(letterBaseData())
       // Upload attachments before submitting for approval so approvers see them.
       if (draftAttachmentFiles.length > 0) {
+        let attachmentUploadFailed = false
         for (const file of draftAttachmentFiles) {
           try {
             await store.uploadAttachment(newLetter.id, file)
           } catch (uploadErr) {
             console.error('[CreateLetterForm] attachment upload failed', uploadErr)
+            attachmentUploadFailed = true
           }
+        }
+        if (attachmentUploadFailed) {
+          pushToast({ key: 'errors.lettersCreate.attachmentUploadFailed' }, 'error')
         }
       }
       store.submitForApproval(newLetter.id)
@@ -329,6 +341,7 @@ export function CreateLetterForm({
       onSuccess('submitted')
     } catch (err) {
       console.error('Failed to submit letter for approval', err)
+      pushToast({ key: 'errors.lettersCreate.submitFailed' }, 'error')
     } finally {
       setIsSubmitting(false)
     }
@@ -452,6 +465,7 @@ export function CreateLetterForm({
                   return created.id
                 } catch (err) {
                   console.error('Failed to add sub-category', err)
+                  pushToast({ key: 'errors.lettersCreate.subCategoryAddFailed' }, 'error')
                   return undefined
                 }
               }}

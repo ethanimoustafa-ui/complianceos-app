@@ -8,13 +8,18 @@ import { z } from 'zod'
 import { Icon } from '@iconify/react'
 import { Button } from '@/components/ui/button'
 import { useTranslation } from '@/i18n'
+import type { TranslationKey } from '@/i18n'
 import { createClient } from '@/lib/supabase/client'
+import { pushToast } from '@/stores/toast-store'
+import { mapAuthError } from '@/lib/supabase/auth-errors'
 
-const forgotPasswordSchema = z.object({
-  email: z.string().email('Please enter a valid email'),
-})
+// i18n-aware schema factory so the email validation message is localized.
+const makeForgotPasswordSchema = (t: (key: TranslationKey) => string) =>
+  z.object({
+    email: z.string().email(t('errors.authPages.emailInvalid' as TranslationKey)),
+  })
 
-type ForgotPasswordInput = z.infer<typeof forgotPasswordSchema>
+type ForgotPasswordInput = z.infer<ReturnType<typeof makeForgotPasswordSchema>>
 
 const COOLDOWN_SECONDS = 60
 
@@ -30,7 +35,7 @@ export default function ForgotPasswordPage() {
     handleSubmit,
     formState: { errors },
   } = useForm<ForgotPasswordInput>({
-    resolver: zodResolver(forgotPasswordSchema),
+    resolver: zodResolver(makeForgotPasswordSchema(t)),
   })
 
   // Cooldown timer effect
@@ -51,16 +56,20 @@ export default function ForgotPasswordPage() {
       })
       if (error) {
         console.error('Failed to send reset email:', error)
+        // The send genuinely failed — tell the user instead of showing a
+        // false-positive "check your email" screen. Mapped copy keeps the
+        // message non-blaming (network / rate-limit) without leaking whether
+        // the address exists.
+        pushToast(mapAuthError(error), 'error')
+        return
       }
-      // Always show success — do not leak which emails exist.
+      // Only show the success screen when the email actually went out.
       setSubmittedEmail(data.email)
       setIsSubmitted(true)
       setCooldown(COOLDOWN_SECONDS)
     } catch (error) {
       console.error('Failed to send reset email:', error)
-      setSubmittedEmail(data.email)
-      setIsSubmitted(true)
-      setCooldown(COOLDOWN_SECONDS)
+      pushToast({ key: 'errors.authPages.resetSendFailed' }, 'error')
     } finally {
       setIsLoading(false)
     }
@@ -73,12 +82,20 @@ export default function ForgotPasswordPage() {
     try {
       const supabase = createClient()
       const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? window.location.origin
-      await supabase.auth.resetPasswordForEmail(submittedEmail, {
+      const { error } = await supabase.auth.resetPasswordForEmail(submittedEmail, {
         redirectTo: `${appUrl}/api/auth/callback`,
       })
+      if (error) {
+        console.error('Failed to resend email:', error)
+        // Without feedback the button just re-enables and the user retries into
+        // the same silent failure — surface the mapped error instead.
+        pushToast(mapAuthError(error), 'error')
+        return
+      }
       setCooldown(COOLDOWN_SECONDS)
     } catch (error) {
       console.error('Failed to resend email:', error)
+      pushToast({ key: 'errors.authPages.resetSendFailed' }, 'error')
     } finally {
       setIsLoading(false)
     }
@@ -116,7 +133,7 @@ export default function ForgotPasswordPage() {
               {isLoading ? (
                 <>
                   <Icon icon="lucide:loader-2" className="animate-spin" />
-                  Sending...
+                  {t('auth.sendingLink')}
                 </>
               ) : cooldown > 0 ? (
                 <>

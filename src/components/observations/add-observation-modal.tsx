@@ -10,6 +10,7 @@ import { ObservationSource, ObservationSeverity } from './observation-types'
 import { useTeamStore } from '@/stores/team-store'
 import { useDepartmentStore } from '@/stores/department-store'
 import { useAuthStore } from '@/stores/auth-store'
+import { pushToast } from '@/stores/toast-store'
 import { useTranslation } from '@/i18n'
 import type { TeamMember, RegulatoryBodyId } from '@/types'
 import { FrameworkTagSelector } from '@/components/ui/framework-tag-selector'
@@ -208,6 +209,9 @@ export const AddObservationModal = memo(function AddObservationModal({ isOpen, o
       setErrors({})
       setTouched({})
       setFrameworkIds([])
+    } catch {
+      // Surface the failure and keep the form open so the user's input is preserved.
+      pushToast({ key: 'errors.obsModals.createObservation' }, 'error')
     } finally {
       setIsSubmitting(false)
     }

@@ -21,6 +21,7 @@ import { HelpTip } from '@/components/ui/tooltip'
 import { useEnumValuesStore, type EnumValue } from '@/stores/enum-values-store'
 import { usePolicyStore } from '@/stores/policy-store'
 import { usePolicyTemplateStore } from '@/stores/policy-template-store'
+import { pushToast } from '@/stores/toast-store'
 import { api } from '@/lib/api-client'
 import type { PolicyApprovalTier, PolicyCategory } from '@/types'
 import {
@@ -165,6 +166,7 @@ export function ApprovalTiersSection({ embedded = false }: { embedded?: boolean 
       return true
     } catch (e) {
       console.error('Failed to save approval tier', e)
+      pushToast({ key: 'errors.settings.approvalTierSaveFailed' }, 'error')
       return false
     }
   }

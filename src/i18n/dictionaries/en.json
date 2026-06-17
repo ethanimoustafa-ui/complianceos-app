@@ -1,4 +1,131 @@
 {
+  "upload": {
+    "tooLarge": "This image is over the {{max}} limit. Please choose a smaller one.",
+    "tooLargeNamed": "\"{{name}}\" is over the {{max}} limit. Please choose a smaller file.",
+    "wrongType": "This file type isn't supported. Please upload a {{types}} image.",
+    "failed": "We couldn't upload your image. Please check your connection and try again.",
+    "filesFailed": "We couldn't upload your files. Please check your connection and try again."
+  },
+  "errors": {
+    "saveFailed": "We couldn't save your changes. Please try again.",
+    "createFailed": "We couldn't create this. Please try again.",
+    "updateFailed": "We couldn't update this. Please try again.",
+    "deleteFailed": "We couldn't delete this. Please try again.",
+    "loadFailed": "We couldn't load this. Please check your connection and try again.",
+    "network": "You appear to be offline. Please check your connection and try again.",
+    "generic": "Something went wrong on our end. Please try again.",
+    "required": "Please fill in all required fields before continuing.",
+    "sessionExpired": "Your session has expired. Please sign in again.",
+    "lettersCreate": {
+      "attachmentUploadFailed": "The letter was saved, but the document didn't attach. Open the letter and add the file again from its detail view.",
+      "draftSaveFailed": "The draft couldn't be saved. Check your connection and try again.",
+      "submitFailed": "The letter couldn't be submitted for approval. Check your connection and try again.",
+      "subCategoryAddFailed": "The sub-category couldn't be added. Check your connection and try again."
+    },
+    "lettersTemplate": {
+      "signatureUploadFailed": "We couldn't upload the signature image. Make sure it's a JPG or PNG under 5 MB, then try again.",
+      "signatureWrongType": "This file type isn't supported for the signature. Please choose a JPG or PNG image.",
+      "signatureTooLarge": "This signature image is too large. Please choose an image under 5 MB.",
+      "departmentAddFailed": "We couldn't add that department. Please try again in a moment."
+    },
+    "policies": {
+      "createFailed": "We couldn't create the policy. Please check your connection and try again.",
+      "updateFailed": "We couldn't save the policy. Please refresh the page and try again.",
+      "documentUploadFailed": "Your policy was created, but we couldn't upload the document. You can add it later from the policy details.",
+      "documentTooLarge": "\"{{name}}\" is over the 25 MB limit. Please choose a smaller file.",
+      "documentWrongType": "This file type isn't supported. Please upload a PDF, Word, Excel, or PowerPoint document.",
+      "templateSaveFailed": "We couldn't save the template. Make sure you have permission to manage policy templates, then try again.",
+      "tierSaveFailed": "We couldn't save the approval tier. Please try again.",
+      "tierDeleteFailed": "We couldn't delete the approval tier. It may still be in use by a policy. Reassign those policies first, or contact your administrator if the problem continues."
+    },
+    "rules": {
+      "documentUploadFailed": "Couldn't upload {{count}} document(s). Check your connection and try attaching them again.",
+      "checklistItemsNotSaved": "The article was saved, but {{count}} checklist item(s) couldn't be saved. Add them again from the article's checklist.",
+      "evidenceFileFailed": "Couldn't create the evidence file. Check your connection and try again."
+    },
+    "authPages": {
+      "invalidCredentials": "We couldn't sign you in. Please check your email and password and try again. If you've forgotten your password, use the reset link.",
+      "emailNotConfirmed": "Please confirm your email before signing in. Open the verification link we emailed you, or request a new one from this page.",
+      "rateLimited": "Too many attempts. Please wait a few minutes and try again.",
+      "linkExpired": "This link has expired or has already been used. Please request a new one and try again.",
+      "signInGeneric": "We couldn't sign you in right now. Please try again in a moment.",
+      "emailInvalid": "Please enter a valid email address.",
+      "passwordTooShort": "Your password must be at least 8 characters.",
+      "verifyingEmail": "Verifying your email…",
+      "confirmingAccount": "Please wait while we confirm your account.",
+      "verificationFailed": "Verification failed",
+      "resetSendFailed": "We couldn't send the reset email. Please check your connection and try again."
+    },
+    "authOnboard": {
+      "frameworkRequired": "Choose at least one framework to continue.",
+      "companyNameLength": "Company name must be between 2 and 100 characters.",
+      "orgSizeRequired": "Choose your organization size to continue.",
+      "industryRequired": "Choose your industry to continue.",
+      "regionRequired": "Choose your headquarters region to continue.",
+      "setupFailed": "We couldn't finish setting up your workspace. Please check your connection and try again."
+    },
+    "auditStore": {
+      "teamMemberAddFailed": "We couldn't add that team member to the audit. Please try again.",
+      "teamMemberRemoveFailed": "We couldn't remove that team member. Please try again.",
+      "commentAddFailed": "Your comment wasn't saved. Please try posting it again.",
+      "commentEditFailed": "We couldn't save your comment edit, so it was rolled back. Please try again.",
+      "commentDeleteFailed": "We couldn't delete that comment. Please try again."
+    },
+    "auditModals": {
+      "createFailed": "We couldn't create the audit. Check that the title, audit type, and lead author are filled in, then try again.",
+      "updateFailed": "We couldn't save your changes to the audit. Check your entries, then try again.",
+      "referenceDocReadFailed": "We couldn't read that document, so it wasn't attached. Try adding the file again.",
+      "templateSaveFailed": "We couldn't save the template. Make sure the template name isn't already in use, then try again."
+    },
+    "reports": {
+      "statusUpdateFailed": "We couldn't update the risk status. Your change has been undone, so please try again.",
+      "mitigationPlanSaveFailed": "We couldn't save the mitigation plan. Your change has been undone, so please try again.",
+      "mitigationPlanRemoveFailed": "We couldn't remove the mitigation plan. Your change has been undone, so please try again.",
+      "scheduleFailed": "We couldn't schedule the report. Please check your settings and recipient emails, then try again.",
+      "recipientsInvalid": "Please check the recipient email addresses. Separate multiple emails with commas (for example: john@company.com, jane@company.com).",
+      "planDocumentUploadFailed": "We couldn't upload \"{{name}}\". Check that the file is under 10MB and your connection is stable, then try again.",
+      "planDocumentRegisterFailed": "\"{{name}}\" was uploaded but couldn't be saved to the plan, so it may not be available later. Please try uploading it again."
+    },
+    "obsPage": {
+      "listLoadFailed": "We couldn't load the observations list. Please refresh the page to try again.",
+      "attachmentUploadFailed": "The observation was created, but the attachment \"{{name}}\" couldn't be uploaded. You can add it again from the observation details."
+    },
+    "obsModals": {
+      "createObservation": "We couldn't create the observation. Check your connection and try again.",
+      "saveObservation": "We couldn't save your changes to the observation. Check your connection and try again.",
+      "addComment": "We couldn't post your comment. Check your connection and try again.",
+      "editComment": "We couldn't save your edited comment. Check your connection and try again.",
+      "deleteComment": "We couldn't delete the comment. Check your connection and try again."
+    },
+    "settings": {
+      "frameworkConfigSaveFailed": "We couldn't save your framework settings, so nothing changed. Check your connection and try again.",
+      "departmentEmailInvalid": "Enter a valid email address, like dept@company.com.",
+      "departmentEmailSaveFailed": "We couldn't save the department email. Check your connection and try again.",
+      "missingRequiredFields": "Please fill in the required fields: {{fields}}.",
+      "emailDigestSaveFailed": "We couldn't save your email digest preference, so it was switched back. Check your connection and try again.",
+      "approvalTierSaveFailed": "We couldn't save the approval tier. Check your connection and try again.",
+      "subCategoryAddFailed": "We couldn't add the sub-category. Check your connection and try again."
+    },
+    "cal": {
+      "inviteFailed": "We couldn't send the invitation to {{email}}. Check the address and try again, or ask your administrator for help.",
+      "inviteEmailInvalid": "Enter a valid email address, for example colleague@company.com.",
+      "inviteDepartmentRequired": "Select a department, or create a new one to continue.",
+      "eventCreateFailed": "We couldn't create that event. Check your details and try again.",
+      "eventRequiredFields": "Add an event title and pick a date to continue.",
+      "eventEndBeforeStart": "End time must be the same as or later than the start time.",
+      "eventLocationTooLong": "Keep the location under 200 characters.",
+      "eventDescriptionTooLong": "Keep the description under 2000 characters."
+    },
+    "misc": {
+      "messageActionFailed": "We couldn't send your message. Check your connection and try again.",
+      "composeIncomplete": "Add at least one recipient and write a message to continue.",
+      "reportExportFailed": "We couldn't prepare your report. Please try exporting again.",
+      "courseAssignFailed": "We couldn't save the course assignment. Please try again.",
+      "employeeAddFailed": "We couldn't add the employee. Check your connection and try again.",
+      "selectDataTypeToUpload": "Choose which data types this file contains to continue.",
+      "assignTrainingRequirements": "Select one or more courses and set a due date to assign training."
+    }
+  },
   "common": {
     "search": "Search",
     "searchRecords": "Search records...",

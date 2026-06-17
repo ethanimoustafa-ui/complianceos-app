@@ -26,6 +26,7 @@ import type { User } from '@/types'
 import { useUserLogStore } from '@/stores/user-log-store'
 import { createClient } from '@/lib/supabase/client'
 import { collectClientActivityContext } from '@/lib/user-activity-meta'
+import { mapAuthError } from '@/lib/supabase/auth-errors'
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -203,9 +204,12 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
       password,
     })
     if (error || !data.user) {
-      const message = error?.message ?? 'Invalid credentials'
-      set({ isLoading: false, error: message })
-      return { ok: false, error: message }
+      // Return a STABLE i18n key (not the raw Supabase message) so every
+      // consumer renders clear, localized copy via t(). Mapping lives in the
+      // shared lib/supabase/auth-errors helper, reused across auth flows.
+      const errorKey = mapAuthError(error).key
+      set({ isLoading: false, error: errorKey })
+      return { ok: false, error: errorKey }
     }
 
     const [profile, permissions] = await Promise.all([

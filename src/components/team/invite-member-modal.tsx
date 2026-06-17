@@ -13,11 +13,14 @@ import { useDepartmentStore } from '@/stores/department-store'
 import { EditableSelect } from '@/components/ui/editable-select'
 import type { TeamMember } from '@/types'
 import { useTranslation } from '@/i18n'
+import type { TranslationKey } from '@/i18n'
+import { pushToast } from '@/stores/toast-store'
 
 const inviteSchema = z.object({
-  email: z.string().email('Invalid email address'),
+  // Validation messages carry i18n keys (resolved to copy via t() at render).
+  email: z.string().email('errors.cal.inviteEmailInvalid'),
   role: z.enum(['auditor', 'officer', 'manager', 'admin']),
-  department: z.string().min(1, 'Department is required'),
+  department: z.string().min(1, 'errors.cal.inviteDepartmentRequired'),
   message: z.string().optional(),
 })
 
@@ -68,6 +71,9 @@ export function InviteMemberModal({ isOpen, onClose, onSuccess }: InviteMemberMo
       handleClose()
     } catch (error) {
       console.error('Failed to invite member:', error)
+      // Surface the failure so the user knows the invite didn't go through and
+      // can retry. The modal stays open (we only close on success).
+      pushToast({ key: 'errors.cal.inviteFailed', params: { email: data.email } }, 'error')
     }
   }
 
@@ -119,7 +125,7 @@ export function InviteMemberModal({ isOpen, onClose, onSuccess }: InviteMemberMo
                 />
               </div>
               {errors.email && (
-                <p className="text-rose-500 text-xs mt-1">{errors.email.message}</p>
+                <p className="text-rose-500 text-xs mt-1">{t(errors.email.message as TranslationKey)}</p>
               )}
             </div>
 
@@ -176,7 +182,7 @@ export function InviteMemberModal({ isOpen, onClose, onSuccess }: InviteMemberMo
                 )}
               />
               {errors.department && (
-                <p className="text-rose-500 text-xs mt-1">{errors.department.message}</p>
+                <p className="text-rose-500 text-xs mt-1">{t(errors.department.message as TranslationKey)}</p>
               )}
             </div>
 

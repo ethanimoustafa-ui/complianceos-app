@@ -10,6 +10,7 @@ import { useDepartmentStore } from '@/stores/department-store'
 import { useFrameworkConfigStore } from '@/stores/framework-config-store'
 import { useTeamStore } from '@/stores/team-store'
 import { useAuthStore } from '@/stores/auth-store'
+import { pushToast } from '@/stores/toast-store'
 import { useCan } from '@/lib/permissions'
 import { resolveAuthorityLabel } from '@/lib/authority-display'
 import { InlineDeadlinePicker } from '@/components/ui/inline-deadline-picker'
@@ -355,6 +356,7 @@ export function CircularDetailsContent({ circular, activeTab, setActiveTab, onCl
                   await new Promise<void>((resolve) =>
                     requestAnimationFrame(() => resolve()),
                   )
+                  let uploadFailures = 0
                   try {
                     for (const file of files) {
                       try {
@@ -367,11 +369,19 @@ export function CircularDetailsContent({ circular, activeTab, setActiveTab, onCl
                           type: file.type,
                         })
                       } catch {
-                        // store sets error state; visible via store.error consumer
+                        // The spinner stops in `finally`, so a silent failure
+                        // looks like success — count failures and toast below.
+                        uploadFailures += 1
                       }
                     }
                   } finally {
                     setPdfUploading(false)
+                  }
+                  if (uploadFailures > 0) {
+                    pushToast(
+                      { key: 'errors.rules.documentUploadFailed', params: { count: String(uploadFailures) } },
+                      'error',
+                    )
                   }
                 }}
               />

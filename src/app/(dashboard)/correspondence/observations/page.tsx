@@ -119,6 +119,7 @@ export default function ObservationsPage() {
         } catch (err) {
           if (!cancelled) {
             console.error('Failed to fetch observations page:', err)
+            pushToast({ key: 'errors.obsPage.listLoadFailed' }, 'error')
             setTrackerFetched(true)
           }
         } finally {
@@ -238,8 +239,13 @@ export default function ObservationsPage() {
               await uploadObservationDocument(created.reference || created.id, att.file, user, false, true)
             } catch (uploadErr) {
               // Non-fatal: the observation was created; the document can be
-              // re-uploaded from the detail view.
+              // re-uploaded from the detail view. Warn the user so the missing
+              // attachment isn't silently dropped.
               console.error('Failed to upload create-time attachment:', uploadErr)
+              pushToast(
+                { key: 'errors.obsPage.attachmentUploadFailed', params: { name: att.file.name } },
+                'error',
+              )
             }
           }
         }

@@ -145,6 +145,13 @@ export function AssignTrainingModal({ isOpen, onClose, employee, courses, onAssi
               <Icon icon="lucide:check" className="text-sm ml-1" />
             </Button>
           </div>
+          {/* Explain why the assign button is disabled instead of leaving the
+              user to guess. */}
+          {(selectedCourseIds.length === 0 || !dueDate) && availableCourses.length > 0 && (
+            <p className="text-xs text-slate-500 text-center -mt-2">
+              {t('errors.misc.assignTrainingRequirements' as TranslationKey)}
+            </p>
+          )}
         </div>
       )}
     </Modal>

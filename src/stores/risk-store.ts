@@ -37,6 +37,7 @@ import { api, ApiClientError } from '@/lib/api-client'
 import { computeNextReview } from '@/lib/review-schedule'
 import { requirePermission } from '@/lib/rbac-store-gate'
 import { newTempId } from '@/lib/optimistic'
+import { pushToast } from '@/stores/toast-store'
 
 // ---------- helpers ---------------------------------------------------------
 
@@ -595,7 +596,9 @@ export const useRiskStore = create<RiskState>()((set, get) => ({
       selectedRisk: s.selectedRisk?.id === id ? optimistic : s.selectedRisk,
     }))
     void get().update(id, { status: newStatus }).catch(() => {
-      // The async `update()` already sets `error` — nothing more to do.
+      // `update()` already rolled back the optimistic state; surface the failure
+      // so the user knows the status change didn't stick.
+      pushToast({ key: 'errors.reports.statusUpdateFailed' }, 'error')
     })
   },
 
@@ -625,7 +628,8 @@ export const useRiskStore = create<RiskState>()((set, get) => ({
     try {
       await get().update(riskId, { mitigationPlan: plan })
     } catch {
-      // `update` already rolled back and surfaced the error.
+      // `update` already rolled back; tell the user the plan wasn't saved.
+      pushToast({ key: 'errors.reports.mitigationPlanSaveFailed' }, 'error')
     }
   },
 
@@ -653,7 +657,8 @@ export const useRiskStore = create<RiskState>()((set, get) => ({
     try {
       await get().update(riskId, { mitigationPlan: plan })
     } catch {
-      // `update` rolled back already.
+      // `update` rolled back already; tell the user the plan wasn't saved.
+      pushToast({ key: 'errors.reports.mitigationPlanSaveFailed' }, 'error')
     }
   },
 
@@ -681,7 +686,8 @@ export const useRiskStore = create<RiskState>()((set, get) => ({
     try {
       await get().update(riskId, { mitigationPlan: undefined })
     } catch {
-      // `update` rolled back already.
+      // `update` rolled back already; tell the user the change wasn't saved.
+      pushToast({ key: 'errors.reports.mitigationPlanRemoveFailed' }, 'error')
     }
   },
 

@@ -8,7 +8,8 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Modal } from '@/components/ui/modal'
 import { cn } from '@/lib/utils'
-import { useTranslation } from '@/i18n'
+import { useTranslation, type TranslationKey } from '@/i18n'
+import { pushToast } from '@/stores/toast-store'
 import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -39,35 +40,26 @@ const integrationCards = [
   { name: 'GitHub Enterprise', icon: 'mdi:github' },
 ]
 
-// Zod Schemas for each step
-const step1Schema = z.object({
-  selectedFrameworks: z
-    .array(z.string())
-    .min(1, 'Please select at least one framework'),
-})
+// i18n-aware Zod schema factory: validation messages are resolved through `t()`
+// so Arabic users see localized copy instead of hardcoded English. Built inside
+// the component (with the active `t`) rather than at module load.
+const makeOnboardingSchema = (t: (key: TranslationKey, params?: Record<string, string | number>) => string) =>
+  z.object({
+    selectedFrameworks: z
+      .array(z.string())
+      .min(1, t('errors.authOnboard.frameworkRequired' as TranslationKey)),
+    companyName: z
+      .string()
+      .min(2, t('errors.authOnboard.companyNameLength' as TranslationKey))
+      .max(100, t('errors.authOnboard.companyNameLength' as TranslationKey)),
+    // Widened from enum literals so user-added options round-trip safely; the
+    // EditableSelect ensures the value always matches a known store id.
+    orgSize: z.string().min(1, t('errors.authOnboard.orgSizeRequired' as TranslationKey)),
+    industry: z.string().min(1, t('errors.authOnboard.industryRequired' as TranslationKey)),
+    region: z.string().min(1, t('errors.authOnboard.regionRequired' as TranslationKey)),
+  })
 
-const step2Schema = z.object({
-  companyName: z
-    .string()
-    .min(2, 'Company name must be at least 2 characters')
-    .max(100, 'Company name must be less than 100 characters'),
-  // Widened from enum literals so user-added options round-trip safely; the
-  // EditableSelect ensures the value always matches a known store id.
-  orgSize: z.string().min(1, 'Please select an organization size'),
-  industry: z.string().min(1, 'Please select an industry'),
-  region: z.string().min(1, 'Please select a region'),
-})
-
-// Combined schema for the entire form
-const onboardingSchema = z.object({
-  selectedFrameworks: step1Schema.shape.selectedFrameworks,
-  companyName: step2Schema.shape.companyName,
-  orgSize: step2Schema.shape.orgSize,
-  industry: step2Schema.shape.industry,
-  region: step2Schema.shape.region,
-})
-
-type OnboardingFormData = z.infer<typeof onboardingSchema>
+type OnboardingFormData = z.infer<ReturnType<typeof makeOnboardingSchema>>
 
 export default function OnboardingPage() {
   const router = useRouter()
@@ -105,7 +97,7 @@ export default function OnboardingPage() {
     setValue,
     formState: { errors },
   } = useForm<OnboardingFormData>({
-    resolver: zodResolver(onboardingSchema),
+    resolver: zodResolver(makeOnboardingSchema(t)),
     defaultValues: {
       selectedFrameworks: [],
       companyName: '',
@@ -174,6 +166,9 @@ export default function OnboardingPage() {
       router.push('/welcome')
     } catch (error) {
       console.error('Onboarding error:', error)
+      // Surface the failure so the user knows setup didn't complete and can
+      // retry — the form stays open (button returns to its normal state).
+      pushToast({ key: 'errors.authOnboard.setupFailed' }, 'error')
       setIsSubmitting(false)
     }
   }

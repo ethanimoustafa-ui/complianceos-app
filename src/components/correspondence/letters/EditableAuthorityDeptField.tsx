@@ -5,6 +5,7 @@ import { Icon } from '@iconify/react'
 import type { CircularAuthority } from '@/types'
 import { EditableSelect } from '@/components/ui/editable-select'
 import { useAuthorityDeptStore } from '@/stores/authority-department-store'
+import { pushToast } from '@/stores/toast-store'
 import { useTranslation } from '@/i18n'
 
 // Editable per-authority department field — wraps EditableSelect against
@@ -46,6 +47,9 @@ export function EditableAuthorityDeptField({
             return created.id
           } catch (err) {
             console.error('Failed to add department', err)
+            // Without this the add silently fails and the user assumes it
+            // worked. Surface a dismissible toast so they know to retry.
+            pushToast({ key: 'errors.lettersTemplate.departmentAddFailed' }, 'error')
             return undefined
           }
         }}

@@ -19,6 +19,7 @@ import { EditableSelect } from '@/components/ui/editable-select'
 import { ReviewSchedulePicker } from '@/components/ui/ReviewSchedulePicker'
 import { computeNextReview, cadenceToReviewCycleDays } from '@/lib/review-schedule'
 import { api } from '@/lib/api-client'
+import { pushToast } from '@/stores/toast-store'
 import { usePolicyStore } from '@/stores/policy-store'
 import { AddTierModal, ACTION_TYPES, type AddTierStep, type EditTier } from './AddTierModal'
 import { usePolicyTemplateStore } from '@/stores/policy-template-store'
@@ -73,6 +74,27 @@ const TIER_WORKFLOWS: Record<string, Array<{ step: string; description: string; 
     { step: 'Committee Review',      description: 'Audit Committee deliberation',          actionType: 'request-approval' },
     { step: 'Committee Approval',    description: 'Final approval by Audit Committee',     actionType: 'request-approval' },
   ],
+}
+
+// Client-side limits for the policy document. The drop zone accepts the same
+// extensions the native input filters on (.pdf/.doc/.docx/.xlsx/.pptx); the
+// size cap gives the user a friendly message BEFORE a large file is read and
+// POSTed. Mirrors the validation in EditPolicyModal.
+const POLICY_DOC_MAX_BYTES = 25 * 1024 * 1024
+const POLICY_DOC_EXTENSIONS = ['pdf', 'doc', 'docx', 'xlsx', 'pptx'] as const
+
+// Returns a translation spec when the file is rejected, or null when it passes.
+// Extension is checked before size so the message names the more fundamental
+// problem first.
+function validatePolicyDoc(file: File): { key: string; params?: Record<string, string> } | null {
+  const ext = file.name.split('.').pop()?.toLowerCase() ?? ''
+  if (!(POLICY_DOC_EXTENSIONS as readonly string[]).includes(ext)) {
+    return { key: 'errors.policies.documentWrongType' }
+  }
+  if (file.size > POLICY_DOC_MAX_BYTES) {
+    return { key: 'errors.policies.documentTooLarge', params: { name: file.name } }
+  }
+  return null
 }
 
 // P7 (W30): helper to read a File as a base64 data URL so it can be passed
@@ -199,6 +221,7 @@ export function RegisterPolicyModal({ isOpen, onClose, onCreated, t, isRTL }: Pr
     } catch (e) {
       // create() throws if the user lacks the 'Manage Policy Templates' permission.
       console.error('Failed to save policy template', e)
+      pushToast({ key: 'errors.policies.templateSaveFailed' }, 'error')
     } finally {
       setIsSavingPolicyTemplate(false)
     }
@@ -250,6 +273,7 @@ export function RegisterPolicyModal({ isOpen, onClose, onCreated, t, isRTL }: Pr
       // already show a revert toast). Returning false prevents the modal from
       // closing as if the save succeeded.
       console.error('Failed to save approval tier', e)
+      pushToast({ key: 'errors.policies.tierSaveFailed' }, 'error')
       return false
     }
   }
@@ -269,6 +293,7 @@ export function RegisterPolicyModal({ isOpen, onClose, onCreated, t, isRTL }: Pr
       // The enum/template stores surface a revert toast on failure; clear any
       // stale edit state so a later Edit re-hydrates fresh.
       console.error('Failed to delete approval tier', e)
+      pushToast({ key: 'errors.policies.tierDeleteFailed' }, 'error')
       setEditTier(null)
     }
   }
@@ -356,18 +381,33 @@ export function RegisterPolicyModal({ isOpen, onClose, onCreated, t, isRTL }: Pr
   const [formOwnerIdx, setFormOwnerIdx] = useState(0)
   const [formDescription, setFormDescription] = useState('')
   const [formDocFile, setFormDocFile] = useState<File | null>(null)
+  const [docError, setDocError] = useState<string | null>(null)
   const [formAffectedDepartments, setFormAffectedDepartments] = useState<string[]>([])
   const [formBusinessOwnerDepartmentId, setFormBusinessOwnerDepartmentId] = useState<string>('')
   const formDocFileRef = useRef<HTMLInputElement>(null)
 
-  // Wire native file input onChange via ref.
+  // Wire native file input onChange via ref. Validate size/type before storing
+  // the file so the user gets a clear inline message instead of a silent failure
+  // (or a Create-time error) when they pick an oversized/unsupported document.
   useEffect(() => {
     const el = formDocFileRef.current
     if (!el) return
-    const handler = () => { const f = el.files?.[0]; if (f) setFormDocFile(f) }
+    const handler = () => {
+      const f = el.files?.[0]
+      if (!f) return
+      const err = validatePolicyDoc(f)
+      if (err) {
+        setDocError(t(err.key, err.params))
+        setFormDocFile(null)
+        el.value = ''
+        return
+      }
+      setDocError(null)
+      setFormDocFile(f)
+    }
     el.addEventListener('change', handler)
     return () => el.removeEventListener('change', handler)
-  }, [isOpen])
+  }, [isOpen, t])
 
   function reset() {
     setSelectedTemplateId('')
@@ -379,6 +419,7 @@ export function RegisterPolicyModal({ isOpen, onClose, onCreated, t, isRTL }: Pr
     setFormOwnerIdx(0)
     setFormDescription('')
     setFormDocFile(null)
+    setDocError(null)
     setFormAffectedDepartments([])
     setFormBusinessOwnerDepartmentId('')
   }
@@ -489,13 +530,20 @@ export function RegisterPolicyModal({ isOpen, onClose, onCreated, t, isRTL }: Pr
             uploadedBy: currentUser?.name ?? owner.name,
           }, true)
         } catch {
-          // Non-fatal — the policy is created; surface error via toast if needed.
+          // Non-fatal — the policy itself was created; only the document didn't
+          // attach. Warn the user so they know to re-upload from policy details.
+          pushToast({ key: 'errors.policies.documentUploadFailed' }, 'error')
         }
       }
 
       onCreated(t('policies.policyCreated'), newPolicy.id)
       reset()
       onClose()
+    } catch (e) {
+      // The policy itself failed to create. The modal stays open (button
+      // re-enables in finally) so the user can retry without losing their input.
+      console.error('Failed to create policy', e)
+      pushToast({ key: 'errors.policies.createFailed' }, 'error')
     } finally {
       setIsCreating(false)
     }
@@ -734,6 +782,7 @@ export function RegisterPolicyModal({ isOpen, onClose, onCreated, t, isRTL }: Pr
               label={t('policies.uploadDocument')}
               t={t}
             />
+            {docError && <p role="alert" className="text-xs font-semibold text-rose-600 mt-1.5">{docError}</p>}
           </div>
         </div>
 

@@ -30,6 +30,7 @@ import type {
   User,
 } from '@/types'
 import { api, ApiClientError } from '@/lib/api-client'
+import { pushToast } from './toast-store'
 import { useAuditLogStore } from './audit-log-store'
 import { useAuthStore } from './auth-store'
 import { useTeamStore } from './team-store'
@@ -936,6 +937,7 @@ export const useAuditStore = create<AuditState>()((set, get) => ({
       })
       .catch((e) => {
         set({ error: errorMessage(e, 'Failed to add team member') })
+        pushToast({ key: 'errors.auditStore.teamMemberAddFailed' }, 'error')
         void get().fetchDetailChildren(auditId)
       })
 
@@ -945,6 +947,7 @@ export const useAuditStore = create<AuditState>()((set, get) => ({
   removeTeamMember: (auditId, memberId) => {
     void api.delete(`/audits/${auditId}/team/${memberId}`).catch((e) => {
       set({ error: errorMessage(e, 'Failed to remove team member') })
+      pushToast({ key: 'errors.auditStore.teamMemberRemoveFailed' }, 'error')
       void get().fetchDetailChildren(auditId)
     })
     set((state) => ({
@@ -1050,6 +1053,7 @@ export const useAuditStore = create<AuditState>()((set, get) => ({
       })
       .catch((e) => {
         set({ error: errorMessage(e, 'Failed to add comment') })
+        pushToast({ key: 'errors.auditStore.commentAddFailed' }, 'error')
         void get().fetchDetailChildren(auditId)
       })
 
@@ -1066,6 +1070,7 @@ export const useAuditStore = create<AuditState>()((set, get) => ({
     // W45: persist (resync from server on failure).
     void api.patch(`/audits/${auditId}/comments/${commentId}`, { content: newContent }).catch((e) => {
       set({ error: errorMessage(e, 'Failed to edit comment') })
+      pushToast({ key: 'errors.auditStore.commentEditFailed' }, 'error')
       void get().fetchDetailChildren(auditId)
     })
 
@@ -1118,6 +1123,7 @@ export const useAuditStore = create<AuditState>()((set, get) => ({
     // W45: persist (resync from server on failure).
     void api.delete(`/audits/${auditId}/comments/${commentId}`).catch((e) => {
       set({ error: errorMessage(e, 'Failed to delete comment') })
+      pushToast({ key: 'errors.auditStore.commentDeleteFailed' }, 'error')
       void get().fetchDetailChildren(auditId)
     })
 

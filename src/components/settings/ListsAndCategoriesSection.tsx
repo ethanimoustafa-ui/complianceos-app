@@ -24,6 +24,7 @@ import { EditableSelect } from '@/components/ui/editable-select'
 
 // ── Stores actually used to count usage ──────────────────────────────────────
 import { Gate } from '@/components/auth/gate'
+import { pushToast } from '@/stores/toast-store'
 import { useLetterStore } from '@/stores/letter-store'
 import { useCalendarStore } from '@/stores/calendar-store'
 import { useAdvisoryStore } from '@/stores/advisory-store'
@@ -64,7 +65,6 @@ import { LetterTemplatesSection } from '@/components/settings/LetterTemplatesSec
 import { TrainingCoursesLauncher } from '@/components/settings/TrainingCoursesSection'
 import { ApprovalTiersSection } from '@/components/settings/ApprovalTiersSection'
 import { DepartmentsSection } from '@/components/settings/DepartmentsSection'
-import { pushToast } from '@/stores/toast-store'
 
 // ── Generic shape every editable-list section consumes ───────────────────────
 
@@ -516,6 +516,7 @@ function FrameworkSubCategoryLauncher({ isRTL, t }: FrameworkSubCategoryLauncher
                   return created.id
                 } catch (err) {
                   console.error('Failed to add sub-category', err)
+                  pushToast({ key: 'errors.settings.subCategoryAddFailed' }, 'error')
                   return undefined
                 }
               }}
