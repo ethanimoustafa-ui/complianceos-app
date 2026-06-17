@@ -798,6 +798,7 @@ export default function LettersPage() {
             attachments: (selectedLetter.attachments ?? []).map((a) => a.name),
             signerName,
             signerTitle,
+            signatureImageUrl: selectedLetter.signatureImageUrl,
           },
         },
         `Letter-${selectedLetter.reference}-${language}.pdf`,

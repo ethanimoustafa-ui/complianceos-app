@@ -45,13 +45,57 @@ const BUILDERS: Record<string, (data: unknown, locale?: LatexLocale) => BuiltTex
   'audit-report': (data, locale) => buildAuditReportTex(data, locale),
 }
 
+/**
+ * Resolve an uploaded signature image (https URL from the `letter_signatures`
+ * bucket, or a data: URI) to a base64 asset for the renderer. Validates PNG/JPEG
+ * magic bytes + a size cap; returns null on any failure so the caller skips the
+ * image gracefully (the .tex won't reference a missing file).
+ */
+async function resolveSignatureAsset(url: string): Promise<{ name: string; b64: string } | null> {
+  try {
+    let bytes: Buffer
+    if (url.startsWith('data:')) {
+      const comma = url.indexOf(',')
+      if (comma < 0) return null
+      bytes = Buffer.from(url.slice(comma + 1), 'base64')
+    } else {
+      const res = await fetch(url)
+      if (!res.ok) return null
+      bytes = Buffer.from(await res.arrayBuffer())
+    }
+    if (bytes.length < 8 || bytes.length > 6 * 1024 * 1024) return null
+    const isPng =
+      bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47
+    const isJpg = bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff
+    if (!isPng && !isJpg) return null
+    return { name: isPng ? 'signature.png' : 'signature.jpg', b64: bytes.toString('base64') }
+  } catch {
+    return null
+  }
+}
+
 export async function runLatexGenerateJob(jobId: string, payload: LatexJobPayload): Promise<void> {
   const build = BUILDERS[payload?.template]
   if (!build) {
     throw new Error(`pdf.latex: unsupported template '${payload?.template}'`)
   }
 
-  const { tex, assets, filename } = build(payload.data, payload.locale)
+  // Resolve an uploaded signature image (sama-letter) to a base64 asset. If it
+  // can't be fetched/decoded, drop the field so the builder doesn't reference a
+  // missing file.
+  let data: unknown = payload.data
+  let signatureAsset: { name: string; b64: string } | null = null
+  const sigUrl = (payload.data as { signatureImageUrl?: string } | null)?.signatureImageUrl
+  if (payload.template === 'sama-letter' && typeof sigUrl === 'string' && sigUrl.trim()) {
+    signatureAsset = await resolveSignatureAsset(sigUrl.trim())
+    if (!signatureAsset) {
+      data = { ...(payload.data as Record<string, unknown>), signatureImageUrl: undefined }
+    }
+  }
+
+  const { tex, assets, filename } = build(data, payload.locale)
+  if (signatureAsset) assets[signatureAsset.name] = signatureAsset.b64
+
   const buffer = await compileLatex({ tex, assets })
 
   const admin = getAdminClient()

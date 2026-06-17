@@ -103,6 +103,13 @@ describe('buildSamaLetterTex — shared behavior', () => {
     expect(ruleIdx).toBeGreaterThan(nameIdx) // ...beneath the name/title
   })
 
+  it('embeds an uploaded signature image above the name (and drops the sign-here line)', () => {
+    const { tex } = buildSamaLetterTex({ ...SAMPLE_EN, signatureImageUrl: 'https://x/sig.png' }, 'en')
+    expect(tex).toContain('\\includegraphics[height=1.6cm]{signature}')
+    expect(tex).not.toContain('\\rule{6cm}') // the image replaces the sign-here line
+    expect(tex.indexOf('{signature}')).toBeLessThan(tex.indexOf(SAMPLE_EN.signerName))
+  })
+
   it('accepts a single-string body (split into paragraphs)', () => {
     const { tex } = buildSamaLetterTex({
       ...SAMPLE_AR,

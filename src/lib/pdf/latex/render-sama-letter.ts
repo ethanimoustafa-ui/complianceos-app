@@ -124,6 +124,17 @@ export function buildSamaLetterTex(input: unknown, locale: LatexLocale = 'ar'): 
     .filter(Boolean)
     .join(' \\\\\n')
 
+  // Uploaded signature image. The job runner resolves the URL/data-URI to a
+  // base64 `signature` asset (png or jpg) and injects it; here we just emit the
+  // \includegraphics above the name (extension-less so graphicx picks the file).
+  // When there's no image, fall back to a sign-here rule line under the name.
+  const signatureImageTex = data.signatureImageUrl
+    ? '\\noindent\\includegraphics[height=1.6cm]{signature}\\\\[2pt]\n'
+    : ''
+  const signatureLineTex = data.signatureImageUrl
+    ? ''
+    : '\n\n\\vspace{1.1cm}\n\\noindent\\rule{6cm}{0.4pt}'
+
   const attachmentItems = (data.attachments ?? [])
     .map((a) => `\\item ${escapeLatex(a)}`)
     .join('\n')
@@ -216,11 +227,8 @@ ${bodyTex}
 
 \vspace{0.8cm}
 
-% ── Signature: signer name (bold) + title, then a line to sign underneath ──
-\noindent ${signatureBlock}
-
-\vspace{1.1cm}
-\noindent\rule{6cm}{0.4pt}
+% ── Signature: uploaded image (if any) above the signer name + title ──
+${signatureImageTex}\noindent ${signatureBlock}${signatureLineTex}
 ${attachmentsBlock}
 
 \end{document}

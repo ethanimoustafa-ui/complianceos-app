@@ -42,6 +42,11 @@ export const SamaLetterLatexDataSchema = z.object({
   signerName: z.string().default(''),
   signerTitle: z.string().optional(),
 
+  /** Uploaded signature image — an https URL (letter_signatures bucket) or a
+   *  data: URI. The latex job runner resolves it to a base64 `signature` asset;
+   *  the builder embeds it above the signer name. Absent → a sign-here line. */
+  signatureImageUrl: z.string().optional(),
+
   /** Attachment captions, listed under "المرفقات". */
   attachments: z.array(z.string()).default([]),
 })
