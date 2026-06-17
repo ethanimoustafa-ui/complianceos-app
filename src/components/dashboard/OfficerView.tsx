@@ -162,7 +162,7 @@ export function OfficerView({ metrics }: OfficerViewProps) {
                 </Badge>
                 <span className="text-xs font-bold text-slate-400">{t('dashboard.thresholdLabel')}: {targetScore}%</span>
               </div>
-              <h2 className="text-2xl font-bold font-display text-slate-900 leading-tight">
+              <h2 key={heroMode} className="text-2xl font-bold font-display text-slate-900 leading-tight animate-fade-in">
                 {heroMode === 'business'
                   ? t('dashboard.complianceHealth')
                   : t('dashboard.deptHealthLabel' as TranslationKey)}
@@ -259,7 +259,8 @@ export function OfficerView({ metrics }: OfficerViewProps) {
             </div>
 
             {/* Right: ring (loading / pending placeholder / real ring) */}
-            <div className="relative flex-shrink-0 flex flex-col items-center justify-center gap-2">
+            {/* key=heroMode re-mounts on toggle so the ring re-draws + fades between modes. */}
+            <div key={heroMode} className="relative flex-shrink-0 flex flex-col items-center justify-center gap-2 animate-fade-in">
               {isHealthLoading ? (
                 <>
                   <Skeleton className="h-[152px] w-[152px] rounded-full" />
