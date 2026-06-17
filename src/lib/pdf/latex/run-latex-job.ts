@@ -18,6 +18,9 @@ import { buildComplianceReportTex } from './render-compliance-report'
 import { buildObservationReportTex } from './render-observation-report'
 import { buildRiskRegisterTex } from './render-risk-report'
 import { buildAuditReportTex } from './render-audit-report'
+import { buildCircularReportTex } from './render-circular-report'
+import { buildPolicyReportTex } from './render-policy-report'
+import { buildTrainingReportTex } from './render-training-report'
 import type { LatexLocale } from './report-base'
 import { compileLatex } from './client'
 
@@ -43,6 +46,9 @@ const BUILDERS: Record<string, (data: unknown, locale?: LatexLocale) => BuiltTex
   'observation-list': (data, locale) => buildObservationReportTex(data, locale),
   'risk-register': (data, locale) => buildRiskRegisterTex(data, locale),
   'audit-report': (data, locale) => buildAuditReportTex(data, locale),
+  'circular-report': (data, locale) => buildCircularReportTex(data, locale),
+  'policy-report': (data, locale) => buildPolicyReportTex(data, locale),
+  'training-compliance-report': (data, locale) => buildTrainingReportTex(data, locale),
 }
 
 /**

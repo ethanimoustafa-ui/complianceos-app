@@ -17,6 +17,9 @@ import type { CircularAuthority } from '@/types'
 import { exportRulesLocalized } from '@/lib/export'
 import { Gate } from '@/components/auth/gate'
 import { paginate } from '@/lib/pagination'
+import { downloadPdf } from '@/lib/pdf-client'
+import type { TranslationKey } from '@/i18n'
+import { useAuthStore } from '@/stores/auth-store'
 
 import { StatCard } from '@/components/correspondence/regulatory-updates/rules/StatCard'
 import { RegisterCircularModal } from '@/components/correspondence/regulatory-updates/rules/RegisterCircularModal'
@@ -37,6 +40,7 @@ function RegulatoryUpdatesRulesPageContent() {
   const isFirstLoad = isLoading && lastFetched === null && circulars.length === 0
   const searchParams = useSearchParams()
   const router = useRouter()
+  const authUser = useAuthStore((s) => s.user)
 
   // Hydrate server-state on mount (Fix-1).
   const fetchCirculars = useCircularStore((s) => s.fetchAll)
@@ -72,6 +76,7 @@ function RegulatoryUpdatesRulesPageContent() {
   const [currentPage, setCurrentPage] = useState(1)
   const PAGE_SIZE = 10
   const [isAddModalOpen, setIsAddModalOpen] = useState(false)
+  const [pdfBusy, setPdfBusy] = useState(false)
   const [isBOModalOpen, setIsBOModalOpen] = useState(false)
   const [isEditModalOpen, setIsEditModalOpen] = useState(false)
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false)
@@ -137,6 +142,43 @@ function RegulatoryUpdatesRulesPageContent() {
     [circulars]
   )
 
+  const handleExportPdf = useCallback(async () => {
+    if (pdfBusy) return
+    setPdfBusy(true)
+    try {
+      const dateStr = new Date().toISOString().split('T')[0]
+      await downloadPdf(
+        {
+          template: 'circular-report',
+          locale: isRTL ? 'ar' : 'en',
+          options: { engine: 'latex' },
+          data: {
+            organization: 'الشركة المتحدة للخدمات المالية',
+            generatedBy: authUser?.name ?? '',
+            date: dateStr,
+            circulars: filteredCirculars.map((c) => ({
+              reference: c.reference,
+              title: c.title,
+              authority: c.authority,
+              priority: c.priority,
+              status: c.status,
+              progress: c.progress,
+              issuanceDate: c.issuanceDate,
+              dueDate: c.dueDate,
+              departments: c.departments,
+              isOverdue: c.isOverdue,
+            })),
+          },
+        },
+        `Circulars-Report-${dateStr}.pdf`,
+      )
+    } catch (err) {
+      console.error('Failed to export circulars PDF:', err)
+    } finally {
+      setPdfBusy(false)
+    }
+  }, [pdfBusy, filteredCirculars, isRTL, authUser])
+
   return (
     // Fix 2: Add rtl class to root container (mirrors policies page)
     <div className={`flex flex-col h-full overflow-hidden ${isRTL ? 'rtl' : ''}`}>
@@ -189,6 +231,19 @@ function RegulatoryUpdatesRulesPageContent() {
           >
             <Icon icon="lucide:download-cloud" className="text-lg" />
           </button>
+          {/* Export PDF — generates a circulars list report. Distinct from the
+              per-circular "Download Source PDF" button in CircularDetailsContent
+              which downloads the user-uploaded pdfUrl file. */}
+          <Gate perm="Export Compliance Data">
+            <Button
+              variant="outline"
+              loading={pdfBusy}
+              onClick={handleExportPdf}
+            >
+              <Icon icon="lucide:file-text" />
+              {t('letters.exportPdf' as TranslationKey)}
+            </Button>
+          </Gate>
           <Gate perm="Manage Audit Findings">
             <Button
               variant="primary"

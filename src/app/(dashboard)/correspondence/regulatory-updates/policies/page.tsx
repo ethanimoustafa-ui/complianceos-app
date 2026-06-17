@@ -28,6 +28,8 @@ import { exportPoliciesLocalized } from '@/lib/export'
 import { Gate } from '@/components/auth/gate'
 import { useFrameworkConfigStore } from '@/stores/framework-config-store'
 import { matchesFrameworkQuery } from '@/components/ui/framework-chips'
+import { downloadPdf } from '@/lib/pdf-client'
+import type { TranslationKey } from '@/i18n'
 
 // Toast component (kept inline — single-use, three-second display).
 function Toast({ message, onClose }: { message: string; onClose: () => void }) {
@@ -125,6 +127,7 @@ export default function RegulatoryUpdatesPoliciesPage() {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false)
   const [toastMessage, setToastMessage] = useState<string | null>(null)
   const [newlyCreatedIds, setNewlyCreatedIds] = useState<string[]>([])
+  const [pdfBusy, setPdfBusy] = useState(false)
 
   const showToast = useCallback((message: string) => {
     setToastMessage(message)
@@ -199,6 +202,43 @@ export default function RegulatoryUpdatesPoliciesPage() {
     ).length,
   }), [policies])
 
+  const handleExportPdf = useCallback(async () => {
+    if (pdfBusy) return
+    setPdfBusy(true)
+    try {
+      const dateStr = new Date().toISOString().split('T')[0]
+      await downloadPdf(
+        {
+          template: 'policy-report',
+          locale: isRTL ? 'ar' : 'en',
+          options: { engine: 'latex' },
+          data: {
+            organization: 'الشركة المتحدة للخدمات المالية',
+            generatedBy: currentUser?.name ?? '',
+            date: dateStr,
+            policies: filteredPolicies.map((p) => ({
+              id: p.id,
+              name: p.name,
+              category: p.category,
+              status: p.status,
+              version: p.version,
+              owner: p.owner?.name,
+              lastReviewDate: p.lastReviewDate,
+              nextReviewDate: p.nextReviewDate,
+              approvalTier: p.approvalTier,
+              isExpired: p.isExpired,
+            })),
+          },
+        },
+        `Policy-Register-${dateStr}.pdf`,
+      )
+    } catch (err) {
+      console.error('Failed to export policies PDF:', err)
+    } finally {
+      setPdfBusy(false)
+    }
+  }, [pdfBusy, filteredPolicies, isRTL, currentUser])
+
   return (
     <div className={`flex flex-col h-full overflow-hidden ${isRTL ? 'rtl' : ''}`}>
       {/* Header */}
@@ -255,6 +295,18 @@ export default function RegulatoryUpdatesPoliciesPage() {
           >
             <Icon icon="lucide:download-cloud" className="text-lg" />
           </button>
+          {/* Export PDF — generates a policy register report. Distinct from any
+              per-policy uploaded-source-PDF download inside PolicyDetailsContent. */}
+          <Gate perm="Export Compliance Data">
+            <Button
+              variant="outline"
+              loading={pdfBusy}
+              onClick={handleExportPdf}
+            >
+              <Icon icon="lucide:file-text" />
+              {t('letters.exportPdf' as TranslationKey)}
+            </Button>
+          </Gate>
           <Gate perm="Approve Policy Reviews">
             <Button
               variant="primary"

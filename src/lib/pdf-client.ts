@@ -18,6 +18,9 @@ export type PdfTemplateKey =
   | 'correspondence-tracker'
   | 'training-report'
   | 'calendar-export'
+  | 'circular-report'
+  | 'policy-report'
+  | 'training-compliance-report'
 
 export type PdfLocale = 'en' | 'ar'
 

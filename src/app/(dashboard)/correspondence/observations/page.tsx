@@ -23,6 +23,7 @@ import { EditObservationModal } from '@/components/observations/edit-observation
 import { DeleteConfirmationDialog } from '@/components/ui/delete-confirmation-dialog'
 import { api } from '@/lib/api-client'
 import { useDashboardSummary } from '@/hooks/useDashboardSummary'
+import { downloadPdf } from '@/lib/pdf-client'
 import type {
   Observation,
   ObservationSource,
@@ -352,7 +353,57 @@ export default function ObservationsPage() {
     setCurrentPage(1)
   }
 
-  // Export observations with localization
+  // PDF export state
+  const [pdfBusy, setPdfBusy] = useState(false)
+
+  const handleExportPdf = async () => {
+    if (pdfBusy) return
+    setPdfBusy(true)
+    try {
+      const res = await fetchPage({
+        page: 1,
+        pageSize: 500,
+        archive_filter: archiveFilter,
+        status: statusFilter !== 'all' ? statusFilter : undefined,
+        severity: severityFilter !== 'all' ? severityFilter : undefined,
+        source: sourceFilter !== 'all' ? sourceFilter : undefined,
+        q: searchQuery || undefined,
+      })
+      const dateStr = new Date().toISOString().split('T')[0]
+      await downloadPdf(
+        {
+          template: 'observation-list',
+          locale: isRTL ? 'ar' : 'en',
+          options: { engine: 'latex' },
+          data: {
+            organization: 'الشركة المتحدة للخدمات المالية',
+            generatedBy: user?.name ?? '',
+            date: dateStr,
+            subtitle: archiveFilter !== 'active'
+              ? archiveFilter === 'archived' ? 'Archived Observations' : 'All Observations'
+              : undefined,
+            observations: res.items.map((o) => ({
+              reference: o.reference,
+              title: o.title,
+              severity: o.severity,
+              source: o.source,
+              status: o.status,
+              assignee: o.assignees?.[0]?.name ?? o.assignee?.name,
+              dueDate: o.dueDate,
+              isOverdue: (o as { isOverdue?: boolean }).isOverdue,
+            })),
+          },
+        },
+        `Observations-Report-${dateStr}.pdf`,
+      )
+    } catch (err) {
+      console.error('Failed to export observations PDF:', err)
+    } finally {
+      setPdfBusy(false)
+    }
+  }
+
+  // Export observations with localization (CSV)
   const handleExport = async () => {
     const baseFilename = isRTL ? 'ملاحظات' : 'observations'
     const dateStr = new Date().toISOString().split('T')[0]
@@ -420,7 +471,7 @@ export default function ObservationsPage() {
         </div>
 
         <div className={`flex items-center gap-4`}>
-          {/* Export Button */}
+          {/* Export CSV Button */}
           <Gate perm="Export Compliance Data">
             <Button
               variant="outline"
@@ -429,6 +480,19 @@ export default function ObservationsPage() {
             >
               <Icon icon="lucide:download" />
               {t('common.exportCsv')}
+            </Button>
+          </Gate>
+
+          {/* Export PDF Button */}
+          <Gate perm="Export Compliance Data">
+            <Button
+              variant="outline"
+              onClick={handleExportPdf}
+              loading={pdfBusy}
+              className={`hidden md:flex`}
+            >
+              <Icon icon="lucide:file-text" />
+              {t('letters.exportPdf' as import('@/i18n').TranslationKey)}
             </Button>
           </Gate>
 

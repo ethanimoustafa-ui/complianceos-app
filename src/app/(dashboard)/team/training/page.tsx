@@ -10,6 +10,7 @@ import { Input } from '@/components/ui/input'
 import { DeleteConfirmationDialog } from '@/components/ui/delete-confirmation-dialog'
 import { useTranslation } from '@/i18n'
 import type { TranslationKey } from '@/i18n'
+import { downloadPdf } from '@/lib/pdf-client'
 import { Gate } from '@/components/auth/gate'
 import { useAuthStore } from '@/stores/auth-store'
 import { hasRole } from '@/lib/permissions'
@@ -100,6 +101,52 @@ function TeamTrainingPageContent() {
   // fetchMetrics settles; gate on `metricsLoading` so they don't flash 0.
   const metricsLoading = useTrainingStore((s) => s.metricsLoading)
   const showMetricsSkeleton = metricsLoading && overviewStats.coursesAssigned === 0
+
+  // PDF export
+  const [pdfBusy, setPdfBusy] = useState(false)
+
+  const handleExportPdf = useCallback(async () => {
+    if (pdfBusy) return
+    setPdfBusy(true)
+    try {
+      const dateStr = new Date().toISOString().split('T')[0]
+      await downloadPdf(
+        {
+          template: 'training-compliance-report',
+          locale: 'en',
+          options: { engine: 'latex' },
+          data: {
+            organization: 'الشركة المتحدة للخدمات المالية',
+            generatedBy: authUser?.name ?? '',
+            date: dateStr,
+            overallCompletion: overviewStats.overallCompletion ?? undefined,
+            employees: employees.map((emp) => ({
+              name: emp.name,
+              email: emp.email,
+              department: emp.department,
+              overallProgress: emp.overallProgress,
+              totalCourses: emp.courses.length,
+              completedCourses: emp.courses.filter((c) => c.status === 'completed').length,
+              overdueCourses: emp.courses.filter((c) => c.status === 'overdue').length,
+              isSaudi: emp.isSaudi,
+            })),
+            departments: departmentProgress.map((dep) => ({
+              name: dep.name,
+              progress: dep.progress,
+              employees: dep.employees,
+              completed: dep.completed,
+              overdue: dep.overdue,
+            })),
+          },
+        },
+        `Training-Compliance-Report-${dateStr}.pdf`,
+      )
+    } catch (err) {
+      console.error('Failed to export training PDF:', err)
+    } finally {
+      setPdfBusy(false)
+    }
+  }, [pdfBusy, employees, departmentProgress, overviewStats, authUser])
 
   // UI state
   const [toastMessage, setToastMessage] = useState<string | null>(null)
@@ -285,6 +332,13 @@ function TeamTrainingPageContent() {
             <Icon icon="lucide:download" className="mr-1.5" />
             {t('training.exportReport' as TranslationKey)}
           </Button>
+          {/* Export PDF — generates a training compliance LaTeX report. */}
+          <Gate perm="Export Compliance Data">
+            <Button variant="outline" size="sm" loading={pdfBusy} onClick={handleExportPdf}>
+              <Icon icon="lucide:file-text" className="mr-1.5" />
+              {t('letters.exportPdf' as TranslationKey)}
+            </Button>
+          </Gate>
           <Gate perm="Manage Training Programs">
             <Button variant="outline" size="sm" onClick={() => setIsManualEntryOpen(true)}>
               <Icon icon="lucide:pencil" className="mr-1.5" />
