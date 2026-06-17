@@ -86,3 +86,7 @@ Thumbs.db
 
 # Letterhead design source (docx + images); base64 is inlined in assets.ts
 /letter-assets/
+
+# Planning / spec archive — used to build the app; kept on disk for reference
+# but out of the repo to declutter. (git history retains earlier versions.)
+/.planning/
