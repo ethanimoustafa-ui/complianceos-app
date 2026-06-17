@@ -1,12 +1,13 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { Icon } from '@iconify/react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Modal } from '@/components/ui/modal'
 import { useUserPreferencesStore } from '@/stores/user-preferences-store'
-import { useTranslation } from '@/i18n'
+import { api } from '@/lib/api-client'
+import { useTranslation, type TranslationKey } from '@/i18n'
 import type { NotificationModule, NotificationEvent, NotificationScope } from '@/types'
 
 const MODULE_CONFIG: { key: NotificationModule; icon: string; labelKey: string }[] = [
@@ -53,6 +54,29 @@ export function NotificationsSection() {
     [notificationPreferences.events]
   )
   const notificationsEnabled = enabledModules > 0 || enabledEvents > 0
+
+  // The email-digest opt-in is the ONE server-backed preference (the daily-digest
+  // cron must read it: profiles.email_digest_enabled). Hydrate it from the server
+  // on mount and persist toggles; the rest of this bag stays localStorage-only.
+  useEffect(() => {
+    let cancelled = false
+    api
+      .get<{ email_digest_enabled?: boolean }>('/team/me')
+      .then((me) => {
+        if (!cancelled && typeof me.email_digest_enabled === 'boolean') {
+          setEmailDigest(me.email_digest_enabled)
+        }
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [setEmailDigest])
+
+  const handleEmailDigestToggle = (next: boolean) => {
+    setEmailDigest(next) // optimistic
+    api.patch('/team/me', { email_digest_enabled: next }).catch(() => setEmailDigest(!next))
+  }
 
   function handleMasterToggle() {
     // Toggle all modules and events on/off
@@ -115,7 +139,7 @@ export function NotificationsSection() {
           title={t('settings.emailDigests')}
           description={t('settings.emailDigestsDescription')}
           isOn={notificationPreferences.emailDigestEnabled}
-          onToggle={() => setEmailDigest(!notificationPreferences.emailDigestEnabled)}
+          onToggle={() => handleEmailDigestToggle(!notificationPreferences.emailDigestEnabled)}
         />
         {notificationPreferences.emailDigestEnabled && (
           <div className="ms-10 space-y-2">
@@ -165,7 +189,7 @@ export function NotificationsSection() {
                 <ToggleRow
                   key={key}
                   icon={icon}
-                  title={t(labelKey as any)}
+                  title={t(labelKey as TranslationKey)}
                   isOn={notificationPreferences.modules[key]}
                   onToggle={() => toggleModuleNotification(key)}
                 />
@@ -181,7 +205,7 @@ export function NotificationsSection() {
                 <ToggleRow
                   key={key}
                   icon={icon}
-                  title={t(labelKey as any)}
+                  title={t(labelKey as TranslationKey)}
                   isOn={notificationPreferences.events[key]}
                   onToggle={() => toggleEventNotification(key)}
                 />
@@ -209,7 +233,7 @@ export function NotificationsSection() {
                     onChange={() => setNotificationScope(key)}
                     className="accent-emerald-500"
                   />
-                  <span className="text-sm font-medium">{t(labelKey as any)}</span>
+                  <span className="text-sm font-medium">{t(labelKey as TranslationKey)}</span>
                 </label>
               ))}
             </div>

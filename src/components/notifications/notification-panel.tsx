@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useCallback } from 'react'
+import { useEffect, useCallback, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Icon } from '@iconify/react'
 import { cn } from '@/lib/utils'
@@ -31,6 +31,9 @@ const typeBg: Record<AppNotification['type'], string> = {
   error: 'bg-rose-500',
 }
 
+// Page size for the notification list's incremental display.
+const PAGE = 20
+
 interface NotificationPanelProps {
   isOpen: boolean
   onClose: () => void
@@ -44,6 +47,17 @@ export function NotificationPanel({ isOpen, onClose }: NotificationPanelProps) {
   const fetchNotifications = useNotificationStore((s) => s.fetchNotifications)
   // First-fetch gate: show skeletons only on the initial load (empty + loading).
   const showSkeleton = isLoading && notifications.length === 0
+  // Incremental display pagination. The list is already bounded server-side
+  // (retention keeps ≤100 per user), so we render in pages of 20 rather than
+  // dumping the whole set into the DOM at once.
+  const [visibleCount, setVisibleCount] = useState(PAGE)
+  // Reset the visible window to the first page each time the panel (re)opens.
+  // Done during render (not in an effect) to avoid a cascading-render warning.
+  const [wasOpen, setWasOpen] = useState(isOpen)
+  if (isOpen !== wasOpen) {
+    setWasOpen(isOpen)
+    if (isOpen) setVisibleCount(PAGE)
+  }
 
   const handleEscape = useCallback((e: KeyboardEvent) => {
     if (e.key === 'Escape') onClose()
@@ -132,8 +146,9 @@ export function NotificationPanel({ isOpen, onClose }: NotificationPanelProps) {
               <p className="text-xs text-slate-300 mt-1 text-center px-4">{t('emptyStates.notifications.description')}</p>
             </div>
           ) : (
+            <>
             <div className="divide-y divide-slate-100">
-              {notifications.map((notif) => (
+              {notifications.slice(0, visibleCount).map((notif) => (
                 <button
                   key={notif.id}
                   onClick={() => handleNotificationClick(notif)}
@@ -166,6 +181,17 @@ export function NotificationPanel({ isOpen, onClose }: NotificationPanelProps) {
                 </button>
               ))}
             </div>
+            {visibleCount < notifications.length && (
+              <div className="p-3">
+                <button
+                  onClick={() => setVisibleCount((c) => c + PAGE)}
+                  className="w-full py-2 text-xs font-semibold text-emerald-600 hover:text-emerald-700 hover:bg-slate-50 rounded-lg transition-colors cursor-pointer"
+                >
+                  {t('common.loadMore')} ({notifications.length - visibleCount})
+                </button>
+              </div>
+            )}
+            </>
           )}
         </div>
       </div>

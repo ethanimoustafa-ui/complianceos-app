@@ -16,6 +16,8 @@ import type { NextRequest } from 'next/server'
 import { NextResponse } from 'next/server'
 import { getAdminClient, hasServiceRole } from '@/lib/api/admin'
 import { runPdfGenerateJob, type PdfJobPayload } from '@/lib/pdf/run-job'
+import { runLatexGenerateJob, type LatexJobPayload } from '@/lib/pdf/latex/run-latex-job'
+import { runEmailSendJob, type EmailJobPayload } from '@/lib/email/run-email-job'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -130,6 +132,12 @@ async function dispatch(job: JobRow): Promise<void> {
     case 'pdf.generate':
       // Shared with the /api/pdf/generate dev-inline path (src/lib/pdf/run-job).
       return runPdfGenerateJob(job.id, job.payload as unknown as PdfJobPayload)
+    case 'pdf.latex':
+      // xelatex via the external renderer microservice (src/lib/pdf/latex).
+      return runLatexGenerateJob(job.id, job.payload as unknown as LatexJobPayload)
+    case 'email.send':
+      // Transactional/notification email via the configured provider (Resend).
+      return runEmailSendJob(job.id, job.payload as unknown as EmailJobPayload)
     default:
       throw new Error(`Unknown job kind: ${job.kind}`)
   }
