@@ -30,32 +30,30 @@ export { STANDARD_PERMISSIONS }
 
 // ---------- role / status translation ---------------------------------------
 
-type TsRole = TeamMember['role'] // 'officer' | 'manager' | 'admin'
-type ApiRole = 'viewer' | 'auditor' | 'compliance_officer' | 'org_admin'
+type TsRole = TeamMember['role'] // 'auditor' | 'officer' | 'manager' | 'admin'
+type ApiRole = TsRole // DB keys == client values after migration 108
 
+// Post-108 the DB and client share the same role keys, so this is a pass-through.
+// The legacy cases keep old rows / stale tokens working during the transition.
 function roleApiToTs(role: string | null | undefined): TsRole {
   switch (role) {
+    case 'auditor':
+    case 'officer':
+    case 'manager':
+    case 'admin':
+      return role
     case 'org_admin':
       return 'admin'
     case 'compliance_officer':
-      return 'manager'
-    case 'viewer':
-    case 'auditor':
-    default:
       return 'officer'
+    case 'viewer':
+    default:
+      return 'auditor'
   }
 }
 
 function roleTsToApi(role: TsRole): ApiRole {
-  switch (role) {
-    case 'admin':
-      return 'org_admin'
-    case 'manager':
-      return 'compliance_officer'
-    case 'officer':
-    default:
-      return 'auditor'
-  }
+  return role
 }
 
 // ---------- API row shapes ---------------------------------------------------

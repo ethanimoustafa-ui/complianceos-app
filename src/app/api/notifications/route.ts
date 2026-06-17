@@ -45,7 +45,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const ctx = await requireUser()
-    const isAdmin = ctx.permissions.includes('create') || ctx.profile.role === 'org_admin'
+    const isAdmin = ctx.permissions.includes('create') || ctx.profile.role === 'admin' || ctx.profile.role === 'org_admin'
     if (!isAdmin && !hasServiceRole()) {
       throw Forbidden('Only admins or service-role callers may create notifications')
     }

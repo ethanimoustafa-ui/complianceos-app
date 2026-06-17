@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { Icon } from '@iconify/react'
 import { Button } from '@/components/ui/button'
 import { LoadingButton } from '@/components/ui/loading-button'
@@ -51,7 +51,7 @@ interface MemberDetailDrawerProps {
   member: TeamMember | null
   isOpen: boolean
   onClose: () => void
-  onUpdateRole: (memberId: string, newRole: TeamMember['role']) => void
+  onUpdateRole: (memberId: string, newRole: TeamMember['role']) => void | Promise<unknown>
   onToast: (message: string) => void
 }
 
@@ -66,26 +66,36 @@ export function MemberDetailDrawer({
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false)
   const [deleteConfirmName, setDeleteConfirmName] = useState('')
+  // Local busy flag so the spinner spans the *entire* save (PATCH + store
+  // refetch), independent of the shared store `isMutating`.
+  const [savingRole, setSavingRole] = useState(false)
 
   // Per-member permissions now live in the Access Control matrix beneath the
   // directory — the drawer only edits the member's role. Reset the role draft
-  // (and the unsaved flag) whenever a different member is opened.
-  useEffect(() => {
+  // (and the unsaved flag) whenever a different member is opened, or its role
+  // changes server-side (e.g. after a save). Done during render — React's
+  // "adjust state when a prop changes" pattern — to avoid a cascading effect.
+  const memberKey = member ? `${member.id}:${member.role}` : null
+  const [syncedMemberKey, setSyncedMemberKey] = useState(memberKey)
+  if (memberKey !== syncedMemberKey) {
+    setSyncedMemberKey(memberKey)
     if (member) {
       setRoleValue(member.role)
       setHasUnsavedChanges(false)
     }
-  }, [member?.id, member?.role])
+  }
 
   const roleColorMap: Record<string, string> = {
     admin: 'text-blue-600',
-    manager: 'text-slate-900',
-    officer: 'text-slate-600',
+    manager: 'text-emerald-600',
+    officer: 'text-slate-900',
+    auditor: 'text-slate-500',
   }
 
   const handleRoleChange = (newRole: TeamMember['role']) => {
     if (!member) return
-    if (newRole === 'admin' && currentUser?.role !== 'admin') {
+    // Manager and Admin are elevated (admin-level) — only an Admin may grant them.
+    if ((newRole === 'admin' || newRole === 'manager') && currentUser?.role !== 'admin') {
       onToast(t('team.cannotElevateToAdmin' as TranslationKey))
       return
     }
@@ -97,7 +107,8 @@ export function MemberDetailDrawer({
 
   return (
     <aside
-      data-member-drawer
+      // No height class: stretches to the flex row, which the page bounds to the
+      // viewport (`h-screen`). Inner content scrolls; the footer stays pinned.
       className={`bg-white border-s border-slate-200 flex flex-col shadow-2xl transition-all duration-300 overflow-hidden ${
         isOpen && member ? 'w-[400px]' : 'w-0'
       }`}
@@ -128,7 +139,7 @@ export function MemberDetailDrawer({
             </div>
           </div>
 
-          <div className="flex-1 overflow-y-auto p-6 space-y-8">
+          <div className="flex-1 overflow-y-auto overscroll-contain hide-scrollbar p-6 space-y-8">
             {/* Assignments */}
             <section>
               <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4 flex items-center justify-between">
@@ -246,10 +257,13 @@ export function MemberDetailDrawer({
                   value={roleValue}
                   onChange={(id) => handleRoleChange(id as TeamMember['role'])}
                   items={[
+                    { id: 'auditor', label: t('team.roleAuditor' as TranslationKey) },
                     { id: 'officer', label: t('team.roleOfficer' as TranslationKey) },
-                    { id: 'manager', label: t('team.roleManager' as TranslationKey) },
                     ...(currentUser?.role === 'admin'
-                      ? [{ id: 'admin', label: t('team.roleAdmin' as TranslationKey) }]
+                      ? [
+                          { id: 'manager', label: t('team.roleManager' as TranslationKey) },
+                          { id: 'admin', label: t('team.roleAdmin' as TranslationKey) },
+                        ]
                       : []),
                   ]}
                 />
@@ -268,17 +282,22 @@ export function MemberDetailDrawer({
               </p>
             )}
             <LoadingButton
-              loading={isMutating}
+              loading={savingRole}
               variant="dark"
               className="w-full"
-              disabled={!hasUnsavedChanges}
-              onClick={() => {
-                if (!member) return
-                if (roleValue !== member.role) {
-                  onUpdateRole(member.id, roleValue)
+              disabled={!hasUnsavedChanges || savingRole}
+              onClick={async () => {
+                if (!member || roleValue === member.role) return
+                setSavingRole(true)
+                try {
+                  await onUpdateRole(member.id, roleValue)
+                  setHasUnsavedChanges(false)
+                  onToast(t('team.roleUpdated' as TranslationKey))
+                } catch {
+                  onToast(t('team.roleUpdateFailed' as TranslationKey))
+                } finally {
+                  setSavingRole(false)
                 }
-                setHasUnsavedChanges(false)
-                onToast(t('team.changesSaved' as TranslationKey))
               }}
             >
               {t('team.saveChanges' as TranslationKey)}

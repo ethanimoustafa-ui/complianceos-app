@@ -3,7 +3,7 @@ export interface User {
   id: string
   name: string
   email: string
-  role: 'officer' | 'manager' | 'admin'
+  role: 'auditor' | 'officer' | 'manager' | 'admin'
   department: string
   avatar?: string
   phone?: string

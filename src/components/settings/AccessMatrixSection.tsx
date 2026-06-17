@@ -16,8 +16,8 @@ import type { TeamMember } from '@/types'
 
 // Plan §2.1 default permission bundles per role.
 const ROLE_DEFAULTS: Record<TeamMember['role'], Permission[]> = {
-  officer: ['View Risk Register'],
-  manager: [
+  auditor: ['View Risk Register'],
+  officer: [
     'Approve Policy Reviews',
     'Approve SAMA Letters',
     'Manage Audit Findings',
@@ -26,6 +26,7 @@ const ROLE_DEFAULTS: Record<TeamMember['role'], Permission[]> = {
     'Can Act As Approver',
     'Manage Training Programs',
   ],
+  manager: [...PERMISSIONS],
   admin: [...PERMISSIONS],
 }
 
@@ -51,6 +52,7 @@ const ROLE_BADGE_STYLE: Record<TeamMember['role'], string> = {
   admin: 'bg-blue-100 text-blue-700',
   manager: 'bg-emerald-100 text-emerald-700',
   officer: 'bg-slate-100 text-slate-700',
+  auditor: 'bg-slate-50 text-slate-500',
 }
 
 function buildAccessControls(grants: Permission[]): { label: string; enabled: boolean }[] {
@@ -74,7 +76,7 @@ export function AccessMatrixSection() {
   const log = useUserLogStore((s) => s.log)
 
   const sortedMembers = useMemo(() => {
-    const roleOrder: Record<TeamMember['role'], number> = { admin: 0, manager: 1, officer: 2 }
+    const roleOrder: Record<TeamMember['role'], number> = { admin: 0, manager: 1, officer: 2, auditor: 3 }
     return [...members].sort((a, b) => {
       const rd = roleOrder[a.role] - roleOrder[b.role]
       if (rd !== 0) return rd
@@ -83,7 +85,7 @@ export function AccessMatrixSection() {
   }, [members])
 
   function handleToggle(member: TeamMember, perm: Permission) {
-    if (member.role === 'admin') return // Admin cells are always-on (and disabled in UI).
+    if (member.role === 'admin' || member.role === 'manager') return // Admin/Manager: all-on (admin-level).
     const before = getEnabledLabels(member)
     const wasEnabled = before.includes(perm)
     const after = wasEnabled ? before.filter((p) => p !== perm) : [...before, perm]

@@ -3,10 +3,11 @@
 import { useState } from 'react'
 import { Icon } from '@iconify/react'
 import { Card } from '@/components/ui/card'
+import { Skeleton } from '@/components/ui/skeleton'
 import { useTranslation } from '@/i18n'
 import type { TranslationKey } from '@/i18n'
 import { useTeamStore } from '@/stores/team-store'
-import { useBurnoutDetection, useTeamWorkloads } from '@/hooks/useWorkload'
+import { useBurnoutDetection, useTeamWorkloads, useWorkloadLoading, fetchMemberWorkloadItems } from '@/hooks/useWorkload'
 import type { WorkloadItem } from '@/hooks/useWorkload'
 import { useObservationStore } from '@/stores/observation-store'
 import { useAuditStore } from '@/stores/audit-store'
@@ -55,7 +56,7 @@ function CapacityRing({ capacity }: { capacity: number }) {
   )
 }
 
-function reassignItem(item: WorkloadItem, fromMemberName: string, toMember: { id: string; name: string; department: string; email: string; role: 'officer' | 'manager' | 'admin'; workload: number }) {
+function reassignItem(item: WorkloadItem, fromMemberName: string, toMember: { id: string; name: string; department: string; email: string; role: 'auditor' | 'officer' | 'manager' | 'admin'; workload: number }) {
   switch (item.type) {
     case 'observation': {
       const store = useObservationStore.getState()
@@ -120,10 +121,15 @@ function reassignItem(item: WorkloadItem, fromMemberName: string, toMember: { id
 export function BurnoutDetectionCard() {
   const { t, isRTL } = useTranslation()
   const members = useTeamStore((s) => s.members)
+  const teamLoading = useTeamStore((s) => s.isLoading)
   const reassignTask = useTeamStore((s) => s.reassignTask)
   const departments = useDepartmentStore((s) => s.departments)
   const atRisk = useBurnoutDetection(members)
   const workloads = useTeamWorkloads(members)
+  // First-fetch gate: counts arrive from /api/dashboard/workload a beat after
+  // the roster, so without this the card flashes "no overloaded members"
+  // (atRisk is [] until counts resolve) and then pops the member in.
+  const isLoading = useWorkloadLoading() || (teamLoading && members.length === 0)
 
   const deptLabel = (name: string) => {
     if (!isRTL) return name
@@ -132,6 +138,28 @@ export function BurnoutDetectionCard() {
 
   const [reassignFrom, setReassignFrom] = useState<string | null>(null)
   const [expandedItem, setExpandedItem] = useState<string | null>(null)
+  // Real assigned items per member — fetched lazily when the drawer opens
+  // (the workload hook only gives counts). `undefined` = not yet fetched.
+  const [itemsByMember, setItemsByMember] = useState<Record<string, WorkloadItem[]>>({})
+  const [loadingItemsFor, setLoadingItemsFor] = useState<string | null>(null)
+
+  const openReassign = (memberId: string, isOpen: boolean) => {
+    setReassignFrom(isOpen ? null : memberId)
+    setExpandedItem(null)
+    if (!isOpen && itemsByMember[memberId] === undefined) {
+      setLoadingItemsFor(memberId)
+      fetchMemberWorkloadItems(memberId)
+        .then((items) => setItemsByMember((prev) => ({ ...prev, [memberId]: items })))
+        .catch(() => setItemsByMember((prev) => ({ ...prev, [memberId]: [] })))
+        .finally(() => setLoadingItemsFor((cur) => (cur === memberId ? null : cur)))
+    }
+  }
+
+  const dropReassignedItem = (memberId: string, wi: WorkloadItem) =>
+    setItemsByMember((prev) => ({
+      ...prev,
+      [memberId]: (prev[memberId] ?? []).filter((x) => !(x.id === wi.id && x.type === wi.type)),
+    }))
 
   const tierColors = {
     mild: 'text-amber-600 bg-amber-50',
@@ -169,7 +197,20 @@ export function BurnoutDetectionCard() {
         )}
       </h3>
 
-      {atRisk.length === 0 ? (
+      {isLoading ? (
+        <div className="space-y-3" aria-busy="true">
+          {Array.from({ length: 2 }).map((_, i) => (
+            <div key={i} className="p-3 rounded-xl border border-slate-100 bg-slate-50 flex items-center gap-3">
+              <Skeleton className="h-10 w-10 rounded-full" />
+              <div className="flex-1 space-y-2">
+                <Skeleton className="h-3 w-32" />
+                <Skeleton className="h-2 w-20" />
+              </div>
+              <Skeleton className="h-6 w-16 rounded" />
+            </div>
+          ))}
+        </div>
+      ) : atRisk.length === 0 ? (
         <div className="text-center py-8">
           <Icon icon="lucide:smile" className="text-3xl text-emerald-400 mx-auto mb-2" />
           <p className="text-sm text-slate-500 font-medium">{t('team.noOverloadedMembers' as TranslationKey)}</p>
@@ -178,8 +219,7 @@ export function BurnoutDetectionCard() {
         <div className="space-y-3">
           {atRisk.map((item) => {
             const fullMember = members.find(m => m.id === item.member.id)
-            const wl = workloads[item.member.id]
-            const allItems = wl?.items || []
+            const allItems = itemsByMember[item.member.id] || []
             const manualTasks = fullMember?.assignments || []
             const isExpanded = reassignFrom === item.member.id
             const activeMembers = members.filter(m => m.status === 'active' && m.id !== item.member.id)
@@ -203,18 +243,29 @@ export function BurnoutDetectionCard() {
                     </div>
                   </div>
                   <button
-                    onClick={() => {
-                      setReassignFrom(isExpanded ? null : item.member.id)
-                      setExpandedItem(null)
-                    }}
-                    className="text-[10px] font-bold text-blue-600 hover:text-blue-700 px-2 py-1 rounded bg-blue-50 hover:bg-blue-100 cursor-pointer shrink-0"
+                    onClick={() => openReassign(item.member.id, isExpanded)}
+                    className="text-[10px] font-bold text-blue-600 hover:text-blue-700 px-2 py-1 rounded bg-blue-50 hover:bg-blue-100 cursor-pointer shrink-0 inline-flex items-center gap-1"
                   >
+                    {loadingItemsFor === item.member.id && (
+                      <Icon icon="lucide:loader-2" className="w-3 h-3 animate-spin" />
+                    )}
                     {t('team.suggestReassignment' as TranslationKey)}
                   </button>
                 </div>
 
-                {isExpanded && (allItems.length > 0 || manualTasks.length > 0) && (
+                {isExpanded && (
                   <div className="mt-3 ms-12 space-y-1">
+                    {loadingItemsFor === item.member.id ? (
+                      <div className="flex items-center gap-2 p-2 text-[10px] font-bold text-slate-400">
+                        <Icon icon="lucide:loader-2" className="w-3 h-3 animate-spin" />
+                        {t('team.loadingAssignments' as TranslationKey)}
+                      </div>
+                    ) : allItems.length === 0 && manualTasks.length === 0 ? (
+                      <p className="p-2 text-[10px] font-medium text-slate-400 italic">
+                        {t('team.noReassignableItems' as TranslationKey)}
+                      </p>
+                    ) : (
+                    <>
                     <p className="text-[10px] font-bold text-slate-500 mb-2">
                       {t('team.currentAssignments' as TranslationKey)}:
                     </p>
@@ -250,6 +301,7 @@ export function BurnoutDetectionCard() {
                                       key={am.id}
                                       onClick={() => {
                                         reassignItem(wi, item.member.name, { id: am.id, name: am.name, department: am.department, email: am.email, role: am.role, workload: am.workload })
+                                        dropReassignedItem(item.member.id, wi)
                                         setExpandedItem(null)
                                         setReassignFrom(null)
                                       }}
@@ -317,6 +369,8 @@ export function BurnoutDetectionCard() {
                         </div>
                       )
                     })}
+                    </>
+                    )}
                   </div>
                 )}
               </div>

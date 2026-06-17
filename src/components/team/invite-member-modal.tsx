@@ -16,7 +16,7 @@ import { useTranslation } from '@/i18n'
 
 const inviteSchema = z.object({
   email: z.string().email('Invalid email address'),
-  role: z.enum(['officer', 'manager', 'admin']),
+  role: z.enum(['auditor', 'officer', 'manager', 'admin']),
   department: z.string().min(1, 'Department is required'),
   message: z.string().optional(),
 })
@@ -30,9 +30,10 @@ interface InviteMemberModalProps {
 }
 
 const roles = [
-  { id: 'officer', label: 'Officer', description: 'View-only access to all features' },
-  { id: 'manager', label: 'Manager', description: 'Create, edit, and export data' },
-  { id: 'admin', label: 'Administrator', description: 'Full access including delete, settings, team' },
+  { id: 'auditor', label: 'Auditor', description: 'View, comment, and observation access' },
+  { id: 'officer', label: 'Officer', description: 'Create, edit, comment, and export' },
+  { id: 'manager', label: 'Manager', description: 'Admin-level access; receives escalations' },
+  { id: 'admin', label: 'Administrator', description: 'Full access including settings and team' },
 ] as const
 
 export function InviteMemberModal({ isOpen, onClose, onSuccess }: InviteMemberModalProps) {

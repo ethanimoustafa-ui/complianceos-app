@@ -48,23 +48,27 @@ export type BackendPermission = (typeof BACKEND_PERMISSIONS)[number]
 // while the new admin perms (`Manage Settings`, etc.) resolve through the
 // registry. Admins always pass — they don't need a record in either map.
 
-const ROLE_HIERARCHY: User['role'][] = ['officer', 'manager', 'admin']
+const ROLE_HIERARCHY: User['role'][] = ['auditor', 'officer', 'manager', 'admin']
 
 export { PERMISSIONS, STANDARD_PERMISSIONS }
 export type { Permission }
 
 // Legacy role-permission map — used as a fallback for the lowercase:colon
 // permission strings that pre-date the round-4 registry.
+const ALL_PERMISSIONS = ['view', 'comment', 'create', 'edit', 'delete', 'audit:view', 'audit:comment', 'audit:create', 'audit:edit', 'audit:delete', 'observation:view', 'observation:comment', 'observation:create', 'observation:edit', 'observation:delete', 'report:view', 'report:create', 'report:delete', 'export', 'settings:view', 'settings:edit', 'team:view', 'team:invite', 'team:edit', 'team:remove']
+
 export const ROLE_PERMISSIONS: Record<User['role'], string[]> = {
-  officer: ['view', 'comment', 'audit:view', 'observation:view', 'observation:create', 'observation:edit', 'observation:comment', 'report:view', 'export'],
-  manager: ['view', 'comment', 'create', 'edit', 'audit:view', 'audit:comment', 'audit:create', 'audit:edit', 'observation:view', 'observation:create', 'observation:edit', 'report:view', 'report:create', 'export'],
-  admin: ['view', 'comment', 'create', 'edit', 'delete', 'audit:view', 'audit:comment', 'audit:create', 'audit:edit', 'audit:delete', 'observation:view', 'observation:create', 'observation:edit', 'observation:delete', 'report:view', 'report:create', 'report:delete', 'export', 'settings:view', 'settings:edit', 'team:view', 'team:invite', 'team:edit', 'team:remove'],
+  // Mirrors the DB role_permissions seed (migration 108). auditor < officer < manager = admin.
+  auditor: ['view', 'comment', 'audit:view', 'observation:view', 'observation:comment', 'observation:create', 'observation:edit', 'report:view', 'export'],
+  officer: ['view', 'comment', 'create', 'edit', 'audit:view', 'audit:comment', 'audit:create', 'audit:edit', 'observation:view', 'observation:comment', 'observation:create', 'observation:edit', 'report:view', 'report:create', 'export'],
+  manager: ALL_PERMISSIONS,
+  admin: ALL_PERMISSIONS,
 }
 
 // ── Effective permissions derivation (RBAC-012) ──────────────────────────────
 export function getEffectivePermissions(user: User | null, members: TeamMember[]): Permission[] {
   if (!user) return []
-  if (user.role === 'admin') return [...PERMISSIONS]
+  if (user.role === 'admin' || user.role === 'manager') return [...PERMISSIONS]
 
   const member = members.find((m) => m.id === user.id)
   if (!member) return []
@@ -156,7 +160,7 @@ export function canDelete(user: User | null, resource?: string): boolean {
   if (resource) {
     // Delete is a stricter action than edit. Officers never delete; managers
     // can delete the same resources they can edit.
-    if (user.role === 'officer') return false
+    if (user.role === 'officer' || user.role === 'auditor') return false
     const required = RESOURCE_EDIT_PERMISSION[resource]
     if (required) return hasPermission(user, required)
   }

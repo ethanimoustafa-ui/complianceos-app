@@ -25,6 +25,7 @@ import { create } from 'zustand'
 import type { User } from '@/types'
 import { useUserLogStore } from '@/stores/user-log-store'
 import { createClient } from '@/lib/supabase/client'
+import { collectClientActivityContext } from '@/lib/user-activity-meta'
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -42,17 +43,18 @@ type ProfileRow = {
 }
 
 function mapProfileToUser(row: ProfileRow): User {
-  // Coerce backend role keys (`org_admin`, `compliance_officer`, `auditor`,
-  // `viewer`) into the legacy three-tier shape the UI expects. Profiles also
-  // store a free-form `role` text column that may already match — prefer it
-  // when valid.
+  // DB role keys now match the client values (migration 108: auditor/officer/
+  // manager/admin). Legacy keys (org_admin/compliance_officer/viewer) map forward
+  // so any stale token/row during the transition still resolves.
   const raw = (row.role ?? '').toLowerCase()
   const role: User['role'] =
     raw === 'admin' || raw === 'org_admin'
       ? 'admin'
-      : raw === 'manager' || raw === 'compliance_officer'
+      : raw === 'manager'
         ? 'manager'
-        : 'officer'
+        : raw === 'officer' || raw === 'compliance_officer'
+          ? 'officer'
+          : 'auditor'
 
   return {
     id: row.id,
@@ -136,8 +138,10 @@ async function recordActivity(
       module,
       details: null,
       ip_address: null,
-      // metadata column is NOT NULL DEFAULT '{}'::jsonb — send {} not null.
-      metadata: {},
+      // Capture browser device/timezone so the User Logs table can render the
+      // Device / Location columns. NOT NULL DEFAULT '{}' — collector returns
+      // {} server-side, never null.
+      metadata: collectClientActivityContext(),
     })
   } catch (err) {
     // Activity logging is best-effort — never block auth on it.

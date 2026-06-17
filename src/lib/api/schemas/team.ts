@@ -3,7 +3,7 @@
 import { z } from 'zod'
 
 const Uuid = z.string().uuid()
-const RoleKey = z.enum(['viewer', 'auditor', 'compliance_officer', 'org_admin'])
+const RoleKey = z.enum(['auditor', 'officer', 'manager', 'admin'])
 const Status = z.enum(['active', 'inactive', 'pending'])
 const Lang = z.enum(['en', 'ar'])
 

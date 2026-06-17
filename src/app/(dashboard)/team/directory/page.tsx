@@ -50,10 +50,12 @@ function RoleBadge({ role }: { role: TeamMember['role'] }) {
   const { t } = useTranslation()
   const colorClasses: Record<TeamMember['role'], string> = {
     admin: 'bg-blue-100 text-blue-700',
-    manager: 'bg-slate-900 text-white',
-    officer: 'bg-slate-100 text-slate-600',
+    manager: 'bg-emerald-100 text-emerald-700',
+    officer: 'bg-slate-900 text-white',
+    auditor: 'bg-slate-100 text-slate-600',
   }
   const roleLabels: Record<TeamMember['role'], string> = {
+    auditor: t('team.roleAuditor' as TranslationKey),
     officer: t('team.roleOfficer' as TranslationKey),
     manager: t('team.roleManager' as TranslationKey),
     admin: t('team.roleAdmin' as TranslationKey),
@@ -146,23 +148,10 @@ export default function TeamDirectoryPage() {
     setToastMessage(message)
   }, [])
 
-  // Click-outside to close drawer (Fix 1)
-  useEffect(() => {
-    if (!isDrawerOpen) return
-    function handleMouseDown(e: MouseEvent) {
-      const target = e.target as HTMLElement
-      if (!target) return
-      // Ignore clicks inside the drawer
-      if (target.closest('[data-member-drawer]')) return
-      // Ignore clicks on table rows (they handle their own open/replace logic)
-      if (target.closest('tr')) return
-      // Ignore clicks on interactive elements
-      if (target.closest('button, a, input, select, textarea, [role="dialog"]')) return
-      setIsDrawerOpen(false)
-    }
-    document.addEventListener('mousedown', handleMouseDown)
-    return () => document.removeEventListener('mousedown', handleMouseDown)
-  }, [isDrawerOpen])
+  // Drawer closes via its X / by selecting another row (like the calendar
+  // EventDrawer). No document click-outside handler on purpose: the role
+  // EditableSelect portals its options to document.body, so an outside-click
+  // handler would close the drawer when picking a role.
 
   const memberStatusLabels: Record<string, string> = {
     active: t('team.active'),
@@ -181,9 +170,8 @@ export default function TeamDirectoryPage() {
       )
     : 0
 
-  const handleUpdateRole = (memberId: string, newRole: TeamMember['role']) => {
+  const handleUpdateRole = (memberId: string, newRole: TeamMember['role']) =>
     storeUpdate(memberId, { role: newRole })
-  }
 
   const handleSort = (col: 'name' | 'role' | 'workload' | 'status' | 'lastActive') => {
     setSortState(prev => {
@@ -224,7 +212,10 @@ export default function TeamDirectoryPage() {
   if (!canViewTeamSection) return null
 
   return (
-    <div className="flex flex-col h-full">
+    // `h-screen` (not `h-full`): the shell is `min-h-screen`, so `h-full` never
+    // resolves and the page body-scrolls. Pinning to the viewport keeps the
+    // header fixed, scrolls the content internally, and lets the drawer fill it.
+    <div className="flex flex-col h-screen">
       <header className="h-20 bg-white border-b border-slate-200 px-8 flex items-center justify-between shrink-0">
         <div className="flex items-center gap-8">
           <div>
@@ -256,7 +247,7 @@ export default function TeamDirectoryPage() {
       <div className="flex-1 flex overflow-hidden">
         {/* Main directory content */}
         <div className="flex-1 flex flex-col overflow-hidden">
-          <div className="flex-1 overflow-auto hide-scrollbar bg-slate-50 p-8">
+          <div className="flex-1 overflow-auto overscroll-contain hide-scrollbar bg-slate-50 p-8">
             {/* Stats Row */}
             <DirectoryStatCards
               totalMembers={members.length}

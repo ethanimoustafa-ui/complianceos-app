@@ -91,7 +91,7 @@ export async function assertObservationMembership(
   role: string | null | undefined,
   opts: { leaderOnly?: boolean } = {},
 ): Promise<void> {
-  if (role === 'org_admin') return
+  if (role === 'admin' || role === 'org_admin') return
 
   const { data: obs, error } = await supabase
     .from('observations')
