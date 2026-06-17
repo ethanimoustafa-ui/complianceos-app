@@ -46,7 +46,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
       error: string | null
     }
 
-    if (j.kind !== 'pdf.generate') {
+    if (j.kind !== 'pdf.generate' && j.kind !== 'pdf.latex') {
       throw NotFound(`Job ${jobId} is not a PDF job`)
     }
     if (j.status === 'failed' || j.status === 'dead') {
@@ -65,7 +65,6 @@ export async function GET(_req: NextRequest, { params }: Params) {
       // Permission check is loaded by requireUser; we just need access here.
       // For MVP we permit all authenticated reads (matches bucket policy),
       // but log who pulled what. A full check belongs in Phase 8 audit work.
-      // eslint-disable-next-line no-console
       console.info(
         `[pdf/download] user ${user.id} reading job ${j.id} owned by ${requestedBy}`,
       )
