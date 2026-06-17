@@ -258,9 +258,9 @@ export function OfficerView({ metrics }: OfficerViewProps) {
               </div>
             </div>
 
-            {/* Right: ring (loading / pending placeholder / real ring) */}
-            {/* key=heroMode re-mounts on toggle so the ring re-draws + fades between modes. */}
-            <div key={heroMode} className="relative flex-shrink-0 flex flex-col items-center justify-center gap-2 animate-fade-in">
+            {/* Right: ring — its arc sweeps to the new value on toggle via the
+                CircularProgressRing stroke-dashoffset transition (no re-mount). */}
+            <div className="relative flex-shrink-0 flex flex-col items-center justify-center gap-2">
               {isHealthLoading ? (
                 <>
                   <Skeleton className="h-[152px] w-[152px] rounded-full" />

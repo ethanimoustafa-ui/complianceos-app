@@ -40,8 +40,11 @@ export function CircularProgressRing({
           cx="50"
           cy="50"
           strokeDasharray={circumference}
-          strokeDashoffset={offset}
-          style={{ stroke: strokeColor }}
+          style={{
+            stroke: strokeColor,
+            strokeDashoffset: offset,
+            transition: 'stroke-dashoffset 0.9s cubic-bezier(0.22, 1, 0.36, 1)',
+          }}
         />
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center">
