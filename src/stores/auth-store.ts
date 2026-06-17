@@ -326,17 +326,23 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
     const { user } = get()
     if (!user) return
     set({ user: { ...user, ...data } })
-    // Persist to the profiles row so the choice survives reload and stays
-    // consistent everywhere the avatar is rendered from `avatar_seed`.
-    // Best-effort: if RLS blocks it the local update still holds for the session.
+    // Persist to the profiles row so the change survives reload and stays
+    // consistent everywhere the name/phone/avatar are rendered from.
     const patch: Record<string, unknown> = {}
     if (data.avatarSeed !== undefined) patch.avatar_seed = data.avatarSeed
     if (data.name !== undefined) patch.name = data.name
     if (data.phone !== undefined) patch.phone = data.phone
-    if (Object.keys(patch).length > 0) {
-      const supabase = createClient()
-      void supabase.from('profiles').update(patch).eq('id', user.id)
-    }
+    if (Object.keys(patch).length === 0) return
+    // supabase-js query builders are LAZY thenables: the HTTP request only fires
+    // when the builder is awaited / `.then()`-ed. A bare `void supabase…update()`
+    // built the query but never executed it, so the profile never persisted.
+    // Run it in a fire-and-forget async IIFE so the request actually goes out,
+    // and surface any error instead of swallowing it silently.
+    const supabase = createClient()
+    void (async () => {
+      const { error } = await supabase.from('profiles').update(patch).eq('id', user.id)
+      if (error) console.warn('[auth-store] updateProfile persist failed', error)
+    })()
   },
 
   setUser: (user) =>
