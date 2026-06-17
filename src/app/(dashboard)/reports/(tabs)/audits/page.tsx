@@ -649,6 +649,9 @@ export default function ReportsAuditsPage() {
               ) : (
                 <p className="text-2xl font-bold text-blue-600">{Math.round(complianceResult.overall)}%</p>
               )}
+              <p className="text-[9px] text-slate-400 mt-1 leading-tight">
+                {t('reports.complianceScoreDeptNote' as TranslationKey)}
+              </p>
             </div>
           </div>
 

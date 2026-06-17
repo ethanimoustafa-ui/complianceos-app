@@ -1,6 +1,6 @@
 ﻿'use client'
 
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { Icon } from '@iconify/react'
 import { Card } from '@/components/ui/card'
 import { Badge, getStatusVariant } from '@/components/ui/badge'
@@ -88,18 +88,27 @@ export function ManagerialView({ metrics }: ManagerialViewProps) {
       .sort((a, b) => b.computed - a.computed)
   }, [metrics.team.members, workloads])
 
+  // Toggle between the two distinct compliance metrics on the hero card.
+  // 'business' = per-department evaluation score (circulars + policies reviewed
+  // as compliant/non-compliant by business owners — the true business health).
+  // 'department' = 7-component weighted execution score (how well the
+  // compliance DEPARTMENT completes its own work).
+  const [heroMode, setHeroMode] = useState<'business' | 'department'>('business')
+
   // Health components (7-component) — used for the bottom Team Score grid.
   const components = metrics.health.components
-  // Hero card "Compliance Health" + threshold bar reads the business
-  // compliance score (per-department compliant/non-compliant from the
-  // Compliance Review tab); the 7-component score is shown separately below
-  // labelled as Team Score.
-  const healthScore = Math.round(metrics.health.businessComplianceScore)
-  const healthEvaluated = metrics.health.businessComplianceEvaluated
+
+  // Hero values driven by the active toggle mode.
+  const healthScore = heroMode === 'business'
+    ? Math.round(metrics.health.businessComplianceScore)
+    : Math.round(metrics.departmentHealthScore)
+  const healthEvaluated = heroMode === 'business'
+    ? metrics.health.businessComplianceEvaluated
+    : 1 // department score is always available once loaded
   // Loading (stores still on first fetch) vs. genuine Pending (loaded, nothing
   // evaluated) — see ExecutiveView for the full rationale.
   const isHealthLoading = metrics.complianceHealthLoading
-  const isPending = !isHealthLoading && healthEvaluated === 0
+  const isPending = !isHealthLoading && heroMode === 'business' && healthEvaluated === 0
   const isAtRisk = !isHealthLoading && !isPending && healthScore < targetScore
 
   // Observations by source
@@ -177,8 +186,44 @@ export function ManagerialView({ metrics }: ManagerialViewProps) {
                 <span className="text-xs font-bold text-slate-400">{t('dashboard.thresholdLabel')}: {targetScore}%</span>
               </div>
               <h2 className="text-2xl font-bold font-display text-slate-900 leading-tight">
-                {t('dashboard.complianceHealth')}
+                {heroMode === 'business'
+                  ? t('dashboard.complianceHealth')
+                  : t('dashboard.deptHealthLabel' as TranslationKey)}
               </h2>
+
+              {/* Mode toggle: Business Compliance vs Compliance Dept Health */}
+              <div
+                role="group"
+                aria-label={t('dashboard.healthToggleAriaLabel' as TranslationKey)}
+                className="inline-flex bg-slate-100 rounded-lg p-0.5 gap-0.5"
+              >
+                <button
+                  role="radio"
+                  aria-checked={heroMode === 'business'}
+                  onClick={() => setHeroMode('business')}
+                  className={cn(
+                    'px-3 py-1 text-[10px] font-bold rounded-md transition-all',
+                    heroMode === 'business'
+                      ? 'bg-white text-slate-900 shadow-sm'
+                      : 'text-slate-500 hover:text-slate-700',
+                  )}
+                >
+                  {t('dashboard.modeBusinessHealth' as TranslationKey)}
+                </button>
+                <button
+                  role="radio"
+                  aria-checked={heroMode === 'department'}
+                  onClick={() => setHeroMode('department')}
+                  className={cn(
+                    'px-3 py-1 text-[10px] font-bold rounded-md transition-all',
+                    heroMode === 'department'
+                      ? 'bg-white text-slate-900 shadow-sm'
+                      : 'text-slate-500 hover:text-slate-700',
+                  )}
+                >
+                  {t('dashboard.modeDeptHealth' as TranslationKey)}
+                </button>
+              </div>
 
               {/* Threshold progress bar */}
               {isHealthLoading ? (

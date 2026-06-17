@@ -209,6 +209,10 @@
     "statusAtRisk": "Status: At Risk",
     "configure": "Configure",
     "complianceHealth": "Compliance Health",
+    "deptHealthLabel": "Compliance Department Health",
+    "healthToggleAriaLabel": "Switch compliance health view",
+    "modeBusinessHealth": "Business Health",
+    "modeDeptHealth": "Dept Health",
     "frameworkCompliance": "Framework Compliance",
     "complianceByComponent": "Compliance by Component",
     "pendingApprovals": "Pending Approvals",
@@ -2130,6 +2134,7 @@
     "compliance": "Compliance"
   },
   "reports": {
+    "complianceScoreDeptNote": "Compliance Department Health",
     "tabs": {
       "risks": "Risk Register"
     },

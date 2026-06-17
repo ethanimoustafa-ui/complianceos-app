@@ -88,6 +88,14 @@ export interface DashboardMetrics {
   }
   currentUser: { id: string; name: string; email: string; role: string; department: string } | null
   /**
+   * The 7-component weighted score measuring how well the compliance
+   * DEPARTMENT executes its work (audit completion, observation closure,
+   * letter timeliness, policy currency, circular implementation, risk posture,
+   * training completion). This is `health.overall` labelled explicitly so
+   * consumers can distinguish it from `health.businessComplianceScore`.
+   */
+  departmentHealthScore: number
+  /**
    * True while any store feeding the "Compliance Health" hero (circulars,
    * policies, departments, evaluations) is still on its first fetch. The hero
    * ring renders a loading placeholder instead of a misleading "Pending —"
@@ -200,6 +208,7 @@ export function useDashboardMetrics(): DashboardMetrics {
   return {
     compliance,
     health,
+    departmentHealthScore: health.overall,
     audits: counts.audits,
     observations: counts.observations,
     risks: counts.risks,

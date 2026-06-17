@@ -209,6 +209,10 @@
     "statusAtRisk": "الحالة: معرّض للخطر",
     "configure": "تهيئة",
     "complianceHealth": "صحة الامتثال",
+    "deptHealthLabel": "صحة قسم الامتثال",
+    "healthToggleAriaLabel": "تبديل عرض صحة الامتثال",
+    "modeBusinessHealth": "الصحة التجارية",
+    "modeDeptHealth": "صحة القسم",
     "frameworkCompliance": "امتثال الأطر التنظيمية",
     "complianceByComponent": "الامتثال حسب المكون",
     "pendingApprovals": "الموافقات المعلقة",
@@ -2130,6 +2134,7 @@
     "compliance": "الامتثال"
   },
   "reports": {
+    "complianceScoreDeptNote": "صحة قسم الامتثال",
     "tabs": {
       "risks": "سجل المخاطر"
     },

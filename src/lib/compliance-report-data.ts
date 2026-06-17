@@ -8,6 +8,9 @@ import type { ComplianceReportData } from '@/lib/pdf/latex/render-compliance-rep
 type Locale = 'en' | 'ar'
 type TFn = (key: string, params?: Record<string, string>) => string
 
+/** Which hero mode was active when the export was triggered. */
+export type ComplianceReportMode = 'business' | 'department'
+
 const COMPONENT_LABELS: Record<Locale, Record<string, string>> = {
   en: {
     auditCompletion: 'Audit Completion',
@@ -25,11 +28,6 @@ const COMPONENT_LABELS: Record<Locale, Record<string, string>> = {
   },
 }
 
-const CONFIDENCE_LABELS: Record<Locale, Record<string, string>> = {
-  en: { high: 'High', moderate: 'Moderate', low: 'Low', insufficient: 'Insufficient data' },
-  ar: { high: 'عالية', moderate: 'متوسطة', low: 'منخفضة', insufficient: 'بيانات غير كافية' },
-}
-
 const ORG_NAME: Record<Locale, string> = {
   en: 'United Company for Financial Services',
   ar: 'الشركة المتحدة للخدمات المالية',
@@ -44,11 +42,20 @@ function frameworkLabel(id: string, metrics: DashboardMetrics): string {
 
 export function toComplianceReportData(
   metrics: DashboardMetrics,
-  opts: { locale: Locale; t: TFn; date: string; period?: string },
+  opts: { locale: Locale; t: TFn; date: string; period?: string; mode?: ComplianceReportMode },
 ): ComplianceReportData {
   const { locale, t, date } = opts
+  const mode = opts.mode ?? 'business'
   const c = metrics.compliance
   const compLabels = COMPONENT_LABELS[locale]
+
+  // The "Compliance Health" hero score in the report matches whatever the
+  // dashboard hero was showing when the export was triggered:
+  // - 'business' → businessComplianceScore (evaluation-based, per-dept)
+  // - 'department' → departmentHealthScore (7-component execution score)
+  const overallScore = mode === 'business'
+    ? metrics.health.businessComplianceScore
+    : metrics.departmentHealthScore
 
   const components = Object.entries(c.components ?? {}).map(([key, v]) => ({
     name: compLabels[key] ?? key,
@@ -73,14 +80,22 @@ export function toComplianceReportData(
   const sev = (k: 'critical' | 'high' | 'medium' | 'low') =>
     (obs.bySource.sama[k] ?? 0) + (obs.bySource.internal[k] ?? 0) + (obs.bySource.sharia[k] ?? 0)
 
+  // The subtitle line in the PDF notes which metric the hero score represents.
+  const scoreModeLabel = mode === 'business'
+    ? (locale === 'ar' ? 'صحة الامتثال التجاري' : 'Overall Business Compliance')
+    : (locale === 'ar' ? 'صحة قسم الامتثال' : 'Compliance Department Health')
+
   return {
     organization: ORG_NAME[locale],
     generatedBy: metrics.currentUser?.name ?? '',
     date,
     period: opts.period,
-    overallScore: c.overall,
-    change: c.change,
-    confidence: CONFIDENCE_LABELS[locale][c.confidence] ?? c.confidence,
+    overallScore,
+    // Pass the score-mode label through the `confidence` slot so the report's
+    // "Confidence" row in the hero section shows the metric label instead.
+    // The confidence field is optional/display-only in the template.
+    confidence: scoreModeLabel,
+    change: undefined, // change% is compliance-engine-based; don't show for business score
     components,
     frameworks,
     trend,

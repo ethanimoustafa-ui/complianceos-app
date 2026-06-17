@@ -1,10 +1,11 @@
 ﻿'use client'
 
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { Icon } from '@iconify/react'
 import { Card } from '@/components/ui/card'
 import { Badge, getStatusVariant } from '@/components/ui/badge'
 import { useTranslation } from '@/i18n'
+import type { TranslationKey } from '@/i18n'
 import { useNotificationStore } from '@/stores/notification-store'
 import { useDashboardMyWork } from '@/hooks/useDashboardMyWork'
 import { useComplianceSettingsStore } from '@/stores/compliance-settings-store'
@@ -28,15 +29,22 @@ export function OfficerView({ metrics }: OfficerViewProps) {
   const userId = metrics.currentUser?.id ?? ''
   const userName = metrics.currentUser?.name ?? ''
 
-  // Hero card "Compliance Health" reads the business compliance score
-  // (per-department compliant/non-compliant from /reports/compliance-review).
-  // The 7-component team-execution score lives elsewhere as Team Score.
-  const healthScore = Math.round(metrics.health.businessComplianceScore)
-  const healthEvaluated = metrics.health.businessComplianceEvaluated
+  // Toggle between the two distinct compliance metrics on the hero card.
+  // 'business' = per-department evaluation score (circulars + policies reviewed).
+  // 'department' = 7-component weighted execution score (compliance dept ops).
+  const [heroMode, setHeroMode] = useState<'business' | 'department'>('business')
+
+  // Hero values driven by the active toggle mode.
+  const healthScore = heroMode === 'business'
+    ? Math.round(metrics.health.businessComplianceScore)
+    : Math.round(metrics.departmentHealthScore)
+  const healthEvaluated = heroMode === 'business'
+    ? metrics.health.businessComplianceEvaluated
+    : 1 // department score is always available once loaded
   // Loading (stores still on first fetch) vs. genuine Pending (loaded, nothing
   // evaluated) — see ExecutiveView for the full rationale.
   const isHealthLoading = metrics.complianceHealthLoading
-  const isPending = !isHealthLoading && healthEvaluated === 0
+  const isPending = !isHealthLoading && heroMode === 'business' && healthEvaluated === 0
   const isAtRisk = !isHealthLoading && !isPending && healthScore < targetScore
 
   // Personal workload
@@ -155,8 +163,44 @@ export function OfficerView({ metrics }: OfficerViewProps) {
                 <span className="text-xs font-bold text-slate-400">{t('dashboard.thresholdLabel')}: {targetScore}%</span>
               </div>
               <h2 className="text-2xl font-bold font-display text-slate-900 leading-tight">
-                {t('dashboard.complianceHealth')}
+                {heroMode === 'business'
+                  ? t('dashboard.complianceHealth')
+                  : t('dashboard.deptHealthLabel' as TranslationKey)}
               </h2>
+
+              {/* Mode toggle: Business Compliance vs Compliance Dept Health */}
+              <div
+                role="group"
+                aria-label={t('dashboard.healthToggleAriaLabel' as TranslationKey)}
+                className="inline-flex bg-slate-100 rounded-lg p-0.5 gap-0.5"
+              >
+                <button
+                  role="radio"
+                  aria-checked={heroMode === 'business'}
+                  onClick={() => setHeroMode('business')}
+                  className={cn(
+                    'px-3 py-1 text-[10px] font-bold rounded-md transition-all',
+                    heroMode === 'business'
+                      ? 'bg-white text-slate-900 shadow-sm'
+                      : 'text-slate-500 hover:text-slate-700',
+                  )}
+                >
+                  {t('dashboard.modeBusinessHealth' as TranslationKey)}
+                </button>
+                <button
+                  role="radio"
+                  aria-checked={heroMode === 'department'}
+                  onClick={() => setHeroMode('department')}
+                  className={cn(
+                    'px-3 py-1 text-[10px] font-bold rounded-md transition-all',
+                    heroMode === 'department'
+                      ? 'bg-white text-slate-900 shadow-sm'
+                      : 'text-slate-500 hover:text-slate-700',
+                  )}
+                >
+                  {t('dashboard.modeDeptHealth' as TranslationKey)}
+                </button>
+              </div>
 
               {/* Threshold progress bar */}
               {isHealthLoading ? (

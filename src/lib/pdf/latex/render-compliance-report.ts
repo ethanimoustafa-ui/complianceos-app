@@ -68,7 +68,7 @@ const LABELS = {
     date: 'Date:',
     health: 'Compliance Health',
     overallOf: '/100',
-    confidence: 'Confidence',
+    confidence: 'Score Metric',
     change: 'Change',
     components: 'Score Components',
     component: 'Component',
@@ -99,7 +99,7 @@ const LABELS = {
     date: 'التاريخ:',
     health: 'صحة الامتثال',
     overallOf: '/١٠٠',
-    confidence: 'الثقة',
+    confidence: 'مقياس النتيجة',
     change: 'التغير',
     components: 'مكونات النتيجة',
     component: 'المكوّن',
@@ -175,6 +175,12 @@ ${d.components
 \end{tabularx}`
     : ''
 
+  // When `change` is undefined the score is a mode-switched metric (business
+  // compliance or dept health) — only show the metric label, not the change %.
+  const heroMeta = d.change === undefined
+    ? RAW`{\color{slate700} ${L.confidence}: \textbf{${escapeLatex(d.confidence ?? '—')}}}`
+    : RAW`{\color{slate700} ${L.confidence}: \textbf{${escapeLatex(d.confidence ?? '—')}}\qquad ${L.change}: \textbf{${changeStr}}}`
+
   const healthSection = RAW`\section{${L.health}}
 \noindent
 \begin{minipage}[c]{0.28\textwidth}
@@ -182,7 +188,7 @@ ${d.components
 \end{minipage}%
 \begin{minipage}[c]{0.70\textwidth}
 ${scoreBar(overall)}\\[8pt]
-{\color{slate700} ${L.confidence}: \textbf{${escapeLatex(d.confidence ?? '—')}}\qquad ${L.change}: \textbf{${changeStr}}}
+${heroMeta}
 \end{minipage}
 
 \subsection{${L.components}}
