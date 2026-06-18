@@ -19,6 +19,7 @@ import { useTeamStore } from '@/stores/team-store'
 import { useFrameworkConfigStore } from '@/stores/framework-config-store'
 import { useCalendarEventTypeStore } from '@/stores/calendar-event-type-store'
 import { useNotificationStore } from '@/stores/notification-store'
+import { useMessageStore } from '@/stores/message-store'
 
 export function LookupHydrator() {
   useEffect(() => {
@@ -26,17 +27,21 @@ export function LookupHydrator() {
     void useTeamStore.getState().fetchAll().catch(() => {})
     void useFrameworkConfigStore.getState().fetch().catch(() => {})
     void useCalendarEventTypeStore.getState().fetchAll().catch(() => {})
-    // Hydrate notifications on mount so the sidebar's unread badge reflects the
-    // real count immediately — without this, `unreadCount` stays 0 until the
-    // user opens the notification panel (its only other caller).
+    // Hydrate notifications + messages on mount so BOTH sidebar unread badges
+    // reflect the real count immediately. Without this, the counts stay 0 until
+    // the user opens the respective panel (their only other caller). The message
+    // path uses the lightweight list-only summary fetch, not the panel's heavier
+    // fetchAll.
     void useNotificationStore.getState().fetchNotifications().catch(() => {})
+    void useMessageStore.getState().fetchThreadSummaries().catch(() => {})
   }, [])
 
-  // Keep the unread badge fresh without a manual reload. Lightweight: hits the
-  // same paginated endpoint the panel polls on open; the store swallows errors.
+  // Keep both unread badges fresh without a manual reload. Lightweight: each
+  // hits the same paginated endpoint its panel uses; the stores swallow errors.
   useEffect(() => {
     const id = setInterval(() => {
       void useNotificationStore.getState().fetchNotifications().catch(() => {})
+      void useMessageStore.getState().fetchThreadSummaries().catch(() => {})
     }, 60_000)
     return () => clearInterval(id)
   }, [])

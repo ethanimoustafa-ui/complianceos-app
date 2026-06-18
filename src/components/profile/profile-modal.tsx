@@ -9,6 +9,7 @@ import type { TranslationKey } from '@/i18n'
 import { dicebearAvatar } from '@/lib/avatar'
 import { createClient } from '@/lib/supabase/client'
 import { validateFile, IMAGE_UPLOAD_RULE, IMAGE_ALLOWED_TYPES } from '@/lib/upload-validation'
+import { useDepartmentStore } from '@/stores/department-store'
 
 // Public Storage bucket for uploaded profile photos (migration 113).
 const AVATAR_BUCKET = 'avatars'
@@ -56,10 +57,15 @@ interface ProfileModalProps {
 }
 
 export function ProfileModal({ isOpen, onClose }: ProfileModalProps) {
-  const { t } = useTranslation()
+  const { t, isRTL } = useTranslation()
   const user = useAuthStore(s => s.user)
   const updateProfile = useAuthStore(s => s.updateProfile)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  // `user.department` holds the department_id (a UUID). Resolve it to a name via
+  // the department store (hydrated app-wide by LookupHydrator) so the read-only
+  // Department field shows "Internal Audit", not "d07fc34b-…".
+  const department = useDepartmentStore(s => (user ? s.byId[user.department] : undefined))
+  const departmentLabel = department ? (isRTL ? department.nameAr : department.name) : '—'
 
   const [name, setName] = useState('')
   const [phone, setPhone] = useState('')
@@ -287,7 +293,7 @@ export function ProfileModal({ isOpen, onClose }: ProfileModalProps) {
             </label>
             <input
               type="text"
-              value={user.department}
+              value={departmentLabel}
               readOnly
               className="w-full px-4 py-3 border border-slate-200 rounded-lg text-sm bg-slate-50 text-slate-500 cursor-not-allowed"
             />

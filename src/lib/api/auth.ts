@@ -181,6 +181,21 @@ async function loadPermissions(supabase: SupabaseClient, userId: string): Promis
 }
 
 /**
+ * True if the caller may mutate a resource they don't necessarily have a blanket
+ * permission for: they either hold the `edit` permission (managers/admins always
+ * do) OR they are the resource's single owner/assignee. Mirrors the client
+ * `canEditCircular` / `canAdvancePolicyWorkflow` helpers and the migration-114
+ * RLS predicates so all three layers agree.
+ *
+ * Pass `ownerId = null` to short-circuit the ownership check (e.g. when the
+ * caller already holds `edit`, so loading the owner row is unnecessary).
+ */
+export function hasEditOrOwnership(ctx: AuthedRequest, ownerId: string | null | undefined): boolean {
+  if (ctx.permissions.includes('edit')) return true
+  return !!ownerId && ownerId === ctx.user.id
+}
+
+/**
  * Asserts the caller has `perm`. Returns the same AuthedRequest payload.
  */
 export async function requirePerm(perm: string): Promise<AuthedRequest> {

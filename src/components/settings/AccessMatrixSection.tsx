@@ -48,6 +48,27 @@ const PERMISSION_KEYS: Record<Permission, TranslationKey> = {
   'Switch User (Demo)': 'team.permissionSwitchUserDemo' as TranslationKey,
 }
 
+// Display-only grouping of the 15 matrix permissions into labelled column
+// groups so the header shows which page/area each toggle governs. PURELY
+// presentational: toggle identity/state key off the permission LABEL, not its
+// column position, so reordering columns here is safe and does NOT touch
+// buildAccessControls / getEnabledLabels (both stay sourced from PERMISSIONS).
+const PERMISSION_GROUPS: { labelKey: TranslationKey; perms: Permission[] }[] = [
+  { labelKey: 'accessMatrix.groupPolicies' as TranslationKey, perms: ['Approve Policy Reviews', 'Manage Policy Templates'] },
+  { labelKey: 'accessMatrix.groupLetters' as TranslationKey, perms: ['Approve SAMA Letters', 'Manage Letter Templates'] },
+  { labelKey: 'accessMatrix.groupAudits' as TranslationKey, perms: ['Manage Audit Findings', 'Manage Audit Templates'] },
+  { labelKey: 'accessMatrix.groupReports' as TranslationKey, perms: ['View Risk Register', 'Export Compliance Data'] },
+  { labelKey: 'accessMatrix.groupTraining' as TranslationKey, perms: ['Manage Training Programs'] },
+  { labelKey: 'accessMatrix.groupApprovals' as TranslationKey, perms: ['Can Act As Approver'] },
+  { labelKey: 'accessMatrix.groupAdmin' as TranslationKey, perms: ['Manage Settings', 'Manage Team & Permissions', 'Configure Frameworks', 'Configure Lists & Categories', 'Switch User (Demo)'] },
+]
+// Flattened column order (covers all 15 PERMISSIONS) the body iterates so its
+// cells line up beneath the grouped header.
+const ORDERED_PERMS: Permission[] = PERMISSION_GROUPS.flatMap((g) => g.perms)
+// First permission of each group after the first — used to draw a subtle
+// vertical separator between column groups in both the header and the body.
+const GROUP_START_PERMS = new Set<Permission>(PERMISSION_GROUPS.slice(1).map((g) => g.perms[0]))
+
 const ROLE_BADGE_STYLE: Record<TeamMember['role'], string> = {
   admin: 'bg-blue-100 text-blue-700',
   manager: 'bg-emerald-100 text-emerald-700',
@@ -171,14 +192,30 @@ export function AccessMatrixSection() {
         <div className="overflow-x-auto">
           <table className="w-full text-left border-separate border-spacing-0">
             <thead>
-              <tr className="bg-slate-50 sticky top-0">
-                <th className="sticky start-0 z-20 bg-slate-50 border-b border-slate-200 px-4 py-3 text-[10px] font-bold uppercase tracking-widest text-slate-500 min-w-[200px]">
+              {/* Row 1 — category headers spanning their permission columns. */}
+              <tr className="bg-slate-50">
+                <th
+                  rowSpan={2}
+                  className="sticky start-0 top-0 z-30 bg-slate-50 border-b border-slate-200 px-4 py-3 text-[10px] font-bold uppercase tracking-widest text-slate-500 min-w-[200px] align-bottom"
+                >
                   {t('accessMatrix.member')}
                 </th>
-                {PERMISSIONS.map((p) => (
+                {PERMISSION_GROUPS.map((g, gi) => (
+                  <th
+                    key={g.labelKey}
+                    colSpan={g.perms.length}
+                    className={`sticky top-0 z-20 bg-slate-100/80 border-b border-slate-200 px-2 py-2 text-[10px] font-bold uppercase tracking-widest text-slate-600 text-center ${gi > 0 ? 'border-s border-slate-300' : ''}`}
+                  >
+                    {t(g.labelKey)}
+                  </th>
+                ))}
+              </tr>
+              {/* Row 2 — individual permission headers. */}
+              <tr className="bg-slate-50">
+                {ORDERED_PERMS.map((p) => (
                   <th
                     key={p}
-                    className="border-b border-slate-200 px-2 py-3 text-[10px] font-bold uppercase tracking-wider text-slate-500 align-bottom min-w-[110px]"
+                    className={`sticky top-9 z-20 bg-slate-50 border-b border-slate-200 px-2 py-3 text-[10px] font-bold uppercase tracking-wider text-slate-500 align-bottom min-w-[110px] ${GROUP_START_PERMS.has(p) ? 'border-s border-slate-200' : ''}`}
                     title={t(PERMISSION_KEYS[p])}
                   >
                     <div className="leading-tight">{t(PERMISSION_KEYS[p])}</div>
@@ -207,10 +244,10 @@ export function AccessMatrixSection() {
                         </div>
                       </div>
                     </td>
-                    {PERMISSIONS.map((p) => {
+                    {ORDERED_PERMS.map((p) => {
                       const isOn = isAdminRow || enabled.has(p)
                       return (
-                        <td key={p} className="border-b border-slate-100 px-2 py-3 text-center">
+                        <td key={p} className={`border-b border-slate-100 px-2 py-3 text-center ${GROUP_START_PERMS.has(p) ? 'border-s border-slate-200' : ''}`}>
                           <button
                             type="button"
                             disabled={isAdminRow}

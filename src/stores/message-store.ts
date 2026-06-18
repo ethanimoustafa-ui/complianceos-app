@@ -114,6 +114,15 @@ interface MessageState {
   lastFetched: number | null
 
   fetchAll: () => Promise<void>
+  /**
+   * Lightweight unread-badge hydration. Fetches ONLY the thread list (no
+   * per-thread detail loop) and merges unread_count / last-message into the
+   * existing threads, preserving any participant ids already loaded by
+   * `fetchAll`. Called by the LookupHydrator on mount + poll so the sidebar
+   * badge populates without opening the panel — `fetchAll`'s N+1 detail loop is
+   * too heavy to run blindly for every user on every page load.
+   */
+  fetchThreadSummaries: () => Promise<void>
   fetchMessages: (threadId: string) => Promise<void>
   sendMessage: (threadId: string, content: string, senderId: string, senderName: string) => void
   createThread: (
@@ -179,6 +188,22 @@ export const useMessageStore = create<MessageState>()((set, get) => ({
       set({ threads, isLoading: false, lastFetched: Date.now() })
     } catch (e) {
       set({ error: errorMessage(e, 'Failed to fetch threads'), isLoading: false })
+    }
+  },
+
+  fetchThreadSummaries: async () => {
+    // List-only: the badge only needs `unread_count`, which is already on each
+    // list row. `mapThreadRow(row, previous)` carries forward participant/admin
+    // ids from any prior full fetch, so a background poll never strips an open
+    // panel's member list. Does NOT toggle `isLoading` — silent background sync.
+    try {
+      const result = await api.get<{ items: MessageThreadApiRow[] }>('/messages/threads', { pageSize: 100 })
+      const previousByThread = new Map(get().threads.map((t) => [t.id, t]))
+      const threads = result.items.map((row) => mapThreadRow(row, previousByThread.get(row.id)))
+      set({ threads, lastFetched: Date.now() })
+    } catch {
+      // Badge hydration is best-effort — swallow so a transient failure never
+      // surfaces an error on a page the user didn't explicitly open Messages on.
     }
   },
 

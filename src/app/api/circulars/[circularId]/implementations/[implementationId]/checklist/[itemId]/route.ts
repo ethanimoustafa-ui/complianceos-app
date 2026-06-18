@@ -2,8 +2,8 @@
 // — get / patch / delete a single checklist item.
 
 import type { NextRequest } from 'next/server'
-import { requirePerm, requireUser } from '@/lib/api/auth'
-import { handle, NotFound, PreconditionFailed } from '@/lib/api/errors'
+import { requireUser, hasEditOrOwnership } from '@/lib/api/auth'
+import { handle, NotFound, PreconditionFailed, Forbidden } from '@/lib/api/errors'
 import { ok } from '@/lib/api/response'
 import { assertUuid, parseJson, readIfMatch } from '@/lib/api/validate'
 import { cacheTags, revalidateAll } from '@/lib/api/cache'
@@ -58,9 +58,25 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   try {
     const { circularId, implementationId, itemId } = await params
     assertUuid(circularId, implementationId, itemId) // SEC-5
-    const { supabase, user, profile } = await requirePerm('edit')
+    // RBAC (ownership): the rule's assignee may edit its checklist even without
+    // the global 'edit' permission; everyone else needs 'edit' (managers/admins
+    // hold it). Mirrors article_checklist_items RLS (migration 114).
+    const ctx = await requireUser()
+    const { supabase, user, profile } = ctx
     await assertCircularExists(supabase, circularId)
     await assertArticleExists(supabase, circularId, implementationId)
+    let ruleOwnerId: string | null = null
+    if (!ctx.permissions.includes('edit')) {
+      const { data: ruleRow } = await supabase
+        .from('circulars')
+        .select('assigned_to')
+        .eq('id', circularId)
+        .maybeSingle<{ assigned_to: string | null }>()
+      ruleOwnerId = ruleRow?.assigned_to ?? null
+    }
+    if (!hasEditOrOwnership(ctx, ruleOwnerId)) {
+      throw Forbidden('Missing permission: edit (or rule ownership)')
+    }
     // W17-1 / SEC-1: optimistic-concurrency token. UPDATE scoped to the live
     // `updated_at` so concurrent PATCHes carrying the same fresh token race
     // atomically — one wins, the other matches 0 rows and returns 412.
@@ -157,9 +173,23 @@ export async function DELETE(req: NextRequest, { params }: Params) {
   try {
     const { circularId, implementationId, itemId } = await params
     assertUuid(circularId, implementationId, itemId) // SEC-5
-    const { supabase, user, profile } = await requirePerm('edit')
+    // RBAC (ownership): same gate as PATCH — assignee or 'edit'.
+    const ctx = await requireUser()
+    const { supabase, user, profile } = ctx
     await assertCircularExists(supabase, circularId)
     await assertArticleExists(supabase, circularId, implementationId)
+    let ruleOwnerId: string | null = null
+    if (!ctx.permissions.includes('edit')) {
+      const { data: ruleRow } = await supabase
+        .from('circulars')
+        .select('assigned_to')
+        .eq('id', circularId)
+        .maybeSingle<{ assigned_to: string | null }>()
+      ruleOwnerId = ruleRow?.assigned_to ?? null
+    }
+    if (!hasEditOrOwnership(ctx, ruleOwnerId)) {
+      throw Forbidden('Missing permission: edit (or rule ownership)')
+    }
     // W17-1 / SEC-1: optimistic-concurrency token. DELETE scoped to live
     // `updated_at` when `If-Match` is sent so a concurrent writer trips 412.
     const ifMatch = readIfMatch(req)

@@ -22,8 +22,8 @@
 // the client appending a phantom "Review Initiated" row (P6.3).
 
 import type { NextRequest } from 'next/server'
-import { requirePerm } from '@/lib/api/auth'
-import { handle, NotFound, Conflict } from '@/lib/api/errors'
+import { requireUser, hasEditOrOwnership } from '@/lib/api/auth'
+import { handle, NotFound, Conflict, Forbidden } from '@/lib/api/errors'
 import { ok } from '@/lib/api/response'
 import { parseJson } from '@/lib/api/validate'
 import { cacheTags, revalidate, revalidateAll } from '@/lib/api/cache'
@@ -68,8 +68,25 @@ export async function POST(req: NextRequest, { params }: Params) {
     // W38: was requirePerm('settings:edit') — an org_admin-only key that locked
     // compliance officers out of submit/approve/initiate-review. 'edit' matches
     // every other policy mutation route (PATCH, steps, reseed).
-    const { supabase, user, profile } = await requirePerm('edit')
+    // RBAC (ownership): the policy OWNER may drive their own workflow even
+    // without the global 'edit' permission; everyone else needs 'edit'
+    // (managers/admins hold it via their role). Mirrors the policies_update /
+    // policy_workflow_steps RLS predicates (migration 114).
+    const ctx = await requireUser()
+    const { supabase, user, profile } = ctx
     const policyId = await assertPolicyExists(supabase, policyIdParam)
+    let ownerId: string | null = null
+    if (!ctx.permissions.includes('edit')) {
+      const { data: ownerRow } = await supabase
+        .from('policies')
+        .select('owner_id')
+        .eq('id', policyId)
+        .maybeSingle<{ owner_id: string | null }>()
+      ownerId = ownerRow?.owner_id ?? null
+    }
+    if (!hasEditOrOwnership(ctx, ownerId)) {
+      throw Forbidden('Missing permission: edit (or policy ownership)')
+    }
     const input = await parseJson(req, AdvancePolicyWorkflowSchema)
 
     const actor = input.user_name ?? profile.name ?? profile.email ?? user.id

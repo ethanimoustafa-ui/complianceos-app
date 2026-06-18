@@ -88,6 +88,7 @@ export async function runOptimistic<T extends { id: string }, R extends { id: st
 // concurrent mutations on other entities.
 
 import { pushToast, type ToastMessage } from '@/stores/toast-store'
+import { ApiClientError } from '@/lib/api-client'
 
 /**
  * RTL-8: default i18n KEY for a reverted optimistic mutation. The toast carries
@@ -151,11 +152,18 @@ export async function optimisticMutation<T>(
     // 4. Revert + friendly toast. Log the real error for developers.
     revert()
     console.error(`[optimistic${context ? `:${context}` : ''}] mutation failed —`, e)
-    const toast =
-      typeof errorMessage === 'function'
-        ? errorMessage(e)
-        : (errorMessage ?? { key: DEFAULT_REVERT_MESSAGE_KEY })
-    pushToast(toast, 'error')
+    // A 403 (permission denied) is already surfaced by the api-client boundary
+    // with a clear "you don't have permission" toast — don't stack the generic
+    // "it didn't register" revert toast on top of it. The revert itself still
+    // runs above so the optimistic change is rolled back either way.
+    const denied = e instanceof ApiClientError && (e.status === 403 || e.code === 'forbidden')
+    if (!denied) {
+      const toast =
+        typeof errorMessage === 'function'
+          ? errorMessage(e)
+          : (errorMessage ?? { key: DEFAULT_REVERT_MESSAGE_KEY })
+      pushToast(toast, 'error')
+    }
     throw e
   }
 }

@@ -20,6 +20,7 @@
 // See `.planning/09-store-pattern.md` for the store migration recipe.
 
 import { dedupeKey, getInflight, trackInflight } from '@/lib/api/dedupe'
+import { pushToast } from '@/stores/toast-store'
 
 export type ApiSuccess<T> = { data: T }
 export type ApiErrorEnvelope = {
@@ -209,6 +210,16 @@ async function apiFetchInternal<T>(
 
   if (!res.ok || (parsed && typeof parsed === 'object' && 'error' in parsed)) {
     const e = (parsed as ApiErrorEnvelope).error
+    // Permission denied — the server is the source of truth for RBAC. Surface
+    // ONE clear toast for mutations so a denied action no longer dead-ends in a
+    // silent console error (the previous behaviour: officers tapping a button
+    // they lacked access to saw nothing). GETs are intentionally skipped —
+    // denied reads are handled by page-level Gate/Forbidden panels, and probing
+    // GETs shouldn't spam a toast. Optimistic stores suppress their own generic
+    // revert toast on 403 (see lib/optimistic.ts) so this is the only message.
+    if (res.status === 403 && method !== 'GET' && typeof window !== 'undefined') {
+      pushToast({ key: 'rbac.deniedActionToast' }, 'error')
+    }
     throw new ApiClientError(
       e?.code ?? 'unknown',
       e?.message ?? res.statusText ?? 'Request failed',

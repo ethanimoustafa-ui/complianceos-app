@@ -2,8 +2,8 @@
 // — list + create checklist items for an article.
 
 import type { NextRequest } from 'next/server'
-import { requirePerm, requireUser } from '@/lib/api/auth'
-import { handle, NotFound } from '@/lib/api/errors'
+import { requireUser, hasEditOrOwnership } from '@/lib/api/auth'
+import { handle, NotFound, Forbidden } from '@/lib/api/errors'
 import { ok } from '@/lib/api/response'
 import { assertUuid, parseJson } from '@/lib/api/validate'
 import { cacheTags, revalidateAll } from '@/lib/api/cache'
@@ -47,9 +47,25 @@ export async function POST(req: NextRequest, { params }: Params) {
   try {
     const { circularId, implementationId } = await params
     assertUuid(circularId, implementationId) // SEC-5
-    const { supabase, user, profile } = await requirePerm('edit')
+    // RBAC (ownership): same gate as the per-item PATCH/DELETE — the rule's
+    // assignee may add a checklist item even without the global 'edit'
+    // permission; everyone else needs 'edit'. Mirrors article_checklist RLS (114).
+    const ctx = await requireUser()
+    const { supabase, user, profile } = ctx
     await assertCircularExists(supabase, circularId)
     await assertArticleExists(supabase, circularId, implementationId)
+    let ruleOwnerId: string | null = null
+    if (!ctx.permissions.includes('edit')) {
+      const { data: ruleRow } = await supabase
+        .from('circulars')
+        .select('assigned_to')
+        .eq('id', circularId)
+        .maybeSingle<{ assigned_to: string | null }>()
+      ruleOwnerId = ruleRow?.assigned_to ?? null
+    }
+    if (!hasEditOrOwnership(ctx, ruleOwnerId)) {
+      throw Forbidden('Missing permission: edit (or rule ownership)')
+    }
     const input = await parseJson(req, CreateArticleChecklistItemSchema)
 
     const { data, error } = await supabase

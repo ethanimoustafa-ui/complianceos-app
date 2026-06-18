@@ -10,6 +10,8 @@ import { useCircularStore } from '@/stores/circular-store'
 import type { CircularArticle, ArticleRiskLevel, ArticleComplianceStatus } from '@/types'
 import { useDepartmentStore } from '@/stores/department-store'
 import { useTeamStore } from '@/stores/team-store'
+import { useAuthStore } from '@/stores/auth-store'
+import { canEditCircular } from '@/lib/permissions'
 import { EditableSelect } from '@/components/ui/editable-select'
 import { InlineDeadlinePicker } from '@/components/ui/inline-deadline-picker'
 import { useDeepLinkHighlight } from '@/hooks/useDeepLink'
@@ -40,6 +42,13 @@ export function ArticleDetailModal({ circularId, article, mode, onClose, t, isRT
   const parentCircularDueDate = useCircularStore((s) => s.byId[circularId]?.dueDate)
   const { departments: allDepartments, addDepartment, updateDepartment, removeDepartment } = useDepartmentStore()
   const teamMembers = useTeamStore(s => s.members)
+  // RBAC: only the rule's assignee or an 'edit'-permission holder (managers/
+  // admins, or officers granted edit) may toggle a PERSISTED checklist item —
+  // matches the server route + article_checklist RLS. Create-mode (local,
+  // unsaved) checklists stay editable by whoever is creating the article.
+  const currentUser = useAuthStore((s) => s.user)
+  const circularAssignedTo = useCircularStore((s) => s.byId[circularId]?.assignedTo)
+  const canEditChecklist = canEditCircular(currentUser, { assignedTo: circularAssignedTo })
   // GAP-15: per-article Activity timeline pagination state.
   const articleTimelinePage = useCircularStore((s) =>
     article ? s.articleTimelinePagination[`${circularId}:${article.id}`] : undefined,
@@ -323,14 +332,22 @@ export function ArticleDetailModal({ circularId, article, mode, onClose, t, isRT
                     <input
                       type="checkbox"
                       checked={item.completed}
+                      disabled={!!article && !canEditChecklist}
+                      title={!!article && !canEditChecklist ? t('rbac.deniedTooltip') : undefined}
                       onChange={() => {
                         if (article) {
+                          // Guard the toggle even though the box is disabled — keeps
+                          // the client honest if the disabled state is ever bypassed.
+                          if (!canEditChecklist) return
                           toggleChecklistItem(circularId, article.id, item.id)
                         } else {
                           setLocalChecklist(prev => prev.map(i => i.id === item.id ? { ...i, completed: !i.completed } : i))
                         }
                       }}
-                      className="rounded text-emerald-600 focus:ring-emerald-500 shrink-0 cursor-pointer"
+                      className={cn(
+                        'rounded text-emerald-600 focus:ring-emerald-500 shrink-0',
+                        !!article && !canEditChecklist ? 'cursor-not-allowed opacity-50' : 'cursor-pointer',
+                      )}
                     />
                     <span className={cn('text-sm flex-1', item.completed ? 'line-through text-slate-400' : 'text-slate-700')}>{item.title}</span>
                     {/* Task D / #32: per-item deadline. Only for persisted
@@ -339,20 +356,28 @@ export function ArticleDetailModal({ circularId, article, mode, onClose, t, isRT
                       <InlineDeadlinePicker
                         value={item.deadline}
                         parentDeadline={parentCircularDueDate}
+                        disabled={!canEditChecklist}
                         onChange={(next) => {
+                          if (!canEditChecklist) return
                           void setArticleChecklistItemDeadline(circularId, article.id, item.id, next)
                         }}
                       />
                     ) : null}
                     <button
+                      disabled={!!article && !canEditChecklist}
+                      title={!!article && !canEditChecklist ? t('rbac.deniedTooltip') : undefined}
                       onClick={() => {
                         if (article) {
+                          if (!canEditChecklist) return
                           deleteChecklistItem(circularId, article.id, item.id)
                         } else {
                           setLocalChecklist(prev => prev.filter(i => i.id !== item.id))
                         }
                       }}
-                      className="cursor-pointer p-1 text-slate-300 hover:text-rose-500 transition-colors shrink-0"
+                      className={cn(
+                        'p-1 text-slate-300 transition-colors shrink-0',
+                        !!article && !canEditChecklist ? 'cursor-not-allowed opacity-40' : 'cursor-pointer hover:text-rose-500',
+                      )}
                     >
                       <Icon icon="lucide:x" className="text-xs" />
                     </button>
@@ -367,13 +392,15 @@ export function ArticleDetailModal({ circularId, article, mode, onClose, t, isRT
                   placeholder={t('regulatoryUpdates.checklistItemPlaceholder')}
                   value={newChecklistTitle}
                   onChange={(e) => setNewChecklistTitle(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === 'Enter') handleAddChecklistItem() }}
+                  onKeyDown={(e) => { if (e.key === 'Enter' && (!article || canEditChecklist)) handleAddChecklistItem() }}
+                  disabled={!!article && !canEditChecklist}
                   className="flex-1 h-11"
                 />
                 <button
                   onClick={handleAddChecklistItem}
-                  disabled={!newChecklistTitle.trim()}
-                  className="h-11 px-4 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-bold rounded-xl flex items-center gap-1 cursor-pointer whitespace-nowrap shrink-0"
+                  disabled={!newChecklistTitle.trim() || (!!article && !canEditChecklist)}
+                  title={!!article && !canEditChecklist ? t('rbac.deniedTooltip') : undefined}
+                  className="h-11 px-4 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs font-bold rounded-xl flex items-center gap-1 cursor-pointer whitespace-nowrap shrink-0"
                 >
                   <Icon icon="lucide:plus" className="text-xs" />
                   {t('regulatoryUpdates.addChecklistItem')}

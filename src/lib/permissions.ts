@@ -301,6 +301,31 @@ export function canReviewClosure(user: User | null, obs: { leaderId?: string }):
   return canManageObservation(user, obs)
 }
 
+// ── Ownership-or-permission edit gates (circular rules + policy workflow) ─────
+// A user may edit a rule's article checklist / advance a policy's workflow if
+// they hold the backend 'edit' permission (managers & admins do via their role;
+// officers via the access matrix) OR they are the single owner/assignee of that
+// resource — "only one person works on a rule". These MIRROR the API route
+// guards + the RLS predicates (migration 114) so the client affordance matches
+// exactly what the server enforces.
+export function canEditCircular(
+  user: User | null,
+  circular: { assignedTo?: string | null } | null | undefined,
+): boolean {
+  if (!user) return false
+  if (hasPermission(user, 'edit')) return true
+  return !!circular?.assignedTo && user.id === circular.assignedTo
+}
+
+export function canAdvancePolicyWorkflow(
+  user: User | null,
+  policy: { ownerId?: string | null } | null | undefined,
+): boolean {
+  if (!user) return false
+  if (hasPermission(user, 'edit')) return true
+  return !!policy?.ownerId && user.id === policy.ownerId
+}
+
 // ── React hooks for permission checks (RBAC-016) ─────────────────────────────
 /**
  * useCan — returns true iff the current user has every permission in the list.

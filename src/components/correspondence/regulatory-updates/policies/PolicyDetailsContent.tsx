@@ -13,7 +13,7 @@ import { useAuthStore } from '@/stores/auth-store'
 import { useNotificationStore } from '@/stores/notification-store'
 import { useDepartmentStore } from '@/stores/department-store'
 import { useTeamStore } from '@/stores/team-store'
-import { useCan } from '@/lib/permissions'
+import { useCan, canAdvancePolicyWorkflow } from '@/lib/permissions'
 import { EditableSelect } from '@/components/ui/editable-select'
 import { InlineDeadlinePicker } from '@/components/ui/inline-deadline-picker'
 // C(#31)/B(#30): consume a calendar deep-link → open the workflow tab + glow
@@ -155,6 +155,10 @@ export function PolicyDetailsContent({
 
   const { policies: allPolicies, update, addWorkflowStep, addAttachment, removeAttachment, addEvidence, removeEvidence, advanceWorkflowStep, loadMorePolicyActivity, policyActivityPagination } = usePolicyStore()
   const { user: authUser } = useAuthStore()
+  // RBAC: the policy OWNER or an 'edit'-permission holder (managers/admins, or
+  // officers granted edit) may drive the workflow — matches the advance route +
+  // RLS (migration 114). Non-owners without edit see the action buttons disabled.
+  const canAdvance = canAdvancePolicyWorkflow(authUser, policy)
   const { addNotification } = useNotificationStore()
   // P6 (W34): real per-policy detail-GET in-flight flag (set by fetchById).
   const detailLoading = usePolicyStore((s) => s.detailLoading[policy.id] ?? false)
@@ -1143,6 +1147,18 @@ export function PolicyDetailsContent({
                 // "Complete Step". Each maps to a logged server transition.
                 const actionType = currentStep.actionType ?? 'move-to-next'
 
+                // RBAC: a non-owner without 'edit' can't drive the workflow —
+                // show a single disabled, explained affordance instead of the
+                // live action button (the server + RLS also reject it).
+                if (!canAdvance) {
+                  return (
+                    <Button variant="outline" className="w-full" disabled title={t('rbac.deniedTooltip')}>
+                      <Icon icon="lucide:lock" className="w-4 h-4" />
+                      {t('rbac.deniedTooltip')}
+                    </Button>
+                  )
+                }
+
                 if (actionType === 'send-email') {
                   return (
                     <Button variant="outline" className="w-full" onClick={() => handleSendEmail(currentStep)} disabled={workflowProcessing}>
@@ -1202,7 +1218,8 @@ export function PolicyDetailsContent({
                         : 'text-emerald-600 border-emerald-200 hover:bg-emerald-50',
                     )}
                     onClick={() => setNotePromptFor('initiate')}
-                    disabled={workflowProcessing}
+                    disabled={workflowProcessing || !canAdvance}
+                    title={!canAdvance ? t('rbac.deniedTooltip') : undefined}
                   >
                     {workflowProcessing ? <Icon icon="lucide:loader-2" className="w-4 h-4 animate-spin" /> : <Icon icon="lucide:refresh-cw" className="w-4 h-4" />}
                     {t('policies.initiateReview')}
@@ -1213,7 +1230,8 @@ export function PolicyDetailsContent({
               {/* P1-e (W29): Undo always available when at least one step completed. */}
               {fresh.workflowTimeline.some(s => s.status === 'completed') && (
                 <Button variant="outline" className="w-full text-rose-600 border-rose-200 hover:bg-rose-50"
-                  onClick={() => setNotePromptFor('undo')} disabled={workflowProcessing}>
+                  onClick={() => setNotePromptFor('undo')} disabled={workflowProcessing || !canAdvance}
+                  title={!canAdvance ? t('rbac.deniedTooltip') : undefined}>
                   {workflowProcessing ? <Icon icon="lucide:loader-2" className="w-4 h-4 animate-spin" /> : <Icon icon="lucide:undo-2" className="w-4 h-4" />}
                   {t('policies.undoLastStep')}
                 </Button>
