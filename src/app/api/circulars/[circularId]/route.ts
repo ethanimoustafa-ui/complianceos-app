@@ -1,7 +1,7 @@
 // /api/circulars/[circularId] — detail / patch / soft-delete.
 
 import type { NextRequest } from 'next/server'
-import { requirePerm, requireUser } from '@/lib/api/auth'
+import { requireAnyPerm, requireUser } from '@/lib/api/auth'
 import { handle, NotFound, PreconditionFailed } from '@/lib/api/errors'
 import { ok } from '@/lib/api/response'
 import { assertNotStale, assertUuid, parseJson, readIfMatch } from '@/lib/api/validate'
@@ -180,7 +180,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     const { circularId } = await params
     // SEC-5: reject a malformed (non-UUID) path segment with a 400.
     assertUuid(circularId)
-    const { supabase, user, profile } = await requirePerm('edit')
+    const { supabase, user, profile } = await requireAnyPerm(['circular:edit', 'edit'])
     await assertCircularExists(supabase, circularId)
     // SEC-1: optimistic-concurrency token — the client echoes the row's
     // last-known `updated_at` via `If-Match`. Compared against the live row
@@ -410,7 +410,7 @@ export async function DELETE(req: NextRequest, { params }: Params) {
     const { circularId } = await params
     // SEC-5: reject a malformed (non-UUID) path segment with a 400.
     assertUuid(circularId)
-    const { supabase, user, profile } = await requirePerm('delete')
+    const { supabase, user, profile } = await requireAnyPerm(['circular:delete', 'delete'])
     await assertCircularExists(supabase, circularId)
 
     // SEC-1: optional optimistic-concurrency guard on delete — if the client

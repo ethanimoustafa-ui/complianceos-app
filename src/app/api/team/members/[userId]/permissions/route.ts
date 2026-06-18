@@ -43,17 +43,37 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     await assertProfileExists(supabase, userId)
     const input = await parseJson(req, SetPermissionsSchema)
 
-    const rows = Object.entries(input.permissions).map(([permission_key, granted]) => ({
-      user_id: userId,
-      permission_key,
-      granted,
-      granted_by: user.id,
-    }))
+    // The matrix sends backend permission keys (FK to public.permissions.key).
+    // Granted keys become explicit additive `user_permissions` rows; ungranted
+    // keys are DELETED rather than written as `granted = false`. Deleting (not
+    // false-upserting) means a disabled toggle just removes the per-user
+    // override and falls back to the user's ROLE defaults, instead of stamping
+    // an explicit revoke that would strip a key the role still grants.
+    const granted: string[] = []
+    const revoked: string[] = []
+    for (const [permission_key, isGranted] of Object.entries(input.permissions)) {
+      ;(isGranted ? granted : revoked).push(permission_key)
+    }
 
-    if (rows.length > 0) {
+    if (granted.length > 0) {
+      const rows = granted.map((permission_key) => ({
+        user_id: userId,
+        permission_key,
+        granted: true,
+        granted_by: user.id,
+      }))
       const { error } = await supabase
         .from('user_permissions')
         .upsert(rows, { onConflict: 'user_id,permission_key' })
+      if (error) throw error
+    }
+
+    if (revoked.length > 0) {
+      const { error } = await supabase
+        .from('user_permissions')
+        .delete()
+        .eq('user_id', userId)
+        .in('permission_key', revoked)
       if (error) throw error
     }
 

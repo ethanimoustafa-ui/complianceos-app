@@ -1,7 +1,7 @@
 // /api/training/courses/[courseId] — GET / PATCH / DELETE.
 
 import type { NextRequest } from 'next/server'
-import { requirePerm, requireUser } from '@/lib/api/auth'
+import { requireAnyPerm, requireUser } from '@/lib/api/auth'
 import { handle, NotFound } from '@/lib/api/errors'
 import { ok } from '@/lib/api/response'
 import { parseJson } from '@/lib/api/validate'
@@ -41,7 +41,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
 export async function PATCH(req: NextRequest, { params }: Params) {
   try {
     const { courseId } = await params
-    const { supabase, user, profile } = await requirePerm('edit')
+    const { supabase, user, profile } = await requireAnyPerm(['training:edit', 'edit'])
     await assertCourseExists(supabase, courseId)
     const patch = await parseJson(req, UpdateTrainingCourseSchema)
     const update: Record<string, unknown> = {}
@@ -75,7 +75,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 export async function DELETE(_req: NextRequest, { params }: Params) {
   try {
     const { courseId } = await params
-    const { supabase, user, profile } = await requirePerm('delete')
+    const { supabase, user, profile } = await requireAnyPerm(['training:delete', 'delete'])
     await assertCourseExists(supabase, courseId)
     const { error } = await supabase
       .from('training_courses')

@@ -5,7 +5,7 @@
 // the matrix grants to compliance_officer and org_admin.
 
 import type { NextRequest } from 'next/server'
-import { requirePerm, requireUser } from '@/lib/api/auth'
+import { requireAnyPerm, requireUser } from '@/lib/api/auth'
 import { handle, NotFound } from '@/lib/api/errors'
 import { ok, paginate } from '@/lib/api/response'
 import { parseJson, parseQuery } from '@/lib/api/validate'
@@ -61,7 +61,7 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    const { supabase, user, profile } = await requirePerm('audit:edit')
+    const { supabase, user, profile } = await requireAnyPerm(['risk:create', 'audit:edit'])
     const input = await parseJson(req, CreateRiskSchema)
 
     const { data, error } = await supabase

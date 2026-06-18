@@ -73,6 +73,36 @@ export function ExecutiveView({ metrics }: ExecutiveViewProps) {
       })
     }
 
+    // Observations past their remediation deadline — a hard compliance breach.
+    if (metrics.observations.overdueCount > 0) {
+      list.push({
+        type: 'critical',
+        title: t('dashboard.criticalActionRequired'),
+        message: t('dashboard.alertObsOverdue', { count: String(metrics.observations.overdueCount) }),
+        route: '/observations?status=open',
+      })
+    }
+
+    // Open critical risks need ongoing oversight even when other KPIs are green.
+    if (metrics.risks.byLevel.critical > 0) {
+      list.push({
+        type: 'warning',
+        title: t('dashboard.trendAlert'),
+        message: t('dashboard.alertCriticalRisks', { count: String(metrics.risks.byLevel.critical) }),
+        route: '/reports/risks',
+      })
+    }
+
+    // Policies overdue for review — a recurring source of regulatory drift.
+    if (metrics.policies.overdue > 0) {
+      list.push({
+        type: 'warning',
+        title: t('dashboard.trendAlert'),
+        message: t('dashboard.alertPoliciesOverdue', { count: String(metrics.policies.overdue) }),
+        route: '/correspondence/regulatory-updates/policies',
+      })
+    }
+
     // Only surface the threshold alert when at least one item has been
     // evaluated company-wide. A fully-pending org should not be flagged
     // "at risk" — that's just the §1.A neutral pending state.

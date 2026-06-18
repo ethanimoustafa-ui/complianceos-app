@@ -118,3 +118,28 @@ export async function getEffectivePermissions(
   const detail = await getMemberDetail(supabase, userId)
   return detail.permissions
 }
+
+/**
+ * Bulk-fetch the explicit per-user permission GRANTS (granted = true) for a set
+ * of users. Returns `userId -> backend permission keys[]`. Used to hydrate the
+ * Access Matrix toggle state so a grant survives a page reload (the matrix
+ * toggles are per-user overrides stored in user_permissions, separate from the
+ * role-derived permissions).
+ */
+export async function getUserPermissionGrants(
+  supabase: SupabaseClient,
+  userIds: string[],
+): Promise<Record<string, string[]>> {
+  const out: Record<string, string[]> = {}
+  if (userIds.length === 0) return out
+  const { data, error } = await supabase
+    .from('user_permissions')
+    .select('user_id, permission_key, granted')
+    .in('user_id', userIds)
+    .eq('granted', true)
+  if (error) throw error
+  for (const row of (data ?? []) as Array<{ user_id: string; permission_key: string }>) {
+    ;(out[row.user_id] ??= []).push(row.permission_key)
+  }
+  return out
+}

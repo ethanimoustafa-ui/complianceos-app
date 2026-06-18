@@ -65,6 +65,10 @@ export function ManagerialView({ metrics }: ManagerialViewProps) {
     if (metrics.samaLetters.overdueCount > 0) {
       list.push({ type: 'critical', title: t('dashboard.criticalActionRequired'), message: t('dashboard.alertSamaOverdue', { count: String(metrics.samaLetters.overdueCount) }), route: '/correspondence' })
     }
+    // Observations past their remediation deadline — a hard compliance breach.
+    if (metrics.observations.overdueCount > 0) {
+      list.push({ type: 'critical', title: t('dashboard.criticalActionRequired'), message: t('dashboard.alertObsOverdue', { count: String(metrics.observations.overdueCount) }), route: '/observations?status=open' })
+    }
     // Suppress the trend alert when nothing has been evaluated yet (§1.A);
     // a fully-pending org is "neutral pending", not "at risk".
     if (
@@ -73,6 +77,12 @@ export function ManagerialView({ metrics }: ManagerialViewProps) {
     ) {
       list.push({ type: 'warning', title: t('dashboard.trendAlert'), message: t('dashboard.alertComplianceLow', { score: String(Math.round(metrics.health.businessComplianceScore)), target: String(targetScore) }), route: '/reports/compliance-review' })
     }
+    // Open critical risks need ongoing oversight even when other KPIs are green.
+    if (metrics.risks.byLevel.critical > 0) {
+      list.push({ type: 'warning', title: t('dashboard.trendAlert'), message: t('dashboard.alertCriticalRisks', { count: String(metrics.risks.byLevel.critical) }), route: '/reports/risks' })
+    }
+    // Critical first, then cap at 2 so the strip stays scannable.
+    list.sort((a, b) => (a.type === 'critical' ? -1 : 1) - (b.type === 'critical' ? -1 : 1))
     return list.slice(0, 2)
   }, [metrics, targetScore, t])
 

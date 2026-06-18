@@ -17,6 +17,7 @@ import {
   ListEvaluationsQuerySchema,
 } from '@/lib/api/schemas/reports'
 import { EVALUATION_COLUMNS, evaluationId } from '@/lib/api/services/reports'
+import { invalidateScoreCache } from '@/lib/api/services/compliance'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -105,6 +106,10 @@ export async function POST(req: NextRequest) {
       cacheTags.evaluationScores(),
       cacheTags.compliance(),
     ])
+    // Evict the dashboard-health DB cache so the hero's business-compliance
+    // score recomputes on next load. revalidateAll only busts the route cache,
+    // not the compliance_scores_cache rows (the real staleness source).
+    await invalidateScoreCache(supabase)
     return ok(data, { status: 201 })
   } catch (e) {
     return handle(e)

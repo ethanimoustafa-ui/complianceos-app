@@ -5,7 +5,7 @@
 //   - POST: dual-store timeline write via renderBilingual (§2.11)
 
 import type { NextRequest } from 'next/server'
-import { requirePerm, requireUser } from '@/lib/api/auth'
+import { requireAnyPerm, requireUser } from '@/lib/api/auth'
 import { handle, NotFound } from '@/lib/api/errors'
 import { ok, paginate } from '@/lib/api/response'
 import { parseJson, parseQuery } from '@/lib/api/validate'
@@ -103,7 +103,7 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    const { supabase, user, profile } = await requirePerm('create')
+    const { supabase, user, profile } = await requireAnyPerm(['letter:create', 'create'])
     // W25-A1: use the minimal draft schema so POST with only {authority,type}
     // → 201. The submit-for-approval endpoint enforces subject+body.
     const input = await parseJson(req, CreateLetterDraftSchema)

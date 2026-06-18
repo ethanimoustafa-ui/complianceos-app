@@ -8,7 +8,7 @@
 //   - DELETE: optional If-Match guard before hard-delete (migration 041)
 
 import type { NextRequest } from 'next/server'
-import { requirePerm, requireUser } from '@/lib/api/auth'
+import { requireAnyPerm, requireUser } from '@/lib/api/auth'
 import { handle, NotFound, PreconditionFailed } from '@/lib/api/errors'
 import { ok } from '@/lib/api/response'
 import { assertNotStale, assertUuid, parseJson, readIfMatch } from '@/lib/api/validate'
@@ -82,7 +82,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     const { policyId } = await params
     // SEC-5.
     assertUuid(policyId)
-    const { supabase, user, profile } = await requirePerm('edit')
+    const { supabase, user, profile } = await requireAnyPerm(['policy:edit', 'edit'])
     await assertPolicyExists(supabase, policyId)
 
     // SEC-1: optimistic-concurrency token.
@@ -310,7 +310,7 @@ export async function DELETE(req: NextRequest, { params }: Params) {
     const { policyId } = await params
     // SEC-5.
     assertUuid(policyId)
-    const { supabase, user, profile } = await requirePerm('delete')
+    const { supabase, user, profile } = await requireAnyPerm(['policy:delete', 'delete'])
     await assertPolicyExists(supabase, policyId)
 
     // SEC-1: optional optimistic-concurrency guard on delete.

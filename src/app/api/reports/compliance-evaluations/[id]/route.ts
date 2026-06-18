@@ -19,6 +19,7 @@ import { cacheTags, revalidateAll } from '@/lib/api/cache'
 import { writeAudit } from '@/lib/api/audit'
 import { UpdateEvaluationSchema } from '@/lib/api/schemas/reports'
 import { EVALUATION_COLUMNS, assertEvaluationExists } from '@/lib/api/services/reports'
+import { invalidateScoreCache } from '@/lib/api/services/compliance'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -118,6 +119,8 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       cacheTags.evaluationScores(),
       cacheTags.compliance(),
     ])
+    // Evict the dashboard-health DB cache so the hero recomputes on next load.
+    await invalidateScoreCache(supabase)
 
     // Return refreshed row with new ETag for the next round-trip.
     const newEtag =
@@ -171,6 +174,8 @@ export async function DELETE(req: NextRequest, { params }: Params) {
       cacheTags.evaluationScores(),
       cacheTags.compliance(),
     ])
+    // Evict the dashboard-health DB cache so the hero recomputes on next load.
+    await invalidateScoreCache(supabase)
     return ok({ id, deleted: true })
   } catch (e) {
     return handle(e)

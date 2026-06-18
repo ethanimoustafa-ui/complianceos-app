@@ -217,3 +217,18 @@ export async function requireAllPerms(perms: readonly string[]): Promise<AuthedR
   }
   return ctx
 }
+
+/**
+ * Assert the caller has AT LEAST ONE of `perms` (OR). Used by the entity
+ * create/edit/delete routes that accept either the granular per-entity key
+ * (e.g. `policy:edit`, migration 115 / the Access Matrix) OR the legacy
+ * generic key (`edit`) that role tiers still carry. Mirrors the RLS predicate,
+ * which OR's the same keys together, so route and DB agree.
+ */
+export async function requireAnyPerm(perms: readonly string[]): Promise<AuthedRequest> {
+  const ctx = await requireUser()
+  if (!perms.some((p) => ctx.permissions.includes(p))) {
+    throw Forbidden(`Missing permission: one of ${perms.join(', ')}`)
+  }
+  return ctx
+}

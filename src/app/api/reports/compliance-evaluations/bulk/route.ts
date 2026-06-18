@@ -10,6 +10,7 @@ import { cacheTags, revalidateAll } from '@/lib/api/cache'
 import { writeAudit } from '@/lib/api/audit'
 import { BulkEvaluationsSchema } from '@/lib/api/schemas/reports'
 import { EVALUATION_COLUMNS, evaluationId } from '@/lib/api/services/reports'
+import { invalidateScoreCache } from '@/lib/api/services/compliance'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -51,6 +52,10 @@ export async function POST(req: NextRequest) {
       cacheTags.evaluationScores(),
       cacheTags.compliance(),
     ])
+    // Evict the dashboard-health DB cache so the hero's business-compliance
+    // score recomputes on next load (route-cache revalidation alone leaves the
+    // compliance_scores_cache rows stale for up to an hour).
+    await invalidateScoreCache(supabase)
     return ok({ items: data ?? [], upserted: rows.length }, { status: 201 })
   } catch (e) {
     return handle(e)

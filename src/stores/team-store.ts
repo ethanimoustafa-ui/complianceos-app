@@ -20,7 +20,13 @@
 
 import { create } from 'zustand'
 import type { TeamMember, PaginationState, SortState } from '@/types'
-import { STANDARD_PERMISSIONS } from '@/lib/permissions-registry'
+import {
+  STANDARD_PERMISSIONS,
+  PERMISSIONS,
+  PERMISSION_BACKEND_KEYS,
+  accessControlsFromGrants,
+  type Permission,
+} from '@/lib/permissions-registry'
 import { requirePermission } from '@/lib/rbac-store-gate'
 import { useUserLogStore } from '@/stores/user-log-store'
 import { api, ApiClientError } from '@/lib/api-client'
@@ -74,6 +80,9 @@ interface ProfileApiRow {
   preferred_language: 'en' | 'ar' | null
   created_at: string
   updated_at: string
+  // Per-user permission overrides (granted = true), surfaced by the list route
+  // so the Access Matrix toggle state survives a reload.
+  user_permission_keys?: string[]
 }
 
 function mapProfileRow(row: ProfileApiRow, previous?: TeamMember): TeamMember {
@@ -91,7 +100,12 @@ function mapProfileRow(row: ProfileApiRow, previous?: TeamMember): TeamMember {
     nationality: row.nationality ?? previous?.nationality,
     // Local-only fields — preserved from prior state until a matching API ships.
     assignments: previous?.assignments,
-    accessControls: previous?.accessControls,
+    // accessControls is API-backed: reconstruct from the per-user grants the
+    // list/detail routes now return. Fall back to prior in-memory state when
+    // the field is absent (e.g. a PATCH response that omits it).
+    accessControls: row.user_permission_keys
+      ? accessControlsFromGrants(row.user_permission_keys)
+      : previous?.accessControls,
     burnoutSince: previous?.burnoutSince,
   }
 }
@@ -298,13 +312,33 @@ export const useTeamStore = create<TeamState>()((set, get) => ({
       if (data.assignments !== undefined) updated.assignments = data.assignments
       if (data.accessControls !== undefined) {
         updated.accessControls = data.accessControls
-        // I1: persist accessControls toggles to user_permissions via the
-        // permissions endpoint so backend requirePerm() checks are enforced.
+        // Persist toggles to user_permissions via the permissions endpoint so
+        // backend has_permission()/requirePerm() checks are enforced.
+        //
+        // CRITICAL: user_permissions.permission_key FK-references
+        // public.permissions.key (the lowercase:colon backend keys), NOT the
+        // human-readable matrix LABELS. Sending labels caused
+        // `user_permissions_permission_key_fkey` violations → 500. We translate
+        // each toggle to its backend key(s) here:
+        //   • a known label (the `Permission` union) → PERMISSION_BACKEND_KEYS
+        //   • anything else is already a granular backend key → passed through
+        // Labels that map to zero backend keys are client-only affordances and
+        // simply contribute nothing to the payload (no FK row, no 500).
+        const labelSet = new Set<string>(PERMISSIONS)
         const permsPayload: Record<string, boolean> = {}
         for (const ac of data.accessControls) {
-          permsPayload[ac.label] = ac.enabled
+          const keys = labelSet.has(ac.label)
+            ? PERMISSION_BACKEND_KEYS[ac.label as Permission]
+            : [ac.label]
+          for (const key of keys) {
+            // If two enabled toggles share a backend key, OR their grants so one
+            // disabled toggle doesn't revoke a key another toggle still grants.
+            permsPayload[key] = (permsPayload[key] ?? false) || ac.enabled
+          }
         }
-        await api.patch(`/team/members/${id}/permissions`, { permissions: permsPayload })
+        if (Object.keys(permsPayload).length > 0) {
+          await api.patch(`/team/members/${id}/permissions`, { permissions: permsPayload })
+        }
       }
       if (data.burnoutSince !== undefined) updated.burnoutSince = data.burnoutSince
       if (data.department !== undefined) updated.department = data.department

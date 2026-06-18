@@ -8,7 +8,7 @@
 //   - DELETE: assertUuid + optional If-Match guard.
 
 import type { NextRequest } from 'next/server'
-import { requirePerm, requireUser } from '@/lib/api/auth'
+import { requireAnyPerm, requireUser } from '@/lib/api/auth'
 import { handle, NotFound, PreconditionFailed } from '@/lib/api/errors'
 import { ok } from '@/lib/api/response'
 import { assertNotStale, assertUuid, parseJson, readIfMatch } from '@/lib/api/validate'
@@ -106,7 +106,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     const { letterId } = await params
     // SEC-5 §2.13
     assertUuid(letterId)
-    const { supabase, user, profile } = await requirePerm('edit')
+    const { supabase, user, profile } = await requireAnyPerm(['letter:edit', 'edit'])
     await assertLetterExists(supabase, letterId)
 
     // §2.12 — optimistic-concurrency token.
@@ -246,7 +246,7 @@ export async function DELETE(req: NextRequest, { params }: Params) {
     const { letterId } = await params
     // SEC-5 §2.13
     assertUuid(letterId)
-    const { supabase, user, profile } = await requirePerm('delete')
+    const { supabase, user, profile } = await requireAnyPerm(['letter:delete', 'delete'])
     await assertLetterExists(supabase, letterId)
 
     // §2.12 — optional optimistic-concurrency guard on DELETE.

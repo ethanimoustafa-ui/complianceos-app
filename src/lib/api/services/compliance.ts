@@ -59,6 +59,48 @@ export async function readScoreCache(
 }
 
 /**
+ * Synthetic `framework_id` discriminator under which the dashboard-health hero
+ * snapshot (incl. the business-compliance overlay) is cached. Mirrors
+ * `DASHBOARD_KEY` in /api/compliance/dashboard-health/route.ts.
+ */
+export const DASHBOARD_HEALTH_KEY = 'dashboard-health'
+
+/**
+ * Evict cached score rows so the next GET recomputes from live inputs.
+ *
+ * Why this exists: `readScoreCache` returns the freshest non-expired row by
+ * (framework_id, period, department_id) IGNORING `inputs_hash`, with a 1h TTL.
+ * So after a business-compliance mutation (a Compliance Review evaluation /
+ * approval) the dashboard-health hero keeps serving the pre-mutation score for
+ * up to an hour. The Next.js `revalidateTag(cacheTags.compliance())` the
+ * mutation already fires only busts the ROUTE (data) cache — it does NOT touch
+ * these DB rows, which are the real staleness source. Deleting the rows forces
+ * the cache-MISS compute path on the next request.
+ *
+ * Pass `frameworkIds` to scope the eviction. Defaults to the dashboard-health
+ * snapshot (the hero), which embeds the business-compliance score. All periods
+ * and departments for the given framework(s) are evicted — a business-owner
+ * evaluation can move the org-wide and any department's score.
+ *
+ * Best-effort: a cache eviction failure must never fail the user's write, so
+ * the caller should swallow errors. Returns the number of rows deleted (or
+ * null if the delete errored).
+ */
+export async function invalidateScoreCache(
+  supabase: SupabaseClient,
+  frameworkIds: string[] = [DASHBOARD_HEALTH_KEY],
+): Promise<number | null> {
+  if (frameworkIds.length === 0) return 0
+  const { data, error } = await supabase
+    .from('compliance_scores_cache')
+    .delete()
+    .in('framework_id', frameworkIds)
+    .select('id')
+  if (error) return null
+  return data?.length ?? 0
+}
+
+/**
  * Enqueue a `compliance.recompute` job to refresh the cache for this key.
  * Idempotent via `idempotency_key = compliance.recompute:<fw>:<period>:<dept>`
  * so a fresh queued/running job for the same key is not duplicated.

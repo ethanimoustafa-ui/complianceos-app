@@ -36,6 +36,22 @@ export const BACKEND_PERMISSIONS = [
   'team:remove',
   'team:view',
   'view',
+  // Granular per-entity keys (migration 115).
+  'policy:create',
+  'policy:edit',
+  'policy:delete',
+  'circular:create',
+  'circular:edit',
+  'circular:delete',
+  'risk:create',
+  'risk:edit',
+  'risk:delete',
+  'letter:create',
+  'letter:edit',
+  'letter:delete',
+  'training:create',
+  'training:edit',
+  'training:delete',
 ] as const
 export type BackendPermission = (typeof BACKEND_PERMISSIONS)[number]
 
@@ -53,14 +69,19 @@ const ROLE_HIERARCHY: User['role'][] = ['auditor', 'officer', 'manager', 'admin'
 export { PERMISSIONS, STANDARD_PERMISSIONS }
 export type { Permission }
 
+// Granular per-entity keys (migration 115). Officers hold create+edit on every
+// entity (not delete); managers/admins hold all of them.
+const GRANULAR_CREATE_EDIT = ['policy:create', 'policy:edit', 'circular:create', 'circular:edit', 'risk:create', 'risk:edit', 'letter:create', 'letter:edit', 'training:create', 'training:edit']
+const GRANULAR_DELETE = ['policy:delete', 'circular:delete', 'risk:delete', 'letter:delete', 'training:delete']
+
 // Legacy role-permission map — used as a fallback for the lowercase:colon
 // permission strings that pre-date the round-4 registry.
-const ALL_PERMISSIONS = ['view', 'comment', 'create', 'edit', 'delete', 'audit:view', 'audit:comment', 'audit:create', 'audit:edit', 'audit:delete', 'observation:view', 'observation:comment', 'observation:create', 'observation:edit', 'observation:delete', 'report:view', 'report:create', 'report:delete', 'export', 'settings:view', 'settings:edit', 'team:view', 'team:invite', 'team:edit', 'team:remove']
+const ALL_PERMISSIONS = ['view', 'comment', 'create', 'edit', 'delete', 'audit:view', 'audit:comment', 'audit:create', 'audit:edit', 'audit:delete', 'observation:view', 'observation:comment', 'observation:create', 'observation:edit', 'observation:delete', 'report:view', 'report:create', 'report:delete', 'export', 'settings:view', 'settings:edit', 'team:view', 'team:invite', 'team:edit', 'team:remove', ...GRANULAR_CREATE_EDIT, ...GRANULAR_DELETE]
 
 export const ROLE_PERMISSIONS: Record<User['role'], string[]> = {
-  // Mirrors the DB role_permissions seed (migration 108). auditor < officer < manager = admin.
+  // Mirrors the DB role_permissions seed (migrations 108 + 115). auditor < officer < manager = admin.
   auditor: ['view', 'comment', 'audit:view', 'observation:view', 'observation:comment', 'observation:create', 'observation:edit', 'report:view', 'export'],
-  officer: ['view', 'comment', 'create', 'edit', 'audit:view', 'audit:comment', 'audit:create', 'audit:edit', 'observation:view', 'observation:comment', 'observation:create', 'observation:edit', 'report:view', 'report:create', 'export'],
+  officer: ['view', 'comment', 'create', 'edit', 'audit:view', 'audit:comment', 'audit:create', 'audit:edit', 'observation:view', 'observation:comment', 'observation:create', 'observation:edit', 'report:view', 'report:create', 'export', ...GRANULAR_CREATE_EDIT],
   manager: ALL_PERMISSIONS,
   admin: ALL_PERMISSIONS,
 }

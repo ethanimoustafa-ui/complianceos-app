@@ -1,7 +1,7 @@
 // /api/risks/[riskId] — item GET/PATCH/DELETE.
 
 import type { NextRequest } from 'next/server'
-import { requirePerm, requireUser } from '@/lib/api/auth'
+import { requireAnyPerm, requireUser } from '@/lib/api/auth'
 import { handle, NotFound } from '@/lib/api/errors'
 import { ok } from '@/lib/api/response'
 import { parseJson } from '@/lib/api/validate'
@@ -37,7 +37,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
 export async function PATCH(req: NextRequest, { params }: Params) {
   try {
     const { riskId } = await params
-    const { supabase, user, profile } = await requirePerm('audit:edit')
+    const { supabase, user, profile } = await requireAnyPerm(['risk:edit', 'audit:edit'])
     await assertRiskExists(supabase, riskId)
     const patch = await parseJson(req, UpdateRiskSchema)
 
@@ -88,7 +88,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 export async function DELETE(_req: NextRequest, { params }: Params) {
   try {
     const { riskId } = await params
-    const { supabase, user, profile } = await requirePerm('audit:delete')
+    const { supabase, user, profile } = await requireAnyPerm(['risk:delete', 'audit:delete'])
     await assertRiskExists(supabase, riskId)
 
     // Write the append-only audit-log entry FIRST so the compliance trail

@@ -24,10 +24,15 @@ export async function GET(_req: NextRequest, { params }: Params) {
     const { userId } = await params
     const { supabase } = await requireUser()
     const detail = await getMemberDetail(supabase, userId)
+    // `user_permission_keys` lets the store reconstruct the Access Matrix toggle
+    // state via the same mapProfileRow path the list route uses.
+    const user_permission_keys = detail.user_permissions
+      .filter((p) => p.granted)
+      .map((p) => p.permission_key)
     // No browser/CDN caching — same reason as the list route: this carries the
     // member's role/permissions and is mutated through the team UI, so a cached
     // copy would show a stale role right after a change.
-    return ok(detail, { cache: 'no-store' })
+    return ok({ ...detail, user_permission_keys }, { cache: 'no-store' })
   } catch (e) {
     return handle(e)
   }
