@@ -49,13 +49,16 @@ export async function POST(req: NextRequest, { params }: Params) {
     assertUuid(circularId, implementationId) // SEC-5
     // RBAC (ownership): same gate as the per-item PATCH/DELETE — the rule's
     // assignee may add a checklist item even without the global 'edit'
-    // permission; everyone else needs 'edit'. Mirrors article_checklist RLS (114).
+    // permission; everyone else needs 'edit'. Migration 117 adds the granular
+    // 'circular:checklist' key as a third accepted path (matrix grant).
+    // Mirrors article_checklist RLS (114 + 117).
     const ctx = await requireUser()
     const { supabase, user, profile } = ctx
     await assertCircularExists(supabase, circularId)
     await assertArticleExists(supabase, circularId, implementationId)
+    const hasChecklistPerm = ctx.permissions.includes('circular:checklist')
     let ruleOwnerId: string | null = null
-    if (!ctx.permissions.includes('edit')) {
+    if (!hasChecklistPerm && !ctx.permissions.includes('edit')) {
       const { data: ruleRow } = await supabase
         .from('circulars')
         .select('assigned_to')
@@ -63,8 +66,8 @@ export async function POST(req: NextRequest, { params }: Params) {
         .maybeSingle<{ assigned_to: string | null }>()
       ruleOwnerId = ruleRow?.assigned_to ?? null
     }
-    if (!hasEditOrOwnership(ctx, ruleOwnerId)) {
-      throw Forbidden('Missing permission: edit (or rule ownership)')
+    if (!hasChecklistPerm && !hasEditOrOwnership(ctx, ruleOwnerId)) {
+      throw Forbidden('Missing permission: circular:checklist or edit (or rule ownership)')
     }
     const input = await parseJson(req, CreateArticleChecklistItemSchema)
 

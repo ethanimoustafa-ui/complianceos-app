@@ -6,7 +6,7 @@
 // forward compatibility but the route drops it silently.
 
 import type { NextRequest } from 'next/server'
-import { requirePerm, requireUser } from '@/lib/api/auth'
+import { requireAnyPerm, requireUser } from '@/lib/api/auth'
 import { handle, NotFound } from '@/lib/api/errors'
 import { ok } from '@/lib/api/response'
 import { parseJson } from '@/lib/api/validate'
@@ -48,7 +48,9 @@ export async function GET(_req: NextRequest, { params }: Params) {
 export async function POST(req: NextRequest, { params }: Params) {
   try {
     const { riskId } = await params
-    const { supabase, user, profile } = await requirePerm('audit:edit')
+    // Migration 117: accept the granular 'risk:checklist' key OR the legacy
+    // 'audit:edit' key the role tiers still carry. Mirrors risk_mitigation_checklist RLS.
+    const { supabase, user, profile } = await requireAnyPerm(['risk:checklist', 'audit:edit'])
     await assertRiskExists(supabase, riskId)
     const input = await parseJson(req, CreateRiskChecklistItemSchema)
 

@@ -52,6 +52,19 @@ export const BACKEND_PERMISSIONS = [
   'training:create',
   'training:edit',
   'training:delete',
+  // Export + checklist + workflow (migration 117).
+  'policy:export',
+  'circular:export',
+  'observation:export',
+  'audit:export',
+  'risk:export',
+  'letter:export',
+  'training:export',
+  'policy:checklist',
+  'circular:checklist',
+  'risk:checklist',
+  'audit:checklist',
+  'workflow:advance',
 ] as const
 export type BackendPermission = (typeof BACKEND_PERMISSIONS)[number]
 
@@ -73,15 +86,19 @@ export type { Permission }
 // entity (not delete); managers/admins hold all of them.
 const GRANULAR_CREATE_EDIT = ['policy:create', 'policy:edit', 'circular:create', 'circular:edit', 'risk:create', 'risk:edit', 'letter:create', 'letter:edit', 'training:create', 'training:edit']
 const GRANULAR_DELETE = ['policy:delete', 'circular:delete', 'risk:delete', 'letter:delete', 'training:delete']
+// Round 6 (migration 117): per-entity export, per-entity checklist, workflow advance.
+const GRANULAR_EXPORT = ['policy:export', 'circular:export', 'observation:export', 'audit:export', 'risk:export', 'letter:export', 'training:export']
+const GRANULAR_CHECKLIST = ['policy:checklist', 'circular:checklist', 'risk:checklist', 'audit:checklist']
+const WORKFLOW_ADVANCE = ['workflow:advance']
 
 // Legacy role-permission map — used as a fallback for the lowercase:colon
 // permission strings that pre-date the round-4 registry.
-const ALL_PERMISSIONS = ['view', 'comment', 'create', 'edit', 'delete', 'audit:view', 'audit:comment', 'audit:create', 'audit:edit', 'audit:delete', 'observation:view', 'observation:comment', 'observation:create', 'observation:edit', 'observation:delete', 'report:view', 'report:create', 'report:delete', 'export', 'settings:view', 'settings:edit', 'team:view', 'team:invite', 'team:edit', 'team:remove', ...GRANULAR_CREATE_EDIT, ...GRANULAR_DELETE]
+const ALL_PERMISSIONS = ['view', 'comment', 'create', 'edit', 'delete', 'audit:view', 'audit:comment', 'audit:create', 'audit:edit', 'audit:delete', 'observation:view', 'observation:comment', 'observation:create', 'observation:edit', 'observation:delete', 'report:view', 'report:create', 'report:delete', 'export', 'settings:view', 'settings:edit', 'team:view', 'team:invite', 'team:edit', 'team:remove', ...GRANULAR_CREATE_EDIT, ...GRANULAR_DELETE, ...GRANULAR_EXPORT, ...GRANULAR_CHECKLIST, ...WORKFLOW_ADVANCE]
 
 export const ROLE_PERMISSIONS: Record<User['role'], string[]> = {
   // Mirrors the DB role_permissions seed (migrations 108 + 115). auditor < officer < manager = admin.
   auditor: ['view', 'comment', 'audit:view', 'observation:view', 'observation:comment', 'observation:create', 'observation:edit', 'report:view', 'export'],
-  officer: ['view', 'comment', 'create', 'edit', 'audit:view', 'audit:comment', 'audit:create', 'audit:edit', 'observation:view', 'observation:comment', 'observation:create', 'observation:edit', 'report:view', 'report:create', 'export', ...GRANULAR_CREATE_EDIT],
+  officer: ['view', 'comment', 'create', 'edit', 'audit:view', 'audit:comment', 'audit:create', 'audit:edit', 'observation:view', 'observation:comment', 'observation:create', 'observation:edit', 'report:view', 'report:create', 'export', ...GRANULAR_CREATE_EDIT, ...GRANULAR_EXPORT, ...GRANULAR_CHECKLIST, ...WORKFLOW_ADVANCE],
   manager: ALL_PERMISSIONS,
   admin: ALL_PERMISSIONS,
 }

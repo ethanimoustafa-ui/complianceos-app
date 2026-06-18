@@ -23,6 +23,9 @@ export const PERMISSIONS = [
   'Manage Policy Templates',
   'Manage Audit Templates',
   'Switch User (Demo)',
+  // Round 6 — a dedicated, separately-grantable capability for moving policy +
+  // rule workflow steps forward (submit / complete / initiate review).
+  'Can Advance Workflow',
 ] as const
 
 export type Permission = (typeof PERMISSIONS)[number]
@@ -66,6 +69,9 @@ export const PERMISSION_BACKEND_KEYS: Record<Permission, readonly string[]> = {
   'Manage Policy Templates': ['settings:edit'],
   'Manage Audit Templates': ['settings:edit'],
   'Switch User (Demo)': [],
+  // Workflow advancement is enforced by a dedicated backend key (migration 117)
+  // OR'd alongside edit/ownership on the policy + rule advance routes.
+  'Can Advance Workflow': ['workflow:advance'],
 }
 
 // ── Granular per-entity permissions (round 5 — migration 115) ─────────────────
@@ -79,25 +85,34 @@ export const PERMISSION_BACKEND_KEYS: Record<Permission, readonly string[]> = {
 export interface GranularEntity {
   /** i18n key for the entity column-group header. */
   readonly groupKey: string
-  /** The three backend keys for create / edit / delete (in that order). */
+  /** Backend keys for create / edit / delete (always present). */
   readonly create: string
   readonly edit: string
   readonly delete: string
+  /** Export (PDF/CSV) — most entities have an export affordance. */
+  readonly export?: string
+  /** Checklist management (add deadline / check / delete / reorder). Only the
+   *  entities that actually have checklists: policies, rules, risks, audits. */
+  readonly checklist?: string
 }
 
 export const GRANULAR_ENTITIES: readonly GranularEntity[] = [
-  { groupKey: 'accessMatrix.entityPolicies', create: 'policy:create', edit: 'policy:edit', delete: 'policy:delete' },
-  { groupKey: 'accessMatrix.entityCirculars', create: 'circular:create', edit: 'circular:edit', delete: 'circular:delete' },
-  { groupKey: 'accessMatrix.entityObservations', create: 'observation:create', edit: 'observation:edit', delete: 'observation:delete' },
-  { groupKey: 'accessMatrix.entityAudits', create: 'audit:create', edit: 'audit:edit', delete: 'audit:delete' },
-  { groupKey: 'accessMatrix.entityRisks', create: 'risk:create', edit: 'risk:edit', delete: 'risk:delete' },
-  { groupKey: 'accessMatrix.entityLetters', create: 'letter:create', edit: 'letter:edit', delete: 'letter:delete' },
-  { groupKey: 'accessMatrix.entityTraining', create: 'training:create', edit: 'training:edit', delete: 'training:delete' },
+  { groupKey: 'accessMatrix.entityPolicies', create: 'policy:create', edit: 'policy:edit', delete: 'policy:delete', export: 'policy:export', checklist: 'policy:checklist' },
+  { groupKey: 'accessMatrix.entityCirculars', create: 'circular:create', edit: 'circular:edit', delete: 'circular:delete', export: 'circular:export', checklist: 'circular:checklist' },
+  { groupKey: 'accessMatrix.entityObservations', create: 'observation:create', edit: 'observation:edit', delete: 'observation:delete', export: 'observation:export' },
+  { groupKey: 'accessMatrix.entityAudits', create: 'audit:create', edit: 'audit:edit', delete: 'audit:delete', export: 'audit:export', checklist: 'audit:checklist' },
+  { groupKey: 'accessMatrix.entityRisks', create: 'risk:create', edit: 'risk:edit', delete: 'risk:delete', export: 'risk:export', checklist: 'risk:checklist' },
+  { groupKey: 'accessMatrix.entityLetters', create: 'letter:create', edit: 'letter:edit', delete: 'letter:delete', export: 'letter:export' },
+  { groupKey: 'accessMatrix.entityTraining', create: 'training:create', edit: 'training:edit', delete: 'training:delete', export: 'training:export' },
 ] as const
+
+/** The ordered action keys a granular entity exposes (used by the matrix UI). */
+export const GRANULAR_ACTIONS = ['create', 'edit', 'delete', 'export', 'checklist'] as const
+export type GranularAction = (typeof GRANULAR_ACTIONS)[number]
 
 // Flat list of every granular backend key the matrix manages, in render order.
 export const GRANULAR_PERMISSION_KEYS: readonly string[] = GRANULAR_ENTITIES.flatMap(
-  (e) => [e.create, e.edit, e.delete],
+  (e) => GRANULAR_ACTIONS.map((a) => e[a]).filter((k): k is string => !!k),
 )
 
 // ── Hydration: backend grants → matrix accessControls ─────────────────────────

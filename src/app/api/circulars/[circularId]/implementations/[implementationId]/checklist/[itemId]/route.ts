@@ -60,13 +60,15 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     assertUuid(circularId, implementationId, itemId) // SEC-5
     // RBAC (ownership): the rule's assignee may edit its checklist even without
     // the global 'edit' permission; everyone else needs 'edit' (managers/admins
-    // hold it). Mirrors article_checklist_items RLS (migration 114).
+    // hold it). Migration 117 adds 'circular:checklist' as a third accepted path.
+    // Mirrors article_checklist_items RLS (migration 114 + 117).
     const ctx = await requireUser()
     const { supabase, user, profile } = ctx
     await assertCircularExists(supabase, circularId)
     await assertArticleExists(supabase, circularId, implementationId)
+    const hasChecklistPerm = ctx.permissions.includes('circular:checklist')
     let ruleOwnerId: string | null = null
-    if (!ctx.permissions.includes('edit')) {
+    if (!hasChecklistPerm && !ctx.permissions.includes('edit')) {
       const { data: ruleRow } = await supabase
         .from('circulars')
         .select('assigned_to')
@@ -74,8 +76,8 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         .maybeSingle<{ assigned_to: string | null }>()
       ruleOwnerId = ruleRow?.assigned_to ?? null
     }
-    if (!hasEditOrOwnership(ctx, ruleOwnerId)) {
-      throw Forbidden('Missing permission: edit (or rule ownership)')
+    if (!hasChecklistPerm && !hasEditOrOwnership(ctx, ruleOwnerId)) {
+      throw Forbidden('Missing permission: circular:checklist or edit (or rule ownership)')
     }
     // W17-1 / SEC-1: optimistic-concurrency token. UPDATE scoped to the live
     // `updated_at` so concurrent PATCHes carrying the same fresh token race
@@ -173,13 +175,14 @@ export async function DELETE(req: NextRequest, { params }: Params) {
   try {
     const { circularId, implementationId, itemId } = await params
     assertUuid(circularId, implementationId, itemId) // SEC-5
-    // RBAC (ownership): same gate as PATCH — assignee or 'edit'.
+    // RBAC (ownership): same gate as PATCH — circular:checklist OR 'edit' OR assignee.
     const ctx = await requireUser()
     const { supabase, user, profile } = ctx
     await assertCircularExists(supabase, circularId)
     await assertArticleExists(supabase, circularId, implementationId)
+    const hasChecklistPerm = ctx.permissions.includes('circular:checklist')
     let ruleOwnerId: string | null = null
-    if (!ctx.permissions.includes('edit')) {
+    if (!hasChecklistPerm && !ctx.permissions.includes('edit')) {
       const { data: ruleRow } = await supabase
         .from('circulars')
         .select('assigned_to')
@@ -187,8 +190,8 @@ export async function DELETE(req: NextRequest, { params }: Params) {
         .maybeSingle<{ assigned_to: string | null }>()
       ruleOwnerId = ruleRow?.assigned_to ?? null
     }
-    if (!hasEditOrOwnership(ctx, ruleOwnerId)) {
-      throw Forbidden('Missing permission: edit (or rule ownership)')
+    if (!hasChecklistPerm && !hasEditOrOwnership(ctx, ruleOwnerId)) {
+      throw Forbidden('Missing permission: circular:checklist or edit (or rule ownership)')
     }
     // W17-1 / SEC-1: optimistic-concurrency token. DELETE scoped to live
     // `updated_at` when `If-Match` is sent so a concurrent writer trips 412.

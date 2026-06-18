@@ -9,7 +9,7 @@
 
 import type { NextRequest } from 'next/server'
 import { z } from 'zod'
-import { requireUser } from '@/lib/api/auth'
+import { requireAnyPerm } from '@/lib/api/auth'
 import { hasServiceRole, getAdminClient } from '@/lib/api/admin'
 import { handle } from '@/lib/api/errors'
 import { ok } from '@/lib/api/response'
@@ -47,10 +47,35 @@ const GeneratePdfBodySchema = z.object({
     .optional(),
 })
 
+// Migration 117: map each export template → the granular per-entity export key.
+// Company-wide / cross-entity templates (compliance-report, calendar-export)
+// have no per-entity key and are gated on the generic 'export' alone. The route
+// always OR's in the legacy 'export' key, so every role that could export before
+// (auditor/officer hold 'export') keeps working; the granular key lets the
+// Access Matrix grant/withhold export per entity.
+const TEMPLATE_EXPORT_PERM: Record<string, string> = {
+  'sama-letter': 'letter:export',
+  'correspondence-tracker': 'letter:export',
+  'audit-report': 'audit:export',
+  'risk-register': 'risk:export',
+  'observation-list': 'observation:export',
+  'policy-export': 'policy:export',
+  'policy-report': 'policy:export',
+  'training-report': 'training:export',
+  'training-compliance-report': 'training:export',
+  'circular-report': 'circular:export',
+  // No per-entity key (gated on generic 'export'):
+  //   'compliance-report', 'calendar-export'
+}
+
 export async function POST(req: NextRequest) {
   try {
-    const { supabase, user } = await requireUser()
+    // Parse first so we know the template, then gate on the mapped per-entity
+    // export key OR the legacy 'export'. requireAnyPerm → requireUser (memoized).
     const body = await parseJson(req, GeneratePdfBodySchema)
+    const entityPerm = TEMPLATE_EXPORT_PERM[body.template]
+    const acceptedPerms = entityPerm ? [entityPerm, 'export'] : ['export']
+    const { supabase, user } = await requireAnyPerm(acceptedPerms)
 
     // Enqueue a pdf.generate job. The cron worker picks it up, calls
     // renderPdf, uploads to Storage, and marks status='done'.

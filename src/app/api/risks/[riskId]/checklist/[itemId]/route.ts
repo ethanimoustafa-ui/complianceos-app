@@ -6,7 +6,7 @@
 // (This matches the existing plan-toggle route's terminal behaviour.)
 
 import type { NextRequest } from 'next/server'
-import { requirePerm } from '@/lib/api/auth'
+import { requireAnyPerm } from '@/lib/api/auth'
 import { handle, NotFound } from '@/lib/api/errors'
 import { ok } from '@/lib/api/response'
 import { parseJson } from '@/lib/api/validate'
@@ -33,7 +33,8 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   try {
     const { riskId, itemId } = await params
     if (!UUID_RE.test(itemId)) throw NotFound(`Checklist item ${itemId} not found`)
-    const { supabase, user, profile } = await requirePerm('audit:edit')
+    // Migration 117: accept 'risk:checklist' OR the legacy 'audit:edit' key.
+    const { supabase, user, profile } = await requireAnyPerm(['risk:checklist', 'audit:edit'])
     await assertRiskExists(supabase, riskId)
     const patch = await parseJson(req, UpdateRiskChecklistItemSchema)
 
@@ -136,7 +137,8 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
   try {
     const { riskId, itemId } = await params
     if (!UUID_RE.test(itemId)) throw NotFound(`Checklist item ${itemId} not found`)
-    const { supabase, user, profile } = await requirePerm('audit:edit')
+    // Migration 117: accept 'risk:checklist' OR the legacy 'audit:edit' key.
+    const { supabase, user, profile } = await requireAnyPerm(['risk:checklist', 'audit:edit'])
     await assertRiskExists(supabase, riskId)
 
     // Fetch text for history note before deleting.

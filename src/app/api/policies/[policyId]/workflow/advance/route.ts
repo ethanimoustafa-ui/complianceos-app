@@ -70,13 +70,15 @@ export async function POST(req: NextRequest, { params }: Params) {
     // every other policy mutation route (PATCH, steps, reseed).
     // RBAC (ownership): the policy OWNER may drive their own workflow even
     // without the global 'edit' permission; everyone else needs 'edit'
-    // (managers/admins hold it via their role). Mirrors the policies_update /
-    // policy_workflow_steps RLS predicates (migration 114).
+    // (managers/admins hold it via their role). Migration 117 adds the granular
+    // 'workflow:advance' key as a third accepted path (matrix grant). Mirrors the
+    // policies_update / policy_workflow_steps RLS predicates (migration 114 + 117).
     const ctx = await requireUser()
     const { supabase, user, profile } = ctx
     const policyId = await assertPolicyExists(supabase, policyIdParam)
+    const hasAdvancePerm = ctx.permissions.includes('workflow:advance')
     let ownerId: string | null = null
-    if (!ctx.permissions.includes('edit')) {
+    if (!hasAdvancePerm && !ctx.permissions.includes('edit')) {
       const { data: ownerRow } = await supabase
         .from('policies')
         .select('owner_id')
@@ -84,8 +86,8 @@ export async function POST(req: NextRequest, { params }: Params) {
         .maybeSingle<{ owner_id: string | null }>()
       ownerId = ownerRow?.owner_id ?? null
     }
-    if (!hasEditOrOwnership(ctx, ownerId)) {
-      throw Forbidden('Missing permission: edit (or policy ownership)')
+    if (!hasAdvancePerm && !hasEditOrOwnership(ctx, ownerId)) {
+      throw Forbidden('Missing permission: workflow:advance or edit (or policy ownership)')
     }
     const input = await parseJson(req, AdvancePolicyWorkflowSchema)
 

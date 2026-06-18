@@ -8,7 +8,7 @@
 // promotes the next phase step.
 
 import type { NextRequest } from 'next/server'
-import { requirePerm } from '@/lib/api/auth'
+import { requireAnyPerm } from '@/lib/api/auth'
 import { Conflict, handle } from '@/lib/api/errors'
 import { ok } from '@/lib/api/response'
 import { assertUuid, parseJson } from '@/lib/api/validate'
@@ -46,7 +46,9 @@ export async function POST(req: NextRequest, { params }: Params) {
   try {
     const { circularId } = await params
     assertUuid(circularId) // SEC-5
-    const { supabase, user, profile } = await requirePerm('edit')
+    // Migration 117: accept the granular 'workflow:advance' key OR the legacy
+    // 'edit' key the role tiers still carry. Mirrors circular_workflow_steps RLS.
+    const { supabase, user, profile } = await requireAnyPerm(['workflow:advance', 'edit'])
     await assertCircularExists(supabase, circularId)
     const body = await parseJson(req, AdvancePhaseSchema)
 

@@ -7,7 +7,7 @@
 // row + optional signer/signature info.
 
 import type { NextRequest } from 'next/server'
-import { requireUser } from '@/lib/api/auth'
+import { requireAnyPerm } from '@/lib/api/auth'
 import { handle, NotFound } from '@/lib/api/errors'
 import { LETTER_DETAIL_COLUMNS } from '@/lib/api/services/letters'
 import {
@@ -158,7 +158,9 @@ export async function GET(
 ) {
   try {
     const { letterId } = await params
-    const { supabase } = await requireUser()
+    // Migration 117: gate the letter PDF export on the granular 'letter:export'
+    // key OR the legacy 'export' key the role tiers still carry.
+    const { supabase } = await requireAnyPerm(['letter:export', 'export'])
 
     const { data, error } = await supabase
       .from('letters')
