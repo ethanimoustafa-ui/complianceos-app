@@ -10,7 +10,7 @@ import { useDepartmentStore } from '@/stores/department-store'
 import { EditableSelect } from '@/components/ui/editable-select'
 import type { TrainingEmployee, TrainingStatus } from '@/types'
 import { dicebearAvatar } from '@/lib/avatar'
-import { Gate } from '@/components/auth/gate'
+import { EntityGate } from '@/components/auth/gate'
 
 interface EmployeeTableProps {
   employees: TrainingEmployee[]
@@ -171,12 +171,12 @@ export function EmployeeTable({ employees, onViewEmployee, onAddEmployee, onRemo
                 />
               </div>
               {onAddEmployee && (
-                <Gate perm="Manage Training Programs">
+                <EntityGate action="create" entity="training">
                   <button onClick={onAddEmployee} className="px-3 py-1.5 text-xs font-bold text-white bg-emerald-600 rounded-lg flex items-center gap-1.5 hover:bg-emerald-700 transition-colors cursor-pointer">
                     <Icon icon="lucide:user-plus" className="text-sm" />
                     {t('training.addPerson' as TranslationKey)}
                   </button>
-                </Gate>
+                </EntityGate>
               )}
               {onHrReminder && (
                 <button onClick={onHrReminder} className="px-3 py-1.5 text-xs font-bold text-slate-700 bg-white border border-slate-200 rounded-lg flex items-center gap-1.5 hover:bg-slate-50 transition-colors cursor-pointer">
@@ -184,9 +184,11 @@ export function EmployeeTable({ employees, onViewEmployee, onAddEmployee, onRemo
                   {t('training.hrReminder' as TranslationKey)}
                 </button>
               )}
-              <button onClick={onExport} className="p-2 hover:bg-slate-50 rounded-lg text-slate-400 cursor-pointer">
-                <Icon icon="lucide:download" />
-              </button>
+              <EntityGate action="export" entity="training">
+                <button onClick={onExport} className="p-2 hover:bg-slate-50 rounded-lg text-slate-400 cursor-pointer">
+                  <Icon icon="lucide:download" />
+                </button>
+              </EntityGate>
             </div>
           </div>
 
@@ -331,7 +333,7 @@ export function EmployeeTable({ employees, onViewEmployee, onAddEmployee, onRemo
                             <Icon icon="lucide:eye" className="text-lg" />
                           </button>
                           {onRemoveEmployee && (
-                            <Gate perm="Manage Training Programs">
+                            <EntityGate action="delete" entity="training">
                               <button
                                 onClick={() => onRemoveEmployee(employee)}
                                 title={t('training.removePerson' as TranslationKey)}
@@ -339,7 +341,7 @@ export function EmployeeTable({ employees, onViewEmployee, onAddEmployee, onRemo
                               >
                                 <Icon icon="lucide:trash-2" className="text-lg" />
                               </button>
-                            </Gate>
+                            </EntityGate>
                           )}
                         </div>
                       </td>

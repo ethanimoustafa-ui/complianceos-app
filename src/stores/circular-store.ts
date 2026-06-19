@@ -37,7 +37,7 @@ import { validateChildDeadline } from '@/lib/deadline-validation'
 import { api, ApiClientError } from '@/lib/api-client'
 import { pushToast, type ToastMessage } from '@/stores/toast-store'
 import { computeCircularProgress } from '@/lib/progress-formula'
-import { optimisticMutation } from '@/lib/optimistic'
+import { optimisticMutation, isPermissionDenied } from '@/lib/optimistic'
 
 // Wave-19.4 / Item-3 — the synthetic "Initial registration" entry shown when a
 // freshly-created circular has no real `circular_versions` rows yet. Inlined
@@ -957,7 +957,7 @@ async function uploadCircularAttachment(
       set((state) => restoreCircularState(state, circularId, snapshot))
     }
     set({ error: errorMessage(e, 'Failed to upload document') })
-    pushToast(revertMessage(e), 'error')
+    if (!isPermissionDenied(e)) pushToast(revertMessage(e), 'error')
     console.error('[optimistic:uploadCircularAttachment] failed —', e)
     throw e
   }
@@ -997,7 +997,7 @@ async function deleteCircularAttachment(
       set((state) => restoreCircularState(state, circularId, snapshot))
     }
     set({ error: errorMessage(e, 'Failed to remove document') })
-    pushToast(revertMessage(e), 'error')
+    if (!isPermissionDenied(e)) pushToast(revertMessage(e), 'error')
     console.error('[optimistic:deleteCircularAttachment] failed —', e)
     throw e
   }
@@ -1208,7 +1208,7 @@ export const useCircularStore = create<CircularState>()((set, get) => ({
           isMutating: false,
         }
       })
-      pushToast(revertMessage(e), 'error')
+      if (!isPermissionDenied(e)) pushToast(revertMessage(e), 'error')
       console.error('[optimistic:create] failed —', e)
       throw e
     }
@@ -1251,7 +1251,7 @@ export const useCircularStore = create<CircularState>()((set, get) => ({
         set((state) => restoreCircularState(state, id, snapshot))
       }
       set({ error: errorMessage(e, 'Failed to update circular'), isMutating: false })
-      pushToast(revertMessage(e), 'error')
+      if (!isPermissionDenied(e)) pushToast(revertMessage(e), 'error')
       console.error('[optimistic:update] failed —', e)
       throw e
     }
@@ -1301,7 +1301,7 @@ export const useCircularStore = create<CircularState>()((set, get) => ({
       } else {
         set({ error: errorMessage(e, 'Failed to delete circular'), isMutating: false })
       }
-      pushToast(revertMessage(e), 'error')
+      if (!isPermissionDenied(e)) pushToast(revertMessage(e), 'error')
       console.error('[optimistic:delete] failed —', e)
       throw e
     }
@@ -1473,7 +1473,7 @@ export const useCircularStore = create<CircularState>()((set, get) => ({
         set((state) => restoreCircularState(state, circularId, snapshot))
       }
       set({ error: errorMessage(e, 'Failed to add article') })
-      pushToast(revertMessage(e), 'error')
+      if (!isPermissionDenied(e)) pushToast(revertMessage(e), 'error')
       console.error('[optimistic:addArticle] failed —', e)
       throw e
     }
@@ -1567,7 +1567,7 @@ export const useCircularStore = create<CircularState>()((set, get) => ({
         set((state) => restoreCircularState(state, circularId, snapshot))
       }
       set({ error: errorMessage(e, 'Failed to update article') })
-      pushToast(revertMessage(e), 'error')
+      if (!isPermissionDenied(e)) pushToast(revertMessage(e), 'error')
       console.error('[optimistic:updateArticle] failed —', e)
       throw e
     }
@@ -1600,7 +1600,7 @@ export const useCircularStore = create<CircularState>()((set, get) => ({
         set((state) => restoreCircularState(state, circularId, snapshot))
       }
       set({ error: errorMessage(e, 'Failed to delete article') })
-      pushToast(revertMessage(e), 'error')
+      if (!isPermissionDenied(e)) pushToast(revertMessage(e), 'error')
       console.error('[optimistic:deleteArticle] failed —', e)
       throw e
     }
@@ -1678,7 +1678,7 @@ export const useCircularStore = create<CircularState>()((set, get) => ({
         set((state) => restoreCircularState(state, circularId, snapshot))
       }
       set({ error: errorMessage(e, 'Failed to update checklist item') })
-      pushToast(revertMessage(e), 'error')
+      if (!isPermissionDenied(e)) pushToast(revertMessage(e), 'error')
       console.error('[optimistic:toggleChecklistItem] failed —', e)
       throw e
     }
@@ -1751,7 +1751,7 @@ export const useCircularStore = create<CircularState>()((set, get) => ({
         set((state) => restoreCircularState(state, circularId, snapshot))
       }
       set({ error: errorMessage(e, 'Failed to add checklist item') })
-      pushToast(revertMessage(e), 'error')
+      if (!isPermissionDenied(e)) pushToast(revertMessage(e), 'error')
       console.error('[optimistic:addChecklistItem] failed —', e)
       throw e
     }
@@ -1814,7 +1814,7 @@ export const useCircularStore = create<CircularState>()((set, get) => ({
         set((state) => restoreCircularState(state, circularId, snapshot))
       }
       set({ error: errorMessage(e, 'Failed to set checklist deadline') })
-      pushToast(revertMessage(e), 'error')
+      if (!isPermissionDenied(e)) pushToast(revertMessage(e), 'error')
       console.error('[optimistic:setArticleChecklistItemDeadline] failed —', e)
       throw e
     }
@@ -1866,7 +1866,7 @@ export const useCircularStore = create<CircularState>()((set, get) => ({
         set((state) => restoreCircularState(state, circularId, snapshot))
       }
       set({ error: errorMessage(e, 'Failed to delete checklist item') })
-      pushToast(revertMessage(e), 'error')
+      if (!isPermissionDenied(e)) pushToast(revertMessage(e), 'error')
       console.error('[optimistic:deleteChecklistItem] failed —', e)
       throw e
     }
@@ -1946,7 +1946,7 @@ export const useCircularStore = create<CircularState>()((set, get) => ({
         set((state) => restoreCircularState(state, circularId, snapshot))
       }
       set({ error: errorMessage(e, 'Failed to advance workflow step') })
-      pushToast(revertMessage(e), 'error')
+      if (!isPermissionDenied(e)) pushToast(revertMessage(e), 'error')
       console.error('[optimistic:advanceWorkflowStep] failed —', e)
       throw e
     }
@@ -2030,7 +2030,7 @@ export const useCircularStore = create<CircularState>()((set, get) => ({
             set((state) => restoreCircularState(state, circularId, snapshot))
           }
           set({ error: errorMessage(e, 'Failed to update step deadline') })
-          pushToast(revertMessage(e), 'error')
+          if (!isPermissionDenied(e)) pushToast(revertMessage(e), 'error')
           console.error('[optimistic:setRuleStepDeadline] failed —', e)
         })
     }
@@ -2111,7 +2111,7 @@ export const useCircularStore = create<CircularState>()((set, get) => ({
         set((state) => restoreCircularState(state, circularId, snapshot))
       }
       set({ error: errorMessage(e, 'Failed to add workflow step') })
-      pushToast(revertMessage(e), 'error')
+      if (!isPermissionDenied(e)) pushToast(revertMessage(e), 'error')
       console.error('[optimistic:addWorkflowStep] failed —', e)
       throw e
     }
@@ -2179,7 +2179,7 @@ export const useCircularStore = create<CircularState>()((set, get) => ({
         set((state) => restoreCircularState(state, circularId, snapshot))
       }
       set({ error: errorMessage(e, 'Failed to rename workflow step') })
-      pushToast(revertMessage(e), 'error')
+      if (!isPermissionDenied(e)) pushToast(revertMessage(e), 'error')
       console.error('[optimistic:renameWorkflowStep] failed —', e)
       throw e
     }
@@ -2242,7 +2242,7 @@ export const useCircularStore = create<CircularState>()((set, get) => ({
         set((state) => restoreCircularState(state, circularId, snapshot))
       }
       set({ error: errorMessage(e, 'Failed to update workflow step') })
-      pushToast(revertMessage(e), 'error')
+      if (!isPermissionDenied(e)) pushToast(revertMessage(e), 'error')
       console.error('[optimistic:updateWorkflowStep] failed —', e)
       throw e
     }
@@ -2309,7 +2309,7 @@ export const useCircularStore = create<CircularState>()((set, get) => ({
         set((state) => restoreCircularState(state, circularId, snapshot))
       }
       set({ error: errorMessage(e, 'Failed to remove workflow step') })
-      pushToast(revertMessage(e), 'error')
+      if (!isPermissionDenied(e)) pushToast(revertMessage(e), 'error')
       console.error('[optimistic:removeWorkflowStep] failed —', e)
       throw e
     }
@@ -2374,7 +2374,7 @@ export const useCircularStore = create<CircularState>()((set, get) => ({
         set((state) => restoreCircularState(state, circularId, snapshot))
       }
       set({ error: errorMessage(e, 'Failed to reorder workflow steps') })
-      pushToast(revertMessage(e), 'error')
+      if (!isPermissionDenied(e)) pushToast(revertMessage(e), 'error')
       console.error('[optimistic:reorderWorkflowSteps] failed —', e)
       throw e
     }
@@ -2701,7 +2701,7 @@ export const useCircularStore = create<CircularState>()((set, get) => ({
           [circularId]: { ...page, loadingMore: false },
         },
       }))
-      pushToast(revertMessage(e), 'error')
+      if (!isPermissionDenied(e)) pushToast(revertMessage(e), 'error')
       console.error('[loadMoreTimeline] failed —', e)
     }
   },
@@ -2801,7 +2801,7 @@ export const useCircularStore = create<CircularState>()((set, get) => ({
           [key]: { ...page, loadingMore: false },
         },
       }))
-      pushToast(revertMessage(e), 'error')
+      if (!isPermissionDenied(e)) pushToast(revertMessage(e), 'error')
       console.error('[loadMoreArticleTimeline] failed —', e)
     }
   },
@@ -2854,7 +2854,7 @@ export const useCircularStore = create<CircularState>()((set, get) => ({
           [circularId]: { ...page, loadingMore: false },
         },
       }))
-      pushToast(revertMessage(e), 'error')
+      if (!isPermissionDenied(e)) pushToast(revertMessage(e), 'error')
       console.error('[loadMoreCircularVersions] failed —', e)
     }
   },
@@ -2951,7 +2951,7 @@ export const useCircularStore = create<CircularState>()((set, get) => ({
           [key]: { ...page, loadingMore: false },
         },
       }))
-      pushToast(revertMessage(e), 'error')
+      if (!isPermissionDenied(e)) pushToast(revertMessage(e), 'error')
       console.error('[loadMoreArticleVersions] failed —', e)
     }
   },

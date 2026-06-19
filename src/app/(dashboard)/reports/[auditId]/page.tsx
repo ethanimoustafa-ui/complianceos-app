@@ -26,6 +26,7 @@ import { formatAuditAction } from '@/lib/audit-log-format'
 import { useAuditTaskCategoryStore } from '@/stores/audit-task-category-store'
 import { SEED_TASK_CATEGORIES } from '@/lib/audit-task-seed-categories'
 import { useAuthStore } from '@/stores/auth-store'
+import { EntityGate } from '@/components/auth/gate'
 import { useFrameworkConfigStore } from '@/stores/framework-config-store'
 import { FrameworkChips } from '@/components/ui/framework-chips'
 import type { RegulatoryBodyId } from '@/types'
@@ -865,18 +866,22 @@ export default function AuditDetailPage() {
               className={`py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 w-64 transition-all ${isRTL ? 'pr-10 pl-4' : 'pl-10 pr-4'}`}
             />
           </div>
-          <Button variant="outline" onClick={() => setShowEditModal(true)}>
-            <Icon icon="lucide:edit-3" />
-            {t('auditDetail.editAudit')}
-          </Button>
-          <Button
-            variant="outline"
-            className="border-rose-200 text-rose-600 hover:bg-rose-50"
-            onClick={() => setShowDeleteConfirm(true)}
-          >
-            <Icon icon="lucide:trash-2" />
-            {t('common.delete')}
-          </Button>
+          <EntityGate action="edit" entity="audit">
+            <Button variant="outline" onClick={() => setShowEditModal(true)}>
+              <Icon icon="lucide:edit-3" />
+              {t('auditDetail.editAudit')}
+            </Button>
+          </EntityGate>
+          <EntityGate action="delete" entity="audit">
+            <Button
+              variant="outline"
+              className="border-rose-200 text-rose-600 hover:bg-rose-50"
+              onClick={() => setShowDeleteConfirm(true)}
+            >
+              <Icon icon="lucide:trash-2" />
+              {t('common.delete')}
+            </Button>
+          </EntityGate>
         </div>
       </header>
 

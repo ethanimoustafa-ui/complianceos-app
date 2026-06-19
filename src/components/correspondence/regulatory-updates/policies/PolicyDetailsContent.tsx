@@ -13,7 +13,7 @@ import { useAuthStore } from '@/stores/auth-store'
 import { useNotificationStore } from '@/stores/notification-store'
 import { useDepartmentStore } from '@/stores/department-store'
 import { useTeamStore } from '@/stores/team-store'
-import { useCan, canAdvancePolicyWorkflow } from '@/lib/permissions'
+import { useCan, useCanEditEntity, useCanDeleteEntity, canAdvancePolicyWorkflow } from '@/lib/permissions'
 import { EditableSelect } from '@/components/ui/editable-select'
 import { InlineDeadlinePicker } from '@/components/ui/inline-deadline-picker'
 // C(#31)/B(#30): consume a calendar deep-link → open the workflow tab + glow
@@ -113,6 +113,8 @@ export function PolicyDetailsContent({
   const [activeTab, setActiveTab] = useState<DetailTab>(initialTab ?? 'overview')
   const [expandedVersion, setExpandedVersion] = useState<number | null>(null)
   const canApprovePolicy = useCan('Approve Policy Reviews')
+  const canEditPolicy = useCanEditEntity('policy')
+  const canDeletePolicy = useCanDeleteEntity('policy')
 
   // P5 (W29): activity Load More — show 10 newest first, Load More appends older.
   const TIMELINE_PAGE_SIZE = 10
@@ -1551,8 +1553,8 @@ export function PolicyDetailsContent({
               variant="primary"
               className="w-full"
               onClick={onEditOpen}
-              disabled={!canApprovePolicy}
-              title={canApprovePolicy ? '' : t('rbac.deniedTooltip')}
+              disabled={!canEditPolicy}
+              title={canEditPolicy ? '' : t('rbac.deniedTooltip')}
             >
               <Icon icon="lucide:edit" className="w-4 h-4" />
               {t('policies.editPolicy')}
@@ -1571,10 +1573,12 @@ export function PolicyDetailsContent({
               {t('policies.unarchivePolicy')}
             </Button>
           )}
-          <Button variant="outline" className="w-full border-rose-200 text-rose-600 hover:bg-rose-50" onClick={onDeleteOpen}>
-            <Icon icon="lucide:trash-2" className="w-4 h-4" />
-            {t('policies.deletePolicy')}
-          </Button>
+          {canDeletePolicy && (
+            <Button variant="outline" className="w-full border-rose-200 text-rose-600 hover:bg-rose-50" onClick={onDeleteOpen}>
+              <Icon icon="lucide:trash-2" className="w-4 h-4" />
+              {t('policies.deletePolicy')}
+            </Button>
+          )}
           <Button variant="ghost" className="w-full" onClick={onClose}>
             {t('common.close')}
           </Button>

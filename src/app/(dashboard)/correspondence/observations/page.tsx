@@ -7,7 +7,7 @@ import { Icon } from '@iconify/react'
 import { Button } from '@/components/ui/button'
 import { useTranslation } from '@/i18n'
 import { exportObservations } from '@/lib/export'
-import { Gate } from '@/components/auth/gate'
+import { EntityGate } from '@/components/auth/gate'
 import { useObservationStore } from '@/stores/observation-store'
 import { useToastStore } from '@/stores/toast-store'
 import { ListSkeleton, CardSkeleton, Skeleton } from '@/components/ui/skeleton'
@@ -488,7 +488,7 @@ export default function ObservationsPage() {
 
         <div className={`flex items-center gap-4`}>
           {/* Export Menu — CSV + PDF */}
-          <Gate perm="Export Compliance Data">
+          <EntityGate action="export" entity="observation">
             <ExportMenu
               iconOnly
               options={[
@@ -505,10 +505,10 @@ export default function ObservationsPage() {
                 },
               ]}
             />
-          </Gate>
+          </EntityGate>
 
           {/* Add Observation Button */}
-          <Gate perm="Manage Audit Findings">
+          <EntityGate action="create" entity="observation">
             <Button
               variant="primary"
               onClick={() => setIsAddModalOpen(true)}
@@ -517,7 +517,7 @@ export default function ObservationsPage() {
               <Icon icon="lucide:plus" />
               {t('observations.addObservation')}
             </Button>
-          </Gate>
+          </EntityGate>
         </div>
       </header>
 

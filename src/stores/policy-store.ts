@@ -35,6 +35,7 @@ import { computeNextReview, cadenceToReviewCycleDays } from '@/lib/review-schedu
 import { validateChildDeadline } from '@/lib/deadline-validation'
 import { requirePermission } from '@/lib/rbac-store-gate'
 import { pushToast, type ToastMessage } from '@/stores/toast-store'
+import { isPermissionDenied } from '@/lib/optimistic'
 
 // W18 / W17-1 / SEC-1: build an `If-Match: W/"<updatedAt>"` header object when
 // the entity carries an `updatedAt` token. Returned `undefined` keeps the
@@ -724,7 +725,7 @@ export const usePolicyStore = create<PolicyStoreState>()((set, get) => ({
       return created
     } catch (e) {
       set({ error: errorMessage(e, 'Failed to create policy'), isMutating: false })
-      pushToast(revertMessage(e), 'error')
+      if (!isPermissionDenied(e)) pushToast(revertMessage(e), 'error')
       throw e
     }
   },
@@ -771,7 +772,7 @@ export const usePolicyStore = create<PolicyStoreState>()((set, get) => ({
           error: errorMessage(e, 'Failed to update policy'),
           isMutating: false,
         }))
-        pushToast(revertMessage(e), 'error')
+        if (!isPermissionDenied(e)) pushToast(revertMessage(e), 'error')
       }
     })()
   },
@@ -802,7 +803,7 @@ export const usePolicyStore = create<PolicyStoreState>()((set, get) => ({
       return true
     } catch (e) {
       set({ error: errorMessage(e, 'Failed to delete policy'), isMutating: false })
-      pushToast(revertMessage(e), 'error')
+      if (!isPermissionDenied(e)) pushToast(revertMessage(e), 'error')
       return false
     }
   },
@@ -906,7 +907,7 @@ export const usePolicyStore = create<PolicyStoreState>()((set, get) => ({
               selectedPolicy: s.selectedPolicy?.id === policyId ? rolled : s.selectedPolicy,
             }
           })
-          pushToast(revertMessage(e), 'error')
+          if (!isPermissionDenied(e)) pushToast(revertMessage(e), 'error')
         }
       })()
     }
@@ -966,7 +967,7 @@ export const usePolicyStore = create<PolicyStoreState>()((set, get) => ({
               selectedPolicy: s.selectedPolicy?.id === policyId ? rolled : s.selectedPolicy,
             }
           })
-          pushToast(revertMessage(e), 'error')
+          if (!isPermissionDenied(e)) pushToast(revertMessage(e), 'error')
         }
       })()
     }
@@ -1065,7 +1066,7 @@ export const usePolicyStore = create<PolicyStoreState>()((set, get) => ({
           [policyId]: { ...page, loadingMore: false },
         },
       }))
-      pushToast(revertMessage(e), 'error')
+      if (!isPermissionDenied(e)) pushToast(revertMessage(e), 'error')
       // eslint-disable-next-line no-console
       console.error('[loadMorePolicyActivity] failed —', e)
     }
@@ -1129,7 +1130,7 @@ export const usePolicyStore = create<PolicyStoreState>()((set, get) => ({
           error: errorMessage(e, 'Failed to update policy leader'),
           isMutating: false,
         }))
-        pushToast(revertMessage(e), 'error')
+        if (!isPermissionDenied(e)) pushToast(revertMessage(e), 'error')
       }
     })()
   },
@@ -1215,7 +1216,7 @@ export const usePolicyStore = create<PolicyStoreState>()((set, get) => ({
         error: errorMessage(e, 'Failed to add workflow step'),
         isMutating: false,
       }))
-      pushToast(revertMessage(e), 'error')
+      if (!isPermissionDenied(e)) pushToast(revertMessage(e), 'error')
       throw e
     }
   },
@@ -1261,7 +1262,7 @@ export const usePolicyStore = create<PolicyStoreState>()((set, get) => ({
     } catch (e) {
       // Roll back on failure
       applyToState(get().byId[policyId] ?? previous, (previous.attachments ?? []))
-      pushToast(revertMessage(e), 'error')
+      if (!isPermissionDenied(e)) pushToast(revertMessage(e), 'error')
       // eslint-disable-next-line no-console
       console.error('[addAttachment] failed —', e)
       throw e
@@ -1360,7 +1361,7 @@ export const usePolicyStore = create<PolicyStoreState>()((set, get) => ({
         previous.evidence ?? [],
         pinCycle ? { id: previous.currentReviewCycleId ?? null, label: previous.currentReviewCycleLabel ?? null } : undefined,
       )
-      pushToast(revertMessage(e), 'error')
+      if (!isPermissionDenied(e)) pushToast(revertMessage(e), 'error')
       // eslint-disable-next-line no-console
       console.error('[addEvidence] failed —', e)
       throw e
@@ -1391,7 +1392,7 @@ export const usePolicyStore = create<PolicyStoreState>()((set, get) => ({
         byId: { ...s.byId, [policyId]: policy },
         selectedPolicy: s.selectedPolicy?.id === policyId ? policy : s.selectedPolicy,
       }))
-      pushToast(revertMessage(e), 'error')
+      if (!isPermissionDenied(e)) pushToast(revertMessage(e), 'error')
       throw e
     }
   },
@@ -1419,7 +1420,7 @@ export const usePolicyStore = create<PolicyStoreState>()((set, get) => ({
         selectedPolicy: s.selectedPolicy?.id === policyId ? previous : s.selectedPolicy,
         isMutating: false,
       }))
-      pushToast(revertMessage(e), 'error')
+      if (!isPermissionDenied(e)) pushToast(revertMessage(e), 'error')
       throw e
     }
     set({ isMutating: false })
@@ -1445,7 +1446,7 @@ export const usePolicyStore = create<PolicyStoreState>()((set, get) => ({
         selectedPolicy: s.selectedPolicy?.id === policyId ? previous : s.selectedPolicy,
         isMutating: false,
       }))
-      pushToast(revertMessage(e), 'error')
+      if (!isPermissionDenied(e)) pushToast(revertMessage(e), 'error')
       throw e
     }
     set({ isMutating: false })
@@ -1511,7 +1512,7 @@ export const usePolicyStore = create<PolicyStoreState>()((set, get) => ({
     } catch (e) {
       // eslint-disable-next-line no-console
       console.error('[advanceWorkflowStep] server persist failed —', action, e)
-      pushToast(revertMessage(e), 'error')
+      if (!isPermissionDenied(e)) pushToast(revertMessage(e), 'error')
     } finally {
       // BUG-R4-01: always clear in-flight flag regardless of success/failure.
       set((s) => ({ workflowProcessing: { ...s.workflowProcessing, [policyId]: false } }))
@@ -1538,7 +1539,7 @@ export const usePolicyStore = create<PolicyStoreState>()((set, get) => ({
     } catch (e) {
       // eslint-disable-next-line no-console
       console.error('[reseedWorkflowFromTier] failed —', e)
-      pushToast(revertMessage(e), 'error')
+      if (!isPermissionDenied(e)) pushToast(revertMessage(e), 'error')
     } finally {
       set((s) => ({ workflowProcessing: { ...s.workflowProcessing, [policyId]: false } }))
     }
@@ -1572,7 +1573,7 @@ export const usePolicyStore = create<PolicyStoreState>()((set, get) => ({
         policies: cur.policies.map(p => p.id === policyId ? { ...p, workflowTimeline: policy.workflowTimeline } : p),
         byId: { ...cur.byId, [policyId]: { ...cur.byId[policyId]!, workflowTimeline: policy.workflowTimeline } },
       }))
-      pushToast(revertMessage(e), 'error')
+      if (!isPermissionDenied(e)) pushToast(revertMessage(e), 'error')
     }
   },
 
@@ -1607,7 +1608,7 @@ export const usePolicyStore = create<PolicyStoreState>()((set, get) => ({
         policies: cur.policies.map(p => p.id === policyId ? { ...p, workflowTimeline: policy.workflowTimeline } : p),
         byId: { ...cur.byId, [policyId]: { ...cur.byId[policyId]!, workflowTimeline: policy.workflowTimeline } },
       }))
-      pushToast(revertMessage(e), 'error')
+      if (!isPermissionDenied(e)) pushToast(revertMessage(e), 'error')
     }
   },
 
@@ -1633,7 +1634,7 @@ export const usePolicyStore = create<PolicyStoreState>()((set, get) => ({
         policies: cur.policies.map((p) => (p.id === policyId ? { ...p, workflowTimeline: prevTimeline } : p)),
         byId: { ...cur.byId, [policyId]: { ...cur.byId[policyId]!, workflowTimeline: prevTimeline } },
       }))
-      pushToast(revertMessage(e), 'error')
+      if (!isPermissionDenied(e)) pushToast(revertMessage(e), 'error')
     }
   },
 

@@ -1,8 +1,8 @@
 // Wave-20 — /api/observations/[observationId]/checklist — list / add items.
 
 import type { NextRequest } from 'next/server'
-import { requirePerm, requireUser } from '@/lib/api/auth'
-import { handle, NotFound } from '@/lib/api/errors'
+import { requireUser } from '@/lib/api/auth'
+import { handle, NotFound, Forbidden } from '@/lib/api/errors'
 import { ok } from '@/lib/api/response'
 import { parseJson } from '@/lib/api/validate'
 import { cacheTags, revalidateAll } from '@/lib/api/cache'
@@ -44,10 +44,21 @@ export async function GET(_req: NextRequest, { params }: Params) {
 export async function POST(req: NextRequest, { params }: Params) {
   try {
     const { observationId: observationIdParam } = await params
-    const { supabase, user, profile } = await requirePerm('observation:edit')
+    // RBAC: the granular `observation:checklist` key (migration 118) authorises
+    // checklist writes without observation membership; everyone else needs
+    // `observation:edit` AND to be a member/leader (org_admin oversees).
+    // Mirrors the circular checklist route + the observation_checklist RLS.
+    const ctx = await requireUser()
+    const { supabase, user, profile } = ctx
+    const hasChecklistPerm = ctx.permissions.includes('observation:checklist')
+    if (!hasChecklistPerm && !ctx.permissions.includes('observation:edit')) {
+      throw Forbidden('Missing permission: observation:checklist or observation:edit')
+    }
     const observationId = await assertObservationExists(supabase, observationIdParam)
     // W39: only people added to the observation can act on it (org_admin oversees).
-    await assertObservationMembership(supabase, observationId, user.id, profile.role)
+    if (!hasChecklistPerm) {
+      await assertObservationMembership(supabase, observationId, user.id, profile.role)
+    }
     const input = await parseJson(req, CreateChecklistItemSchema)
 
     // GAP-12 — server-authoritative MAX+1 sort_order. The client may still

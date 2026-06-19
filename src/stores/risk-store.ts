@@ -36,7 +36,7 @@ import type {
 import { api, ApiClientError } from '@/lib/api-client'
 import { computeNextReview } from '@/lib/review-schedule'
 import { requirePermission } from '@/lib/rbac-store-gate'
-import { newTempId } from '@/lib/optimistic'
+import { newTempId, isPermissionDenied } from '@/lib/optimistic'
 import { pushToast } from '@/stores/toast-store'
 
 // ---------- helpers ---------------------------------------------------------
@@ -595,10 +595,10 @@ export const useRiskStore = create<RiskState>()((set, get) => ({
       byId: { ...s.byId, [id]: optimistic },
       selectedRisk: s.selectedRisk?.id === id ? optimistic : s.selectedRisk,
     }))
-    void get().update(id, { status: newStatus }).catch(() => {
+    void get().update(id, { status: newStatus }).catch((e) => {
       // `update()` already rolled back the optimistic state; surface the failure
       // so the user knows the status change didn't stick.
-      pushToast({ key: 'errors.reports.statusUpdateFailed' }, 'error')
+      if (!isPermissionDenied(e)) pushToast({ key: 'errors.reports.statusUpdateFailed' }, 'error')
     })
   },
 
@@ -627,9 +627,9 @@ export const useRiskStore = create<RiskState>()((set, get) => ({
     }))
     try {
       await get().update(riskId, { mitigationPlan: plan })
-    } catch {
+    } catch (e) {
       // `update` already rolled back; tell the user the plan wasn't saved.
-      pushToast({ key: 'errors.reports.mitigationPlanSaveFailed' }, 'error')
+      if (!isPermissionDenied(e)) pushToast({ key: 'errors.reports.mitigationPlanSaveFailed' }, 'error')
     }
   },
 
@@ -656,9 +656,9 @@ export const useRiskStore = create<RiskState>()((set, get) => ({
     }))
     try {
       await get().update(riskId, { mitigationPlan: plan })
-    } catch {
+    } catch (e) {
       // `update` rolled back already; tell the user the plan wasn't saved.
-      pushToast({ key: 'errors.reports.mitigationPlanSaveFailed' }, 'error')
+      if (!isPermissionDenied(e)) pushToast({ key: 'errors.reports.mitigationPlanSaveFailed' }, 'error')
     }
   },
 
@@ -685,9 +685,9 @@ export const useRiskStore = create<RiskState>()((set, get) => ({
     }))
     try {
       await get().update(riskId, { mitigationPlan: undefined })
-    } catch {
+    } catch (e) {
       // `update` rolled back already; tell the user the change wasn't saved.
-      pushToast({ key: 'errors.reports.mitigationPlanRemoveFailed' }, 'error')
+      if (!isPermissionDenied(e)) pushToast({ key: 'errors.reports.mitigationPlanRemoveFailed' }, 'error')
     }
   },
 

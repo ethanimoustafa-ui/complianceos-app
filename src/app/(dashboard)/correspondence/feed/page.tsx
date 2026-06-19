@@ -26,8 +26,8 @@ import { formatDateWithPreference } from '@/lib/date-format'
 import { formatLocalizedQuarter } from '@/lib/format-date'
 import { useUserPreferencesStore } from '@/stores/user-preferences-store'
 import { dicebearAvatar } from '@/lib/avatar'
-import { Gate } from '@/components/auth/gate'
-import { useCan } from '@/lib/permissions'
+import { EntityGate } from '@/components/auth/gate'
+import { useCan, useCanDeleteEntity } from '@/lib/permissions'
 import { useTeamWorkloads } from '@/hooks/useWorkload'
 import { useFrameworkConfigStore } from '@/stores/framework-config-store'
 import { resolveAuthorityCode } from '@/lib/authority-display'
@@ -182,6 +182,9 @@ export default function CorrespondenceFeedPage() {
   // W42 (story 12): type-vocabulary management is officer+ only — viewers get
   // a read-only dropdown (the API rejects them anyway; don't show dead UI).
   const canManageTypes = useCan('Manage Audit Findings')
+  // Feed delete is server-gated on feed:delete OR generic delete (migration 118);
+  // gate the affordance to match so we don't render a button that can only 403.
+  const canDeleteFeed = useCanDeleteEntity('feed')
 
   // W28 BUG A2/A3 — re-fetch correspondence whenever the archive filter
   // changes. The server defaults `archived=false`, so without threading the
@@ -626,7 +629,7 @@ export default function CorrespondenceFeedPage() {
           </div>
         </div>
         <div className={`flex items-center gap-4`}>
-          <Gate perm="Manage Audit Findings">
+          <EntityGate action="create" entity="feed">
             <button
               onClick={() => setIsNewCorrespondenceOpen(true)}
               className={`bg-emerald-600 text-white px-5 py-2.5 rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-emerald-700 transition-colors shadow-lg shadow-emerald-100 cursor-pointer`}
@@ -634,7 +637,7 @@ export default function CorrespondenceFeedPage() {
               <Icon icon="lucide:plus" />
               {t('correspondence.logCommunication' as TranslationKey)}
             </button>
-          </Gate>
+          </EntityGate>
         </div>
       </header>
 
@@ -895,13 +898,13 @@ export default function CorrespondenceFeedPage() {
                               onArchive={() => handleArchive(letter.id)}
                               onSend={() => handleMarkSent(letter.id)}
                               isSending={markSentBusy === letter.id}
-                              onDelete={() => {
+                              onDelete={canDeleteFeed ? () => {
                                 if (deleteConfirmId === letter.id) {
                                   void handleDelete(letter.id)
                                 } else {
                                   setDeleteConfirmId(letter.id)
                                 }
-                              }}
+                              } : undefined}
                               isConfirmingDelete={deleteConfirmId === letter.id}
                               t={t}
                               isRTL={isRTL}
@@ -1539,7 +1542,7 @@ export default function CorrespondenceFeedPage() {
                 {detailLetter.archived ? t('correspondence.unarchive') : t('correspondence.archive')}
               </button>
               {/* H2: Delete button — opens confirm dialog, then calls DELETE /api/correspondence/[id] */}
-              {deleteConfirmId === detailLetter.id ? (
+              {canDeleteFeed && (deleteConfirmId === detailLetter.id ? (
                 <div className="flex gap-2 flex-1">
                   <button
                     onClick={() => handleDelete(detailLetter.id)}
@@ -1567,7 +1570,7 @@ export default function CorrespondenceFeedPage() {
                   <Icon icon="lucide:trash-2" />
                   {t('common.delete')}
                 </button>
-              )}
+              ))}
             </div>
           </div>
         )}
@@ -1646,13 +1649,13 @@ export default function CorrespondenceFeedPage() {
                       onArchive={() => handleArchive(letter.id)}
                       onSend={() => handleMarkSent(letter.id)}
                       isSending={markSentBusy === letter.id}
-                      onDelete={() => {
+                      onDelete={canDeleteFeed ? () => {
                         if (deleteConfirmId === letter.id) {
                           void handleDelete(letter.id)
                         } else {
                           setDeleteConfirmId(letter.id)
                         }
-                      }}
+                      } : undefined}
                       isConfirmingDelete={deleteConfirmId === letter.id}
                       t={t}
                       isRTL={isRTL}

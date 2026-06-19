@@ -123,6 +123,26 @@ async function fetchPermissions(userId: string): Promise<string[]> {
       }
     }
   }
+
+  // Per-user grants from the Access Matrix live in `user_permissions` (NOT
+  // role_permissions). WITHOUT this the client never sees a matrix-granted key
+  // (e.g. an officer granted `letter:delete`), so its button stayed disabled
+  // even though the server RLS — which DOES read user_permissions — allowed it.
+  // granted=true adds the key; granted=false is an explicit deny override.
+  const { data: grants, error: grantsErr } = await supabase
+    .from('user_permissions')
+    .select('permission_key, granted')
+    .eq('user_id', userId)
+  if (grantsErr) {
+    console.error('[auth-store] fetchPermissions user_permissions error', grantsErr)
+  } else {
+    for (const g of (grants ?? []) as Array<{ permission_key?: string; granted?: boolean }>) {
+      if (!g.permission_key) continue
+      if (g.granted === false) keys.delete(g.permission_key)
+      else keys.add(g.permission_key)
+    }
+  }
+
   return Array.from(keys)
 }
 

@@ -140,6 +140,7 @@ export function AccessMatrixSection() {
   const isLoading = useTeamStore((s) => s.isLoading)
   const isMutating = useTeamStore((s) => s.isMutating)
   const updateMember = useTeamStore((s) => s.update)
+  const setPermission = useTeamStore((s) => s.setPermission)
   const currentUser = useAuthStore((s) => s.user)
   const log = useUserLogStore((s) => s.log)
 
@@ -163,15 +164,16 @@ export function AccessMatrixSection() {
   async function handleToggle(member: TeamMember, id: string) {
     if (isFixedAllOn(member)) return
     const pk = `${member.id}:${id}`
-    const before = getEnabledIds(member)
-    const wasEnabled = before.has(id)
-    const after = new Set(before)
-    if (wasEnabled) after.delete(id)
-    else after.add(id)
+    // Read the LATEST store state (not the captured prop) so a toggle fired while
+    // another is mid-flight builds on the up-to-date grant set.
+    const latest = useTeamStore.getState().byId[member.id] ?? member
+    const wasEnabled = getEnabledIds(latest).has(id)
 
     setPending((p) => new Set(p).add(pk))
     try {
-      await updateMember(member.id, { accessControls: buildAccessControls(after) })
+      // Delta write — only THIS toggle's key persists, so concurrent toggles
+      // load independently and never clobber one another.
+      await setPermission(member.id, id, !wasEnabled)
       log({
         userId: currentUser?.id ?? 'anonymous',
         action: 'team.permissions_changed',
@@ -182,6 +184,9 @@ export function AccessMatrixSection() {
           revoked: wasEnabled ? [id] : [],
         },
       })
+    } catch {
+      // setPermission already reverted the optimistic flip; the api-client
+      // surfaces its own error toast. Swallow so the finally still clears pending.
     } finally {
       setPending((p) => {
         const n = new Set(p)

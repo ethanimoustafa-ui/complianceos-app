@@ -4,8 +4,8 @@
 // `updated_at = ifMatch`; 0 rows → 412.
 
 import type { NextRequest } from 'next/server'
-import { requirePerm } from '@/lib/api/auth'
-import { handle, NotFound, PreconditionFailed } from '@/lib/api/errors'
+import { requireUser } from '@/lib/api/auth'
+import { handle, NotFound, PreconditionFailed, Forbidden } from '@/lib/api/errors'
 import { ok } from '@/lib/api/response'
 import { assertNotStale, assertUuid, parseJson, readIfMatch } from '@/lib/api/validate'
 import { cacheTags, revalidateAll } from '@/lib/api/cache'
@@ -29,10 +29,18 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   try {
     const { observationId: observationIdParam, itemId } = await params
     assertUuid(itemId)
-    const { supabase, user, profile } = await requirePerm('observation:edit')
+    // RBAC: `observation:checklist` (migration 118) OR `observation:edit` + membership.
+    const ctx = await requireUser()
+    const { supabase, user, profile } = ctx
+    const hasChecklistPerm = ctx.permissions.includes('observation:checklist')
+    if (!hasChecklistPerm && !ctx.permissions.includes('observation:edit')) {
+      throw Forbidden('Missing permission: observation:checklist or observation:edit')
+    }
     const observationId = await assertObservationExists(supabase, observationIdParam)
     // W39: only people added to the observation can act on it (org_admin oversees).
-    await assertObservationMembership(supabase, observationId, user.id, profile.role)
+    if (!hasChecklistPerm) {
+      await assertObservationMembership(supabase, observationId, user.id, profile.role)
+    }
     const ifMatch = readIfMatch(req)
     const patch = await parseJson(req, UpdateChecklistItemSchema)
 
@@ -128,10 +136,18 @@ export async function DELETE(req: NextRequest, { params }: Params) {
   try {
     const { observationId: observationIdParam, itemId } = await params
     assertUuid(itemId)
-    const { supabase, user, profile } = await requirePerm('observation:edit')
+    // RBAC: `observation:checklist` (migration 118) OR `observation:edit` + membership.
+    const ctx = await requireUser()
+    const { supabase, user, profile } = ctx
+    const hasChecklistPerm = ctx.permissions.includes('observation:checklist')
+    if (!hasChecklistPerm && !ctx.permissions.includes('observation:edit')) {
+      throw Forbidden('Missing permission: observation:checklist or observation:edit')
+    }
     const observationId = await assertObservationExists(supabase, observationIdParam)
     // W39: only people added to the observation can act on it (org_admin oversees).
-    await assertObservationMembership(supabase, observationId, user.id, profile.role)
+    if (!hasChecklistPerm) {
+      await assertObservationMembership(supabase, observationId, user.id, profile.role)
+    }
     const ifMatch = readIfMatch(req)
 
     if (ifMatch != null) {

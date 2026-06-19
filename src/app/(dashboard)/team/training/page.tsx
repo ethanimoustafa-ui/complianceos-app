@@ -11,7 +11,7 @@ import { DeleteConfirmationDialog } from '@/components/ui/delete-confirmation-di
 import { useTranslation } from '@/i18n'
 import type { TranslationKey } from '@/i18n'
 import { downloadPdf } from '@/lib/pdf-client'
-import { Gate } from '@/components/auth/gate'
+import { EntityGate } from '@/components/auth/gate'
 import { useAuthStore } from '@/stores/auth-store'
 import { ExportMenu } from '@/components/ui/export-menu'
 import { hasRole } from '@/lib/permissions'
@@ -326,7 +326,7 @@ function TeamTrainingPageContent() {
         </div>
         <div className="flex items-center gap-3">
           {/* Export Menu — CSV + PDF */}
-          <Gate perm="Export Compliance Data">
+          <EntityGate action="export" entity="training">
             <ExportMenu
               iconOnly
               options={[
@@ -347,8 +347,8 @@ function TeamTrainingPageContent() {
                 },
               ]}
             />
-          </Gate>
-          <Gate perm="Manage Training Programs">
+          </EntityGate>
+          <EntityGate action="edit" entity="training">
             <Button variant="outline" size="sm" onClick={() => setIsManualEntryOpen(true)}>
               <Icon icon="lucide:pencil" className="mr-1.5" />
               {t('training.editMetrics' as TranslationKey)}
@@ -370,7 +370,7 @@ function TeamTrainingPageContent() {
                 </span>
               </Button>
             </Tooltip>
-          </Gate>
+          </EntityGate>
         </div>
       </header>
 

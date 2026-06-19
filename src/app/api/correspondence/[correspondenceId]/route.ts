@@ -9,7 +9,7 @@
 //   - DELETE: assertUuid + optional If-Match guard.
 
 import type { NextRequest } from 'next/server'
-import { requirePerm, requireUser } from '@/lib/api/auth'
+import { requireAnyPerm, requireUser } from '@/lib/api/auth'
 import { handle, NotFound, PreconditionFailed } from '@/lib/api/errors'
 import { ok } from '@/lib/api/response'
 import { assertNotStale, assertUuid, parseJson, readIfMatch } from '@/lib/api/validate'
@@ -90,7 +90,8 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     const { correspondenceId } = await params
     // SEC-5 §2.13 — reject non-UUID before DB access.
     assertUuid(correspondenceId)
-    const { supabase, user, profile } = await requirePerm('edit')
+    // Granular `feed:edit` (migration 118) OR the legacy generic `edit` key.
+    const { supabase, user, profile } = await requireAnyPerm(['feed:edit', 'edit'])
 
     // §2.12 — read the client's If-Match token (weak ETag = W/"<updated_at>").
     const ifMatch = readIfMatch(req)
@@ -169,7 +170,8 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
     const { correspondenceId } = await params
     // SEC-5 §2.13 — reject non-UUID before DB access.
     assertUuid(correspondenceId)
-    const { supabase, user, profile } = await requirePerm('delete')
+    // Granular `feed:delete` (migration 118) OR the legacy generic `delete` key.
+    const { supabase, user, profile } = await requireAnyPerm(['feed:delete', 'delete'])
     await assertCorrespondenceExists(supabase, correspondenceId)
 
     // Audit FIRST — append-only trail survives even if the soft-delete write fails.

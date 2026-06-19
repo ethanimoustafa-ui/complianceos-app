@@ -1,7 +1,7 @@
 'use client'
 
 import { ReactNode } from 'react'
-import { useCan, useCanAny } from '@/lib/permissions'
+import { useCan, useCanAny, useEntityCan, type EntityAction } from '@/lib/permissions'
 import type { Permission } from '@/lib/permissions-registry'
 
 interface GateProps {
@@ -44,5 +44,30 @@ export function Gate({ perm, anyOf, fallback = null, children }: GateProps) {
   else if (anyOf !== undefined) allowed = allowedAny
   else allowed = true // No perms specified — render unconditionally.
 
+  return <>{allowed ? children : fallback}</>
+}
+
+/**
+ * EntityGate — like <Gate> but gates on a GRANULAR per-entity action key
+ * (`<entity>:<action>`) via useEntityCan. Use this for entity Create / Edit /
+ * Delete / Export affordances so a matrix grant (or role tier) actually enables
+ * them — instead of gating on the coarse manager-tier label.
+ *
+ * @example
+ *   <EntityGate action="create" entity="policy"><Button>New Policy</Button></EntityGate>
+ *   <EntityGate action="delete" entity="letter"><DeleteButton /></EntityGate>
+ */
+export function EntityGate({
+  action,
+  entity,
+  fallback = null,
+  children,
+}: {
+  action: EntityAction
+  entity: string
+  fallback?: ReactNode
+  children: ReactNode
+}) {
+  const allowed = useEntityCan(action, entity)
   return <>{allowed ? children : fallback}</>
 }

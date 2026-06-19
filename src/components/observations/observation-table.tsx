@@ -6,7 +6,7 @@ import { Observation } from './observation-types'
 import { NoResultsEmptyState, NoDataEmptyState } from '@/components/ui/empty-state'
 import { useTranslation } from '@/i18n'
 import { useAuthStore } from '@/stores/auth-store'
-import { canEditObservation } from '@/lib/permissions'
+import { canEditObservation, useEntityCan } from '@/lib/permissions'
 import { ObservationTableRow } from './observation-table-row'
 import { TablePagination } from '@/components/ui/table-pagination'
 
@@ -47,6 +47,12 @@ export const ObservationTable = memo(function ObservationTable({
 }: ObservationTableProps) {
   const { t, isRTL } = useTranslation()
   const user = useAuthStore((state) => state.user)
+  // Granular grants (observation:edit / observation:delete) unlock the row
+  // actions even for users who aren't the observation's owner/assignee.
+  // Delete maps to the granular observation:delete key — the server DELETE route
+  // gates on observation:delete with NO leader exception, so the affordance must
+  // too (officers/auditors lack it by role; only manager/admin + explicit grant).
+  const canDeleteObs = useEntityCan('delete', 'observation')
   const [sortField, setSortField] = useState<SortField | null>(null)
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc')
   const [openMenuId, setOpenMenuId] = useState<string | null>(null)
@@ -204,6 +210,7 @@ export const ObservationTable = memo(function ObservationTable({
                 observation={observation}
                 onRowClick={onRowClick}
                 canEdit={canEditObservation(user, observation)}
+                canDelete={canDeleteObs}
                 onEdit={onEdit}
                 onDelete={onDelete}
                 isMenuOpen={openMenuId === observation.id}

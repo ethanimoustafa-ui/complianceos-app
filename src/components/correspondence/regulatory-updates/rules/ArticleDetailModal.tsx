@@ -11,7 +11,7 @@ import type { CircularArticle, ArticleRiskLevel, ArticleComplianceStatus } from 
 import { useDepartmentStore } from '@/stores/department-store'
 import { useTeamStore } from '@/stores/team-store'
 import { useAuthStore } from '@/stores/auth-store'
-import { canEditCircular } from '@/lib/permissions'
+import { canEditCircular, useEntityCan } from '@/lib/permissions'
 import { EditableSelect } from '@/components/ui/editable-select'
 import { InlineDeadlinePicker } from '@/components/ui/inline-deadline-picker'
 import { useDeepLinkHighlight } from '@/hooks/useDeepLink'
@@ -48,7 +48,12 @@ export function ArticleDetailModal({ circularId, article, mode, onClose, t, isRT
   // unsaved) checklists stay editable by whoever is creating the article.
   const currentUser = useAuthStore((s) => s.user)
   const circularAssignedTo = useCircularStore((s) => s.byId[circularId]?.assignedTo)
-  const canEditChecklist = canEditCircular(currentUser, { assignedTo: circularAssignedTo })
+  // Rules-of-hooks: call the granular gate unconditionally at the top, then OR
+  // it with the assignee/owner check so a circular:edit grant also unlocks the
+  // checklist (not just the rule's assignee).
+  const canCircularChecklist = useEntityCan('edit', 'circular')
+  const canEditChecklist =
+    canCircularChecklist || canEditCircular(currentUser, { assignedTo: circularAssignedTo })
   // GAP-15: per-article Activity timeline pagination state.
   const articleTimelinePage = useCircularStore((s) =>
     article ? s.articleTimelinePagination[`${circularId}:${article.id}`] : undefined,

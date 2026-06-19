@@ -18,7 +18,7 @@ import { exportAdvisoryLocalized } from '@/lib/export'
 import type { AdvisoryRequest, AdvisoryStatus, AdvisoryPriority, BusinessUnit } from '@/types'
 import { useDepartmentStore } from '@/stores/department-store'
 import { EditableSelect } from '@/components/ui/editable-select'
-import { Gate } from '@/components/auth/gate'
+import { EntityGate } from '@/components/auth/gate'
 import { paginate } from '@/lib/pagination'
 import { formatLocalizedDate } from '@/lib/format-date'
 
@@ -309,7 +309,7 @@ export default function AdvisoryPage() {
           </div>
         </div>
         <div className={`flex items-center gap-4`}>
-          <Gate perm="Manage Audit Findings">
+          <EntityGate action="create" entity="advisory">
             <button
               onClick={() => setIsNewAdvisoryOpen(true)}
               className={`bg-emerald-600 text-white px-5 py-2.5 rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-emerald-700 transition-colors shadow-lg shadow-emerald-100 cursor-pointer`}
@@ -317,7 +317,7 @@ export default function AdvisoryPage() {
               <Icon icon="lucide:plus" />
               {t('advisory.newRequest' as TranslationKey)}
             </button>
-          </Gate>
+          </EntityGate>
         </div>
       </header>
 
@@ -887,7 +887,7 @@ export default function AdvisoryPage() {
             {/* Actions */}
             <div className={`flex gap-3 pt-4 border-t border-slate-200`}>
               {selectedAdvisory.status !== 'completed' && (
-                <Gate perm="Manage Audit Findings">
+                <EntityGate action="edit" entity="advisory">
                   <button
                     onClick={() => {
                       advisoryStore.updateStatus(selectedAdvisory.id, 'completed')
@@ -918,11 +918,11 @@ export default function AdvisoryPage() {
                       isRTL={isRTL}
                     />
                   </div>
-                </Gate>
+                </EntityGate>
               )}
               {/* W42: gated client-side too — the API enforces 'delete'
                   server-side, so don't render a button that can only 403. */}
-              <Gate perm="Manage Audit Findings">
+              <EntityGate action="delete" entity="advisory">
                 <button
                   onClick={() => setIsDeleteAdvisoryOpen(true)}
                   disabled={advisoryMutating}
@@ -930,7 +930,7 @@ export default function AdvisoryPage() {
                 >
                   {t('common.delete')}
                 </button>
-              </Gate>
+              </EntityGate>
               <button
                 onClick={handleCloseAdvisoryDetail}
                 className="px-6 bg-slate-100 text-slate-700 py-3 rounded-lg font-bold hover:bg-slate-200 transition-colors cursor-pointer"

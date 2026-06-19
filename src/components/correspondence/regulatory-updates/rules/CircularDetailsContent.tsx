@@ -11,7 +11,7 @@ import { useFrameworkConfigStore } from '@/stores/framework-config-store'
 import { useTeamStore } from '@/stores/team-store'
 import { useAuthStore } from '@/stores/auth-store'
 import { pushToast } from '@/stores/toast-store'
-import { useCan } from '@/lib/permissions'
+import { useCanEditEntity, useCanDeleteEntity } from '@/lib/permissions'
 import { resolveAuthorityLabel } from '@/lib/authority-display'
 import { InlineDeadlinePicker } from '@/components/ui/inline-deadline-picker'
 // C(#31): consume a calendar deep-link → open the workflow tab + glow the step.
@@ -79,7 +79,8 @@ type Props = {
 }
 
 export function CircularDetailsContent({ circular, activeTab, setActiveTab, onClose, onOpenBOModal, onEditOpen, onDeleteOpen, t, isRTL }: Props) {
-  const canManage = useCan('Manage Audit Findings')
+  const canEditRule = useCanEditEntity('circular')
+  const canDeleteRule = useCanDeleteEntity('circular')
   const [articleModal, setArticleModal] = useState<{
     open: boolean
     article?: CircularArticle
@@ -1480,8 +1481,8 @@ export function CircularDetailsContent({ circular, activeTab, setActiveTab, onCl
             variant="outline"
             className="w-full"
             onClick={onEditOpen}
-            disabled={!canManage}
-            title={canManage ? '' : t('rbac.deniedTooltip')}
+            disabled={!canEditRule}
+            title={canEditRule ? '' : t('rbac.deniedTooltip')}
           >
             <Icon icon="lucide:pencil" className="w-4 h-4" />
             {t('regulatoryUpdates.editCircular')}
@@ -1521,8 +1522,8 @@ export function CircularDetailsContent({ circular, activeTab, setActiveTab, onCl
             variant="outline"
             className="w-full border-rose-200 text-rose-600 hover:bg-rose-50"
             onClick={() => onDeleteOpen(freshCircular.id)}
-            disabled={!canManage}
-            title={canManage ? '' : t('rbac.deniedTooltip')}
+            disabled={!canDeleteRule}
+            title={canDeleteRule ? '' : t('rbac.deniedTooltip')}
           >
             <Icon icon="lucide:trash-2" className="w-4 h-4" />
             {t('regulatoryUpdates.deleteCircular')}

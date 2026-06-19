@@ -7,6 +7,7 @@ import { useTranslation } from '@/i18n'
 import type { TranslationKey } from '@/i18n'
 import type { TrainingEmployee, TrainingStatus } from '@/types'
 import { dicebearAvatar } from '@/lib/avatar'
+import { EntityGate } from '@/components/auth/gate'
 
 const trainingStatusConfig: Record<TrainingStatus, { bg: string; text: string; labelKey: string }> = {
   completed: { bg: 'bg-emerald-100', text: 'text-emerald-700', labelKey: 'training.completed' },
@@ -169,13 +170,15 @@ export function EmployeeDetailModal({ isOpen, onClose, employee, onAssignTrainin
             <Icon icon="lucide:bell" className="text-lg" />
             {t('training.sendReminder' as TranslationKey)}
           </button>
-          <button
-            onClick={handleGenerateReport}
-            className="flex-1 bg-slate-100 text-slate-700 py-3 rounded-lg font-bold hover:bg-slate-200 transition-colors flex items-center justify-center gap-2 cursor-pointer"
-          >
-            <Icon icon="lucide:file-text" className="text-lg" />
-            {t('training.generateReport' as TranslationKey)}
-          </button>
+          <EntityGate action="export" entity="training">
+            <button
+              onClick={handleGenerateReport}
+              className="flex-1 bg-slate-100 text-slate-700 py-3 rounded-lg font-bold hover:bg-slate-200 transition-colors flex items-center justify-center gap-2 cursor-pointer"
+            >
+              <Icon icon="lucide:file-text" className="text-lg" />
+              {t('training.generateReport' as TranslationKey)}
+            </button>
+          </EntityGate>
         </div>
       </div>
     </Modal>

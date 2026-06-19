@@ -8,7 +8,7 @@ import { useObservationStore } from '@/stores/observation-store'
 import { useAuthStore } from '@/stores/auth-store'
 import { useTeamStore } from '@/stores/team-store'
 import { useTranslation } from '@/i18n'
-import { canTransferLeadership, canReviewRemediation, canSubmitRemediation, canUploadDocument, canRequestClosure, canReviewClosure } from '@/lib/permissions'
+import { canTransferLeadership, canReviewRemediation, canSubmitRemediation, canUploadDocument, canRequestClosure, canReviewClosure, useCan } from '@/lib/permissions'
 // C(#31): scroll to + glow a checklist item the user clicked on the calendar.
 import { useDeepLinkHighlight } from '@/hooks/useDeepLink'
 import { TransferLeadershipModal } from './transfer-leadership-modal'
@@ -83,6 +83,10 @@ export const ObservationDetailModal = memo(function ObservationDetailModal({
   const isDetailLoadedFn = (store as unknown as { isDetailLoaded?: (id: string) => boolean }).isDetailLoaded
   const user = useAuthStore((state) => state.user)
   const { members } = useTeamStore()
+  // Granular `observation:checklist` grant — a holder may edit the remediation
+  // checklist even without observation membership/leadership (mirrors the route
+  // gate + the observation_checklist RLS widened in migration 118).
+  const canObsChecklist = useCan('observation:checklist')
 
   // WAVE2-A: when the modal opens, hydrate the observation's nested children
   // (checklist, updates/comments, documents, remediation plan, closure
@@ -378,6 +382,10 @@ export const ObservationDetailModal = memo(function ObservationDetailModal({
   // W39: membership mirror of the server gate — only people added to the
   // observation (leader / assignees; admin oversees) get input affordances.
   const isMember = canSubmitRemediation(user, liveObs)
+  // Checklist editability: a member OR a holder of the granular
+  // `observation:checklist` key (migration 118). The route + RLS accept the same
+  // key, so this affordance matches exactly what the server enforces.
+  const canEditChecklist = isMember || canObsChecklist
 
   // Derived data
   const displayAssignees = liveObs.assignees?.length
@@ -445,14 +453,14 @@ export const ObservationDetailModal = memo(function ObservationDetailModal({
                 non-members (W39: the server rejects non-member writes). */}
             <ChecklistSection
               items={localChecklist}
-              onAdd={isClosed || !isMember ? (() => {}) : handleAddChecklistItem}
-              onEdit={isClosed || !isMember ? undefined : handleEditChecklistItem}
-              onRemove={isClosed || !isMember ? (() => {}) : handleRemoveChecklistItem}
-              onToggle={isClosed || !isMember ? (() => {}) : handleChecklistItemToggle}
-              onSetDeadline={isClosed || !isMember ? undefined : (itemId, deadline) => setChecklistItemDeadline(observation.id, itemId, deadline, user || undefined)}
+              onAdd={isClosed || !canEditChecklist ? (() => {}) : handleAddChecklistItem}
+              onEdit={isClosed || !canEditChecklist ? undefined : handleEditChecklistItem}
+              onRemove={isClosed || !canEditChecklist ? (() => {}) : handleRemoveChecklistItem}
+              onToggle={isClosed || !canEditChecklist ? (() => {}) : handleChecklistItemToggle}
+              onSetDeadline={isClosed || !canEditChecklist ? undefined : (itemId, deadline) => setChecklistItemDeadline(observation.id, itemId, deadline, user || undefined)}
               parentDeadline={liveObs?.dueDate ?? observation?.dueDate}
               isRTL={isRTL}
-              readOnly={isClosed || !isMember}
+              readOnly={isClosed || !canEditChecklist}
               loading={!detailLoaded}
             />
 

@@ -3301,6 +3301,8 @@
     "entityRisks": "المخاطر",
     "entityLetters": "الخطابات",
     "entityTraining": "التدريب",
+    "entityFeed": "المراسلات",
+    "entityAdvisory": "الاستشارات",
     "actionExport": "تصدير",
     "actionChecklist": "قائمة التحقق",
     "permAdvanceWorkflow": "تقديم سير العمل",

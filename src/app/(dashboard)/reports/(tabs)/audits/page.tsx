@@ -21,7 +21,7 @@ import type { TranslationKey } from '@/i18n'
 import { ExportMenu } from '@/components/ui/export-menu'
 import { useFormattedDate } from '@/hooks/useFormattedDate'
 import { useDashboardHealth } from '@/hooks/useDashboardHealth'
-import { Gate } from '@/components/auth/gate'
+import { EntityGate } from '@/components/auth/gate'
 import { useAuditCategoryStore } from '@/stores/audit-category-store'
 import { useAuthStore } from '@/stores/auth-store'
 import { useTeamStore } from '@/stores/team-store'
@@ -601,28 +601,30 @@ export default function ReportsAuditsPage() {
               className={`${isRTL ? 'pr-10 pl-4' : 'pl-10 pr-4'} py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 w-64 transition-all`}
             />
           </div>
-          <ExportMenu
-            iconOnly
-            options={[
-              {
-                label: t('common.exportCsv'),
-                icon: 'lucide:table',
-                onSelect: () => exportAuditsLocalized(sortedAudits, 'audits', t, isRTL),
-              },
-              {
-                label: t('common.exportPdf'),
-                icon: 'lucide:file-text',
-                onSelect: handleExportPdf,
-                loading: pdfBusy,
-              },
-            ]}
-          />
-          <Gate perm="Manage Audit Findings">
+          <EntityGate action="export" entity="audit">
+            <ExportMenu
+              iconOnly
+              options={[
+                {
+                  label: t('common.exportCsv'),
+                  icon: 'lucide:table',
+                  onSelect: () => exportAuditsLocalized(sortedAudits, 'audits', t, isRTL),
+                },
+                {
+                  label: t('common.exportPdf'),
+                  icon: 'lucide:file-text',
+                  onSelect: handleExportPdf,
+                  loading: pdfBusy,
+                },
+              ]}
+            />
+          </EntityGate>
+          <EntityGate action="create" entity="audit">
             <Button className="shadow-lg shadow-emerald-100" onClick={() => setShowScheduleAuditModal(true)}>
               <Icon icon="lucide:plus" />
               {t('reports.scheduleAudit')}
             </Button>
-          </Gate>
+          </EntityGate>
         </div>
       </header>
 
@@ -722,12 +724,12 @@ export default function ReportsAuditsPage() {
                             <p className="text-sm font-bold text-slate-900 mb-1">{t('reports.noAuditsFound')}</p>
                             <p className="text-xs text-slate-500">{t('reports.createFirstAudit')}</p>
                           </div>
-                          <Gate perm="Manage Audit Findings">
+                          <EntityGate action="create" entity="audit">
                             <Button className="mt-2" onClick={() => setShowScheduleAuditModal(true)}>
                               <Icon icon="lucide:plus" />
                               {t('reports.scheduleAudit')}
                             </Button>
-                          </Gate>
+                          </EntityGate>
                         </div>
                       </td>
                     </tr>
@@ -849,7 +851,7 @@ export default function ReportsAuditsPage() {
           }}
           onClick={(e) => e.stopPropagation()}
         >
-          <Gate perm="Manage Audit Findings">
+          <EntityGate action="edit" entity="audit">
             <button
               onClick={() => {
                 const storeAudit = storeAudits.find(a => a.id === auditDropdownOpen.id)
@@ -861,8 +863,8 @@ export default function ReportsAuditsPage() {
               <Icon icon="lucide:edit-3" className="text-slate-400" />
               {t('common.edit')}
             </button>
-          </Gate>
-          <Gate perm="Manage Audit Findings">
+          </EntityGate>
+          <EntityGate action="delete" entity="audit">
             <button
               onClick={() => {
                 const storeAudit = storeAudits.find(a => a.id === auditDropdownOpen.id)
@@ -880,7 +882,7 @@ export default function ReportsAuditsPage() {
               <Icon icon="lucide:trash-2" className="text-rose-400" />
               {t('common.delete')}
             </button>
-          </Gate>
+          </EntityGate>
         </div>
       )}
 

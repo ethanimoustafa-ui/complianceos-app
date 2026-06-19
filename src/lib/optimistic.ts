@@ -89,6 +89,22 @@ export async function runOptimistic<T extends { id: string }, R extends { id: st
 
 import { pushToast, type ToastMessage } from '@/stores/toast-store'
 import { ApiClientError } from '@/lib/api-client'
+import { RBACError } from '@/lib/rbac-error'
+
+/**
+ * True when an error is a permission denial — either a client-side gate
+ * (RBACError, surfaced by the global RBACToastHost) or a server 403 (surfaced
+ * by the api-client boundary). In BOTH cases the denial already shows its own
+ * toast, so a generic "it didn't register, please try again" revert toast must
+ * NOT stack on top of it. Reused everywhere a mutation-failure toast could clash
+ * with the permission rollback.
+ */
+export function isPermissionDenied(e: unknown): boolean {
+  return (
+    e instanceof RBACError ||
+    (e instanceof ApiClientError && (e.status === 403 || e.code === 'forbidden'))
+  )
+}
 
 /**
  * RTL-8: default i18n KEY for a reverted optimistic mutation. The toast carries
@@ -152,12 +168,11 @@ export async function optimisticMutation<T>(
     // 4. Revert + friendly toast. Log the real error for developers.
     revert()
     console.error(`[optimistic${context ? `:${context}` : ''}] mutation failed —`, e)
-    // A 403 (permission denied) is already surfaced by the api-client boundary
-    // with a clear "you don't have permission" toast — don't stack the generic
-    // "it didn't register" revert toast on top of it. The revert itself still
-    // runs above so the optimistic change is rolled back either way.
-    const denied = e instanceof ApiClientError && (e.status === 403 || e.code === 'forbidden')
-    if (!denied) {
+    // A permission denial (client RBACError OR server 403) already surfaces its
+    // own "you don't have permission" toast — don't stack the generic "it didn't
+    // register" revert toast on top of it (only ONE should show). The revert
+    // itself still runs above so the optimistic change is rolled back either way.
+    if (!isPermissionDenied(e)) {
       const toast =
         typeof errorMessage === 'function'
           ? errorMessage(e)

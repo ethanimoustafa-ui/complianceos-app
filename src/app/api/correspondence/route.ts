@@ -5,7 +5,7 @@
 //   - POST: SEC-8 strict schema, server-generated reference (§2.10).
 
 import type { NextRequest } from 'next/server'
-import { requirePerm, requireUser } from '@/lib/api/auth'
+import { requireAnyPerm, requireUser } from '@/lib/api/auth'
 import { handle, NotFound } from '@/lib/api/errors'
 import { ok, paginate } from '@/lib/api/response'
 import { parseJson, parseQuery } from '@/lib/api/validate'
@@ -107,7 +107,9 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    const { supabase, user, profile } = await requirePerm('create')
+    // Granular `feed:create` (Access Matrix, migration 118) OR the legacy
+    // generic `create` key role tiers carry. Mirrors the RLS predicate.
+    const { supabase, user, profile } = await requireAnyPerm(['feed:create', 'create'])
     const input = await parseJson(req, CreateCorrespondenceSchema)
 
     let inserted: Record<string, unknown> | null = null

@@ -99,11 +99,14 @@ export interface GranularEntity {
 export const GRANULAR_ENTITIES: readonly GranularEntity[] = [
   { groupKey: 'accessMatrix.entityPolicies', create: 'policy:create', edit: 'policy:edit', delete: 'policy:delete', export: 'policy:export', checklist: 'policy:checklist' },
   { groupKey: 'accessMatrix.entityCirculars', create: 'circular:create', edit: 'circular:edit', delete: 'circular:delete', export: 'circular:export', checklist: 'circular:checklist' },
-  { groupKey: 'accessMatrix.entityObservations', create: 'observation:create', edit: 'observation:edit', delete: 'observation:delete', export: 'observation:export' },
+  { groupKey: 'accessMatrix.entityObservations', create: 'observation:create', edit: 'observation:edit', delete: 'observation:delete', export: 'observation:export', checklist: 'observation:checklist' },
   { groupKey: 'accessMatrix.entityAudits', create: 'audit:create', edit: 'audit:edit', delete: 'audit:delete', export: 'audit:export', checklist: 'audit:checklist' },
   { groupKey: 'accessMatrix.entityRisks', create: 'risk:create', edit: 'risk:edit', delete: 'risk:delete', export: 'risk:export', checklist: 'risk:checklist' },
   { groupKey: 'accessMatrix.entityLetters', create: 'letter:create', edit: 'letter:edit', delete: 'letter:delete', export: 'letter:export' },
   { groupKey: 'accessMatrix.entityTraining', create: 'training:create', edit: 'training:edit', delete: 'training:delete', export: 'training:export' },
+  // Round 7 (migration 118) — correspondence Feed + Advisory granular CRUD.
+  { groupKey: 'accessMatrix.entityFeed', create: 'feed:create', edit: 'feed:edit', delete: 'feed:delete' },
+  { groupKey: 'accessMatrix.entityAdvisory', create: 'advisory:create', edit: 'advisory:edit', delete: 'advisory:delete' },
 ] as const
 
 /** The ordered action keys a granular entity exposes (used by the matrix UI). */

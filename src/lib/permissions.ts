@@ -65,6 +65,14 @@ export const BACKEND_PERMISSIONS = [
   'risk:checklist',
   'audit:checklist',
   'workflow:advance',
+  // Observation checklist + Feed/Advisory granular CRUD (migration 118).
+  'observation:checklist',
+  'feed:create',
+  'feed:edit',
+  'feed:delete',
+  'advisory:create',
+  'advisory:edit',
+  'advisory:delete',
 ] as const
 export type BackendPermission = (typeof BACKEND_PERMISSIONS)[number]
 
@@ -88,17 +96,22 @@ const GRANULAR_CREATE_EDIT = ['policy:create', 'policy:edit', 'circular:create',
 const GRANULAR_DELETE = ['policy:delete', 'circular:delete', 'risk:delete', 'letter:delete', 'training:delete']
 // Round 6 (migration 117): per-entity export, per-entity checklist, workflow advance.
 const GRANULAR_EXPORT = ['policy:export', 'circular:export', 'observation:export', 'audit:export', 'risk:export', 'letter:export', 'training:export']
-const GRANULAR_CHECKLIST = ['policy:checklist', 'circular:checklist', 'risk:checklist', 'audit:checklist']
+const GRANULAR_CHECKLIST = ['policy:checklist', 'circular:checklist', 'risk:checklist', 'audit:checklist', 'observation:checklist']
 const WORKFLOW_ADVANCE = ['workflow:advance']
+// Round 7 (migration 118): Feed + Advisory granular CRUD. Officers hold
+// create+edit (NOT delete — mirrors GRANULAR_CREATE_EDIT); managers/admins hold
+// all via ALL_PERMISSIONS below.
+const GRANULAR_FEED_ADVISORY_CREATE_EDIT = ['feed:create', 'feed:edit', 'advisory:create', 'advisory:edit']
+const GRANULAR_FEED_ADVISORY_DELETE = ['feed:delete', 'advisory:delete']
 
 // Legacy role-permission map — used as a fallback for the lowercase:colon
 // permission strings that pre-date the round-4 registry.
-const ALL_PERMISSIONS = ['view', 'comment', 'create', 'edit', 'delete', 'audit:view', 'audit:comment', 'audit:create', 'audit:edit', 'audit:delete', 'observation:view', 'observation:comment', 'observation:create', 'observation:edit', 'observation:delete', 'report:view', 'report:create', 'report:delete', 'export', 'settings:view', 'settings:edit', 'team:view', 'team:invite', 'team:edit', 'team:remove', ...GRANULAR_CREATE_EDIT, ...GRANULAR_DELETE, ...GRANULAR_EXPORT, ...GRANULAR_CHECKLIST, ...WORKFLOW_ADVANCE]
+const ALL_PERMISSIONS = ['view', 'comment', 'create', 'edit', 'delete', 'audit:view', 'audit:comment', 'audit:create', 'audit:edit', 'audit:delete', 'observation:view', 'observation:comment', 'observation:create', 'observation:edit', 'observation:delete', 'report:view', 'report:create', 'report:delete', 'export', 'settings:view', 'settings:edit', 'team:view', 'team:invite', 'team:edit', 'team:remove', ...GRANULAR_CREATE_EDIT, ...GRANULAR_DELETE, ...GRANULAR_EXPORT, ...GRANULAR_CHECKLIST, ...WORKFLOW_ADVANCE, ...GRANULAR_FEED_ADVISORY_CREATE_EDIT, ...GRANULAR_FEED_ADVISORY_DELETE]
 
 export const ROLE_PERMISSIONS: Record<User['role'], string[]> = {
   // Mirrors the DB role_permissions seed (migrations 108 + 115). auditor < officer < manager = admin.
   auditor: ['view', 'comment', 'audit:view', 'observation:view', 'observation:comment', 'observation:create', 'observation:edit', 'report:view', 'export'],
-  officer: ['view', 'comment', 'create', 'edit', 'audit:view', 'audit:comment', 'audit:create', 'audit:edit', 'observation:view', 'observation:comment', 'observation:create', 'observation:edit', 'report:view', 'report:create', 'export', ...GRANULAR_CREATE_EDIT, ...GRANULAR_EXPORT, ...GRANULAR_CHECKLIST, ...WORKFLOW_ADVANCE],
+  officer: ['view', 'comment', 'create', 'edit', 'audit:view', 'audit:comment', 'audit:create', 'audit:edit', 'observation:view', 'observation:comment', 'observation:create', 'observation:edit', 'report:view', 'report:create', 'export', ...GRANULAR_CREATE_EDIT, ...GRANULAR_EXPORT, ...GRANULAR_CHECKLIST, ...WORKFLOW_ADVANCE, ...GRANULAR_FEED_ADVISORY_CREATE_EDIT],
   manager: ALL_PERMISSIONS,
   admin: ALL_PERMISSIONS,
 }
@@ -142,7 +155,12 @@ export function hasPermission(user: User | null, permission: string): boolean {
   // Legacy fallback for `team:invite`, `audit:edit`, `view`, etc.
   const legacy = ROLE_PERMISSIONS[user.role] || []
   if (legacy.includes(permission)) return true
-  return (user.permissions ?? []).includes(permission)
+  if ((user.permissions ?? []).includes(permission)) return true
+  // Backend permission keys (role tiers + per-user matrix grants) are fetched
+  // from Supabase into auth-store.permissions — NOT onto user.permissions (which
+  // stays []). Consult them so a granted `<entity>:<action>` key actually gates
+  // the corresponding button. See fetchPermissions (auth-store).
+  return useAuthStore.getState().permissions.includes(permission)
 }
 
 export function isAdmin(user: User | null): boolean {
@@ -181,14 +199,38 @@ const RESOURCE_EDIT_PERMISSION: Record<string, Permission> = {
   'audit-template': 'Manage Audit Templates',
 }
 
+// Resource name (as passed by call sites) → the granular entity-key PREFIX
+// (migrations 115/117). Lets canEdit/canDelete/canCreate/canExport consult the
+// `<entity>:<action>` backend key a matrix grant actually writes — without this,
+// granting e.g. `circular:edit` had zero client effect (the button still gated
+// on the manager-tier label only). Keep in sync with GRANULAR_ENTITIES.
+const RESOURCE_ENTITY: Record<string, string> = {
+  policy: 'policy', policies: 'policy',
+  circular: 'circular', circulars: 'circular', rule: 'circular', rules: 'circular',
+  letter: 'letter', letters: 'letter', 'sama-letter': 'letter', 'sama-letters': 'letter',
+  risk: 'risk', risks: 'risk',
+  audit: 'audit', audits: 'audit',
+  observation: 'observation', observations: 'observation',
+  training: 'training',
+  // Correspondence Feed + Advisory (migration 118).
+  feed: 'feed', correspondence: 'feed',
+  advisory: 'advisory',
+}
+
 export function canEdit(user: User | null, resource?: string): boolean {
   if (!user) return false
   if (user.role === 'admin') return true
   if (resource) {
-    const required = RESOURCE_EDIT_PERMISSION[resource]
-    if (required) return hasPermission(user, required)
+    const entity = RESOURCE_ENTITY[resource]
+    // Granular grant (or role-tier grant) on `<entity>:edit`.
+    if (entity && hasPermission(user, `${entity}:edit`)) return true
+    // Legacy manager-tier label.
+    const label = RESOURCE_EDIT_PERMISSION[resource]
+    if (label && hasPermission(user, label)) return true
+    // A KNOWN resource with neither grant → denied (don't over-grant via the
+    // manager fallback below, which is only for unknown/no-resource call sites).
+    if (entity || label) return false
   }
-  // No resource specified — fall back to manager+.
   return hasRole(user, 'manager')
 }
 
@@ -196,14 +238,28 @@ export function canDelete(user: User | null, resource?: string): boolean {
   if (!user) return false
   if (user.role === 'admin') return true
   if (resource) {
-    // Delete is a stricter action than edit. Officers never delete; managers
-    // can delete the same resources they can edit.
-    if (user.role === 'officer' || user.role === 'auditor') return false
-    const required = RESOURCE_EDIT_PERMISSION[resource]
-    if (required) return hasPermission(user, required)
+    const entity = RESOURCE_ENTITY[resource]
+    // Granular `<entity>:delete` grant — any role granted it (incl. officers)
+    // can delete. (Replaces the old hardcoded "officers never delete".)
+    if (entity && hasPermission(user, `${entity}:delete`)) return true
+    // Manager-tier: a manager who holds the resource's edit label may delete it.
+    const label = RESOURCE_EDIT_PERMISSION[resource]
+    if (label && hasRole(user, 'manager') && hasPermission(user, label)) return true
+    if (entity || label) return false
   }
-  // Default: admin-only delete when no resource hint.
   return false
+}
+
+export function canCreate(user: User | null, resource?: string): boolean {
+  if (!user) return false
+  if (user.role === 'admin') return true
+  if (resource) {
+    const entity = RESOURCE_ENTITY[resource]
+    // Granular `<entity>:create` (revocable per-entity). Officers hold these by
+    // role (migration 115) so existing create flows keep working.
+    if (entity) return hasPermission(user, `${entity}:create`)
+  }
+  return hasPermission(user, 'create')
 }
 
 // Module → permission map. `null` means every authenticated user can access.
@@ -252,9 +308,13 @@ export function canPerformAction(
   return hasPermission(user, `${module}:${action}`) || hasPermission(user, action)
 }
 
-export function canExport(user: User | null): boolean {
+export function canExport(user: User | null, resource?: string): boolean {
   if (!user) return false
   if (user.role === 'admin') return true
+  if (resource) {
+    const entity = RESOURCE_ENTITY[resource]
+    if (entity && hasPermission(user, `${entity}:export`)) return true
+  }
   return hasPermission(user, 'Export Compliance Data') || hasPermission(user, 'export')
 }
 
@@ -394,6 +454,56 @@ export function useCanAny(perms: (Permission | BackendPermission)[]): boolean {
   const isAdminUser = useAuthStore((s) => s.user?.role === 'admin')
   if (isAdminUser) return true
   return perms.some((p) => effective.includes(p as Permission) || backendPerms.includes(p as string))
+}
+
+// ── Granular entity-action hooks (reactive wrappers over canEdit/…) ───────────
+// Subscribe to the auth user + backend permission keys + team members so a gated
+// button re-renders the instant a grant changes. They consult the
+// `<entity>:<action>` granular keys (matrix grants + role tiers) AND the legacy
+// manager-tier labels — so granting e.g. `circular:edit` enables the rules Edit
+// button without a manager role. Pass the resource name (e.g. 'circular',
+// 'policy', 'letter', 'risk', 'audit', 'observation', 'training').
+function useGranularGate(
+  fn: (u: User | null, r?: string) => boolean,
+  resource: string,
+): boolean {
+  const user = useAuthStore((s) => s.user)
+  // Subscribe for reactivity — fn reads these via getState() internally.
+  useAuthStore((s) => s.permissions)
+  useTeamStore((s) => s.members)
+  return fn(user, resource)
+}
+
+export function useCanEditEntity(resource: string): boolean {
+  return useGranularGate(canEdit, resource)
+}
+export function useCanDeleteEntity(resource: string): boolean {
+  return useGranularGate(canDelete, resource)
+}
+export function useCanCreateEntity(resource: string): boolean {
+  return useGranularGate(canCreate, resource)
+}
+export function useCanExportEntity(resource: string): boolean {
+  return useGranularGate(canExport, resource)
+}
+
+// Unified dispatcher — `useEntityCan('edit', 'circular')`. Powers <EntityGate>.
+export type EntityAction = 'create' | 'edit' | 'delete' | 'export'
+export function useEntityCan(action: EntityAction, resource: string): boolean {
+  const user = useAuthStore((s) => s.user)
+  // Subscribe for reactivity — the canX helpers read these via getState().
+  useAuthStore((s) => s.permissions)
+  useTeamStore((s) => s.members)
+  switch (action) {
+    case 'create':
+      return canCreate(user, resource)
+    case 'edit':
+      return canEdit(user, resource)
+    case 'delete':
+      return canDelete(user, resource)
+    case 'export':
+      return canExport(user, resource)
+  }
 }
 
 export { ROLE_HIERARCHY }

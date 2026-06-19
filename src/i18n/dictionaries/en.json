@@ -3301,6 +3301,8 @@
     "entityRisks": "Risks",
     "entityLetters": "Letters",
     "entityTraining": "Training",
+    "entityFeed": "Feed",
+    "entityAdvisory": "Advisory",
     "actionExport": "Export",
     "actionChecklist": "Checklist",
     "permAdvanceWorkflow": "Can Advance Workflow",

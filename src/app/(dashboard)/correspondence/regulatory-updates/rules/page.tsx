@@ -15,7 +15,7 @@ import { RegDocFilterBar } from '@/components/correspondence/regulatory-updates/
 import { Skeleton } from '@/components/ui/skeleton'
 import type { CircularAuthority } from '@/types'
 import { exportRulesLocalized } from '@/lib/export'
-import { Gate } from '@/components/auth/gate'
+import { EntityGate } from '@/components/auth/gate'
 import { paginate } from '@/lib/pagination'
 import { downloadPdf } from '@/lib/pdf-client'
 import type { TranslationKey } from '@/i18n'
@@ -224,7 +224,7 @@ function RegulatoryUpdatesRulesPageContent() {
         </div>
         <div className={`flex items-center gap-4`}>
           {/* Export Menu — CSV + PDF */}
-          <Gate perm="Export Compliance Data">
+          <EntityGate action="export" entity="circular">
             <ExportMenu
               iconOnly
               options={[
@@ -241,8 +241,8 @@ function RegulatoryUpdatesRulesPageContent() {
                 },
               ]}
             />
-          </Gate>
-          <Gate perm="Manage Audit Findings">
+          </EntityGate>
+          <EntityGate action="create" entity="circular">
             <Button
               variant="primary"
               className="shadow-lg shadow-emerald-100"
@@ -251,7 +251,7 @@ function RegulatoryUpdatesRulesPageContent() {
               <Icon icon="lucide:plus" />
               {t('regulatoryUpdates.registerNewCircular')}
             </Button>
-          </Gate>
+          </EntityGate>
         </div>
       </header>
 

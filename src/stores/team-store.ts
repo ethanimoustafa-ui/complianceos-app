@@ -142,6 +142,14 @@ interface TeamState {
   fetchById: (id: string) => Promise<TeamMember | null>
   invite: (data: { email: string; role: TeamMember['role']; department: string; fullName?: string }) => Promise<TeamMember>
   update: (id: string, data: Partial<TeamMember>) => Promise<TeamMember>
+  /**
+   * Flip a SINGLE access-matrix toggle (a label or a granular backend key) and
+   * persist it as a DELTA — PATCHing only that toggle's backend key(s), not a
+   * full snapshot. Updates state optimistically and reverts on failure. This is
+   * what lets the matrix run multiple toggles concurrently (each loading
+   * independently) without one toggle's write clobbering another's.
+   */
+  setPermission: (id: string, toggleId: string, enabled: boolean) => Promise<void>
   updateRole: (memberId: string, newRole: TeamMember['role']) => void
   remove: (id: string) => Promise<void>
   resendInvite: (id: string) => Promise<void>
@@ -353,6 +361,66 @@ export const useTeamStore = create<TeamState>()((set, get) => ({
       return updated
     } catch (e) {
       set({ error: errorMessage(e, 'Failed to update team member'), isMutating: false })
+      throw e
+    }
+  },
+
+  setPermission: async (id, toggleId, enabled) => {
+    requirePermission('Manage Team & Permissions', {
+      storeName: 'team',
+      actionName: 'setPermission',
+      id,
+    })
+    const existing = get().byId[id]
+    if (!existing) throw new Error('Team member not found')
+
+    // 1. Optimistic flip of JUST this toggle's accessControls row. Concurrent
+    //    toggles each read this updated state, so no full-snapshot clobber.
+    const prevControls = existing.accessControls ?? []
+    const nextControls = prevControls.some((ac) => ac.label === toggleId)
+      ? prevControls.map((ac) => (ac.label === toggleId ? { ...ac, enabled } : ac))
+      : [...prevControls, { label: toggleId, enabled }]
+    const optimistic = { ...existing, accessControls: nextControls }
+    // NOTE: deliberately NOT touching the global `isMutating` — each toggle owns
+    // its own in-flight spinner, so two can be saving at once.
+    set((s) => ({
+      members: s.members.map((m) => (m.id === id ? optimistic : m)),
+      byId: { ...s.byId, [id]: optimistic },
+      selectedMember: s.selectedMember?.id === id ? optimistic : s.selectedMember,
+    }))
+
+    // 2. Translate the toggle id → backend key(s) and PATCH ONLY those (a delta).
+    //    Labels map via PERMISSION_BACKEND_KEYS; a granular key passes through.
+    //    Client-only labels map to [] → nothing to persist (optimistic flip only).
+    //
+    //    CRITICAL: a backend key can be shared by several toggles (settings:edit
+    //    is shared by 6 admin labels; policy:edit by the 'Approve Policy Reviews'
+    //    label AND the granular 'policy:edit' chip). When DISABLING a toggle we
+    //    must NOT revoke a key another still-enabled toggle needs. So grant=true
+    //    iff the key is still required by ANY enabled toggle after this flip —
+    //    mirroring the bulk update() OR-merge so a delta can't clobber siblings.
+    const labelSet = new Set<string>(PERMISSIONS)
+    const keysFor = (toggle: string): readonly string[] =>
+      labelSet.has(toggle) ? PERMISSION_BACKEND_KEYS[toggle as Permission] : [toggle]
+    const stillRequired = new Set<string>()
+    for (const ac of nextControls) {
+      if (!ac.enabled) continue
+      for (const k of keysFor(ac.label)) stillRequired.add(k)
+    }
+    const keys = keysFor(toggleId)
+    try {
+      if (keys.length > 0) {
+        const permsPayload: Record<string, boolean> = {}
+        for (const key of keys) permsPayload[key] = stillRequired.has(key)
+        await api.patch(`/team/members/${id}/permissions`, { permissions: permsPayload })
+      }
+    } catch (e) {
+      // Revert the optimistic flip on failure.
+      set((s) => ({
+        members: s.members.map((m) => (m.id === id ? existing : m)),
+        byId: { ...s.byId, [id]: existing },
+        selectedMember: s.selectedMember?.id === id ? existing : s.selectedMember,
+      }))
       throw e
     }
   },

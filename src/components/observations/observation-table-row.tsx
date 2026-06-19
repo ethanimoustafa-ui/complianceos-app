@@ -15,6 +15,7 @@ interface ObservationTableRowProps {
   observation: Observation
   onRowClick: (observation: Observation) => void
   canEdit: boolean
+  canDelete: boolean
   onEdit?: (observation: Observation) => void
   onDelete?: (observationId: string) => void
   isMenuOpen: boolean
@@ -39,6 +40,7 @@ export const ObservationTableRow = memo(function ObservationTableRow({
   observation,
   onRowClick,
   canEdit,
+  canDelete,
   onEdit,
   onDelete,
   isMenuOpen,
@@ -59,9 +61,14 @@ export const ObservationTableRow = memo(function ObservationTableRow({
   }
   const isClosed = observation.status === 'closed'
 
+  // Edit is shown only for open rows the user can edit; Delete only when granted.
+  const showEdit = !isClosed && canEdit
+  const showDelete = canDelete
+
   const MENU_WIDTH = 172
-  // O6: closed rows show a single Delete item (Edit is hidden), so the menu is shorter.
-  const MENU_HEIGHT = isClosed ? 52 : 92
+  // O6: closed rows (or edit-less grants) show a single Delete item, so the menu
+  // is shorter. Both items present → taller.
+  const MENU_HEIGHT = showEdit && showDelete ? 92 : 52
 
   // Position the action menu next to the cursor. In LTR, the menu's left edge sits
   // just right of the cursor; in RTL, the menu's right edge sits just left of the cursor.
@@ -173,7 +180,7 @@ export const ObservationTableRow = memo(function ObservationTableRow({
         </div>
       </td>
       <td className={`py-4 ${isRTL ? 'pl-4 text-left' : 'pr-4 text-right'}`}>
-        {!canEdit ? (
+        {!(canEdit || canDelete) ? (
           // O6: closed rows still get the emerald "verified" check when the user
           // can't act; non-actionable open rows show the muted check.
           <span className="inline-flex justify-end w-full">
@@ -220,8 +227,9 @@ export const ObservationTableRow = memo(function ObservationTableRow({
                       }}
                     >
                       {/* O6: Edit is hidden for completed (closed) observations —
-                          verified findings stay immutable; only Delete is offered. */}
-                      {!isClosed && (
+                          verified findings stay immutable; only Delete is offered.
+                          Also hidden when the user only holds observation:delete. */}
+                      {showEdit && (
                         <button
                           onClick={(e) => {
                             e.stopPropagation()
@@ -249,32 +257,34 @@ export const ObservationTableRow = memo(function ObservationTableRow({
                           <span>{t('observations.actions.edit')}</span>
                         </button>
                       )}
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          onMenuToggle(null)
-                          onDelete?.(observation.id)
-                        }}
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: 8,
-                          width: '100%',
-                          padding: '8px 16px',
-                          fontSize: 14,
-                          color: '#e11d48',
-                          background: 'transparent',
-                          border: 0,
-                          cursor: 'pointer',
-                          textAlign: isRTL ? 'right' : 'left',
-                          justifyContent: isRTL ? 'flex-end' : 'flex-start',
-                        }}
-                        onMouseEnter={(e) => (e.currentTarget.style.background = '#fff1f2')}
-                        onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
-                      >
-                        <Icon icon="lucide:trash-2" />
-                        <span>{t('observations.actions.delete')}</span>
-                      </button>
+                      {showDelete && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            onMenuToggle(null)
+                            onDelete?.(observation.id)
+                          }}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 8,
+                            width: '100%',
+                            padding: '8px 16px',
+                            fontSize: 14,
+                            color: '#e11d48',
+                            background: 'transparent',
+                            border: 0,
+                            cursor: 'pointer',
+                            textAlign: isRTL ? 'right' : 'left',
+                            justifyContent: isRTL ? 'flex-end' : 'flex-start',
+                          }}
+                          onMouseEnter={(e) => (e.currentTarget.style.background = '#fff1f2')}
+                          onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                        >
+                          <Icon icon="lucide:trash-2" />
+                          <span>{t('observations.actions.delete')}</span>
+                        </button>
+                      )}
                     </div>
                   </>,
                   document.body,

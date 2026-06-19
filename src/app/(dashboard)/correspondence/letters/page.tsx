@@ -13,7 +13,7 @@ import { paginate } from '@/lib/pagination'
 import { TablePagination } from '@/components/ui/table-pagination'
 import { cn } from '@/lib/utils'
 import { useTranslation } from '@/i18n'
-import { Gate } from '@/components/auth/gate'
+import { Gate, EntityGate } from '@/components/auth/gate'
 import { useLetterStore } from '@/stores/letter-store'
 import { useAuthStore } from '@/stores/auth-store'
 import type { Letter, LetterType, LetterStatus, LetterTemplate, TemplateStatus, CircularAuthority } from '@/types'
@@ -1018,7 +1018,7 @@ export default function LettersPage() {
             </div>
           </div>
 
-          <Gate perm="Approve SAMA Letters">
+          <EntityGate action="create" entity="letter">
             <button
               onClick={() => handleOpenCreateModal()}
               className={`bg-emerald-600 text-white px-5 py-2.5 rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-emerald-700 transition-colors shadow-lg shadow-emerald-100 cursor-pointer`}
@@ -1026,7 +1026,7 @@ export default function LettersPage() {
               <Icon icon="lucide:plus" />
               {t('letters.draftNewLetter')}
             </button>
-          </Gate>
+          </EntityGate>
         </div>
       </header>
 
@@ -1231,13 +1231,15 @@ export default function LettersPage() {
                           </td>
                           <td className="px-6 py-4">
                             <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                              <button
-                                onClick={() => handleUseTemplate(template)}
-                                className="p-1.5 hover:bg-emerald-100 rounded text-slate-400 hover:text-emerald-600 transition-colors cursor-pointer"
-                                title={t('letters.useTemplate')}
-                              >
-                                <Icon icon="lucide:arrow-right-circle" />
-                              </button>
+                              <EntityGate action="create" entity="letter">
+                                <button
+                                  onClick={() => handleUseTemplate(template)}
+                                  className="p-1.5 hover:bg-emerald-100 rounded text-slate-400 hover:text-emerald-600 transition-colors cursor-pointer"
+                                  title={t('letters.useTemplate')}
+                                >
+                                  <Icon icon="lucide:arrow-right-circle" />
+                                </button>
+                              </EntityGate>
                               <button
                                 onClick={() => handleViewTemplate(template)}
                                 className="p-1.5 hover:bg-slate-200 rounded text-slate-400 hover:text-slate-900 transition-colors cursor-pointer"
@@ -1367,14 +1369,15 @@ export default function LettersPage() {
                                                template.type === 'submission' ? t('letters.submission') :
                                                t('letters.notification')
                         return (
-                          <TemplateCard
-                            key={template.type}
-                            type={translatedType}
-                            icon={template.icon}
-                            color={template.color}
-                            description={t('letters.startFromScratch')}
-                            onClick={() => handleOpenCreateModal(template.type)}
-                          />
+                          <EntityGate key={template.type} action="create" entity="letter">
+                            <TemplateCard
+                              type={translatedType}
+                              icon={template.icon}
+                              color={template.color}
+                              description={t('letters.startFromScratch')}
+                              onClick={() => handleOpenCreateModal(template.type)}
+                            />
+                          </EntityGate>
                         )
                       })}
                     </div>
@@ -1383,14 +1386,15 @@ export default function LettersPage() {
                 return (
                   <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                     {quickTemplates.map((tpl) => (
-                      <TemplateCard
-                        key={tpl.id}
-                        type={tpl.name}
-                        icon={tpl.icon}
-                        color={tpl.color}
-                        description={`${(tpl.defaultAuthority ?? 'sama').toUpperCase()} · ${getTypeLabel(tpl.type)}`}
-                        onClick={() => handleUseTemplate(tpl)}
-                      />
+                      <EntityGate key={tpl.id} action="create" entity="letter">
+                        <TemplateCard
+                          type={tpl.name}
+                          icon={tpl.icon}
+                          color={tpl.color}
+                          description={`${(tpl.defaultAuthority ?? 'sama').toUpperCase()} · ${getTypeLabel(tpl.type)}`}
+                          onClick={() => handleUseTemplate(tpl)}
+                        />
+                      </EntityGate>
                     ))}
                   </div>
                 )
@@ -1662,16 +1666,18 @@ export default function LettersPage() {
                 </div>
               </div>
               <div className={`flex gap-3`}>
-                {/* Print PDF — always available in detail view */}
-                <button
-                  onClick={handleDownloadPdf}
-                  disabled={pdfBusy}
-                  aria-busy={pdfBusy || undefined}
-                  className={`px-4 py-2 bg-white border border-slate-200 rounded-lg text-sm font-bold text-slate-700 flex items-center gap-2 hover:bg-slate-50 transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed`}
-                >
-                  <Icon icon={pdfBusy ? 'lucide:loader-2' : 'lucide:printer'} className={pdfBusy ? 'animate-spin' : ''} />
-                  {pdfBusy ? t('letters.generatingPdf' as Parameters<typeof t>[0]) : t('letters.printPdf')}
-                </button>
+                {/* Print PDF — export-gated in detail view */}
+                <EntityGate action="export" entity="letter">
+                  <button
+                    onClick={handleDownloadPdf}
+                    disabled={pdfBusy}
+                    aria-busy={pdfBusy || undefined}
+                    className={`px-4 py-2 bg-white border border-slate-200 rounded-lg text-sm font-bold text-slate-700 flex items-center gap-2 hover:bg-slate-50 transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed`}
+                  >
+                    <Icon icon={pdfBusy ? 'lucide:loader-2' : 'lucide:printer'} className={pdfBusy ? 'animate-spin' : ''} />
+                    {pdfBusy ? t('letters.generatingPdf' as Parameters<typeof t>[0]) : t('letters.printPdf')}
+                  </button>
+                </EntityGate>
                 {/* Status-specific primary actions */}
                 {/* W40: rejected letters resubmit through the same action. */}
                 {(selectedLetter?.status === 'draft' || selectedLetter?.status === 'rejected') && (
@@ -2620,16 +2626,18 @@ export default function LettersPage() {
                 {t('common.close')}
               </button>
               {selectedTemplate && (
-                <button
-                  onClick={() => {
-                    setIsViewTemplateModalOpen(false)
-                    handleUseTemplate(selectedTemplate)
-                  }}
-                  className={`px-6 py-2.5 bg-emerald-600 text-white rounded-xl text-sm font-bold hover:bg-emerald-700 transition-colors shadow-lg shadow-emerald-100 flex items-center gap-2 cursor-pointer`}
-                >
-                  <Icon icon="lucide:arrow-right-circle" />
-                  {t('letters.useTemplate')}
-                </button>
+                <EntityGate action="create" entity="letter">
+                  <button
+                    onClick={() => {
+                      setIsViewTemplateModalOpen(false)
+                      handleUseTemplate(selectedTemplate)
+                    }}
+                    className={`px-6 py-2.5 bg-emerald-600 text-white rounded-xl text-sm font-bold hover:bg-emerald-700 transition-colors shadow-lg shadow-emerald-100 flex items-center gap-2 cursor-pointer`}
+                  >
+                    <Icon icon="lucide:arrow-right-circle" />
+                    {t('letters.useTemplate')}
+                  </button>
+                </EntityGate>
               )}
             </div>
           </div>
@@ -2750,15 +2758,17 @@ export default function LettersPage() {
               </button>
             )}
             <div className="border-t border-slate-100 my-1" />
-            <button onClick={(e) => {
-              e.stopPropagation()
-              setOpenMenuId(null)
-              setMenuPosition(null)
-              setConfirmDeleteLetterId(letter.id)
-            }}
-              className="w-full px-4 py-2 text-left text-sm text-rose-600 hover:bg-rose-50 flex items-center gap-2 cursor-pointer">
-              <Icon icon="lucide:trash-2" /> {t('letters.delete' as Parameters<typeof t>[0])}
-            </button>
+            <EntityGate action="delete" entity="letter">
+              <button onClick={(e) => {
+                e.stopPropagation()
+                setOpenMenuId(null)
+                setMenuPosition(null)
+                setConfirmDeleteLetterId(letter.id)
+              }}
+                className="w-full px-4 py-2 text-left text-sm text-rose-600 hover:bg-rose-50 flex items-center gap-2 cursor-pointer">
+                <Icon icon="lucide:trash-2" /> {t('letters.delete' as Parameters<typeof t>[0])}
+              </button>
+            </EntityGate>
           </div>,
           document.body
         )

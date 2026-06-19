@@ -25,7 +25,7 @@ import { useDepartmentStore } from '@/stores/department-store'
 import { usePolicyTemplateStore } from '@/stores/policy-template-store'
 import { usePolicyCategoryStore } from '@/stores/policy-category-store'
 import { exportPoliciesLocalized } from '@/lib/export'
-import { Gate } from '@/components/auth/gate'
+import { EntityGate } from '@/components/auth/gate'
 import { useFrameworkConfigStore } from '@/stores/framework-config-store'
 import { matchesFrameworkQuery } from '@/components/ui/framework-chips'
 import { downloadPdf } from '@/lib/pdf-client'
@@ -284,7 +284,7 @@ export default function RegulatoryUpdatesPoliciesPage() {
         </div>
         <div className={`flex items-center gap-4`}>
           {/* Export Menu — CSV + PDF */}
-          <Gate perm="Export Compliance Data">
+          <EntityGate action="export" entity="policy">
             <ExportMenu
               iconOnly
               options={[
@@ -306,8 +306,8 @@ export default function RegulatoryUpdatesPoliciesPage() {
                 },
               ]}
             />
-          </Gate>
-          <Gate perm="Approve Policy Reviews">
+          </EntityGate>
+          <EntityGate action="create" entity="policy">
             <Button
               variant="primary"
               className="shadow-lg shadow-emerald-100"
@@ -316,7 +316,7 @@ export default function RegulatoryUpdatesPoliciesPage() {
               <Icon icon="lucide:plus" />
               {t('policies.createPolicy')}
             </Button>
-          </Gate>
+          </EntityGate>
         </div>
       </header>
 

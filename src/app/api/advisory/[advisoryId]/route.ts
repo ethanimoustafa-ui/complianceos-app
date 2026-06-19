@@ -12,7 +12,7 @@
 //   DELETE: assertUuid, optional If-Match guard on soft-delete.
 
 import type { NextRequest } from 'next/server'
-import { requirePerm, requireUser } from '@/lib/api/auth'
+import { requireAnyPerm, requireUser } from '@/lib/api/auth'
 import { handle, NotFound, PreconditionFailed } from '@/lib/api/errors'
 import { ok } from '@/lib/api/response'
 import { assertNotStale, assertUuid, parseJson, readIfMatch } from '@/lib/api/validate'
@@ -105,7 +105,8 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     const { advisoryId } = await params
     // SEC-5 §2.13
     assertUuid(advisoryId)
-    const { supabase, user, profile } = await requirePerm('edit')
+    // Granular `advisory:edit` (migration 118) OR the legacy generic `edit`.
+    const { supabase, user, profile } = await requireAnyPerm(['advisory:edit', 'edit'])
     await assertAdvisoryExists(supabase, advisoryId)
 
     // §2.12 — optimistic-concurrency token.
@@ -247,7 +248,8 @@ export async function POST(req: NextRequest, { params }: Params) {
     const { advisoryId } = await params
     // SEC-5 §2.13
     assertUuid(advisoryId)
-    const { supabase, user, profile } = await requirePerm('edit')
+    // Note-append is an edit op: `advisory:edit` (migration 118) OR generic `edit`.
+    const { supabase, user, profile } = await requireAnyPerm(['advisory:edit', 'edit'])
     await assertAdvisoryExists(supabase, advisoryId)
     const input = await parseJson(req, CreateAdvisoryNoteSchema)
 
@@ -298,7 +300,8 @@ export async function DELETE(req: NextRequest, { params }: Params) {
     const { advisoryId } = await params
     // SEC-5 §2.13
     assertUuid(advisoryId)
-    const { supabase, user, profile } = await requirePerm('delete')
+    // Granular `advisory:delete` (migration 118) OR the legacy generic `delete`.
+    const { supabase, user, profile } = await requireAnyPerm(['advisory:delete', 'delete'])
     await assertAdvisoryExists(supabase, advisoryId)
 
     // §2.12 — optional optimistic-concurrency guard on DELETE.
