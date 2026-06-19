@@ -22,6 +22,7 @@ import type { ObservationFormData } from '@/components/observations/add-observat
 import { EditObservationModal } from '@/components/observations/edit-observation-modal'
 import { DeleteConfirmationDialog } from '@/components/ui/delete-confirmation-dialog'
 import { api } from '@/lib/api-client'
+import { RBACError } from '@/lib/rbac-error'
 import { useDashboardSummary } from '@/hooks/useDashboardSummary'
 import { downloadPdf } from '@/lib/pdf-client'
 import { ExportMenu } from '@/components/ui/export-menu'
@@ -254,6 +255,9 @@ export default function ObservationsPage() {
       refetchTracker()
     } catch (error) {
       console.error('Failed to create observation:', error)
+      // Surface a permission denial — a client-side RBACError caught here would
+      // otherwise never reach the global RBACToastHost (the silent-failure bug).
+      if (error instanceof RBACError) pushToast({ key: 'rbac.deniedActionToast' }, 'error')
     }
   }
 
@@ -306,6 +310,8 @@ export default function ObservationsPage() {
       refetchTracker()
     } catch (error) {
       console.error('Failed to update observation:', error)
+      // Surface a permission denial instead of silently closing the modal.
+      if (error instanceof RBACError) pushToast({ key: 'rbac.deniedActionToast' }, 'error')
     }
   }
 
@@ -326,6 +332,9 @@ export default function ObservationsPage() {
       refetchTracker()
     } catch (error) {
       console.error('Failed to delete observation:', error)
+      // Surface a permission denial — a client-side RBACError caught here would
+      // otherwise never reach the global RBACToastHost (the silent-failure bug).
+      if (error instanceof RBACError) pushToast({ key: 'rbac.deniedActionToast' }, 'error')
     } finally {
       setDeleteTarget(null)
     }
