@@ -42,6 +42,7 @@ import { FieldLabel } from '@/components/ui/field-label'
 import { FileUpload, type UploadedFile } from '@/components/ui/file-upload'
 import { supabase as supabaseClient } from '@/lib/supabase/client'
 import { pushToast } from '@/stores/toast-store'
+import { isPermissionDenied } from '@/lib/optimistic'
 import { ApiClientError } from '@/lib/api-client'
 import type { Risk as StoreRisk } from '@/types'
 
@@ -510,7 +511,14 @@ export default function ReportsRisksPage() {
       // Keep the modal open with the user's input; the store already rolled
       // back its optimistic row. Without this the failure was completely
       // silent (unhandled rejection, modal stuck, no message).
-      pushToast(apiErrorMessage(e, t('reports.failedToSaveRisk' as TranslationKey)), 'error')
+      // A permission denial must show the clean "you don't have permission"
+      // copy — NOT apiErrorMessage(e), which would leak the raw RBACError
+      // message ("Manage Audit Findings required", an internal label name).
+      if (isPermissionDenied(e)) {
+        pushToast({ key: 'rbac.deniedActionToast' }, 'error')
+      } else {
+        pushToast(apiErrorMessage(e, t('reports.failedToSaveRisk' as TranslationKey)), 'error')
+      }
       return
     } finally {
       setIsSavingRisk(false)

@@ -11,13 +11,20 @@ import { UserPreferencesSection } from '@/components/settings/UserPreferencesSec
 // Departments, and Observation Sources (each opens as a modal).
 import { ListsAndCategoriesSection } from '@/components/settings/ListsAndCategoriesSection'
 import { Gate } from '@/components/auth/gate'
-import { ForbiddenPanel } from '@/components/auth/forbidden-panel'
 
 export default function SettingsPage() {
   const { t } = useTranslation()
 
+  // Settings is open to EVERY signed-in user — the personal sections (preferences,
+  // notifications, connected apps) always render. Each ADMIN/CONFIG surface gates
+  // on its OWN capability label instead of a blanket "Manage Settings" wall:
+  //   • Frameworks (incl. the company compliance threshold) → "Configure Frameworks"
+  //   • Configurables hub (lists/categories/templates/tiers/departments)
+  //       → self-gates internally on "Configure Lists & Categories"
+  // So an officer with neither still sees their personal preferences; granting
+  // just "Configure Frameworks" reveals only the frameworks card, etc.
   return (
-    <Gate perm="Manage Settings" fallback={<ForbiddenPanel />}>
+    <>
       <header className="h-20 bg-white border-b border-slate-200 px-8 flex items-center justify-between shrink-0">
         <div className="flex items-center gap-8">
           <div>
@@ -38,17 +45,24 @@ export default function SettingsPage() {
 
       <div className="flex-1 overflow-auto hide-scrollbar p-8">
         <div className="max-w-6xl mx-auto space-y-10">
-          <FrameworksSection />
+          {/* Framework access (+ the overall business compliance threshold) is its
+              own toggleable capability — hidden entirely without it. */}
+          <Gate perm="Configure Frameworks">
+            <FrameworksSection />
+          </Gate>
 
+          {/* Personal preferences — always available to everyone. */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
             <NotificationsSection />
             <ConnectedAppsSection />
           </div>
 
           <UserPreferencesSection />
+
+          {/* Configurables hub self-gates on "Configure Lists & Categories". */}
           <ListsAndCategoriesSection />
         </div>
       </div>
-    </Gate>
+    </>
   )
 }

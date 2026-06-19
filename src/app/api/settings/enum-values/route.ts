@@ -9,7 +9,7 @@
 // The PATCH/DELETE half lives in `./[id]/route.ts` (per-row).
 
 import type { NextRequest } from 'next/server'
-import { requirePerm, requireUser } from '@/lib/api/auth'
+import { requireAnyPerm, requireUser } from '@/lib/api/auth'
 import { Conflict, handle, NotFound, ValidationFailed } from '@/lib/api/errors'
 import { ok } from '@/lib/api/response'
 import { parseJson, parseQuery } from '@/lib/api/validate'
@@ -47,7 +47,7 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    const { supabase, user, profile } = await requirePerm('settings:edit')
+    const { supabase, user, profile } = await requireAnyPerm(['lists:config', 'settings:edit'])
     const input = await parseJson(req, CreateEnumValueSchema)
 
     // Unique (domain, key) — check first so we can return a friendly 400 code

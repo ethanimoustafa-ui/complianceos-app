@@ -4,7 +4,7 @@
 // affect scoring (weight, threshold, enabled) bust the compliance score cache.
 
 import type { NextRequest } from 'next/server'
-import { requirePerm } from '@/lib/api/auth'
+import { requireAnyPerm } from '@/lib/api/auth'
 import { handle, NotFound } from '@/lib/api/errors'
 import { ok } from '@/lib/api/response'
 import { parseJson } from '@/lib/api/validate'
@@ -24,7 +24,7 @@ type Params = { params: Promise<{ frameworkId: string }> }
 export async function PATCH(req: NextRequest, { params }: Params) {
   try {
     const { frameworkId } = await params
-    const { supabase, user, profile } = await requirePerm('settings:edit')
+    const { supabase, user, profile } = await requireAnyPerm(['frameworks:config', 'settings:edit'])
     await assertFrameworkExists(supabase, frameworkId)
     const patch = await parseJson(req, UpdateFrameworkConfigSchema)
 

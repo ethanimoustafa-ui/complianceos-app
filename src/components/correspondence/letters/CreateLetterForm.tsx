@@ -110,10 +110,20 @@ export function CreateLetterForm({
     template?.defaultSignatureImageUrl,
   )
 
+  // Track the EFFECTIVE template (initial prop OR in-modal "Choose Template"
+  // re-select) so the signer name/title + recipient defaults carry forward on
+  // BOTH paths. Same staleness fix as effectiveSignatureImageUrl above: the
+  // `template` prop still points at the original createFromTemplate after a
+  // re-select, so reading signer/recipient off it dropped what the user picked.
+  const [effectiveTemplate, setEffectiveTemplate] = useState<LetterTemplate | undefined>(template)
+
   // Apply template defaults — shared by both the initial-template prop path
   // and the in-modal template-select path.
   const applyTemplate = useCallback((t: LetterTemplate | undefined) => {
     if (!t) return
+    // Capture the applied template so letterBaseData() reads signer/recipient
+    // from it (not the stale prop) — carries name + position into the letter.
+    setEffectiveTemplate(t)
     if (t.defaultSubjectEn)  setSubjectEn(t.defaultSubjectEn)
     if (t.defaultSubjectAr)  setSubjectAr(t.defaultSubjectAr)
     if (t.defaultBodyEn)     setBodyEn(t.defaultBodyEn)
@@ -247,20 +257,23 @@ export function CreateLetterForm({
       status: 'draft' as const,
       priority,
       createdBy,
-      signerName:           template?.defaultSignerName || undefined,
-      signerTitle:          template?.defaultSignerTitle || undefined,
-      signerNameAr:         template?.defaultSignerNameAr || undefined,
-      signerTitleAr:        template?.defaultSignerTitleAr || undefined,
+      // Read signer + recipient from the EFFECTIVE template (updated by
+      // applyTemplate) so the saved name/title + recipient carry forward on both
+      // the initial quick-add and the in-modal re-select — not the stale prop.
+      signerName:           effectiveTemplate?.defaultSignerName || undefined,
+      signerTitle:          effectiveTemplate?.defaultSignerTitle || undefined,
+      signerNameAr:         effectiveTemplate?.defaultSignerNameAr || undefined,
+      signerTitleAr:        effectiveTemplate?.defaultSignerTitleAr || undefined,
       // Bug-3 fix: use effectiveSignatureImageUrl (updated by applyTemplate)
       // so the in-modal "Choose Template" select also carries the signature,
       // not just the initial `template` prop.
       signatureImageUrl:    effectiveSignatureImageUrl || undefined,
-      recipientName:        template?.defaultRecipientName || recipientDefaults.en.name,
-      recipientOrg:         template?.defaultRecipientOrg  || recipientDefaults.en.org,
-      recipientCity:        template?.defaultRecipientCity || recipientDefaults.en.city,
-      recipientNameAr:      template?.defaultRecipientNameAr || recipientDefaults.ar.name,
-      recipientOrgAr:       template?.defaultRecipientOrgAr  || recipientDefaults.ar.org,
-      recipientCityAr:      template?.defaultRecipientCityAr || recipientDefaults.ar.city,
+      recipientName:        effectiveTemplate?.defaultRecipientName || recipientDefaults.en.name,
+      recipientOrg:         effectiveTemplate?.defaultRecipientOrg  || recipientDefaults.en.org,
+      recipientCity:        effectiveTemplate?.defaultRecipientCity || recipientDefaults.en.city,
+      recipientNameAr:      effectiveTemplate?.defaultRecipientNameAr || recipientDefaults.ar.name,
+      recipientOrgAr:       effectiveTemplate?.defaultRecipientOrgAr  || recipientDefaults.ar.org,
+      recipientCityAr:      effectiveTemplate?.defaultRecipientCityAr || recipientDefaults.ar.city,
       approvalChain: [] as import('@/types').LetterApprovalStep[],
       timeline: [buildTimelineEvent(t('letters.letterCreatedDraft'))],
       // L1: server increments the template usage_count when template_id is present.

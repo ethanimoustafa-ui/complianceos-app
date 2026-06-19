@@ -4,7 +4,7 @@
 // clears `framework_config.pinned`. No-op if not pinned.
 
 import type { NextRequest } from 'next/server'
-import { requirePerm } from '@/lib/api/auth'
+import { requireAnyPerm } from '@/lib/api/auth'
 import { handle } from '@/lib/api/errors'
 import { ok } from '@/lib/api/response'
 import { cacheTags, revalidateAll } from '@/lib/api/cache'
@@ -19,7 +19,7 @@ type Params = { params: Promise<{ frameworkId: string }> }
 export async function POST(_req: NextRequest, { params }: Params) {
   try {
     const { frameworkId } = await params
-    const { supabase, user, profile } = await requirePerm('settings:edit')
+    const { supabase, user, profile } = await requireAnyPerm(['frameworks:config', 'settings:edit'])
     await assertFrameworkExists(supabase, frameworkId)
 
     const { error } = await supabase

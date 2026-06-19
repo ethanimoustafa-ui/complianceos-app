@@ -80,33 +80,39 @@ export function ApprovalStepActions({
         </>
       )}
       <div className={`flex gap-2`}>
-        <button
-          onClick={handleApprove}
-          disabled={!canApprove || isBusy}
-          aria-busy={busy === 'approve' || undefined}
-          title={canApprove ? '' : t('rbac.deniedTooltip')}
-          className="flex-1 py-1.5 bg-emerald-600 text-white rounded-lg text-xs font-bold hover:bg-emerald-700 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center justify-center gap-1.5"
-        >
-          {busy === 'approve' && <Icon icon="lucide:loader-2" className="animate-spin text-xs" />}
-          {t('letters.approveStep')}
-        </button>
-        <button
-          onClick={handleReject}
-          disabled={!canApprove || isBusy}
-          aria-busy={busy === 'reject' || undefined}
-          title={canApprove ? '' : t('rbac.deniedTooltip')}
-          className="flex-1 py-1.5 bg-rose-100 text-rose-700 rounded-lg text-xs font-bold hover:bg-rose-200 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center justify-center gap-1.5"
-        >
-          {busy === 'reject' && <Icon icon="lucide:loader-2" className="animate-spin text-xs" />}
-          {t('letters.rejectStep')}
-        </button>
-        <button
-          onClick={() => setShowNotes(!showNotes)}
-          className="px-2 py-1.5 bg-slate-100 text-slate-500 rounded-lg text-xs hover:bg-slate-200 transition-colors cursor-pointer"
-          title={t('letters.addNotes')}
-        >
-          <Icon icon="lucide:message-square" />
-        </button>
+        {/* Approve/Reject only show for the step's actual approver — hidden, not
+            disabled, for everyone else (the user shouldn't see a button they
+            can't use). The busy state still disables them while a save is in flight. */}
+        {canApprove && (
+          <>
+            <button
+              onClick={handleApprove}
+              disabled={isBusy}
+              aria-busy={busy === 'approve' || undefined}
+              className="flex-1 py-1.5 bg-emerald-600 text-white rounded-lg text-xs font-bold hover:bg-emerald-700 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center justify-center gap-1.5"
+            >
+              {busy === 'approve' && <Icon icon="lucide:loader-2" className="animate-spin text-xs" />}
+              {t('letters.approveStep')}
+            </button>
+            <button
+              onClick={handleReject}
+              disabled={isBusy}
+              aria-busy={busy === 'reject' || undefined}
+              className="flex-1 py-1.5 bg-rose-100 text-rose-700 rounded-lg text-xs font-bold hover:bg-rose-200 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center justify-center gap-1.5"
+            >
+              {busy === 'reject' && <Icon icon="lucide:loader-2" className="animate-spin text-xs" />}
+              {t('letters.rejectStep')}
+            </button>
+            {/* Notes feed the approve/reject flow — only the approver needs it. */}
+            <button
+              onClick={() => setShowNotes(!showNotes)}
+              className="px-2 py-1.5 bg-slate-100 text-slate-500 rounded-lg text-xs hover:bg-slate-200 transition-colors cursor-pointer"
+              title={t('letters.addNotes')}
+            >
+              <Icon icon="lucide:message-square" />
+            </button>
+          </>
+        )}
       </div>
     </div>
   )

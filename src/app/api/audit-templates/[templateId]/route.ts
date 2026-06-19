@@ -1,7 +1,7 @@
 // /api/audit-templates/[templateId] — update or delete a template.
 
 import type { NextRequest } from 'next/server'
-import { requirePerm } from '@/lib/api/auth'
+import { requireAnyPerm } from '@/lib/api/auth'
 import { handle, NotFound } from '@/lib/api/errors'
 import { ok } from '@/lib/api/response'
 import { parseJson } from '@/lib/api/validate'
@@ -20,7 +20,7 @@ type Params = { params: Promise<{ templateId: string }> }
 export async function PATCH(req: NextRequest, { params }: Params) {
   try {
     const { templateId } = await params
-    const { supabase, user, profile } = await requirePerm('settings:edit')
+    const { supabase, user, profile } = await requireAnyPerm(['lists:config', 'settings:edit'])
     const patch = await parseJson(req, UpdateAuditTemplateSchema)
 
     const update: Record<string, unknown> = {}
@@ -54,7 +54,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 export async function DELETE(_req: NextRequest, { params }: Params) {
   try {
     const { templateId } = await params
-    const { supabase, user, profile } = await requirePerm('settings:edit')
+    const { supabase, user, profile } = await requireAnyPerm(['lists:config', 'settings:edit'])
 
     const { error } = await supabase.from('audit_templates').delete().eq('id', templateId)
     if (error) throw error

@@ -5,7 +5,7 @@
 // If another framework already holds that slot, it is unpinned first.
 
 import type { NextRequest } from 'next/server'
-import { requirePerm } from '@/lib/api/auth'
+import { requireAnyPerm } from '@/lib/api/auth'
 import { handle } from '@/lib/api/errors'
 import { ok } from '@/lib/api/response'
 import { parseJson } from '@/lib/api/validate'
@@ -19,7 +19,7 @@ export const dynamic = 'force-dynamic'
 
 export async function POST(req: NextRequest) {
   try {
-    const { supabase, user, profile } = await requirePerm('settings:edit')
+    const { supabase, user, profile } = await requireAnyPerm(['frameworks:config', 'settings:edit'])
     const input = await parseJson(req, PinFrameworkSchema)
     await assertFrameworkExists(supabase, input.framework_id)
 

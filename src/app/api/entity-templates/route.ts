@@ -3,7 +3,7 @@
 // Initially wired for 'circular' entity type; future waves extend to others.
 
 import type { NextRequest } from 'next/server'
-import { requirePerm, requireUser } from '@/lib/api/auth'
+import { requireAnyPerm, requireUser } from '@/lib/api/auth'
 import { handle } from '@/lib/api/errors'
 import { ok } from '@/lib/api/response'
 import { parseJson, parseQuery } from '@/lib/api/validate'
@@ -46,7 +46,7 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    const { supabase, user } = await requirePerm('settings:edit')
+    const { supabase, user } = await requireAnyPerm(['lists:config', 'settings:edit'])
     const input = await parseJson(req, CreateTemplateSchema)
 
     const { data, error } = await supabase

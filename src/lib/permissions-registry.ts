@@ -63,11 +63,17 @@ export const PERMISSION_BACKEND_KEYS: Record<Permission, readonly string[]> = {
   // officer granted them in the matrix can actually reach those server routes.
   'Manage Settings': ['settings:edit', 'settings:view'],
   'Manage Team & Permissions': ['team:edit', 'team:invite', 'team:remove', 'team:view'],
-  'Configure Frameworks': ['settings:edit'],
-  'Configure Lists & Categories': ['settings:edit'],
-  'Manage Letter Templates': ['settings:edit'],
-  'Manage Policy Templates': ['settings:edit'],
-  'Manage Audit Templates': ['settings:edit'],
+  // Round 8 (migration 119): two INDEPENDENT settings capabilities. Frameworks
+  // (incl. the company compliance threshold) vs Configurables (lists, categories,
+  // tiers, departments, AND all template managers — templates live in the
+  // Configurables hub). Each is its own backend key so granting one in the matrix
+  // does NOT grant the other. settings:edit remains the manager/admin superuser
+  // key (config routes OR it in), so those tiers keep full access.
+  'Configure Frameworks': ['frameworks:config'],
+  'Configure Lists & Categories': ['lists:config'],
+  'Manage Letter Templates': ['lists:config'],
+  'Manage Policy Templates': ['lists:config'],
+  'Manage Audit Templates': ['lists:config'],
   'Switch User (Demo)': [],
   // Workflow advancement is enforced by a dedicated backend key (migration 117)
   // OR'd alongside edit/ownership on the policy + rule advance routes.

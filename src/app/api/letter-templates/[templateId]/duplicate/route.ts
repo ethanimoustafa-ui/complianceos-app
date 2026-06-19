@@ -16,10 +16,10 @@
 //   - All default_* content fields deep-copied verbatim
 //   - placeholder_defs deep-copied verbatim
 //
-// Auth: requirePerm('settings:edit') — same as POST /api/letter-templates.
+// Auth: requireAnyPerm(['lists:config','settings:edit']) — same as POST /api/letter-templates.
 
 import type { NextRequest } from 'next/server'
-import { requirePerm } from '@/lib/api/auth'
+import { requireAnyPerm } from '@/lib/api/auth'
 import { handle, NotFound } from '@/lib/api/errors'
 import { ok } from '@/lib/api/response'
 import { assertUuid } from '@/lib/api/validate'
@@ -36,7 +36,7 @@ export async function POST(_req: NextRequest, { params }: Params) {
   try {
     const { templateId } = await params
     assertUuid(templateId)
-    const { supabase, user, profile } = await requirePerm('settings:edit')
+    const { supabase, user, profile } = await requireAnyPerm(['lists:config', 'settings:edit'])
 
     // Fetch source template.
     const { data: src, error: readErr } = await supabase

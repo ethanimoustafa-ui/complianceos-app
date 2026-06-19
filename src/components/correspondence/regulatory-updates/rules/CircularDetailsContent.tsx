@@ -1477,16 +1477,16 @@ export function CircularDetailsContent({ circular, activeTab, setActiveTab, onCl
         )}
 
         <div className="space-y-2 pt-3 border-t border-slate-200">
-          <Button
-            variant="outline"
-            className="w-full"
-            onClick={onEditOpen}
-            disabled={!canEditRule}
-            title={canEditRule ? '' : t('rbac.deniedTooltip')}
-          >
-            <Icon icon="lucide:pencil" className="w-4 h-4" />
-            {t('regulatoryUpdates.editCircular')}
-          </Button>
+          {canEditRule && (
+            <Button
+              variant="outline"
+              className="w-full"
+              onClick={onEditOpen}
+            >
+              <Icon icon="lucide:pencil" className="w-4 h-4" />
+              {t('regulatoryUpdates.editCircular')}
+            </Button>
+          )}
           <Button variant="outline" className="w-full" onClick={onOpenBOModal}>
             <Icon icon="lucide:user-check" className="w-4 h-4" />
             {freshCircular.businessOwnerDepartment
@@ -1518,16 +1518,16 @@ export function CircularDetailsContent({ circular, activeTab, setActiveTab, onCl
               {getBONotifyLabel(freshCircular, t)}
             </Button>
           )}
-          <Button
-            variant="outline"
-            className="w-full border-rose-200 text-rose-600 hover:bg-rose-50"
-            onClick={() => onDeleteOpen(freshCircular.id)}
-            disabled={!canDeleteRule}
-            title={canDeleteRule ? '' : t('rbac.deniedTooltip')}
-          >
-            <Icon icon="lucide:trash-2" className="w-4 h-4" />
-            {t('regulatoryUpdates.deleteCircular')}
-          </Button>
+          {canDeleteRule && (
+            <Button
+              variant="outline"
+              className="w-full border-rose-200 text-rose-600 hover:bg-rose-50"
+              onClick={() => onDeleteOpen(freshCircular.id)}
+            >
+              <Icon icon="lucide:trash-2" className="w-4 h-4" />
+              {t('regulatoryUpdates.deleteCircular')}
+            </Button>
+          )}
           <Button variant="ghost" className="w-full" onClick={onClose}>
             {t('common.close')}
           </Button>

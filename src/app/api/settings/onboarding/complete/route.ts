@@ -1,6 +1,6 @@
 // POST /api/settings/onboarding/complete — finalize onboarding.
 
-import { requirePerm } from '@/lib/api/auth'
+import { requireAnyPerm } from '@/lib/api/auth'
 import { handle } from '@/lib/api/errors'
 import { ok } from '@/lib/api/response'
 import { cacheTags, revalidate } from '@/lib/api/cache'
@@ -19,7 +19,9 @@ const DEFAULT_STATE: OnboardingState = { completed: false, completed_at: null, s
 
 export async function POST() {
   try {
-    const { supabase, user, profile } = await requirePerm('settings:edit')
+    // Onboarding is admin-tier setup that writes compliance_settings (a
+    // frameworks:config table) — keep it on settings:edit only, not section-grantable.
+    const { supabase, user, profile } = await requireAnyPerm(['settings:edit'])
 
     const { data: existing } = await supabase
       .from('compliance_settings')

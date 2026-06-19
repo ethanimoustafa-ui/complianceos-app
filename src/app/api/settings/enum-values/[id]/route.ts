@@ -9,7 +9,7 @@
 //     currently referenced (FK-style protection via a count query).
 
 import type { NextRequest } from 'next/server'
-import { requirePerm } from '@/lib/api/auth'
+import { requireAnyPerm } from '@/lib/api/auth'
 import { Conflict, handle, NotFound, PreconditionFailed, ValidationFailed } from '@/lib/api/errors'
 import { ok } from '@/lib/api/response'
 import { assertNotStale, assertUuid, parseJson, readIfMatch } from '@/lib/api/validate'
@@ -30,7 +30,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   try {
     const { id } = await params
     assertUuid(id)
-    const { supabase, user, profile } = await requirePerm('settings:edit')
+    const { supabase, user, profile } = await requireAnyPerm(['lists:config', 'settings:edit'])
     const input = await parseJson(req, UpdateEnumValueSchema)
     const ifMatch = readIfMatch(req)
 
@@ -96,7 +96,7 @@ export async function DELETE(req: NextRequest, { params }: Params) {
   try {
     const { id } = await params
     assertUuid(id)
-    const { supabase, user, profile } = await requirePerm('settings:edit')
+    const { supabase, user, profile } = await requireAnyPerm(['lists:config', 'settings:edit'])
     const ifMatch = readIfMatch(req)
 
     const { data: before, error: bErr } = await supabase

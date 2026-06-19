@@ -1,7 +1,7 @@
 // /api/settings/policy-categories/[id] — patch / delete.
 
 import type { NextRequest } from 'next/server'
-import { requirePerm } from '@/lib/api/auth'
+import { requireAnyPerm } from '@/lib/api/auth'
 import { ApiError, Conflict, handle, NotFound } from '@/lib/api/errors'
 import { ok } from '@/lib/api/response'
 import { parseJson } from '@/lib/api/validate'
@@ -22,7 +22,7 @@ type Params = { params: Promise<{ id: string }> }
 export async function PATCH(req: NextRequest, { params }: Params) {
   try {
     const { id } = await params
-    const { supabase, user, profile } = await requirePerm('settings:edit')
+    const { supabase, user, profile } = await requireAnyPerm(['lists:config', 'settings:edit'])
     await assertPolicyCategoryExists(supabase, id)
     const patch = await parseJson(req, UpdatePolicyCategorySchema)
 
@@ -57,7 +57,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 export async function DELETE(_req: NextRequest, { params }: Params) {
   try {
     const { id } = await params
-    const { supabase, user, profile } = await requirePerm('settings:edit')
+    const { supabase, user, profile } = await requireAnyPerm(['lists:config', 'settings:edit'])
     const row = await assertPolicyCategoryExists(supabase, id)
     if (row.is_default) {
       throw Conflict('System-default policy categories cannot be deleted')

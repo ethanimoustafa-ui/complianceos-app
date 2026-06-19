@@ -3338,7 +3338,7 @@
     "forbiddenTitle": "Permission required",
     "forbiddenBody": "You don't have permission to view this section. Ask an admin to enable it for you.",
     "deniedTooltip": "You don't have permission to do this",
-    "deniedToast": "Permission denied: this action requires a higher-tier role.",
+    "deniedToast": "You don't have permission to do this. If you need access, ask an administrator.",
     "deniedActionToast": "You don't have permission to do this. If you need access, ask an administrator.",
     "actingAs": "Acting as: {{name}} ({{role}})",
     "demoBanner": "Demo mode: acting as {{name}}",

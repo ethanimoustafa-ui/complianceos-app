@@ -73,6 +73,9 @@ export const BACKEND_PERMISSIONS = [
   'advisory:create',
   'advisory:edit',
   'advisory:delete',
+  // Settings split (migration 119): Frameworks config vs Configurables config.
+  'frameworks:config',
+  'lists:config',
 ] as const
 export type BackendPermission = (typeof BACKEND_PERMISSIONS)[number]
 
@@ -103,10 +106,14 @@ const WORKFLOW_ADVANCE = ['workflow:advance']
 // all via ALL_PERMISSIONS below.
 const GRANULAR_FEED_ADVISORY_CREATE_EDIT = ['feed:create', 'feed:edit', 'advisory:create', 'advisory:edit']
 const GRANULAR_FEED_ADVISORY_DELETE = ['feed:delete', 'advisory:delete']
+// Round 8 (migration 119): two independent settings-config capabilities. Admin
+// tier holds both (managers/admins also pass config routes via settings:edit);
+// officers get NEITHER by role — they're grant-only via the Access Matrix.
+const SETTINGS_CONFIG = ['frameworks:config', 'lists:config']
 
 // Legacy role-permission map — used as a fallback for the lowercase:colon
 // permission strings that pre-date the round-4 registry.
-const ALL_PERMISSIONS = ['view', 'comment', 'create', 'edit', 'delete', 'audit:view', 'audit:comment', 'audit:create', 'audit:edit', 'audit:delete', 'observation:view', 'observation:comment', 'observation:create', 'observation:edit', 'observation:delete', 'report:view', 'report:create', 'report:delete', 'export', 'settings:view', 'settings:edit', 'team:view', 'team:invite', 'team:edit', 'team:remove', ...GRANULAR_CREATE_EDIT, ...GRANULAR_DELETE, ...GRANULAR_EXPORT, ...GRANULAR_CHECKLIST, ...WORKFLOW_ADVANCE, ...GRANULAR_FEED_ADVISORY_CREATE_EDIT, ...GRANULAR_FEED_ADVISORY_DELETE]
+const ALL_PERMISSIONS = ['view', 'comment', 'create', 'edit', 'delete', 'audit:view', 'audit:comment', 'audit:create', 'audit:edit', 'audit:delete', 'observation:view', 'observation:comment', 'observation:create', 'observation:edit', 'observation:delete', 'report:view', 'report:create', 'report:delete', 'export', 'settings:view', 'settings:edit', 'team:view', 'team:invite', 'team:edit', 'team:remove', ...GRANULAR_CREATE_EDIT, ...GRANULAR_DELETE, ...GRANULAR_EXPORT, ...GRANULAR_CHECKLIST, ...WORKFLOW_ADVANCE, ...GRANULAR_FEED_ADVISORY_CREATE_EDIT, ...GRANULAR_FEED_ADVISORY_DELETE, ...SETTINGS_CONFIG]
 
 export const ROLE_PERMISSIONS: Record<User['role'], string[]> = {
   // Mirrors the DB role_permissions seed (migrations 108 + 115). auditor < officer < manager = admin.

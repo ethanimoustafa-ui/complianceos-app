@@ -4,7 +4,7 @@
 // during migration 018 seeding; never created by this endpoint, only updated.
 
 import type { NextRequest } from 'next/server'
-import { requirePerm, requireUser } from '@/lib/api/auth'
+import { requireAnyPerm, requireUser } from '@/lib/api/auth'
 import { handle, NotFound } from '@/lib/api/errors'
 import { ok } from '@/lib/api/response'
 import { parseJson } from '@/lib/api/validate'
@@ -40,7 +40,7 @@ export async function GET() {
 
 export async function PATCH(req: NextRequest) {
   try {
-    const { supabase, user, profile } = await requirePerm('settings:edit')
+    const { supabase, user, profile } = await requireAnyPerm(['frameworks:config', 'settings:edit'])
     const patch = await parseJson(req, PatchComplianceSettingsSchema)
 
     // Merge weights JSONB shallowly so partial updates don't blow away other keys.

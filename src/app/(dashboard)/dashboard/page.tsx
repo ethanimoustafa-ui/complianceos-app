@@ -155,6 +155,7 @@ export default function DashboardPage() {
         subtitle={t(subtitleKey as any)}
         exportSlot={
           <ExportMenu
+            iconOnly
             options={[
               {
                 label: t('common.exportPdf' as any),

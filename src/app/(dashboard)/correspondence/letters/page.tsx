@@ -14,6 +14,7 @@ import { TablePagination } from '@/components/ui/table-pagination'
 import { cn } from '@/lib/utils'
 import { useTranslation } from '@/i18n'
 import { Gate, EntityGate } from '@/components/auth/gate'
+import { useCanCreateEntity } from '@/lib/permissions'
 import { useLetterStore } from '@/stores/letter-store'
 import { useAuthStore } from '@/stores/auth-store'
 import type { Letter, LetterType, LetterStatus, LetterTemplate, TemplateStatus, CircularAuthority } from '@/types'
@@ -184,6 +185,9 @@ export default function LettersPage() {
 
   // Template Actions State (templates sourced from persistent store)
   const [createFromTemplate, setCreateFromTemplate] = useState<LetterTemplate | null>(null)
+  // Gate the empty-state quick-add CTA the same as every other create path
+  // (letter:create) — keep the "no letters yet" message, drop the Add button.
+  const canCreateLetter = useCanCreateEntity('letter')
   const [selectedTemplate, setSelectedTemplate] = useState<LetterTemplate | null>(null)
   const [isViewTemplateModalOpen, setIsViewTemplateModalOpen] = useState(false)
   const [isEditTemplateModalOpen, setIsEditTemplateModalOpen] = useState(false)
@@ -1624,7 +1628,7 @@ export default function LettersPage() {
                               title={t('emptyStates.letters.title')}
                               description={t('emptyStates.letters.description')}
                               ctaLabel={t('emptyStates.letters.cta')}
-                              onAdd={() => handleOpenCreateModal()}
+                              onAdd={canCreateLetter ? () => handleOpenCreateModal() : undefined}
                             />
                           )}
                         </td>

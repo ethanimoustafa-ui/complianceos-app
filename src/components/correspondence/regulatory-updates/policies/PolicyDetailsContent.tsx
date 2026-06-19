@@ -1078,28 +1078,30 @@ export function PolicyDetailsContent({
                         <Icon icon="lucide:clock" className="text-amber-500 text-sm" />
                         <span className="text-xs font-bold text-amber-700">{t('policies.awaitingApproval')}</span>
                       </div>
-                      <div className="flex gap-2">
-                        <Button
-                          variant="primary"
-                          className="flex-1 text-xs h-9"
-                          onClick={() => setNotePromptFor('approve-step')}
-                          disabled={!canApprovePolicy || workflowProcessing}
-                          title={canApprovePolicy ? '' : t('rbac.deniedTooltip')}
-                        >
-                          {workflowProcessing ? <Icon icon="lucide:loader-2" className="w-3.5 h-3.5 animate-spin" /> : <Icon icon="lucide:check-circle" className="w-3.5 h-3.5" />}
-                          {t('policies.approveStep')}
-                        </Button>
-                        <Button
-                          variant="outline"
-                          className="flex-1 text-xs h-9 text-rose-600 border-rose-200 hover:bg-rose-50"
-                          onClick={() => setNotePromptFor('deny-step')}
-                          disabled={!canApprovePolicy || workflowProcessing}
-                          title={canApprovePolicy ? '' : t('rbac.deniedTooltip')}
-                        >
-                          {workflowProcessing ? <Icon icon="lucide:loader-2" className="w-3.5 h-3.5 animate-spin" /> : <Icon icon="lucide:x-circle" className="w-3.5 h-3.5" />}
-                          {t('policies.denyStep')}
-                        </Button>
-                      </div>
+                      {/* Approve/Deny show only for the policy's approver — hidden
+                          (not disabled) for everyone else; busy still disables. */}
+                      {canApprovePolicy && (
+                        <div className="flex gap-2">
+                          <Button
+                            variant="primary"
+                            className="flex-1 text-xs h-9"
+                            onClick={() => setNotePromptFor('approve-step')}
+                            disabled={workflowProcessing}
+                          >
+                            {workflowProcessing ? <Icon icon="lucide:loader-2" className="w-3.5 h-3.5 animate-spin" /> : <Icon icon="lucide:check-circle" className="w-3.5 h-3.5" />}
+                            {t('policies.approveStep')}
+                          </Button>
+                          <Button
+                            variant="outline"
+                            className="flex-1 text-xs h-9 text-rose-600 border-rose-200 hover:bg-rose-50"
+                            onClick={() => setNotePromptFor('deny-step')}
+                            disabled={workflowProcessing}
+                          >
+                            {workflowProcessing ? <Icon icon="lucide:loader-2" className="w-3.5 h-3.5 animate-spin" /> : <Icon icon="lucide:x-circle" className="w-3.5 h-3.5" />}
+                            {t('policies.denyStep')}
+                          </Button>
+                        </div>
+                      )}
                     </div>
                   )
                 }
@@ -1149,16 +1151,11 @@ export function PolicyDetailsContent({
                 // "Complete Step". Each maps to a logged server transition.
                 const actionType = currentStep.actionType ?? 'move-to-next'
 
-                // RBAC: a non-owner without 'edit' can't drive the workflow —
-                // show a single disabled, explained affordance instead of the
-                // live action button (the server + RLS also reject it).
+                // RBAC: a non-owner without 'edit'/advance can't drive the
+                // workflow — hide the action entirely (don't show a button they
+                // can't use). The server + RLS also reject it.
                 if (!canAdvance) {
-                  return (
-                    <Button variant="outline" className="w-full" disabled title={t('rbac.deniedTooltip')}>
-                      <Icon icon="lucide:lock" className="w-4 h-4" />
-                      {t('rbac.deniedTooltip')}
-                    </Button>
-                  )
+                  return null
                 }
 
                 if (actionType === 'send-email') {
@@ -1210,6 +1207,8 @@ export function PolicyDetailsContent({
                 const allStepsCompleted = fresh.workflowTimeline.length > 0 && fresh.workflowTimeline.every(s => s.status === 'completed')
                 const needsReview = fresh.status === 'expired' || fresh.status === 'overdue' || fresh.status === 'requires-review'
                 if (!allStepsCompleted && !needsReview) return null
+                // Hide for users who can't advance (non-owner without edit/advance).
+                if (!canAdvance) return null
                 return (
                   <Button
                     variant="outline"
@@ -1220,8 +1219,7 @@ export function PolicyDetailsContent({
                         : 'text-emerald-600 border-emerald-200 hover:bg-emerald-50',
                     )}
                     onClick={() => setNotePromptFor('initiate')}
-                    disabled={workflowProcessing || !canAdvance}
-                    title={!canAdvance ? t('rbac.deniedTooltip') : undefined}
+                    disabled={workflowProcessing}
                   >
                     {workflowProcessing ? <Icon icon="lucide:loader-2" className="w-4 h-4 animate-spin" /> : <Icon icon="lucide:refresh-cw" className="w-4 h-4" />}
                     {t('policies.initiateReview')}
@@ -1229,11 +1227,11 @@ export function PolicyDetailsContent({
                 )
               })()}
 
-              {/* P1-e (W29): Undo always available when at least one step completed. */}
-              {fresh.workflowTimeline.some(s => s.status === 'completed') && (
+              {/* P1-e (W29): Undo available when at least one step completed — and
+                  only for users who can advance the workflow (hidden otherwise). */}
+              {fresh.workflowTimeline.some(s => s.status === 'completed') && canAdvance && (
                 <Button variant="outline" className="w-full text-rose-600 border-rose-200 hover:bg-rose-50"
-                  onClick={() => setNotePromptFor('undo')} disabled={workflowProcessing || !canAdvance}
-                  title={!canAdvance ? t('rbac.deniedTooltip') : undefined}>
+                  onClick={() => setNotePromptFor('undo')} disabled={workflowProcessing}>
                   {workflowProcessing ? <Icon icon="lucide:loader-2" className="w-4 h-4 animate-spin" /> : <Icon icon="lucide:undo-2" className="w-4 h-4" />}
                   {t('policies.undoLastStep')}
                 </Button>
@@ -1547,14 +1545,13 @@ export function PolicyDetailsContent({
 
         {/* Actions */}
         <div className="space-y-2 pt-4 border-t border-slate-200">
-          {/* P1 (W30): hide Edit Policy button for archived policies */}
-          {!isArchived && (
+          {/* P1 (W30): hide Edit Policy button for archived policies — and for
+              users without edit access (hidden, not disabled). */}
+          {!isArchived && canEditPolicy && (
             <Button
               variant="primary"
               className="w-full"
               onClick={onEditOpen}
-              disabled={!canEditPolicy}
-              title={canEditPolicy ? '' : t('rbac.deniedTooltip')}
             >
               <Icon icon="lucide:edit" className="w-4 h-4" />
               {t('policies.editPolicy')}
