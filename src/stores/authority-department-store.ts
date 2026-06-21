@@ -69,7 +69,7 @@ interface AuthorityDeptState {
   error: string | null
   lastFetched: number | null
 
-  fetchAll: () => Promise<void>
+  fetchAll: (force?: boolean) => Promise<void>
   getDepartments: (authority: string) => AuthorityDept[]
   addDepartment: (
     authority: string,
@@ -108,7 +108,9 @@ export const useAuthorityDeptStore = create<AuthorityDeptState>()((set, get) => 
   error: null,
   lastFetched: null,
 
-  fetchAll: async () => {
+  fetchAll: async (force = false) => {
+    const state = get()
+    if (!force && state.lastFetched && Date.now() - state.lastFetched < 30_000) return
     set({ isLoading: true, error: null })
     try {
       const rows = await api.get<AuthorityDeptApiRow[]>('/authority-departments')

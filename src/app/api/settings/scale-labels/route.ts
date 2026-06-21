@@ -26,7 +26,7 @@ export async function GET() {
       .order('scale', { ascending: true })
     if (error) throw error
     return ok(data ?? [], {
-      cache: { sMaxAge: 3600, staleWhileRevalidate: 7200, tags: [cacheTags.scaleLabels()] },
+      cache: { scope: 'public', sMaxAge: 3600, staleWhileRevalidate: 7200, tags: [cacheTags.scaleLabels()] },
     })
   } catch (e) {
     return handle(e)

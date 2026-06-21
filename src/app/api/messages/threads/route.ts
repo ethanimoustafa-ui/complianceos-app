@@ -53,12 +53,31 @@ export async function GET(req: NextRequest) {
       const row = p as { thread_id: string; unread_count: number; is_admin: boolean }
       partsByThread[row.thread_id] = { unread_count: row.unread_count, is_admin: row.is_admin }
     }
+
+    // Fetch ALL participants for these threads in one query so the client can
+    // render member lists without an N+1 per-thread detail fetch. The
+    // participant SELECT policy lets a participant read co-participant rows, so
+    // this is the same data the detail route would return, batched.
+    const { data: allParts } = await supabase
+      .from('message_thread_participants')
+      .select('thread_id, user_id, is_admin')
+      .in('thread_id', threadIds)
+    const participantsByThread: Record<string, { user_id: string; is_admin: boolean }[]> = {}
+    for (const p of allParts ?? []) {
+      const row = p as { thread_id: string; user_id: string; is_admin: boolean }
+      ;(participantsByThread[row.thread_id] ??= []).push({
+        user_id: row.user_id,
+        is_admin: row.is_admin,
+      })
+    }
+
     const items = (data ?? []).map((t) => {
       const row = t as { id: string }
       return {
         ...t,
         unread_count: partsByThread[row.id]?.unread_count ?? 0,
         is_admin: partsByThread[row.id]?.is_admin ?? false,
+        participants: participantsByThread[row.id] ?? [],
       }
     })
 

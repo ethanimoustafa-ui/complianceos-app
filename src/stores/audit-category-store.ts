@@ -54,7 +54,7 @@ interface AuditCategoryState {
   error: string | null
   lastFetched: number | null
 
-  fetchAll(): Promise<void>
+  fetchAll(force?: boolean): Promise<void>
   /** Optimistic add — returns tentative id synchronously. */
   // W45: async — resolves to the SERVER id (callers persist it on audits).
   add(label: string, labelAr?: string): Promise<string>
@@ -73,7 +73,9 @@ export const useAuditCategoryStore = create<AuditCategoryState>()((set, get) => 
   error: null,
   lastFetched: null,
 
-  fetchAll: async () => {
+  fetchAll: async (force = false) => {
+    const state = get()
+    if (!force && state.lastFetched && Date.now() - state.lastFetched < 30_000) return
     set({ isLoading: true, error: null })
     try {
       const rows = await api.get<AuditCategoryApiRow[]>('/audit-categories')

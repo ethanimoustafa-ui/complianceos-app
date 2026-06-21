@@ -63,7 +63,7 @@ interface CalendarEventTypeState {
   error: string | null
   lastFetched: number | null
 
-  fetchAll: () => Promise<void>
+  fetchAll: (force?: boolean) => Promise<void>
   // Sync-shaped to satisfy `EditableSelect`'s `onAdd: (label) => string | void`.
   // Local state is updated optimistically; API insert runs in the background.
   add: (label: string, labelAr?: string) => string
@@ -79,7 +79,9 @@ export const useCalendarEventTypeStore = create<CalendarEventTypeState>()((set, 
   error: null,
   lastFetched: null,
 
-  fetchAll: async () => {
+  fetchAll: async (force = false) => {
+    const state = get()
+    if (!force && state.lastFetched && Date.now() - state.lastFetched < 30_000) return
     set({ isLoading: true, error: null })
     try {
       const rows = await api.get<CalendarEventTypeApiRow[]>('/calendar/event-types')

@@ -25,7 +25,7 @@ export async function GET(req: NextRequest) {
       .order('id', { ascending: true })
     if (error) throw error
     return ok(localizeMany(data ?? [], resolveLocale(req)), {
-      cache: { sMaxAge: 3600, staleWhileRevalidate: 7200, tags: [cacheTags.frameworks()] },
+      cache: { scope: 'public', sMaxAge: 3600, staleWhileRevalidate: 7200, tags: [cacheTags.frameworks()] },
     })
   } catch (e) {
     return handle(e)

@@ -28,6 +28,7 @@ export async function GET() {
     if (!data) throw NotFound('compliance_settings singleton missing')
     return ok(data, {
       cache: {
+        scope: 'public',
         sMaxAge: 3600,
         staleWhileRevalidate: 7200,
         tags: [cacheTags.complianceSettings()],

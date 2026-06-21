@@ -31,6 +31,7 @@ export async function GET(req: NextRequest) {
 
     return ok(localizeMany(data ?? [], resolveLocale(req)), {
       cache: {
+        scope: 'public',
         sMaxAge: 3600,
         staleWhileRevalidate: 7200,
         tags: [cacheTags.letterSubCategories()],

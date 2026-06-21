@@ -52,7 +52,7 @@ interface DepartmentState {
   error: string | null
   lastFetched: number | null
 
-  fetchAll(): Promise<void>
+  fetchAll(force?: boolean): Promise<void>
   /**
    * Async add — inserts an optimistic row immediately (so the list updates
    * before the server responds) then awaits the POST and returns the real
@@ -77,7 +77,9 @@ export const useDepartmentStore = create<DepartmentState>()((set, get) => ({
   error: null,
   lastFetched: null,
 
-  fetchAll: async () => {
+  fetchAll: async (force = false) => {
+    const state = get()
+    if (!force && state.lastFetched && Date.now() - state.lastFetched < 30_000) return
     set({ isLoading: true, error: null })
     try {
       const rows = await api.get<DepartmentApiRow[]>('/settings/departments')

@@ -56,7 +56,7 @@ interface CorrespondenceTypeState {
   error: string | null
   lastFetched: number | null
 
-  fetchAll: () => Promise<void>
+  fetchAll: (force?: boolean) => Promise<void>
   add: (label: string, labelAr?: string) => Promise<string>
   update: (
     id: string,
@@ -74,7 +74,9 @@ export const useCorrespondenceTypeStore = create<CorrespondenceTypeState>()(
     error: null,
     lastFetched: null,
 
-    fetchAll: async () => {
+    fetchAll: async (force = false) => {
+      const state = get()
+      if (!force && state.lastFetched && Date.now() - state.lastFetched < 30_000) return
       set({ isLoading: true, error: null })
       try {
         const rows = await api.get<CorrespondenceTypeApiRow[]>('/correspondence-types')

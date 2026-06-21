@@ -30,7 +30,7 @@ export async function GET(req: NextRequest) {
     if (error) throw error
 
     return ok(data ?? [], {
-      cache: { sMaxAge: 300, staleWhileRevalidate: 600, tags: [TAG] },
+      cache: { scope: 'public', sMaxAge: 300, staleWhileRevalidate: 600, tags: [TAG] },
     })
   } catch (e) {
     return handle(e)

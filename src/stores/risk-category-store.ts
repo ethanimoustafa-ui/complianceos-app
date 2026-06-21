@@ -64,7 +64,7 @@ interface RiskCategoryState {
   error: string | null
   lastFetched: number | null
 
-  fetchAll: () => Promise<void>
+  fetchAll: (force?: boolean) => Promise<void>
   add: (label: string, labelAr?: string) => string
   update: (id: string, patch: Partial<Omit<RiskCategoryItem, 'id'>>) => void
   remove: (id: string) => void
@@ -79,7 +79,9 @@ export const useRiskCategoryStore = create<RiskCategoryState>()((set, get) => ({
   error: null,
   lastFetched: null,
 
-  fetchAll: async () => {
+  fetchAll: async (force = false) => {
+    const state = get()
+    if (!force && state.lastFetched && Date.now() - state.lastFetched < 30_000) return
     set({ isLoading: true, error: null })
     try {
       const rows = await api.get<RiskCategoryApiRow[]>('/risk-categories')

@@ -24,7 +24,7 @@ export async function GET() {
         pins: pinsRes.data ?? [],
       },
       {
-        cache: { sMaxAge: 300, staleWhileRevalidate: 900, tags: [cacheTags.frameworkConfig()] },
+        cache: { scope: 'public', sMaxAge: 300, staleWhileRevalidate: 900, tags: [cacheTags.frameworkConfig()] },
       },
     )
   } catch (e) {

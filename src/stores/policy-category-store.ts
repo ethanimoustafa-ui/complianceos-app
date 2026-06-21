@@ -65,7 +65,7 @@ interface PolicyCategoryState {
   error: string | null
   lastFetched: number | null
 
-  fetchAll: () => Promise<void>
+  fetchAll: (force?: boolean) => Promise<void>
   /** Returns the new id (slug). The POST is fired and reconciled in background. */
   add: (label: string, labelAr?: string) => string
   update: (id: string, patch: Partial<Omit<PolicyCategoryItem, 'id'>>) => void
@@ -84,7 +84,9 @@ export const usePolicyCategoryStore = create<PolicyCategoryState>()((set, get) =
   error: null,
   lastFetched: null,
 
-  fetchAll: async () => {
+  fetchAll: async (force = false) => {
+    const state = get()
+    if (!force && state.lastFetched && Date.now() - state.lastFetched < 30_000) return
     set({ isLoading: true, error: null })
     try {
       const rows = await api.get<PolicyCategoryApiRow[]>('/policy-categories')

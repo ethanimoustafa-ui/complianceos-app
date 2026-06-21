@@ -62,6 +62,13 @@ interface NotificationState {
   lastFetched: number | null
 
   fetchNotifications: () => Promise<void>
+  /**
+   * Lightweight unread-badge refresh. Hits `/api/notifications/unread-count`
+   * (a `head:true` COUNT — tiny payload) and updates only `unreadCount`, never
+   * the `notifications` list. The LookupHydrator polls this so the badge stays
+   * fresh without re-pulling the full `pageSize=100` list on every tick.
+   */
+  fetchUnreadCount: () => Promise<void>
   addNotification: (notification: Omit<AppNotification, 'id' | 'createdAt' | 'read'>) => void
   markAsRead: (id: string) => void
   markAllAsRead: () => void
@@ -99,6 +106,16 @@ export const useNotificationStore = create<NotificationState>()((set, get) => ({
       })
     } catch (e) {
       set({ error: errorMessage(e, 'Failed to fetch notifications'), isLoading: false })
+    }
+  },
+
+  fetchUnreadCount: async () => {
+    try {
+      const { count } = await api.get<{ count: number }>('/notifications/unread-count')
+      set({ unreadCount: count })
+    } catch {
+      // Badge refresh is best-effort — swallow so a transient failure never
+      // surfaces an error on a page the user didn't open Notifications on.
     }
   },
 

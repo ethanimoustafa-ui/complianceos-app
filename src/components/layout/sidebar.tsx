@@ -36,14 +36,13 @@ export function Sidebar() {
   useNotificationEngine()
 
   const unreadNotifications = useNotificationStore(s => s.unreadCount)
-  const threads = useMessageStore(s => s.threads)
+  const unreadMessages = useMessageStore(s => s.unreadCount)
   const user = useAuthStore(s => s.user)
 
   const [activePanel, setActivePanel] = useState<PanelType>(null)
   const [isSignOutOpen, setIsSignOutOpen] = useState(false)
   const [isProfileOpen, setIsProfileOpen] = useState(false)
 
-  const unreadMessages = threads.reduce((sum, t) => sum + t.unreadCount, 0)
   const avatarSrc = user?.avatar || dicebearAvatar(user?.avatarSeed || 'Felix')
 
   const togglePanel = (panel: PanelType) => {

@@ -55,7 +55,7 @@ interface BusinessUnitState {
   error: string | null
   lastFetched: number | null
 
-  fetchAll(): Promise<void>
+  fetchAll(force?: boolean): Promise<void>
   /** Optimistic add — see department-store for rationale. */
   add(label: string, labelAr?: string): string
   update(id: string, patch: Partial<Omit<BusinessUnitOption, 'id'>>): Promise<void>
@@ -72,7 +72,9 @@ export const useBusinessUnitStore = create<BusinessUnitState>()((set, get) => ({
   error: null,
   lastFetched: null,
 
-  fetchAll: async () => {
+  fetchAll: async (force = false) => {
+    const state = get()
+    if (!force && state.lastFetched && Date.now() - state.lastFetched < 30_000) return
     set({ isLoading: true, error: null })
     try {
       const rows = await api.get<BusinessUnitApiRow[]>('/settings/business-units')

@@ -36,14 +36,36 @@ export function LookupHydrator() {
     void useMessageStore.getState().fetchThreadSummaries().catch(() => {})
   }, [])
 
-  // Keep both unread badges fresh without a manual reload. Lightweight: each
-  // hits the same paginated endpoint its panel uses; the stores swallow errors.
+  // Keep both unread badges fresh without a manual reload. This is the steady-
+  // state background load for every open tab, so it's deliberately cheap:
+  //   - polls the count-only endpoints (a COUNT / sum, tiny payload) rather than
+  //     re-pulling the full `pageSize=100` lists,
+  //   - pauses entirely while the tab is hidden (no compute for backgrounded
+  //     tabs), and refreshes once the moment the tab becomes visible again,
+  //   - runs every 2 min instead of 1.
+  // The panels still call their full fetch on open, so opening a panel always
+  // shows live data.
   useEffect(() => {
-    const id = setInterval(() => {
-      void useNotificationStore.getState().fetchNotifications().catch(() => {})
-      void useMessageStore.getState().fetchThreadSummaries().catch(() => {})
-    }, 60_000)
-    return () => clearInterval(id)
+    const refreshBadges = () => {
+      void useNotificationStore.getState().fetchUnreadCount().catch(() => {})
+      void useMessageStore.getState().fetchUnreadCount().catch(() => {})
+    }
+
+    const tick = () => {
+      if (document.visibilityState === 'visible') refreshBadges()
+    }
+    const id = setInterval(tick, 120_000)
+
+    // Catch up immediately when the user returns to a backgrounded tab.
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') refreshBadges()
+    }
+    document.addEventListener('visibilitychange', onVisibility)
+
+    return () => {
+      clearInterval(id)
+      document.removeEventListener('visibilitychange', onVisibility)
+    }
   }, [])
 
   return null

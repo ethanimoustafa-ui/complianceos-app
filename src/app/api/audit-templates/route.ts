@@ -32,7 +32,7 @@ export async function GET(req: NextRequest) {
     if (error) throw error
 
     return ok(data ?? [], {
-      cache: { sMaxAge: 300, staleWhileRevalidate: 600, tags: [cacheTags.auditTemplates()] },
+      cache: { scope: 'public', sMaxAge: 300, staleWhileRevalidate: 600, tags: [cacheTags.auditTemplates()] },
     })
   } catch (e) {
     return handle(e)

@@ -138,7 +138,7 @@ interface TeamState {
   lastFetched: number | null
 
   // Actions
-  fetchAll: (opts?: { page?: number; pageSize?: number; filters?: Partial<TeamFilters> }) => Promise<void>
+  fetchAll: (opts?: { page?: number; pageSize?: number; filters?: Partial<TeamFilters> }, force?: boolean) => Promise<void>
   fetchById: (id: string) => Promise<TeamMember | null>
   invite: (data: { email: string; role: TeamMember['role']; department: string; fullName?: string }) => Promise<TeamMember>
   update: (id: string, data: Partial<TeamMember>) => Promise<TeamMember>
@@ -177,8 +177,14 @@ export const useTeamStore = create<TeamState>()((set, get) => ({
   error: null,
   lastFetched: null,
 
-  fetchAll: async (opts) => {
+  fetchAll: async (opts, force = false) => {
     const current = get()
+    // Skip if a fresh fetch completed in the last 30s, unless force=true. Only
+    // applies to a plain hydrate call (no opts) — any pagination/filter change
+    // must always re-fetch since it asks the server for a different page/slice.
+    if (!opts && !force && current.lastFetched && Date.now() - current.lastFetched < 30_000) {
+      return
+    }
     const page = opts?.page ?? current.pagination.page
     const pageSize = opts?.pageSize ?? current.pagination.pageSize
     const filters = opts?.filters ? { ...current.filters, ...opts.filters } : current.filters

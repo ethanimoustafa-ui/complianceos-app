@@ -28,7 +28,7 @@ export async function GET() {
     if (error) throw error
     if (!data) throw NotFound('saudization_metrics singleton missing')
     return ok(data, {
-      cache: { sMaxAge: 300, staleWhileRevalidate: 900, tags: [cacheTags.saudization()] },
+      cache: { scope: 'public', sMaxAge: 300, staleWhileRevalidate: 900, tags: [cacheTags.saudization()] },
     })
   } catch (e) {
     return handle(e)

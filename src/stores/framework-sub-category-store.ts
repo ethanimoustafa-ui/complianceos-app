@@ -64,7 +64,7 @@ interface FrameworkSubCategoryState {
   lastFetched: number | null
 
   /** Pulls all sub-categories from the server (across all frameworks). */
-  fetchAll: () => Promise<void>
+  fetchAll: (force?: boolean) => Promise<void>
   /** Selector. Filters in-memory; does not refetch. */
   list: (frameworkId: string) => SubCategory[]
   add: (frameworkId: string, label: string, labelAr?: string) => Promise<SubCategory>
@@ -84,7 +84,9 @@ export const useFrameworkSubCategoryStore = create<FrameworkSubCategoryState>()(
     error: null,
     lastFetched: null,
 
-    fetchAll: async () => {
+    fetchAll: async (force = false) => {
+      const state = get()
+      if (!force && state.lastFetched && Date.now() - state.lastFetched < 30_000) return
       set({ isLoading: true, error: null })
       try {
         const rows = await api.get<SubCategoryApiRow[]>('/letter-sub-categories')

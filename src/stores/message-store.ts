@@ -49,13 +49,6 @@ interface MessageApiRow {
   created_at: string
 }
 
-interface ParticipantApiRow {
-  thread_id: string
-  user_id: string
-  is_admin: boolean
-  unread_count: number
-}
-
 function nameFor(userId: string): string {
   // Best-effort name lookup against the team-store cache.
   const m = useTeamStore.getState().byId[userId]
@@ -102,11 +95,24 @@ function errorMessage(e: unknown, fallback: string): string {
   return fallback
 }
 
+/** Total unread across the user's threads — drives the sidebar badge. */
+function sumUnread(threads: MessageThread[]): number {
+  return threads.reduce((sum, t) => sum + (t.unreadCount || 0), 0)
+}
+
 // ---------- store -----------------------------------------------------------
 
 interface MessageState {
   threads: MessageThread[]
   messages: Message[]
+  /**
+   * Authoritative unread-badge total. Kept in sync with `threads` everywhere a
+   * thread's unread changes, AND refreshable on its own via `fetchUnreadCount`
+   * (the cheap poll path) without loading the full thread list. The sidebar
+   * reads this rather than reducing `threads`, so the badge stays correct even
+   * when only the count was polled.
+   */
+  unreadCount: number
   isLoading: boolean
   isLoadingMessages: boolean
   isMutating: boolean
@@ -123,6 +129,13 @@ interface MessageState {
    * too heavy to run blindly for every user on every page load.
    */
   fetchThreadSummaries: () => Promise<void>
+  /**
+   * Lightweight unread-badge refresh. Hits `/api/messages/unread-count` (a sum
+   * over the user's participant rows — tiny payload, no per-thread N+1) and
+   * updates only `unreadCount`. The LookupHydrator polls this so the badge
+   * stays fresh without re-pulling the full `pageSize=100` thread list.
+   */
+  fetchUnreadCount: () => Promise<void>
   fetchMessages: (threadId: string) => Promise<void>
   sendMessage: (threadId: string, content: string, senderId: string, senderName: string) => void
   createThread: (
@@ -151,6 +164,7 @@ interface MessageState {
 export const useMessageStore = create<MessageState>()((set, get) => ({
   threads: [],
   messages: [],
+  unreadCount: 0,
   isLoading: false,
   isLoadingMessages: false,
   isMutating: false,
@@ -160,32 +174,33 @@ export const useMessageStore = create<MessageState>()((set, get) => ({
   fetchAll: async () => {
     set({ isLoading: true, error: null })
     try {
+      // The list endpoint now embeds `participants` (user_id + is_admin) per
+      // thread, so we map member lists directly from each row — no per-thread
+      // detail fetch (the old N+1 that fired 1 + N requests per panel open).
       const result = await api.get<{
-        items: MessageThreadApiRow[]
+        items: (MessageThreadApiRow & { participants?: { user_id: string; is_admin: boolean }[] })[]
         page: number
         pageSize: number
         total: number
         totalPages: number
       }>('/messages/threads', { pageSize: 100 })
 
-      // Hydrate participant ids + admin ids per thread via detail fetches.
       const previousByThread = new Map(get().threads.map((t) => [t.id, t]))
-      const threads: MessageThread[] = []
-      for (const row of result.items) {
-        try {
-          const detail = await api.get<MessageThreadApiRow & { participants: ParticipantApiRow[] }>(
-            `/messages/threads/${row.id}`,
-          )
-          const participantIds = detail.participants.map((p) => p.user_id)
-          const adminIds = detail.participants.filter((p) => p.is_admin).map((p) => p.user_id)
-          threads.push(mapThreadRow(row, previousByThread.get(row.id), participantIds, adminIds))
-        } catch {
-          // If detail fetch fails, fall back to the list row alone.
-          threads.push(mapThreadRow(row, previousByThread.get(row.id)))
-        }
-      }
+      const threads = result.items.map((row) => {
+        const parts = row.participants ?? []
+        const participantIds = parts.map((p) => p.user_id)
+        const adminIds = parts.filter((p) => p.is_admin).map((p) => p.user_id)
+        // Pass undefined (not []) when absent so mapThreadRow carries forward
+        // any ids already loaded for this thread.
+        return mapThreadRow(
+          row,
+          previousByThread.get(row.id),
+          participantIds.length ? participantIds : undefined,
+          adminIds.length ? adminIds : undefined,
+        )
+      })
 
-      set({ threads, isLoading: false, lastFetched: Date.now() })
+      set({ threads, unreadCount: sumUnread(threads), isLoading: false, lastFetched: Date.now() })
     } catch (e) {
       set({ error: errorMessage(e, 'Failed to fetch threads'), isLoading: false })
     }
@@ -200,10 +215,19 @@ export const useMessageStore = create<MessageState>()((set, get) => ({
       const result = await api.get<{ items: MessageThreadApiRow[] }>('/messages/threads', { pageSize: 100 })
       const previousByThread = new Map(get().threads.map((t) => [t.id, t]))
       const threads = result.items.map((row) => mapThreadRow(row, previousByThread.get(row.id)))
-      set({ threads, lastFetched: Date.now() })
+      set({ threads, unreadCount: sumUnread(threads), lastFetched: Date.now() })
     } catch {
       // Badge hydration is best-effort — swallow so a transient failure never
       // surfaces an error on a page the user didn't explicitly open Messages on.
+    }
+  },
+
+  fetchUnreadCount: async () => {
+    try {
+      const { count } = await api.get<{ count: number }>('/messages/unread-count')
+      set({ unreadCount: count })
+    } catch {
+      // Best-effort badge refresh — swallow transient failures.
     }
   },
 
@@ -344,10 +368,14 @@ export const useMessageStore = create<MessageState>()((set, get) => ({
   },
 
   markThreadAsRead: (threadId) => {
-    set((state) => ({
-      messages: state.messages.map((m) => (m.threadId === threadId ? { ...m, read: true } : m)),
-      threads: state.threads.map((t) => (t.id === threadId ? { ...t, unreadCount: 0 } : t)),
-    }))
+    set((state) => {
+      const threads = state.threads.map((t) => (t.id === threadId ? { ...t, unreadCount: 0 } : t))
+      return {
+        messages: state.messages.map((m) => (m.threadId === threadId ? { ...m, read: true } : m)),
+        threads,
+        unreadCount: sumUnread(threads),
+      }
+    })
     // No dedicated endpoint for per-thread read flag yet; the server tracks
     // unread_count on the participant row but the route to flip it isn't
     // exposed. Local-only patch keeps the UI responsive; the next fetchAll
@@ -357,12 +385,16 @@ export const useMessageStore = create<MessageState>()((set, get) => ({
   deleteThread: (threadId) => {
     const existing = get().threads.find((t) => t.id === threadId)
     const existingMessages = get().messages.filter((m) => m.threadId === threadId)
-    set((state) => ({
-      threads: state.threads.filter((t) => t.id !== threadId),
-      messages: state.messages.filter((m) => m.threadId !== threadId),
-      isMutating: true,
-      error: null,
-    }))
+    set((state) => {
+      const threads = state.threads.filter((t) => t.id !== threadId)
+      return {
+        threads,
+        unreadCount: sumUnread(threads),
+        messages: state.messages.filter((m) => m.threadId !== threadId),
+        isMutating: true,
+        error: null,
+      }
+    })
     if (threadId.startsWith('local-')) {
       set({ isMutating: false })
       return
@@ -373,12 +405,16 @@ export const useMessageStore = create<MessageState>()((set, get) => ({
         set({ isMutating: false })
       } catch (e) {
         // Roll back.
-        set((s) => ({
-          threads: existing ? [existing, ...s.threads] : s.threads,
-          messages: [...s.messages, ...existingMessages],
-          error: errorMessage(e, 'Failed to delete thread'),
-          isMutating: false,
-        }))
+        set((s) => {
+          const threads = existing ? [existing, ...s.threads] : s.threads
+          return {
+            threads,
+            unreadCount: sumUnread(threads),
+            messages: [...s.messages, ...existingMessages],
+            error: errorMessage(e, 'Failed to delete thread'),
+            isMutating: false,
+          }
+        })
       }
     })()
   },

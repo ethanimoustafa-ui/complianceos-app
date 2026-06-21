@@ -120,7 +120,7 @@ interface AuditTemplateState {
   error: string | null
   lastFetched: number | null
 
-  fetchAll(): Promise<void>
+  fetchAll(force?: boolean): Promise<void>
   create(data: Omit<AuditTemplate, 'id' | 'createdAt' | 'updatedAt' | 'usageCount'>): Promise<AuditTemplate>
   update(id: string, data: Partial<AuditTemplate>): Promise<AuditTemplate>
   delete(id: string): Promise<void>
@@ -143,7 +143,9 @@ export const useAuditTemplateStore = create<AuditTemplateState>()((set, get) => 
   error: null,
   lastFetched: null,
 
-  fetchAll: async () => {
+  fetchAll: async (force = false) => {
+    const state = get()
+    if (!force && state.lastFetched && Date.now() - state.lastFetched < 30_000) return
     set({ isLoading: true, error: null })
     try {
       const rows = await api.get<AuditTemplateApiRow[]>('/audit-templates')
