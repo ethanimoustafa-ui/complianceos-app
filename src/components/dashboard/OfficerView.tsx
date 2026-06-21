@@ -1,6 +1,6 @@
 ﻿'use client'
 
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useEffect } from 'react'
 import { Icon } from '@iconify/react'
 import { Card } from '@/components/ui/card'
 import { Badge, getStatusVariant } from '@/components/ui/badge'
@@ -57,6 +57,12 @@ export function OfficerView({ metrics }: OfficerViewProps) {
   const myAudits = myWork.audits
   const myPolicies = myWork.policies
   const notifications = useNotificationStore(s => s.notifications)
+  // The global LookupHydrator now hydrates only the unread COUNT (not the full
+  // list) on mount, so the "Recent Activity" widget below — the one
+  // always-visible reader of the full notifications array — fetches it itself.
+  useEffect(() => {
+    void useNotificationStore.getState().fetchNotifications().catch(() => {})
+  }, [])
 
   // Overdue items
   const now = Date.now()

@@ -18,9 +18,6 @@ import { toComplianceReportData } from '@/lib/compliance-report-data'
 import { ExportMenu } from '@/components/ui/export-menu'
 import { pushToast } from '@/stores/toast-store'
 import type { DashboardView } from '@/types'
-import { usePolicyStore } from '@/stores/policy-store'
-import { useTrainingStore } from '@/stores/training-store'
-import { useCircularStore } from '@/stores/circular-store'
 import { useTeamStore } from '@/stores/team-store'
 import { useDepartmentStore } from '@/stores/department-store'
 import { useComplianceSettingsStore } from '@/stores/compliance-settings-store'
@@ -40,42 +37,21 @@ export default function DashboardPage() {
   const setDashboardView = useUserPreferencesStore(s => s.setDashboardView)
   const metrics = useDashboardMetrics()
 
-  // Hydrate every store the dashboard aggregates (Fix-1). Without this, all
-  // KPI cards render zeros on a fresh load until the user clicks elsewhere.
-  const fetchPolicies = usePolicyStore((s) => s.fetchAll)
-  const fetchTrainings = useTrainingStore((s) => s.fetchAll)
-  const fetchCirculars = useCircularStore((s) => s.fetchAll)
+  // Hydrate the stores the dashboard still consumes DIRECTLY (row-level data the
+  // rollup doesn't carry): the team roster (workload widgets) + dept labels for
+  // the Executive/Managerial training bars, and the company compliance target
+  // for the hero's "At Risk" line. Counts, training aggregates, and the bell's
+  // alerts now come from server read-models (/api/dashboard/summary +
+  // /api/dashboard/alerts), so policies/circulars/training are no longer fetched
+  // here — that removed 4 heavy list fetches from the dashboard cold load.
   const fetchTeam = useTeamStore((s) => s.fetchAll)
-  // The "Compliance Health" hero still needs departments hydrated (Executive
-  // getDeptLabel + the team roster). Business-compliance is now computed
-  // server-side (dashboard-health), so the evaluations store is no longer
-  // fetched here — compliance-review hydrates it on its own page.
   const fetchDepartments = useDepartmentStore((s) => s.fetchAll)
-  // Hydrate the company compliance target so the hero's "At Risk" line uses the
-  // configured threshold rather than the store's hardcoded 90% default.
   const fetchComplianceSettings = useComplianceSettingsStore((s) => s.fetch)
   useEffect(() => {
-    // All views now read entity data from server endpoints (/api/dashboard/
-    // summary, /workload, /approvals, /my-work, /alerts), so the dashboard only
-    // hydrates the stores still consumed directly: the Compliance Health hero
-    // (circulars/policies/departments), team roster, training, and the
-    // compliance target. The 5 entity stores (audits/observations/risks/
-    // letters/correspondence) are no longer fetched here.
-    void fetchPolicies()
-    void fetchCirculars()
-    // fetchTrainings() already fans out to fetchCourses() + fetchEmployees().
-    void fetchTrainings()
     void fetchTeam()
     void fetchDepartments()
     void fetchComplianceSettings()
-  }, [
-    fetchPolicies,
-    fetchTrainings,
-    fetchCirculars,
-    fetchTeam,
-    fetchDepartments,
-    fetchComplianceSettings,
-  ])
+  }, [fetchTeam, fetchDepartments, fetchComplianceSettings])
 
   const [showFadeIn, setShowFadeIn] = useState(false)
 
@@ -121,21 +97,13 @@ export default function DashboardPage() {
 
   const { titleKey, subtitleKey } = viewConfig[dashboardView]
 
-  // First-fetch detector. Dashboard widgets read from many stores, so we
-  // treat the whole page as "still loading" until *any* of the headline
-  // stores has hydrated (`lastFetched != null`). The auto-deduped `apiFetch`
-  // means a stale store snapshot is still useful — once one resolves we
+  // First-fetch detector. The dashboard's row-level data now comes from the
+  // team store (workload/roster) — counts, training, and alerts are server
+  // read-models gated separately below. Once team hydrates (`lastFetched`) we
   // unwrap the skeleton and let individual widget empty states take over.
-  const policiesLastFetched = usePolicyStore((s) => s.lastFetched)
-  const circularsLastFetched = useCircularStore((s) => s.lastFetched)
-  const trainingLastFetched = useTrainingStore((s) => s.lastFetched)
   const teamLastFetched = useTeamStore((s) => s.lastFetched)
 
-  const anyStoreReady =
-    policiesLastFetched !== null ||
-    circularsLastFetched !== null ||
-    trainingLastFetched !== null ||
-    teamLastFetched !== null
+  const anyStoreReady = teamLastFetched !== null
 
   // Keep the composed skeleton up until the *server-driven* data the widgets
   // actually render is ready too — not just the first store. Previously the

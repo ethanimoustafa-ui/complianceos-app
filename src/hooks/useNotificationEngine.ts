@@ -1,7 +1,4 @@
 import { useMemo, useEffect, useRef, useState } from 'react'
-import { usePolicyStore } from '@/stores/policy-store'
-import { useCircularStore } from '@/stores/circular-store'
-import { useTrainingStore } from '@/stores/training-store'
 import { useUserPreferencesStore } from '@/stores/user-preferences-store'
 import { useNotificationStore } from '@/stores/notification-store'
 import { useTranslation } from '@/i18n'
@@ -52,7 +49,7 @@ type TFn = ReturnType<typeof useTranslation>['t']
 // Map a server-derived alert (audits/observations/letters/risks) to an
 // AppNotification, honoring the same module/event preference gates and i18n
 // strings the in-store derivation used.
-function mapAlert(a: DerivedAlert, modules: Prefs['modules'], events: Prefs['events'], t: TFn): AppNotification | null {
+function mapAlert(a: DerivedAlert, modules: Prefs['modules'], events: Prefs['events'], t: TFn, isRTL: boolean): AppNotification | null {
   const days = String(Math.ceil(daysUntil(a.dueDate)))
   switch (a.sourceType) {
     case 'audit': {
@@ -93,6 +90,38 @@ function mapAlert(a: DerivedAlert, modules: Prefs['modules'], events: Prefs['eve
         ? makeNotif('risk', a.entityId, 'due-30d', t('notifications.riskReviewApproaching' as TranslationKey), t('notifications.reviewInDays' as TranslationKey, { name: a.name, days }), 'info', route) : null
       return null
     }
+    case 'policy': {
+      if (!modules.policies) return null
+      const base = `/correspondence/regulatory-updates/policies?policyId=${a.entityId}`
+      if (a.reason === 'overdue') return events.overdueItems
+        ? makeNotif('policy', a.entityId, 'overdue', t('notifications.policyOverdue' as TranslationKey), t('notifications.isOverdueForReview' as TranslationKey, { name: a.name }), 'error', base) : null
+      if (a.reason === 'requires-review') return events.criticalAlerts
+        ? makeNotif('policy', a.entityId, 'requires-review', t('notifications.policyReviewRequired' as TranslationKey), t('notifications.requiresReview' as TranslationKey, { name: a.name }), 'warning', `${base}&tab=workflow`) : null
+      if (a.reason === 'expired') return events.overdueItems
+        ? makeNotif('policy', a.entityId, 'expired', t('notifications.policyExpired' as TranslationKey), t('notifications.hasExpired' as TranslationKey, { name: a.name }), 'error', base) : null
+      if (a.reason === 'due-30d') return events.dueDates
+        ? makeNotif('policy', a.entityId, 'due-30d', t('notifications.policyReviewApproaching' as TranslationKey), t('notifications.reviewInDays' as TranslationKey, { name: a.name, days }), 'info', base) : null
+      return null
+    }
+    case 'circular': {
+      if (!modules.rules) return null
+      const route = `/correspondence/regulatory-updates/rules?id=${a.entityId}`
+      if (a.reason === 'overdue') return events.overdueItems
+        ? makeNotif('circular', a.entityId, 'overdue', t('notifications.circularOverdue' as TranslationKey), t('notifications.isOverdueRef' as TranslationKey, { ref: a.ref ?? '', name: a.name }), 'error', route) : null
+      if (a.reason === 'due-7d') return events.dueDates
+        ? makeNotif('circular', a.entityId, 'due-7d', t('notifications.circularDueSoon' as TranslationKey), t('notifications.refDueInDays' as TranslationKey, { ref: a.ref ?? '', name: a.name, days }), 'warning', route) : null
+      return null
+    }
+    case 'training': {
+      if (!modules.training) return null
+      const route = `/team/training?employeeId=${a.routeId ?? ''}`
+      const emp = a.ref ?? ''
+      if (a.reason === 'overdue') return events.overdueItems
+        ? makeNotif('training', a.entityId, 'overdue', t('notifications.trainingOverdue' as TranslationKey), isRTL ? `${emp} — ${a.name} متأخر` : `${emp} — ${a.name} is overdue`, 'error', route) : null
+      if (a.reason === 'due-7d') return events.dueDates
+        ? makeNotif('training', a.entityId, 'due-7d', t('notifications.trainingDueSoon' as TranslationKey), isRTL ? `${emp} — ${a.name} مستحق خلال ${days} أيام` : `${emp} — ${a.name} due in ${days} days`, 'warning', route) : null
+      return null
+    }
     default:
       return null
   }
@@ -123,13 +152,11 @@ function useDerivedAlerts(): DerivedAlert[] {
 
 export function useNotificationEngine() {
   const { t, isRTL } = useTranslation()
-  // Store-derived sources (the dashboard keeps these hydrated): policies,
-  // circulars, training. The other four (audits/observations/letters/risks)
-  // come from /api/dashboard/alerts so the bell works without hydrating their
-  // stores (Phase B — dashboard no longer fetches them).
-  const policies = usePolicyStore(s => s.policies)
-  const circulars = useCircularStore(s => s.circulars)
-  const employees = useTrainingStore(s => s.employees)
+  // The bell renders entirely from the server-derived alert feed
+  // (/api/dashboard/alerts), which now covers audits, observations, letters,
+  // risks, policies, circulars, and training. No client entity stores are read,
+  // so the bell is identical on every route and no page needs to hydrate those
+  // full lists just to populate it.
   const prefs = useUserPreferencesStore(s => s.notificationPreferences)
   const syncGeneratedNotifications = useNotificationStore(s => s.syncGeneratedNotifications)
   const derivedAlerts = useDerivedAlerts()
@@ -141,64 +168,9 @@ export function useNotificationEngine() {
     const modules = prefs.modules
     const events = prefs.events
 
-    // ── Server-derived: audits / observations / letters / risks ──
     for (const a of derivedAlerts) {
-      const n = mapAlert(a, modules, events, t)
+      const n = mapAlert(a, modules, events, t, isRTL)
       if (n) notifs.push(n)
-    }
-
-    // ── Policies ── (store)
-    if (modules.policies) {
-      for (const p of policies) {
-        if (p.status === 'overdue' && events.overdueItems) {
-          notifs.push(makeNotif('policy', p.id, 'overdue', t('notifications.policyOverdue' as TranslationKey), t('notifications.isOverdueForReview' as TranslationKey, { name: p.name }), 'error', `/correspondence/regulatory-updates/policies?policyId=${p.id}`))
-        }
-        if (p.status === 'requires-review' && events.criticalAlerts) {
-          notifs.push(makeNotif('policy', p.id, 'requires-review', t('notifications.policyReviewRequired' as TranslationKey), t('notifications.requiresReview' as TranslationKey, { name: p.name }), 'warning', `/correspondence/regulatory-updates/policies?policyId=${p.id}&tab=workflow`))
-        }
-        if (p.status === 'expired' && events.overdueItems) {
-          notifs.push(makeNotif('policy', p.id, 'expired', t('notifications.policyExpired' as TranslationKey), t('notifications.hasExpired' as TranslationKey, { name: p.name }), 'error', `/correspondence/regulatory-updates/policies?policyId=${p.id}`))
-        }
-        if (p.status === 'approved' && events.dueDates) {
-          const d = daysUntil(p.nextReviewDate)
-          if (d <= 30 && d > 0) {
-            notifs.push(makeNotif('policy', p.id, 'due-30d', t('notifications.policyReviewApproaching' as TranslationKey), t('notifications.reviewInDays' as TranslationKey, { name: p.name, days: String(Math.ceil(d)) }), 'info', `/correspondence/regulatory-updates/policies?policyId=${p.id}`))
-          }
-        }
-      }
-    }
-
-    // ── Circulars ── (store)
-    if (modules.rules) {
-      for (const c of circulars) {
-        if (c.status === 'overdue' && events.overdueItems) {
-          notifs.push(makeNotif('circular', c.id, 'overdue', t('notifications.circularOverdue' as TranslationKey), t('notifications.isOverdueRef' as TranslationKey, { ref: c.reference, name: c.title }), 'error', `/correspondence/regulatory-updates/rules?id=${c.id}`))
-        } else if (c.status !== 'completed' && events.dueDates) {
-          const d = daysUntil(c.dueDate)
-          if (d <= 7 && d > 0) {
-            notifs.push(makeNotif('circular', c.id, 'due-7d', t('notifications.circularDueSoon' as TranslationKey), t('notifications.refDueInDays' as TranslationKey, { ref: c.reference, name: c.title, days: String(Math.ceil(d)) }), 'warning', `/correspondence/regulatory-updates/rules?id=${c.id}`))
-          }
-        }
-      }
-    }
-
-    // ── Training ── (store)
-    if (modules.training) {
-      for (const emp of employees) {
-        for (const course of emp.courses) {
-          if (course.status === 'completed') continue
-          const d = daysUntil(course.dueDate)
-          const key = `${emp.id}-${course.id}`
-          if ((course.status === 'overdue' || d < 0) && events.overdueItems) {
-            const msg = isRTL ? `${emp.name} — ${course.name} متأخر` : `${emp.name} — ${course.name} is overdue`
-            notifs.push(makeNotif('training', key, 'overdue', t('notifications.trainingOverdue' as TranslationKey), msg, 'error', `/team/training?employeeId=${emp.id}`))
-          } else if (d <= 7 && d > 0 && events.dueDates) {
-            const days = Math.ceil(d)
-            const msg = isRTL ? `${emp.name} — ${course.name} مستحق خلال ${days} أيام` : `${emp.name} — ${course.name} due in ${days} days`
-            notifs.push(makeNotif('training', key, 'due-7d', t('notifications.trainingDueSoon' as TranslationKey), msg, 'warning', `/team/training?employeeId=${emp.id}`))
-          }
-        }
-      }
     }
 
     // Sort: error > warning > info > success, then by createdAt desc
@@ -210,7 +182,7 @@ export function useNotificationEngine() {
     })
 
     return notifs.slice(0, MAX_NOTIFICATIONS)
-  }, [policies, circulars, employees, derivedAlerts, prefs, prefs.modules, prefs.events, t, isRTL])
+  }, [derivedAlerts, prefs, prefs.modules, prefs.events, t, isRTL])
 
   // Sync to store only when the set of dedupeKeys changes
   useEffect(() => {

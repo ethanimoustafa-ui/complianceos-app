@@ -27,13 +27,13 @@ export function LookupHydrator() {
     void useTeamStore.getState().fetchAll().catch(() => {})
     void useFrameworkConfigStore.getState().fetch().catch(() => {})
     void useCalendarEventTypeStore.getState().fetchAll().catch(() => {})
-    // Hydrate notifications + messages on mount so BOTH sidebar unread badges
-    // reflect the real count immediately. Without this, the counts stay 0 until
-    // the user opens the respective panel (their only other caller). The message
-    // path uses the lightweight list-only summary fetch, not the panel's heavier
-    // fetchAll.
-    void useNotificationStore.getState().fetchNotifications().catch(() => {})
-    void useMessageStore.getState().fetchThreadSummaries().catch(() => {})
+    // Hydrate BOTH sidebar unread badges on mount with the cheap count-only
+    // endpoints (a COUNT / sum — tiny payload), NOT the full `pageSize=100`
+    // lists. The panels fetch their full list on open (their only other reader),
+    // so nothing always-visible needs the list here — except the Officer
+    // dashboard's "Recent Activity" widget, which fetches its own notifications.
+    void useNotificationStore.getState().fetchUnreadCount().catch(() => {})
+    void useMessageStore.getState().fetchUnreadCount().catch(() => {})
   }, [])
 
   // Keep both unread badges fresh without a manual reload. This is the steady-

@@ -1,7 +1,6 @@
 'use client'
 
 import { useMemo } from 'react'
-import { useTrainingStore } from '@/stores/training-store'
 import { useTeamStore } from '@/stores/team-store'
 import { useFrameworkConfigStore } from '@/stores/framework-config-store'
 import { useAuthStore } from '@/stores/auth-store'
@@ -118,7 +117,7 @@ const ZERO_SEV = { total: 0, critical: 0, high: 0, medium: 0, low: 0 }
 // `dashboard_rollup` blob (migration 104) exactly.
 const EMPTY_COUNTS: Pick<
   DashboardMetrics,
-  'audits' | 'observations' | 'risks' | 'policies' | 'samaLetters' | 'correspondence' | 'circulars'
+  'audits' | 'observations' | 'risks' | 'policies' | 'samaLetters' | 'correspondence' | 'circulars' | 'training'
 > = {
   audits: { total: 0, byStatus: {}, byType: {}, overdueCount: 0, upcoming30dCount: 0, completedThisMonth: 0 },
   observations: {
@@ -136,6 +135,7 @@ const EMPTY_COUNTS: Pick<
   samaLetters: { total: 0, byStatus: {}, overdueCount: 0, upcoming30d: 0, completedThisMonth: 0 },
   correspondence: { total: 0, active: 0, drafts: 0, sent: 0 },
   circulars: { total: 0, byAuthority: {}, implemented: 0 },
+  training: { overallCompletion: 0, saudization: { actual: 0, target: 0, gap: 0 }, departmentProgress: [] },
 }
 
 export function useDashboardMetrics(): DashboardMetrics {
@@ -151,9 +151,6 @@ export function useDashboardMetrics(): DashboardMetrics {
 
   // Groups that need row-level data (not just counts) stay client-side.
   const teamMembers = useTeamStore(s => s.members)
-  const saudizationMetrics = useTrainingStore(s => s.saudizationMetrics)
-  const departmentProgress = useTrainingStore(s => s.departmentProgress)
-  const overviewStats = useTrainingStore(s => s.overviewStats)
   const frameworks = useFrameworkConfigStore(s => s.frameworks)
   const pinnedIds = useFrameworkConfigStore(s => s.pinnedIds)
   const currentUser = useAuthStore(s => s.user)
@@ -162,16 +159,6 @@ export function useDashboardMetrics(): DashboardMetrics {
   // server-computed (useDashboardHealth -> /api/compliance/dashboard-health), so
   // its loading state is just the health request's own loading flag.
   const complianceHealthLoading = health.isLoading
-
-  const trainingMetrics = useMemo(() => ({
-    overallCompletion: overviewStats.overallCompletion ?? 0,
-    saudization: {
-      actual: saudizationMetrics.actual,
-      target: saudizationMetrics.target,
-      gap: Math.round((saudizationMetrics.actual - saudizationMetrics.target) * 10) / 10,
-    },
-    departmentProgress: [...departmentProgress],
-  }), [overviewStats, saudizationMetrics, departmentProgress])
 
   const teamMetrics = useMemo(() => {
     const active = teamMembers.filter(m => m.status === 'active')
@@ -214,7 +201,10 @@ export function useDashboardMetrics(): DashboardMetrics {
     risks: counts.risks,
     policies: counts.policies,
     samaLetters: counts.samaLetters,
-    training: trainingMetrics,
+    // `training` is the newest rollup section (migration 122) — fall back to the
+    // empty shape if an older rollup blob predates it, so the views never read
+    // `.saudization` off undefined.
+    training: counts.training ?? EMPTY_COUNTS.training,
     team: teamMetrics,
     correspondence: counts.correspondence,
     circulars: counts.circulars,

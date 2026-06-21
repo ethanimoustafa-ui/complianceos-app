@@ -13,7 +13,7 @@ import type { DashboardMetrics } from '@/hooks/useDashboardMetrics'
 
 export type DashboardSummaryData = Pick<
   DashboardMetrics,
-  'audits' | 'observations' | 'risks' | 'policies' | 'samaLetters' | 'correspondence' | 'circulars'
+  'audits' | 'observations' | 'risks' | 'policies' | 'samaLetters' | 'correspondence' | 'circulars' | 'training'
 >
 
 interface SummaryResponse {
