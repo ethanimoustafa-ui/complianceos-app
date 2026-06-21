@@ -19,13 +19,17 @@ import { dicebearAvatar } from '@/lib/avatar'
 import { hasRole } from '@/lib/permissions'
 import { APP_VERSION } from '@/lib/version'
 
+// `href` is the navigation target (the section's default tab, so clicking skips
+// the parent route's server `redirect()` hop — which otherwise costs an extra
+// proxy.ts getUser() round-trip). `match` is the section root used for active
+// highlighting, so the icon stays lit across every sub-tab.
 const navigation = [
-  { nameKey: 'navigation.dashboard', href: '/dashboard', icon: 'lucide:layout-grid' },
-  { nameKey: 'navigation.calendar', href: '/calendar', icon: 'lucide:calendar' },
-  { nameKey: 'navigation.correspondence', href: '/correspondence', icon: 'lucide:mail' },
-  { nameKey: 'navigation.reports', href: '/reports', icon: 'lucide:file-text' },
-  { nameKey: 'navigation.team', href: '/team', icon: 'lucide:users' },
-  { nameKey: 'navigation.settings', href: '/settings', icon: 'lucide:settings' },
+  { nameKey: 'navigation.dashboard', href: '/dashboard', match: '/dashboard', icon: 'lucide:layout-grid' },
+  { nameKey: 'navigation.calendar', href: '/calendar', match: '/calendar', icon: 'lucide:calendar' },
+  { nameKey: 'navigation.correspondence', href: '/correspondence/feed', match: '/correspondence', icon: 'lucide:mail' },
+  { nameKey: 'navigation.reports', href: '/reports/compliance-review', match: '/reports', icon: 'lucide:file-text' },
+  { nameKey: 'navigation.team', href: '/team/directory', match: '/team', icon: 'lucide:users' },
+  { nameKey: 'navigation.settings', href: '/settings', match: '/settings', icon: 'lucide:settings' },
 ]
 
 type PanelType = 'notifications' | 'messages' | 'help' | null
@@ -64,8 +68,9 @@ export function Sidebar() {
             // point their Team icon straight there (directory/logs pages also
             // bounce officers, this just avoids the redirect hop).
             const href =
-              item.href === '/team' && !hasRole(user, 'manager') ? '/team/training' : item.href
-            const isActive = pathname === item.href || pathname.startsWith(item.href + '/')
+              item.match === '/team' && !hasRole(user, 'manager') ? '/team/training' : item.href
+            // Highlight by section root so the icon stays lit on every sub-tab.
+            const isActive = pathname === item.match || pathname.startsWith(item.match + '/')
             const name = t(item.nameKey as any)
             return (
               <Link

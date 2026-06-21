@@ -129,9 +129,9 @@ export function ManagerialView({ metrics }: ManagerialViewProps) {
     const componentRoutes: Record<string, { label: string; route: string; icon: string }> = {
       audits: { label: t('dashboard.reviewAudits'), route: '/reports', icon: 'lucide:clipboard-check' },
       observations: { label: t('dashboard.reviewObservations'), route: '/observations', icon: 'lucide:eye' },
-      letters: { label: t('dashboard.reviewLetters'), route: '/correspondence', icon: 'lucide:file-text' },
+      letters: { label: t('dashboard.reviewLetters'), route: '/correspondence/letters', icon: 'lucide:file-text' },
       policies: { label: t('dashboard.reviewPolicies'), route: '/correspondence/regulatory-updates/policies', icon: 'lucide:file-check' },
-      circulars: { label: t('dashboard.reviewCirculars'), route: '/correspondence/regulatory-updates', icon: 'lucide:scale' },
+      circulars: { label: t('dashboard.reviewCirculars'), route: '/correspondence/regulatory-updates/rules', icon: 'lucide:scale' },
       riskPosture: { label: t('dashboard.reviewRisks'), route: '/reports/risks', icon: 'lucide:shield-alert' },
       training: { label: t('dashboard.reviewTraining'), route: '/team/training', icon: 'lucide:graduation-cap' },
     }

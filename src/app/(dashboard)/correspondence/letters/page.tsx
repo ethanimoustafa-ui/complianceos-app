@@ -1006,7 +1006,7 @@ export default function LettersPage() {
               {t('letters.tabLetters')}
             </Link>
             <Link
-              href="/correspondence/regulatory-updates"
+              href="/correspondence/regulatory-updates/rules"
               className={`px-3 py-1.5 text-xs font-bold text-slate-600 bg-slate-50 hover:bg-slate-100 rounded-lg transition-all border border-slate-200 flex items-center gap-2`}
             >
               <Icon icon="lucide:refresh-cw" className="text-blue-500" />

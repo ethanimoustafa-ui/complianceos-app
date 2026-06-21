@@ -169,9 +169,9 @@ export function ExecutiveView({ metrics }: ExecutiveViewProps) {
     const componentRoutes: Record<string, { label: string; route: string }> = {
       audits: { label: t('dashboard.reviewAudits'), route: '/reports' },
       observations: { label: t('dashboard.reviewObservations'), route: '/observations' },
-      letters: { label: t('dashboard.reviewLetters'), route: '/correspondence' },
+      letters: { label: t('dashboard.reviewLetters'), route: '/correspondence/letters' },
       policies: { label: t('dashboard.reviewPolicies'), route: '/correspondence/regulatory-updates/policies' },
-      circulars: { label: t('dashboard.reviewCirculars'), route: '/correspondence/regulatory-updates' },
+      circulars: { label: t('dashboard.reviewCirculars'), route: '/correspondence/regulatory-updates/rules' },
       riskPosture: { label: t('dashboard.reviewRisks'), route: '/reports/risks' },
       training: { label: t('dashboard.reviewTraining'), route: '/team/training' },
     }
