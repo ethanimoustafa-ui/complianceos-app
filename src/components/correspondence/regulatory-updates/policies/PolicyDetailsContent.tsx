@@ -13,7 +13,7 @@ import { useAuthStore } from '@/stores/auth-store'
 import { useNotificationStore } from '@/stores/notification-store'
 import { useDepartmentStore } from '@/stores/department-store'
 import { useTeamStore } from '@/stores/team-store'
-import { useCan, useCanEditEntity, useCanDeleteEntity, canAdvancePolicyWorkflow } from '@/lib/permissions'
+import { useCanEditEntity, useCanDeleteEntity, canAdvancePolicyWorkflow } from '@/lib/permissions'
 import { EditableSelect } from '@/components/ui/editable-select'
 import { InlineDeadlinePicker } from '@/components/ui/inline-deadline-picker'
 // C(#31)/B(#30): consume a calendar deep-link → open the workflow tab + glow
@@ -112,7 +112,6 @@ export function PolicyDetailsContent({
 }: Props) {
   const [activeTab, setActiveTab] = useState<DetailTab>(initialTab ?? 'overview')
   const [expandedVersion, setExpandedVersion] = useState<number | null>(null)
-  const canApprovePolicy = useCan('Approve Policy Reviews')
   const canEditPolicy = useCanEditEntity('policy')
   const canDeletePolicy = useCanDeleteEntity('policy')
 
@@ -157,9 +156,11 @@ export function PolicyDetailsContent({
 
   const { policies: allPolicies, update, addWorkflowStep, addAttachment, removeAttachment, addEvidence, removeEvidence, advanceWorkflowStep, loadMorePolicyActivity, policyActivityPagination } = usePolicyStore()
   const { user: authUser } = useAuthStore()
-  // RBAC: the policy OWNER or an 'edit'-permission holder (managers/admins, or
-  // officers granted edit) may drive the workflow — matches the advance route +
-  // RLS (migration 114). Non-owners without edit see the action buttons disabled.
+  // RBAC (ownership model): driving a policy's workflow requires the global
+  // 'workflow:advance' grant (managers/admins by role; officers via the Access
+  // Matrix) OR being the policy OWNER — the generic 'edit' no longer qualifies
+  // (migration 121). Mirrors the advance route. Non-drivers have the workflow
+  // action buttons HIDDEN (not merely disabled).
   const canAdvance = canAdvancePolicyWorkflow(authUser, policy)
   const { addNotification } = useNotificationStore()
   // P6 (W34): real per-policy detail-GET in-flight flag (set by fetchById).
@@ -1078,9 +1079,14 @@ export function PolicyDetailsContent({
                         <Icon icon="lucide:clock" className="text-amber-500 text-sm" />
                         <span className="text-xs font-bold text-amber-700">{t('policies.awaitingApproval')}</span>
                       </div>
-                      {/* Approve/Deny show only for the policy's approver — hidden
-                          (not disabled) for everyone else; busy still disables. */}
-                      {canApprovePolicy && (
+                      {/* Approve/Deny show ONLY for someone who can DRIVE this
+                          workflow — the policy owner or a workflow:advance holder.
+                          This mirrors the advance route, which accepts workflow:advance
+                          OR ownership but NOT the "Approve Policy Reviews" label
+                          (that maps to policy:edit, which the server rejects for
+                          approving — leaving it here would 403 after the click).
+                          Hidden for everyone else. */}
+                      {canAdvance && (
                         <div className="flex gap-2">
                           <Button
                             variant="primary"
@@ -1107,6 +1113,8 @@ export function PolicyDetailsContent({
                 }
 
                 if (currentStep.stepState === 'awaiting-response') {
+                  // Only the owner / a workflow:advance holder may drive this step.
+                  if (!canAdvance) return null
                   return (
                     <Button variant="outline" className="w-full" onClick={() => setNotePromptFor('log-response')} disabled={workflowProcessing}>
                       {workflowProcessing ? <Icon icon="lucide:loader-2" className="w-4 h-4 animate-spin" /> : <Icon icon="lucide:mail-check" className="w-4 h-4" />}
@@ -1116,6 +1124,8 @@ export function PolicyDetailsContent({
                 }
 
                 if (currentStep.stepState === 'awaiting-manager') {
+                  // Only the owner / a workflow:advance holder may drive this step.
+                  if (!canAdvance) return null
                   return (
                     <div className="space-y-2">
                       <div className="flex items-center gap-2 px-3 py-2 bg-violet-50 border border-violet-200 rounded-lg">

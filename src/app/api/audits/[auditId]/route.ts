@@ -12,8 +12,8 @@
 //   §2.11 dual-store activity log via insertAuditTimeline
 
 import type { NextRequest } from 'next/server'
-import { requirePerm, requireUser } from '@/lib/api/auth'
-import { handle, NotFound } from '@/lib/api/errors'
+import { requirePerm, requireUser, canDriveWorkflow } from '@/lib/api/auth'
+import { handle, NotFound, Forbidden } from '@/lib/api/errors'
 import { ok } from '@/lib/api/response'
 import { parseJson, assertUuid, readIfMatch, assertNotStale } from '@/lib/api/validate'
 import { cacheTags, revalidate, revalidateAll } from '@/lib/api/cache'
@@ -59,7 +59,11 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     const { auditId } = await params
     // SEC-5: validate route param.
     assertUuid(auditId)
-    const { supabase, user, profile } = await requirePerm('audit:edit')
+    const ctx = await requireUser()
+    const { supabase, user, profile } = ctx
+    if (!ctx.permissions.includes('audit:edit')) {
+      throw Forbidden('Missing permission: audit:edit')
+    }
 
     // W26-A §2.12: read the client's If-Match token BEFORE any DB access.
     const ifMatch = readIfMatch(req)
@@ -78,6 +82,20 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     const update: Record<string, unknown> = {}
     for (const [k, v] of Object.entries(patch)) {
       if (v !== undefined) update[k] = v
+    }
+
+    // RBAC (ownership model): status / progress / completion / assignee changes
+    // DRIVE the audit lifecycle — gate them exactly like /start and /complete
+    // (workflow:advance OR assignee-ownership) so a PATCH can't bypass those gated
+    // routes. Plain 'audit:edit' (checked above) covers only non-lifecycle edits.
+    const AUDIT_LIFECYCLE_KEYS = ['status', 'progress', 'completed_at', 'closed_overdue', 'assignee_id']
+    if (AUDIT_LIFECYCLE_KEYS.some((k) => k in update)) {
+      const { data: ownerRow } = await supabase
+        .from('audits').select('assignee_id').eq('id', auditId)
+        .maybeSingle<{ assignee_id: string | null }>()
+      if (!canDriveWorkflow(ctx, ownerRow?.assignee_id)) {
+        throw Forbidden('Missing permission: workflow:advance (or audit ownership) to change audit status/assignee')
+      }
     }
 
     if (Object.keys(update).length === 0) {

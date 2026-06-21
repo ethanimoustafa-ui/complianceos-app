@@ -127,6 +127,8 @@
     }
   },
   "common": {
+    "alphaVersion": "Alpha version {{version}}",
+    "comingSoon": "Coming soon",
     "search": "Search",
     "searchRecords": "Search records...",
     "optional": "Optional",
@@ -2183,6 +2185,17 @@
     "backToSignIn": "Back to Sign In",
     "checkYourEmail": "Check your email",
     "resetInstructionsSent": "We've sent password reset instructions to your email address. Please check your inbox.",
+    "setNewPassword": "Set a New Password",
+    "setNewPasswordSubtitle": "Choose a new password for your account.",
+    "newPassword": "New Password",
+    "confirmNewPassword": "Confirm New Password",
+    "updatePassword": "Update Password",
+    "updatingPassword": "Updating...",
+    "passwordUpdated": "Your password has been updated.",
+    "passwordsDoNotMatch": "Passwords do not match",
+    "resetLinkInvalid": "This reset link is invalid or has expired",
+    "resetLinkInvalidSubtitle": "Request a new password reset link to continue.",
+    "requestNewLink": "Request a new link",
     "allRightsReserved": "All rights reserved."
   },
   "verification": {
@@ -3317,7 +3330,7 @@
     "descDelete": "Allows deleting {{entity}}. This cannot be undone.",
     "descExport": "Allows exporting {{entity}} to PDF or CSV.",
     "descChecklist": "Allows managing {{entity}} checklists — add deadlines, check items, delete and reorder.",
-    "descApproveReviews": "Approve or reject steps in the policy review workflow.",
+    "descApproveReviews": "Grants editing of policies. Approving or advancing a policy review requires being the policy owner or holding the \"Can Advance Workflow\" grant.",
     "descApproveLetters": "Approve or reject letters in the approval chain.",
     "descManageFindings": "Edit audit findings and observations.",
     "descViewRiskRegister": "View the full risk register.",

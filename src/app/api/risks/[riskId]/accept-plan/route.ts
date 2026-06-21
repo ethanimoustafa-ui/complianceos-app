@@ -2,8 +2,8 @@
 // Transitions 'plan-proposed' → 'in-progress' and sets risks.status='mitigating'.
 
 import type { NextRequest } from 'next/server'
-import { requirePerm } from '@/lib/api/auth'
-import { handle, NotFound } from '@/lib/api/errors'
+import { requireUser, canDriveWorkflow } from '@/lib/api/auth'
+import { handle, NotFound, Forbidden } from '@/lib/api/errors'
 import { ok } from '@/lib/api/response'
 import { cacheTags, revalidate, revalidateAll } from '@/lib/api/cache'
 import { writeAudit } from '@/lib/api/audit'
@@ -21,16 +21,24 @@ type Params = { params: Promise<{ riskId: string }> }
 export async function POST(_req: NextRequest, { params }: Params) {
   try {
     const { riskId } = await params
-    const { supabase, user, profile } = await requirePerm('audit:edit')
+    // Ownership model: accepting the department's plan is an OWNER-SIDE action —
+    // it requires the global 'workflow:advance' grant (managers/admins by role;
+    // officers via the Access Matrix) OR being the risk's owner (risks.owner_id).
+    // The generic 'audit:edit' no longer grants it. Mirrors the workflow routes.
+    const ctx = await requireUser()
+    const { supabase, user, profile } = ctx
 
     const { data: current, error: readErr } = await supabase
       .from('risks')
-      .select('id, mitigation_workflow_status, status')
+      .select('id, mitigation_workflow_status, status, owner_id')
       .eq('id', riskId)
       .is('deleted_at', null)
-      .maybeSingle<{ id: string; mitigation_workflow_status: string; status: string }>()
+      .maybeSingle<{ id: string; mitigation_workflow_status: string; status: string; owner_id: string | null }>()
     if (readErr) throw readErr
     if (!current) throw NotFound(`Risk ${riskId} not found`)
+    if (!canDriveWorkflow(ctx, current.owner_id)) {
+      throw Forbidden('Missing permission: workflow:advance (or risk ownership)')
+    }
     assertWorkflowTransition(current.mitigation_workflow_status, 'in-progress')
 
     const { data, error } = await supabase

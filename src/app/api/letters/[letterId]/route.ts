@@ -8,8 +8,8 @@
 //   - DELETE: assertUuid + optional If-Match guard.
 
 import type { NextRequest } from 'next/server'
-import { requireAnyPerm, requireUser } from '@/lib/api/auth'
-import { handle, NotFound, PreconditionFailed } from '@/lib/api/errors'
+import { requireAnyPerm, requireUser, canDriveWorkflow } from '@/lib/api/auth'
+import { handle, NotFound, PreconditionFailed, Forbidden } from '@/lib/api/errors'
 import { ok } from '@/lib/api/response'
 import { assertNotStale, assertUuid, parseJson, readIfMatch } from '@/lib/api/validate'
 import { cacheTags, revalidateAll } from '@/lib/api/cache'
@@ -106,7 +106,11 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     const { letterId } = await params
     // SEC-5 §2.13
     assertUuid(letterId)
-    const { supabase, user, profile } = await requireAnyPerm(['letter:edit', 'edit'])
+    const ctx = await requireUser()
+    const { supabase, user, profile } = ctx
+    if (!ctx.permissions.includes('letter:edit') && !ctx.permissions.includes('edit')) {
+      throw Forbidden('Missing permission: letter:edit')
+    }
     await assertLetterExists(supabase, letterId)
 
     // §2.12 — optimistic-concurrency token.
@@ -133,6 +137,20 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       if (v === undefined) continue
       if (guardedArrayKeys.has(k) && !(k in rawBody)) continue
       update[k] = v
+    }
+
+    // RBAC (ownership model): status / assigned_to drive the letter approval
+    // lifecycle and ownership — gate them like the letter approval routes
+    // (workflow:advance OR letter ownership[created_by]) so a PATCH can't bypass
+    // submit/approve/send. Plain 'letter:edit'/'edit' covers non-lifecycle edits.
+    const LETTER_LIFECYCLE_KEYS = ['status', 'assigned_to']
+    if (LETTER_LIFECYCLE_KEYS.some((k) => k in update)) {
+      const { data: ownerRow } = await supabase
+        .from('letters').select('created_by').eq('id', letterId)
+        .maybeSingle<{ created_by: string | null }>()
+      if (!canDriveWorkflow(ctx, ownerRow?.created_by)) {
+        throw Forbidden('Missing permission: workflow:advance (or letter ownership) to change status/assignee')
+      }
     }
 
     if (Object.keys(update).length === 0) {

@@ -27,6 +27,7 @@ import { useUserLogStore } from '@/stores/user-log-store'
 import { createClient } from '@/lib/supabase/client'
 import { collectClientActivityContext } from '@/lib/user-activity-meta'
 import { mapAuthError } from '@/lib/supabase/auth-errors'
+import { clearSessionPersistence } from '@/lib/auth/session-persistence'
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -263,6 +264,8 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
 
   signOut: async () => {
     const previousUser = get().user
+    // Clear "remember me" bookkeeping so the next sign-in starts clean.
+    clearSessionPersistence()
     const supabase = createClient()
     await supabase.auth.signOut()
     if (previousUser) {

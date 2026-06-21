@@ -588,6 +588,11 @@ export interface Letter {
   status: LetterStatus
   priority: 'standard' | 'urgent'
   createdBy: string
+  // Ownership model: the raw `created_by` user id (UUID), kept SEPARATE from
+  // `createdBy` (which holds the FK-joined display name). Client workflow gates
+  // (canDriveLetter / canApproveLetter) compare this against the auth user id so
+  // the affordance matches the server's `canDriveWorkflow(ctx, created_by)` check.
+  createdById?: string
   assignedTo?: string
   approvalChain: LetterApprovalStep[]
   timeline: LetterTimelineEvent[]

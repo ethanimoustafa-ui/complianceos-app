@@ -72,7 +72,11 @@ export async function POST(req: NextRequest) {
         category: input.category,
         likelihood: input.likelihood,
         impact: input.impact,
-        owner_id: input.owner_id ?? null,
+        // Ownership model: default the owner to the creator (mirrors
+        // policies/audits) so the risk has an owner who can drive its workflow
+        // (send-to-department / accept-plan / resolving checklist toggle) even
+        // without the global 'workflow:advance' grant.
+        owner_id: input.owner_id ?? user.id,
         mitigation_plan: input.mitigation_plan ?? null,
         monitoring_frequency: input.monitoring_frequency,
         last_review_date: input.last_review_date ?? null,

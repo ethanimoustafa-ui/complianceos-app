@@ -36,6 +36,9 @@ import { ChecklistSection } from '@/components/observations/detail/checklist-sec
 // C(#31): glow a mitigation-checklist item opened from the calendar.
 import { useDeepLinkHighlight } from '@/hooks/useDeepLink'
 import { EntityGate } from '@/components/auth/gate'
+// Ownership model: gate the risk OWNER-SIDE workflow buttons exactly like the
+// server (canDriveWorkflow): 'workflow:advance' OR being the risk owner.
+import { canAdvanceRisk } from '@/lib/permissions'
 import { dicebearAvatar } from '@/lib/avatar'
 import { paginate } from '@/lib/pagination'
 import { FieldLabel } from '@/components/ui/field-label'
@@ -1246,7 +1249,13 @@ export default function ReportsRisksPage() {
                 // 'pending-assignment', so gating on it alone made the send button
                 // unreachable after any refresh.
                 const isAssignable = wfStatus === 'pending-assignment' || wfStatus === 'not-started'
-                const canSend = !!storeRisk.intendedDepartmentId && !!storeRisk.mitigationDeadline && isAssignable
+                // Ownership model: OWNER-SIDE actions (send-to-department,
+                // accept-plan, resolving checklist toggle) require 'workflow:advance'
+                // OR being the risk owner. Mirrors canDriveWorkflow on the server,
+                // so we never show a button the API would 403. (The department-side
+                // "propose plan" form below is NOT gated by this.)
+                const canDrive = canAdvanceRisk(authUser, { ownerId: storeRisk.owner?.id ?? null })
+                const canSend = canDrive && !!storeRisk.intendedDepartmentId && !!storeRisk.mitigationDeadline && isAssignable
                 return (
                   <div className="p-4 bg-white rounded-xl border border-slate-200">
                     <div className="flex items-center justify-between mb-3">
@@ -1302,7 +1311,11 @@ export default function ReportsRisksPage() {
                             Awaiting mitigation plan from{' '}
                             {deptList.find((d) => d.id === storeRisk.intendedDepartmentId)?.name ?? 'department'}.
                           </p>
-                          {!proposePlanOpen && (
+                          {/* Ownership model: the propose-plan form shows for a risk
+                              driver (owner / workflow:advance — the officer proxy) OR a
+                              member of the intended department — mirrors the submit-plan
+                              route gate. */}
+                          {!proposePlanOpen && (canDrive || (!!authUser?.department && authUser.department === storeRisk.intendedDepartmentId)) && (
                             <button
                               type="button"
                               onClick={() => setProposePlanOpen(true)}
@@ -1488,7 +1501,7 @@ export default function ReportsRisksPage() {
                               ))}
                             </div>
                           )}
-                          {wfStatus === 'plan-proposed' && (
+                          {wfStatus === 'plan-proposed' && canDrive && (
                             <button
                               type="button"
                               onClick={() => acceptDepartmentPlan(storeRisk.id, actingUser)}
@@ -1502,10 +1515,15 @@ export default function ReportsRisksPage() {
                             <div className="mt-2 space-y-1">
                               <p className="text-[10px] font-bold text-slate-500 uppercase">Officer evaluation</p>
                               {(storeRisk.mitigationChecklist ?? []).map((item) => (
-                                <label key={item.id} className="flex items-center gap-2 text-[11px] text-slate-700 cursor-pointer">
+                                <label key={item.id} className={cn('flex items-center gap-2 text-[11px] text-slate-700', canDrive ? 'cursor-pointer' : 'cursor-not-allowed opacity-60')}>
                                   <input
                                     type="checkbox"
                                     checked={item.completed}
+                                    // Ownership model: toggling drives the workflow
+                                    // (last item resolves the risk), so only a driver
+                                    // (owner or 'workflow:advance') may toggle — matches
+                                    // the server gate on the resolving toggle route.
+                                    disabled={!canDrive}
                                     onChange={() => toggleDeptPlanItem(storeRisk.id, item.id, actingUser)}
                                     className="rounded border-slate-300"
                                   />

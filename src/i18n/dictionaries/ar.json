@@ -127,6 +127,8 @@
     }
   },
   "common": {
+    "alphaVersion": "نسخة ألفا {{version}}",
+    "comingSoon": "قريباً",
     "search": "بحث",
     "searchRecords": "البحث في السجلات...",
     "optional": "اختياري",
@@ -2183,6 +2185,17 @@
     "backToSignIn": "العودة لتسجيل الدخول",
     "checkYourEmail": "تحقق من بريدك الإلكتروني",
     "resetInstructionsSent": "لقد أرسلنا تعليمات إعادة تعيين كلمة المرور إلى بريدك الإلكتروني. يرجى التحقق من صندوق الوارد.",
+    "setNewPassword": "تعيين كلمة مرور جديدة",
+    "setNewPasswordSubtitle": "اختر كلمة مرور جديدة لحسابك.",
+    "newPassword": "كلمة المرور الجديدة",
+    "confirmNewPassword": "تأكيد كلمة المرور الجديدة",
+    "updatePassword": "تحديث كلمة المرور",
+    "updatingPassword": "جاري التحديث...",
+    "passwordUpdated": "تم تحديث كلمة المرور.",
+    "passwordsDoNotMatch": "كلمتا المرور غير متطابقتين",
+    "resetLinkInvalid": "رابط إعادة التعيين غير صالح أو منتهي الصلاحية",
+    "resetLinkInvalidSubtitle": "اطلب رابط إعادة تعيين جديد للمتابعة.",
+    "requestNewLink": "طلب رابط جديد",
     "allRightsReserved": "جميع الحقوق محفوظة."
   },
   "verification": {
@@ -3317,7 +3330,7 @@
     "descDelete": "السماح بحذف {{entity}}. لا يمكن التراجع عن ذلك.",
     "descExport": "السماح بتصدير {{entity}} إلى PDF أو CSV.",
     "descChecklist": "السماح بإدارة قوائم التحقق لـ {{entity}} — إضافة المواعيد، وتحديد العناصر، والحذف، وإعادة الترتيب.",
-    "descApproveReviews": "الموافقة على خطوات مراجعة السياسات أو رفضها.",
+    "descApproveReviews": "يتيح تعديل السياسات. تتطلب الموافقة على مراجعة السياسة أو تقديمها أن يكون المستخدم مالك السياسة أو حاصلاً على صلاحية \"تقديم سير العمل\".",
     "descApproveLetters": "الموافقة على الخطابات في سلسلة الاعتماد أو رفضها.",
     "descManageFindings": "تعديل نتائج المراجعة والملاحظات.",
     "descViewRiskRegister": "عرض سجل المخاطر الكامل.",

@@ -11,7 +11,7 @@ import { useFrameworkConfigStore } from '@/stores/framework-config-store'
 import { useTeamStore } from '@/stores/team-store'
 import { useAuthStore } from '@/stores/auth-store'
 import { pushToast } from '@/stores/toast-store'
-import { useCanEditEntity, useCanDeleteEntity } from '@/lib/permissions'
+import { useCanEditEntity, useCanDeleteEntity, canAdvanceCircular } from '@/lib/permissions'
 import { resolveAuthorityLabel } from '@/lib/authority-display'
 import { InlineDeadlinePicker } from '@/components/ui/inline-deadline-picker'
 // C(#31): consume a calendar deep-link → open the workflow tab + glow the step.
@@ -593,6 +593,9 @@ export function CircularDetailsContent({ circular, activeTab, setActiveTab, onCl
               const hasCompleted = wfSteps.some((s) => s.status === 'completed')
               const allCompleted = wfSteps.length > 0 && wfSteps.every((s) => s.status === 'completed')
               if (!hasCompleted) return null
+              // Ownership model: undo/reset DRIVE the workflow — only the rule's
+              // assignee (owner) or a workflow:advance holder may use them.
+              if (!canAdvanceCircular(authUser, freshCircular)) return null
               return (
                 <div className="flex items-center gap-2 justify-end">
                   <button
@@ -910,7 +913,9 @@ export function CircularDetailsContent({ circular, activeTab, setActiveTab, onCl
                                 {t('regulatoryUpdates.due')}: {step.deadline}
                               </span>
                             )}
-                            {isCurrent && (
+                            {/* Ownership model: only the rule's assignee (owner) or a
+                                user granted "Can Advance Workflow" may advance steps. */}
+                            {isCurrent && canAdvanceCircular(authUser, freshCircular) && (
                               <button
                                 onClick={() => setAdvanceConfirm({ open: true, stepId: step.id, stepLabel: step.label })}
                                 className="px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg transition-colors flex items-center gap-1 cursor-pointer"

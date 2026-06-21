@@ -4,11 +4,18 @@
 // rejected letter stays visibly rejected WITH its reason, remains editable,
 // and can be resubmitted — submit-for-approval resets the chain fresh).
 //
+// Auth (ownership model — Area B): requireUser() + canDriveWorkflow against the
+// letter's creator (mirrors approve-step). The generic 'edit' (officers hold it)
+// no longer grants committing a reject verdict; advancing requires the global
+// 'workflow:advance' grant OR being the letter's CREATOR. The same per-step
+// chain-role enforcement FLAG from approve-step applies here.
+//
 // Wave-21: assertUuid + dual-store timeline write.
 
 import type { NextRequest } from 'next/server'
-import { requirePerm } from '@/lib/api/auth'
-import { Conflict, handle, NotFound } from '@/lib/api/errors'
+import { canDriveWorkflow, requireUser } from '@/lib/api/auth'
+import { callerMeetsStepRole } from '@/lib/letter-approval-roles'
+import { Conflict, Forbidden, handle, NotFound } from '@/lib/api/errors'
 import { ok } from '@/lib/api/response'
 import { parseJson } from '@/lib/api/validate'
 import { cacheTags, revalidateAll } from '@/lib/api/cache'
@@ -31,24 +38,43 @@ export async function POST(req: NextRequest, { params }: Params) {
   try {
     const { letterId: letterIdParam } = await params
     // W26-C param parity: resolve UUID or reference → canonical UUID.
-    const { supabase, user, profile } = await requirePerm('edit')
+    const ctx = await requireUser()
+    const { supabase, user, profile } = ctx
     const letterId = await assertLetterExists(supabase, letterIdParam)
     const body = await parseJson(req, RejectStepSchema)
 
     const { data: letter, error: lErr } = await supabase
       .from('letters')
-      .select('id, status')
+      .select('id, status, created_by')
       .eq('id', letterId)
       .is('deleted_at', null)
-      .maybeSingle<{ id: string; status: string }>()
+      .maybeSingle<{ id: string; status: string; created_by: string | null }>()
     if (lErr) throw lErr
     if (!letter) throw NotFound(`Letter ${letterId} not found`)
+    // RBAC (ownership model): committing a reject verdict requires the global
+    // 'workflow:advance' grant OR being the letter's CREATOR. See the chain-role
+    // FLAG in approve-step (intentionally not gated here).
+    if (!canDriveWorkflow(ctx, letter.created_by)) {
+      throw Forbidden('Missing permission: workflow:advance (or letter ownership)')
+    }
     if (letter.status !== 'pending-approval') {
       throw Conflict(`Cannot reject in status ${letter.status}`)
     }
 
     const steps = await getApprovalSteps(supabase, letterId)
     assertIsCurrentStep(steps, body.step_index)
+
+    // Separation of duties: the caller's role must satisfy THIS step's required
+    // role (hierarchy; admin clears every step) — mirrors approve-step.
+    const { data: stepRow } = await supabase
+      .from('letter_approval_steps')
+      .select('role')
+      .eq('letter_id', letterId)
+      .eq('step', body.step_index)
+      .maybeSingle<{ role: string | null }>()
+    if (!callerMeetsStepRole(profile.role, stepRow?.role)) {
+      throw Forbidden(`This approval step requires the '${stepRow?.role ?? 'appropriate'}' role`)
+    }
 
     const now = new Date().toISOString()
     const { error: updErr } = await supabase

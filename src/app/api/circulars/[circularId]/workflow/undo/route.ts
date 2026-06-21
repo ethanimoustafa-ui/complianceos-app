@@ -36,8 +36,8 @@
 //   3. `recomputeCircularProgress` so the progress bar reflects the change.
 
 import type { NextRequest } from 'next/server'
-import { requirePerm } from '@/lib/api/auth'
-import { Conflict, handle, NotFound, PreconditionFailed } from '@/lib/api/errors'
+import { requireUser, canDriveWorkflow } from '@/lib/api/auth'
+import { Conflict, Forbidden, handle, NotFound, PreconditionFailed } from '@/lib/api/errors'
 import { ok } from '@/lib/api/response'
 import { assertNotStale, assertUuid, readIfMatch } from '@/lib/api/validate'
 import { cacheTags, revalidate, revalidateAll } from '@/lib/api/cache'
@@ -68,8 +68,20 @@ export async function POST(req: NextRequest, { params }: Params) {
   try {
     const { circularId } = await params
     assertUuid(circularId) // SEC-5
-    const { supabase, user, profile } = await requirePerm('edit')
+    const ctx = await requireUser()
+    const { supabase, user, profile } = ctx
     await assertCircularExists(supabase, circularId)
+    // RBAC (ownership model): undoing the workflow cursor IS driving the workflow
+    // — require workflow:advance OR rule ownership (assigned_to), NOT the generic
+    // 'edit' key (which officers hold). Mirrors the circular advance route.
+    {
+      const { data: ownerRow } = await supabase
+        .from('circulars').select('assigned_to').eq('id', circularId)
+        .maybeSingle<{ assigned_to: string | null }>()
+      if (!canDriveWorkflow(ctx, ownerRow?.assigned_to)) {
+        throw Forbidden('Missing permission: workflow:advance (or rule ownership)')
+      }
+    }
     const actor = profile.name ?? profile.email ?? user.id
 
     // SEC-1 (W17.2): read-then-check pre-flight so we can return 412 BEFORE

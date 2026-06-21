@@ -48,7 +48,9 @@ export const STANDARD_PERMISSIONS = PERMISSIONS
 // IMPORTANT: every key on the right-hand side MUST exist in `public.permissions`
 // (migrations 018 + 115). Keep this in sync with that seed.
 export const PERMISSION_BACKEND_KEYS: Record<Permission, readonly string[]> = {
-  // Policy review approval ⇒ ability to edit policies (drive the workflow).
+  // Policy review approval ⇒ ability to EDIT policies only. Driving the workflow
+  // (approve/advance/initiate) is NOT granted by this — that needs ownership or
+  // the dedicated 'workflow:advance' key ('Can Advance Workflow').
   'Approve Policy Reviews': ['policy:edit'],
   // Letter approval ⇒ edit letters.
   'Approve SAMA Letters': ['letter:edit'],

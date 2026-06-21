@@ -14,7 +14,7 @@ import { TablePagination } from '@/components/ui/table-pagination'
 import { cn } from '@/lib/utils'
 import { useTranslation } from '@/i18n'
 import { Gate, EntityGate } from '@/components/auth/gate'
-import { useCanCreateEntity } from '@/lib/permissions'
+import { useCanCreateEntity, canDriveLetter } from '@/lib/permissions'
 import { useLetterStore } from '@/stores/letter-store'
 import { useAuthStore } from '@/stores/auth-store'
 import type { Letter, LetterType, LetterStatus, LetterTemplate, TemplateStatus, CircularAuthority } from '@/types'
@@ -81,6 +81,14 @@ export default function LettersPage() {
   const selectedLetter = storeSelected
     ? (store.byId[storeSelected.id] ?? store.letters.find((l) => l.id === storeSelected.id) ?? storeSelected)
     : null
+  // Ownership model (Area B): the workflow actions (submit-for-approval, send)
+  // are gated on the global 'workflow:advance' grant OR being the letter's
+  // creator — NOT the generic 'edit' that officers hold. Subscribe to the
+  // backend permission keys so the buttons re-render the instant a grant
+  // changes; canDriveLetter reads them via getState() internally. Mirrors the
+  // server's canDriveWorkflow(ctx, created_by) on the submit/send routes.
+  useAuthStore((s) => s.permissions)
+  const canDriveSelected = canDriveLetter(user, selectedLetter)
   // Detail-loaded boundary: list rows ship minimal data; the full record
   // (approval chain, attachments, timeline) only arrives after fetchById
   // completes. The old heuristic treated any non-draft letter as "loaded",
@@ -1683,8 +1691,10 @@ export default function LettersPage() {
                   </button>
                 </EntityGate>
                 {/* Status-specific primary actions */}
-                {/* W40: rejected letters resubmit through the same action. */}
-                {(selectedLetter?.status === 'draft' || selectedLetter?.status === 'rejected') && (
+                {/* W40: rejected letters resubmit through the same action.
+                    Ownership model: hidden — not disabled — for anyone the
+                    server's canDriveWorkflow gate would 403 on submit-for-approval. */}
+                {(selectedLetter?.status === 'draft' || selectedLetter?.status === 'rejected') && canDriveSelected && (
                   <button
                     onClick={async () => {
                       if (!selectedLetter) return
@@ -1710,7 +1720,9 @@ export default function LettersPage() {
                     removed — approval verdicts flow through the per-step
                     actions in the Approval Chain card (chains now seed on
                     every submission and are configurable). */}
-                {selectedLetter?.status === 'approved' && (
+                {/* Ownership model: send is gated on canDriveWorkflow — hidden,
+                    not disabled, for anyone the server's send route would 403. */}
+                {selectedLetter?.status === 'approved' && canDriveSelected && (
                   <button
                     onClick={async () => {
                       setSendBusy(true)
@@ -2330,6 +2342,7 @@ export default function LettersPage() {
                                   letterId={selectedLetter.id}
                                   step={step.step as 1 | 2 | 3}
                                   approverName={currentUser}
+                                  stepRole={step.role}
                                 />
                               )}
                             </div>
@@ -2712,6 +2725,11 @@ export default function LettersPage() {
       {openMenuId && menuPosition && (() => {
         const letter = store.letters.find(l => l.id === openMenuId)
         if (!letter) return null
+        // Ownership model: the row-level Submit/Send actions mirror the detail
+        // view — gated on canDriveWorkflow (workflow:advance OR letter creator),
+        // hidden for anyone the server would 403. Computed per-row off this
+        // dropdown's letter (canDriveSelected only covers the open detail letter).
+        const rowCanDrive = canDriveLetter(user, letter)
         const dropdownApproxHeight = 180
         const flipUp = menuPosition.y + dropdownApproxHeight > window.innerHeight
         return createPortal(
@@ -2732,7 +2750,7 @@ export default function LettersPage() {
               className="w-full px-4 py-2 text-left text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-2 cursor-pointer">
               <Icon icon="lucide:eye" className="text-slate-400" /> {t('common.view')}
             </button>
-            {(letter.status === 'draft' || letter.status === 'rejected') && (
+            {(letter.status === 'draft' || letter.status === 'rejected') && rowCanDrive && (
               <button
                 disabled={isMutating}
                 onClick={async () => {
@@ -2744,7 +2762,7 @@ export default function LettersPage() {
                 {letter.status === 'rejected' ? t('letters.resubmitForApproval') : t('letters.submitForApproval')}
               </button>
             )}
-            {letter.status === 'approved' && (
+            {letter.status === 'approved' && rowCanDrive && (
               <button onClick={(e) => { e.stopPropagation(); handleViewLetter(letter); setPendingSend(true); setOpenMenuId(null); setMenuPosition(null) }}
                 className="w-full px-4 py-2 text-left text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-2 cursor-pointer">
                 <Icon icon="lucide:send" className="text-emerald-500" /> {t('letters.send')}

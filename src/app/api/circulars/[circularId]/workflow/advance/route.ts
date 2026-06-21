@@ -8,8 +8,8 @@
 // promotes the next phase step.
 
 import type { NextRequest } from 'next/server'
-import { requireAnyPerm } from '@/lib/api/auth'
-import { Conflict, handle } from '@/lib/api/errors'
+import { requireUser } from '@/lib/api/auth'
+import { Conflict, Forbidden, handle } from '@/lib/api/errors'
 import { ok } from '@/lib/api/response'
 import { assertUuid, parseJson } from '@/lib/api/validate'
 import { cacheTags, revalidate, revalidateAll } from '@/lib/api/cache'
@@ -46,10 +46,24 @@ export async function POST(req: NextRequest, { params }: Params) {
   try {
     const { circularId } = await params
     assertUuid(circularId) // SEC-5
-    // Migration 117: accept the granular 'workflow:advance' key OR the legacy
-    // 'edit' key the role tiers still carry. Mirrors circular_workflow_steps RLS.
-    const { supabase, user, profile } = await requireAnyPerm(['workflow:advance', 'edit'])
+    // RBAC (ownership model): advancing a rule's workflow requires the global
+    // 'workflow:advance' grant (managers/admins by role; officers via the Access
+    // Matrix) OR being the rule's ASSIGNEE (its owner). 'edit' no longer grants
+    // advance — editing and advancing are distinct. Mirrors the policy advance
+    // route + canAdvanceCircular on the client.
+    const ctx = await requireUser()
+    const { supabase, user, profile } = ctx
     await assertCircularExists(supabase, circularId)
+    if (!ctx.permissions.includes('workflow:advance')) {
+      const { data: ownerRow } = await supabase
+        .from('circulars')
+        .select('assigned_to')
+        .eq('id', circularId)
+        .maybeSingle<{ assigned_to: string | null }>()
+      if (ownerRow?.assigned_to !== user.id) {
+        throw Forbidden('Missing permission: workflow:advance (or rule ownership)')
+      }
+    }
     const body = await parseJson(req, AdvancePhaseSchema)
 
     const { data: stepsData, error: stErr } = await supabase

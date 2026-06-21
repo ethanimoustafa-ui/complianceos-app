@@ -9,6 +9,7 @@
 import { useEffect } from 'react'
 import { useAuthStore } from '@/stores/auth-store'
 import { createClient } from '@/lib/supabase/client'
+import { initSessionPersistence } from '@/lib/auth/session-persistence'
 
 export function AuthListener() {
   const refreshSession = useAuthStore((s) => s.refreshSession)
@@ -16,6 +17,27 @@ export function AuthListener() {
 
   useEffect(() => {
     let cancelled = false
+
+    // "Remember me": if this is a cold browser start resuming an ephemeral
+    // (remember-me-off) session, sign out instead of restoring it, then hard-
+    // redirect so the server proxy deterministically re-gates the page.
+    //
+    // Skip this entirely on the auth/recovery routes: the password-reset flow
+    // lands on /reset-password with a FRESH recovery session (set by the auth
+    // callback) that must NOT be revoked, and sign-in/up don't need gating.
+    const path = typeof window !== 'undefined' ? window.location.pathname : ''
+    const onAuthRoute = /^\/(sign-in|sign-up|forgot-password|reset-password|verify-email)(\/|$)/.test(path)
+    if (!onAuthRoute && initSessionPersistence().expire) {
+      void useAuthStore
+        .getState()
+        .signOut()
+        .finally(() => {
+          window.location.replace('/sign-in')
+        })
+      return () => {
+        cancelled = true
+      }
+    }
 
     // Hydrate from the current session immediately.
     void refreshSession().catch(() => {})

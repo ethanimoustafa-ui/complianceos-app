@@ -123,7 +123,10 @@ export async function POST(req: NextRequest) {
         category: input.category,
         version: input.version ?? 'v1.0',
         approval_tier: input.approval_tier,
-        owner_id: input.owner_id ?? null,
+        // Ownership model: the creator becomes the policy's leader/owner unless a
+        // leader was explicitly chosen — so "I created it" ⇒ "I can drive its
+        // workflow" (see the advance route's ownership gate).
+        owner_id: input.owner_id ?? user.id,
         owner_name: input.owner_name ?? null,
         owner_department: input.owner_department ?? null,
         business_owner_department_id: input.business_owner_department_id ?? null,

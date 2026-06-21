@@ -22,7 +22,7 @@
 // the client appending a phantom "Review Initiated" row (P6.3).
 
 import type { NextRequest } from 'next/server'
-import { requireUser, hasEditOrOwnership } from '@/lib/api/auth'
+import { requireUser } from '@/lib/api/auth'
 import { handle, NotFound, Conflict, Forbidden } from '@/lib/api/errors'
 import { ok } from '@/lib/api/response'
 import { parseJson } from '@/lib/api/validate'
@@ -68,26 +68,35 @@ export async function POST(req: NextRequest, { params }: Params) {
     // W38: was requirePerm('settings:edit') — an org_admin-only key that locked
     // compliance officers out of submit/approve/initiate-review. 'edit' matches
     // every other policy mutation route (PATCH, steps, reseed).
-    // RBAC (ownership): the policy OWNER may drive their own workflow even
-    // without the global 'edit' permission; everyone else needs 'edit'
-    // (managers/admins hold it via their role). Migration 117 adds the granular
-    // 'workflow:advance' key as a third accepted path (matrix grant). Mirrors the
-    // policies_update / policy_workflow_steps RLS predicates (migration 114 + 117).
+    // RBAC (ownership): driving the workflow requires the 'workflow:advance'
+    // grant (managers/admins by role; officers via the Access Matrix) OR being
+    // the policy's OWNER — the generic 'edit' does NOT qualify (migration 121
+    // removed advance from the officer role).
+    //
+    // This route is the PRIMARY gate and is deliberately STRICTER than RLS: the
+    // policy_workflow_steps RLS predicate still accepts 'edit' because step CRUD
+    // (add / rename / delete a step) is edit-gated by design. We do NOT relax the
+    // route to match RLS — advance/approve/initiate must stay advance-or-owner.
     const ctx = await requireUser()
     const { supabase, user, profile } = ctx
     const policyId = await assertPolicyExists(supabase, policyIdParam)
+    // RBAC (ownership model): driving a policy's workflow (submit / approve /
+    // advance / undo) requires the global 'workflow:advance' grant — managers &
+    // admins hold it by role; officers ONLY via the Access Matrix — OR being the
+    // policy's OWNER (its leader). The generic 'edit' permission intentionally
+    // does NOT grant advance: editing and advancing are distinct capabilities, so
+    // an officer who can edit policies still can't drive a workflow they don't
+    // own. Mirrors canAdvancePolicyWorkflow on the client.
     const hasAdvancePerm = ctx.permissions.includes('workflow:advance')
-    let ownerId: string | null = null
-    if (!hasAdvancePerm && !ctx.permissions.includes('edit')) {
+    if (!hasAdvancePerm) {
       const { data: ownerRow } = await supabase
         .from('policies')
         .select('owner_id')
         .eq('id', policyId)
         .maybeSingle<{ owner_id: string | null }>()
-      ownerId = ownerRow?.owner_id ?? null
-    }
-    if (!hasAdvancePerm && !hasEditOrOwnership(ctx, ownerId)) {
-      throw Forbidden('Missing permission: workflow:advance or edit (or policy ownership)')
+      if (ownerRow?.owner_id !== user.id) {
+        throw Forbidden('Missing permission: workflow:advance (or policy ownership)')
+      }
     }
     const input = await parseJson(req, AdvancePolicyWorkflowSchema)
 

@@ -4,8 +4,8 @@
 // Wave-21: assertUuid + dual-store timeline write.
 
 import type { NextRequest } from 'next/server'
-import { requirePerm } from '@/lib/api/auth'
-import { Conflict, handle, NotFound } from '@/lib/api/errors'
+import { canDriveWorkflow, requireUser } from '@/lib/api/auth'
+import { Conflict, Forbidden, handle, NotFound } from '@/lib/api/errors'
 import { ok } from '@/lib/api/response'
 import { cacheTags, revalidateAll } from '@/lib/api/cache'
 import { writeAudit } from '@/lib/api/audit'
@@ -25,17 +25,27 @@ export async function POST(_req: NextRequest, { params }: Params) {
   try {
     const { letterId: letterIdParam } = await params
     // W26-C param parity: resolve UUID or reference → canonical UUID.
-    const { supabase, user, profile } = await requirePerm('edit')
+    // Ownership model (Area B): drop the generic 'edit' gate (officers hold it)
+    // in favour of requireUser() + canDriveWorkflow against the letter's creator.
+    const ctx = await requireUser()
+    const { supabase, user, profile } = ctx
     const letterId = await assertLetterExists(supabase, letterIdParam)
 
     const { data: current, error: readErr } = await supabase
       .from('letters')
-      .select('id, status, type, authority')
+      .select('id, status, type, authority, created_by')
       .eq('id', letterId)
       .is('deleted_at', null)
-      .maybeSingle<{ id: string; status: string; type: string; authority: string }>()
+      .maybeSingle<{ id: string; status: string; type: string; authority: string; created_by: string | null }>()
     if (readErr) throw readErr
     if (!current) throw NotFound(`Letter ${letterId} not found`)
+    // RBAC (ownership model): sending requires the global 'workflow:advance'
+    // grant (managers/admins by role; officers via the Access Matrix) OR being
+    // the letter's CREATOR (created_by). The generic 'edit' no longer grants it.
+    // Mirrors the policy/circular/audit workflow routes + `canDriveLetter`.
+    if (!canDriveWorkflow(ctx, current.created_by)) {
+      throw Forbidden('Missing permission: workflow:advance (or letter ownership)')
+    }
     if (current.status === 'sent') return ok({ id: letterId, status: 'sent' })
     if (current.status !== 'approved') {
       throw Conflict(`Cannot send in status ${current.status}`)

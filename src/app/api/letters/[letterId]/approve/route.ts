@@ -14,15 +14,18 @@
 // without touching the step table. It is the mirror of the policy
 // `approve-step` pattern but without the chain logic.
 //
-// Auth: requirePerm('edit') — same permission as approve-step (BACKEND-API-MAP §3.3).
-// RBAC: no "approver !== creator" guard. Admin can self-approve (Hani confirmed).
+// Auth (ownership model — Area B): requireUser() + canDriveWorkflow against the
+// letter's creator. The generic 'edit' (officers hold it) no longer grants
+// approval; advancing requires the global 'workflow:advance' grant
+// (managers/admins by role; officers via the Access Matrix) OR being the letter's
+// CREATOR. Admin self-approve still works (admins hold workflow:advance).
 //
 // W17.2 atomic conditional UPDATE: UPDATE ... WHERE status='pending-approval'.
 // W19.5 P6 dual-store timeline.
 
 import type { NextRequest } from 'next/server'
-import { requirePerm } from '@/lib/api/auth'
-import { Conflict, handle, NotFound } from '@/lib/api/errors'
+import { canDriveWorkflow, requireUser } from '@/lib/api/auth'
+import { Conflict, Forbidden, handle, NotFound } from '@/lib/api/errors'
 import { ok } from '@/lib/api/response'
 import { parseJson } from '@/lib/api/validate'
 import { cacheTags, revalidateAll } from '@/lib/api/cache'
@@ -49,9 +52,24 @@ export async function POST(req: NextRequest, { params }: Params) {
   try {
     const { letterId: letterIdParam } = await params
     // W26-C param parity: resolve UUID or reference → canonical UUID.
-    const { supabase, user, profile } = await requirePerm('edit')
+    const ctx = await requireUser()
+    const { supabase, user, profile } = ctx
     const letterId = await assertLetterExists(supabase, letterIdParam)
     const body = await parseJson(req, ApproveLetterSchema)
+
+    // RBAC (ownership model): approving requires the global 'workflow:advance'
+    // grant (managers/admins by role; officers via the Access Matrix) OR being
+    // the letter's CREATOR (created_by). Read the owner before the conditional
+    // UPDATE so the gate is enforced regardless of the row's status.
+    const { data: owner } = await supabase
+      .from('letters')
+      .select('created_by')
+      .eq('id', letterId)
+      .is('deleted_at', null)
+      .maybeSingle<{ created_by: string | null }>()
+    if (!canDriveWorkflow(ctx, owner?.created_by)) {
+      throw Forbidden('Missing permission: workflow:advance (or letter ownership)')
+    }
 
     // W17.2 atomic conditional UPDATE: include status guard so a concurrent
     // second approve returns 0 rows (→ 409 conflict_state) instead of 200.

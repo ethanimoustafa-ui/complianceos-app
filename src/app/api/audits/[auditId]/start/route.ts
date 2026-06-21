@@ -2,8 +2,8 @@
 // W26-A: assertUuid + dual-store timeline.
 
 import type { NextRequest } from 'next/server'
-import { requirePerm } from '@/lib/api/auth'
-import { handle, NotFound, Conflict } from '@/lib/api/errors'
+import { requireUser } from '@/lib/api/auth'
+import { handle, NotFound, Conflict, Forbidden } from '@/lib/api/errors'
 import { ok } from '@/lib/api/response'
 import { assertUuid } from '@/lib/api/validate'
 import { cacheTags, revalidate, revalidateAll } from '@/lib/api/cache'
@@ -20,15 +20,23 @@ export async function POST(_req: NextRequest, { params }: Params) {
     const { auditId } = await params
     // SEC-5: validate route param before any DB access.
     assertUuid(auditId)
-    const { supabase, user, profile } = await requirePerm('audit:edit')
+    const ctx = await requireUser()
+    const { supabase, user, profile } = ctx
 
     const { data: current, error: readErr } = await supabase
       .from('audits')
-      .select('id, status, title')
+      .select('id, status, title, assignee_id')
       .eq('id', auditId)
-      .maybeSingle<{ id: string; status: string; title: string }>()
+      .maybeSingle<{ id: string; status: string; title: string; assignee_id: string | null }>()
     if (readErr) throw readErr
     if (!current) throw NotFound(`Audit ${auditId} not found`)
+    // RBAC (ownership model): starting an audit requires the global
+    // 'workflow:advance' grant (managers/admins by role; officers via the Access
+    // Matrix) OR being the audit's ASSIGNEE (owner). The generic 'audit:edit'
+    // (general editing) no longer grants it. Mirrors the policy/circular routes.
+    if (!ctx.permissions.includes('workflow:advance') && current.assignee_id !== user.id) {
+      throw Forbidden('Missing permission: workflow:advance (or audit ownership)')
+    }
     if (current.status === 'in_progress') return ok({ id: auditId, status: 'in_progress' })
     if (current.status !== 'pending' && current.status !== 'overdue') {
       throw Conflict(`Cannot start audit in status ${current.status}`)

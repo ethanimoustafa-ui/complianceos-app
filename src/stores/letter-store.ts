@@ -44,6 +44,7 @@ import type {
 } from '@/types'
 import { api, ApiClientError } from '@/lib/api-client'
 import { requirePermission } from '@/lib/rbac-store-gate'
+import { useAuthStore } from '@/stores/auth-store'
 // newTempId removed — W28-D1 create no longer uses a temp row
 import { useUserLogStore } from '@/stores/user-log-store'
 import { supabase as supabaseClient } from '@/lib/supabase/client'
@@ -237,6 +238,10 @@ function mapRow(row: LetterApiRow, previous?: Letter): Letter {
     // W25-D1: prefer the FK-joined creator.name; fall back to UUID only when
     // the embed is absent (e.g. legacy rows written before the FK column existed).
     createdBy: row.creator?.name ?? row.created_by ?? previous?.createdBy ?? '',
+    // Ownership model: keep the raw created_by UUID so client workflow gates can
+    // compare it against the auth user id (createdBy above holds the display name,
+    // not the id). Mirrors the server's canDriveWorkflow(ctx, created_by) gate.
+    createdById: row.created_by ?? previous?.createdById ?? undefined,
     assignedTo: row.assigned_to ?? previous?.assignedTo ?? undefined,
     // GAP-17 hardened mapper: read the GET's nested embed FIRST; fall back to
     // `previous` only when the embed is absent; default to EMPTY_* (stable ref).
@@ -751,11 +756,9 @@ export const useLetterStore = create<LetterState>()((set, get) => ({
   },
 
   submitForApproval: async (id) => {
-    requirePermission('Approve SAMA Letters', {
-      storeName: 'letter',
-      actionName: 'submitForApproval',
-      id,
-    })
+    // Ownership model: the server gates this (workflow:advance OR letter
+    // ownership[created_by]) and the UI gates the button via canDriveLetter — no
+    // blanket 'Approve SAMA Letters' label gate here (it blocked owning officers).
     set({ isMutating: true, error: null })
     try {
       const row = await api.post<LetterApiRow>(`/letters/${id}/submit-for-approval`)
@@ -781,11 +784,7 @@ export const useLetterStore = create<LetterState>()((set, get) => ({
   // W28-BUG-B2 — direct admin approve (bypasses chain when no steps configured).
   // Calls POST /api/letters/[letterId]/approve (W25.1-RESIDUAL-3).
   approve: async (id, comment) => {
-    requirePermission('Approve SAMA Letters', {
-      storeName: 'letter',
-      actionName: 'approve',
-      id,
-    })
+    // Ownership model: gated server-side + by canDriveLetter; no blanket label gate.
     set({ isMutating: true, error: null })
     try {
       await api.post<LetterApiRow>(`/letters/${id}/approve`, {
@@ -840,11 +839,8 @@ export const useLetterStore = create<LetterState>()((set, get) => ({
   },
 
   approveStep: async (id, step, notes) => {
-    const user = requirePermission('Approve SAMA Letters', {
-      storeName: 'letter',
-      actionName: `approveStep:${step}`,
-      id,
-    })
+    // Ownership model: gated server-side + by canDriveLetter; no blanket label gate.
+    const user = useAuthStore.getState().user
     set({ isMutating: true, error: null })
     try {
       await api.post<LetterApiRow>(`/letters/${id}/approve-step`, {
@@ -852,7 +848,7 @@ export const useLetterStore = create<LetterState>()((set, get) => ({
         notes,
       })
       useUserLogStore.getState().log({
-        userId: user.id,
+        userId: user?.id ?? 'anonymous',
         action: 'samaLetter.approval_step_committed',
         target: id,
         metadata: { step, notes: notes ?? null },
@@ -877,11 +873,7 @@ export const useLetterStore = create<LetterState>()((set, get) => ({
   },
 
   rejectStep: async (id, step, notes) => {
-    requirePermission('Approve SAMA Letters', {
-      storeName: 'letter',
-      actionName: `rejectStep:${step}`,
-      id,
-    })
+    // Ownership model: gated server-side + by canDriveLetter; no blanket label gate.
     set({ isMutating: true, error: null })
     try {
       await api.post<LetterApiRow>(`/letters/${id}/reject-step`, {
@@ -908,16 +900,13 @@ export const useLetterStore = create<LetterState>()((set, get) => ({
   },
 
   send: async (id) => {
-    const user = requirePermission('Approve SAMA Letters', {
-      storeName: 'letter',
-      actionName: 'send',
-      id,
-    })
+    // Ownership model: gated server-side + by canDriveLetter; no blanket label gate.
+    const user = useAuthStore.getState().user
     set({ isMutating: true, error: null })
     try {
       await api.post<LetterApiRow>(`/letters/${id}/send`)
       useUserLogStore.getState().log({
-        userId: user.id,
+        userId: user?.id ?? 'anonymous',
         action: 'samaLetter.sent',
         target: id,
       })

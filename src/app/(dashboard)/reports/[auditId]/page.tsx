@@ -35,7 +35,7 @@ import { AuditHistoryCard, ArchivedCycleView } from '@/components/reports/audits
 import type { AuditCycleDetail } from '@/stores/audit-store'
 import { EditableSelect } from '@/components/ui/editable-select'
 import type { Audit, AuditComment } from '@/types'
-import { canEditComment, canDeleteComment } from '@/lib/permissions'
+import { canEditComment, canDeleteComment, canAdvanceAudit } from '@/lib/permissions'
 import { dicebearAvatar } from '@/lib/avatar'
 
 // Types
@@ -1252,7 +1252,8 @@ export default function AuditDetailPage() {
 
                     {/* Action Buttons */}
                     <div className="flex gap-2">
-                      {(audit?.status === 'pending' || audit?.status === 'overdue') && (
+                      {(audit?.status === 'pending' || audit?.status === 'overdue') &&
+                        canAdvanceAudit(currentUser, { assigneeId: audit?.assignee?.id ?? null }) && (
                         <LoadingButton
                           variant="primary"
                           size="sm"
@@ -1264,7 +1265,8 @@ export default function AuditDetailPage() {
                           {t('auditDetail.startAudit')}
                         </LoadingButton>
                       )}
-                      {audit?.status === 'in_progress' && (
+                      {audit?.status === 'in_progress' &&
+                        canAdvanceAudit(currentUser, { assigneeId: audit?.assignee?.id ?? null }) && (
                         <LoadingButton
                           variant="primary"
                           size="sm"

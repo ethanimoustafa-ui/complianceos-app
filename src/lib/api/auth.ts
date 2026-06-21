@@ -196,6 +196,23 @@ export function hasEditOrOwnership(ctx: AuthedRequest, ownerId: string | null | 
 }
 
 /**
+ * True if the caller may DRIVE a workflow on a resource — advance / approve /
+ * start / complete / undo / reset, OR change the resource's lifecycle status or
+ * owner. They must hold the global 'workflow:advance' grant (managers/admins by
+ * role; officers only via the Access Matrix) OR be the resource's owner/leader.
+ *
+ * Unlike `hasEditOrOwnership`, the generic 'edit' permission does NOT grant this:
+ * editing an item and DRIVING its workflow are deliberately separate capabilities
+ * (the ownership model). Use this for every advance/approve/start/complete route
+ * AND to gate status/owner transitions on the generic PATCH routes, so PATCH
+ * can't be used to bypass the dedicated gated transition routes.
+ */
+export function canDriveWorkflow(ctx: AuthedRequest, ownerId: string | null | undefined): boolean {
+  if (ctx.permissions.includes('workflow:advance')) return true
+  return !!ownerId && ownerId === ctx.user.id
+}
+
+/**
  * Asserts the caller has `perm`. Returns the same AuthedRequest payload.
  */
 export async function requirePerm(perm: string): Promise<AuthedRequest> {

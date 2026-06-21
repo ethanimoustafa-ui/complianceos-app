@@ -87,7 +87,14 @@ const PERMISSION_GROUPS: { labelKey: TranslationKey; perms: Permission[] }[] = [
   { labelKey: 'accessMatrix.groupReports', perms: ['View Risk Register', 'Export Compliance Data'] },
   { labelKey: 'accessMatrix.groupTraining', perms: ['Manage Training Programs'] },
   { labelKey: 'accessMatrix.groupApprovals', perms: ['Can Act As Approver', 'Can Advance Workflow'] },
-  { labelKey: 'accessMatrix.groupAdmin', perms: ['Manage Settings', 'Manage Team & Permissions', 'Configure Frameworks', 'Configure Lists & Categories', 'Switch User (Demo)'] },
+  // Settings group: ONLY the two independently-grantable settings capabilities an
+  // officer can be given. "Manage Settings" was removed (the settings page is open
+  // to every signed-in user; sections self-gate on the two keys below). "Manage
+  // Team & Permissions" was removed (the Team Directory is role-gated to
+  // managers/admins, so granting it to an officer is a no-op). "Switch User (Demo)"
+  // was removed (impersonation no longer exists). Managers/admins still hold all of
+  // these by role — this only changes what the matrix can grant to officers.
+  { labelKey: 'accessMatrix.groupAdmin', perms: ['Configure Frameworks', 'Configure Lists & Categories'] },
 ]
 
 const ACTION_KEYS: Record<GranularAction, TranslationKey> = {

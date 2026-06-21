@@ -17,6 +17,7 @@ import { ProfileModal } from '@/components/profile/profile-modal'
 import { useNotificationEngine } from '@/hooks/useNotificationEngine'
 import { dicebearAvatar } from '@/lib/avatar'
 import { hasRole } from '@/lib/permissions'
+import { APP_VERSION } from '@/lib/version'
 
 const navigation = [
   { nameKey: 'navigation.dashboard', href: '/dashboard', icon: 'lucide:layout-grid' },
@@ -148,6 +149,16 @@ export function Sidebar() {
           </button>
 
           {/* Acting-As affordance removed in MVP — real auth via Supabase. */}
+
+          {/* Alpha version tag — surfaced app-wide so the build stage is always
+              visible. Full "Alpha version x.y.z" string also appears on the
+              auth pages. */}
+          <div className="mt-1 flex flex-col items-center leading-none" title={`v${APP_VERSION}`}>
+            <span className="text-[9px] font-bold uppercase tracking-widest text-amber-400/80">
+              Alpha
+            </span>
+            <span className="text-[9px] text-slate-500">v{APP_VERSION}</span>
+          </div>
         </div>
       </aside>
 

@@ -3,7 +3,9 @@
 import { useState } from 'react'
 import { Icon } from '@iconify/react'
 import { useTranslation } from '@/i18n'
-import { useCan } from '@/lib/permissions'
+import { canApproveLetter } from '@/lib/permissions'
+import { callerMeetsStepRole } from '@/lib/letter-approval-roles'
+import { useAuthStore } from '@/stores/auth-store'
 import { useLetterStore } from '@/stores/letter-store'
 
 // Approval Step Actions Component
@@ -11,21 +13,38 @@ export function ApprovalStepActions({
   letterId,
   step,
   approverName,
+  stepRole,
 }: {
   letterId: string
   step: number
   approverName: string
+  /** The chain step's role title (e.g. "Department Head") — gates by tier. */
+  stepRole?: string
 }) {
   const { t, isRTL } = useTranslation()
   const store = useLetterStore()
   const isMutating = useLetterStore((s) => s.isMutating)
+  const user = useAuthStore((s) => s.user)
+  // Subscribe to backend permission keys so the gate re-renders the instant a
+  // 'workflow:advance' grant changes (canApproveLetter reads them via getState()).
+  useAuthStore((s) => s.permissions)
+  // Ownership model: read the letter's creator id from the store so the gate can
+  // compare it against the auth user — the per-step Approve/Reject buttons mirror
+  // the server's canDriveWorkflow(ctx, created_by) on /approve-step + /reject-step.
+  const letter = useLetterStore((s) => s.byId[letterId])
   const [notes, setNotes] = useState('')
   const [showNotes, setShowNotes] = useState(false)
   // W40: rejecting REQUIRES a reason (spec story 6) — first click without one
   // opens the notes box with a hint instead of firing an empty rejection.
   const [rejectNeedsReason, setRejectNeedsReason] = useState(false)
   const [busy, setBusy] = useState<'approve' | 'reject' | null>(null)
-  const canApprove = useCan('Approve SAMA Letters')
+  // Ownership model: the per-step verdict is gated on workflow:advance OR being
+  // the letter's creator (NOT the generic 'edit' that officers hold). Hidden —
+  // not disabled — for everyone the server would 403. See the FLAG in the
+  // approve-step route re: chain-role enforcement (not enforced here either).
+  // Separation of duties: the per-step Approve/Reject also require the caller's
+  // role to satisfy THIS step's role (mirrors the approve-step/reject-step routes).
+  const canApprove = canApproveLetter(user, letter) && callerMeetsStepRole(user?.role, stepRole)
 
   const handleApprove = async () => {
     // Round 4 Phase 6: store derives approver name from auth user; legacy

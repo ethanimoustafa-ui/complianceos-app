@@ -1,8 +1,8 @@
 // /api/circulars/[circularId] — detail / patch / soft-delete.
 
 import type { NextRequest } from 'next/server'
-import { requireAnyPerm, requireUser } from '@/lib/api/auth'
-import { handle, NotFound, PreconditionFailed } from '@/lib/api/errors'
+import { requireAnyPerm, requireUser, canDriveWorkflow } from '@/lib/api/auth'
+import { handle, NotFound, PreconditionFailed, Forbidden } from '@/lib/api/errors'
 import { ok } from '@/lib/api/response'
 import { assertNotStale, assertUuid, parseJson, readIfMatch } from '@/lib/api/validate'
 import { cacheTags, revalidate, revalidateAll } from '@/lib/api/cache'
@@ -180,7 +180,11 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     const { circularId } = await params
     // SEC-5: reject a malformed (non-UUID) path segment with a 400.
     assertUuid(circularId)
-    const { supabase, user, profile } = await requireAnyPerm(['circular:edit', 'edit'])
+    const ctx = await requireUser()
+    const { supabase, user, profile } = ctx
+    if (!ctx.permissions.includes('circular:edit') && !ctx.permissions.includes('edit')) {
+      throw Forbidden('Missing permission: circular:edit')
+    }
     await assertCircularExists(supabase, circularId)
     // SEC-1: optimistic-concurrency token — the client echoes the row's
     // last-known `updated_at` via `If-Match`. Compared against the live row
@@ -212,6 +216,20 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       // carried the key. Belt-and-braces alongside the default-free schema.
       if (guardedArrayKeys.has(k) && !(k in rawBody)) continue
       update[k] = v
+    }
+
+    // RBAC (ownership model): status / progress drive the rule's workflow and
+    // assigned_to transfers ownership — gate all three like the circular advance
+    // route (workflow:advance OR rule ownership) so PATCH can't bypass it. Plain
+    // 'circular:edit'/'edit' (checked above) covers only non-lifecycle edits.
+    const CIRCULAR_LIFECYCLE_KEYS = ['status', 'progress', 'assigned_to']
+    if (CIRCULAR_LIFECYCLE_KEYS.some((k) => k in update)) {
+      const { data: ownerRow } = await supabase
+        .from('circulars').select('assigned_to').eq('id', circularId)
+        .maybeSingle<{ assigned_to: string | null }>()
+      if (!canDriveWorkflow(ctx, ownerRow?.assigned_to)) {
+        throw Forbidden('Missing permission: workflow:advance (or rule ownership) to change status/assignee')
+      }
     }
 
     // GAP-2: snapshot the full row BEFORE the update so we can compose a

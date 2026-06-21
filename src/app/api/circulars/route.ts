@@ -124,7 +124,9 @@ export async function POST(req: NextRequest) {
           departments: input.departments,
           business_owner_department: input.business_owner_department ?? null,
           business_owner_department_id: input.business_owner_department_id ?? null,
-          assigned_to: input.assigned_to ?? null,
+          // Ownership model: creator becomes the rule's assignee (owner) unless
+          // one was explicitly chosen — so the creator can drive its workflow.
+          assigned_to: input.assigned_to ?? user.id,
           progress: input.progress,
           issuance_date: input.issuance_date,
           due_date: input.due_date,

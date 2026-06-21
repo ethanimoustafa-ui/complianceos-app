@@ -1175,11 +1175,12 @@ export const useAuditStore = create<AuditState>()((set, get) => ({
   // ---- status -------------------------------------------------------------
 
   updateStatus: async (auditId, newStatus, _user) => {
-    requirePermission('Manage Audit Findings', {
-      storeName: 'audit',
-      actionName: `updateStatus:${newStatus}`,
-      id: auditId,
-    })
+    // RBAC (ownership model): NO blanket 'Manage Audit Findings' gate here — that
+    // label-only check blocked an audit OWNER (who the server now allows to
+    // start/complete their own audit) and is redundant. The start/complete/PATCH
+    // routes enforce 'workflow:advance' OR assignee-ownership server-side, and the
+    // Start/Complete buttons are client-gated by canAdvanceAudit. A non-owner who
+    // somehow reaches here gets a 403 + the standard RBAC denial toast.
     const audit = get().byId[auditId]
     const oldStatus = audit?.status
 

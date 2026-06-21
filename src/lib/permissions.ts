@@ -118,7 +118,11 @@ const ALL_PERMISSIONS = ['view', 'comment', 'create', 'edit', 'delete', 'audit:v
 export const ROLE_PERMISSIONS: Record<User['role'], string[]> = {
   // Mirrors the DB role_permissions seed (migrations 108 + 115). auditor < officer < manager = admin.
   auditor: ['view', 'comment', 'audit:view', 'observation:view', 'observation:comment', 'observation:create', 'observation:edit', 'report:view', 'export'],
-  officer: ['view', 'comment', 'create', 'edit', 'audit:view', 'audit:comment', 'audit:create', 'audit:edit', 'observation:view', 'observation:comment', 'observation:create', 'observation:edit', 'report:view', 'report:create', 'export', ...GRANULAR_CREATE_EDIT, ...GRANULAR_EXPORT, ...GRANULAR_CHECKLIST, ...WORKFLOW_ADVANCE, ...GRANULAR_FEED_ADVISORY_CREATE_EDIT],
+  // Ownership model (migration 121): officers do NOT hold 'workflow:advance' by
+  // role — they drive a workflow only when they OWN the item, or when explicitly
+  // granted "Can Advance Workflow" via the Access Matrix. WORKFLOW_ADVANCE was
+  // removed here to mirror the DB role_permissions change.
+  officer: ['view', 'comment', 'create', 'edit', 'audit:view', 'audit:comment', 'audit:create', 'audit:edit', 'observation:view', 'observation:comment', 'observation:create', 'observation:edit', 'report:view', 'report:create', 'export', ...GRANULAR_CREATE_EDIT, ...GRANULAR_EXPORT, ...GRANULAR_CHECKLIST, ...GRANULAR_FEED_ADVISORY_CREATE_EDIT],
   manager: ALL_PERMISSIONS,
   admin: ALL_PERMISSIONS,
 }
@@ -427,8 +431,76 @@ export function canAdvancePolicyWorkflow(
   policy: { ownerId?: string | null } | null | undefined,
 ): boolean {
   if (!user) return false
-  if (hasPermission(user, 'edit')) return true
+  // Ownership model: advancing requires the global 'workflow:advance' grant
+  // (managers/admins by role; officers only via the Access Matrix) OR being the
+  // policy's owner. The generic 'edit' no longer grants advance — editing and
+  // advancing are distinct. Mirrors the policy advance route.
+  if (hasPermission(user, 'workflow:advance')) return true
   return !!policy?.ownerId && user.id === policy.ownerId
+}
+
+// Advancing a rule's workflow: global 'workflow:advance' OR being the rule's
+// assignee (owner). Mirrors the circular advance route.
+export function canAdvanceCircular(
+  user: User | null,
+  circular: { assignedTo?: string | null } | null | undefined,
+): boolean {
+  if (!user) return false
+  if (hasPermission(user, 'workflow:advance')) return true
+  return !!circular?.assignedTo && user.id === circular.assignedTo
+}
+
+// Starting / completing an audit: global 'workflow:advance' OR being the audit's
+// assignee (owner). Mirrors the audit start/complete routes.
+export function canAdvanceAudit(
+  user: User | null,
+  audit: { assigneeId?: string | null } | null | undefined,
+): boolean {
+  if (!user) return false
+  if (hasPermission(user, 'workflow:advance')) return true
+  return !!audit?.assigneeId && user.id === audit.assigneeId
+}
+
+// Driving a letter's approval workflow (submit-for-approval, approve, approve-step,
+// reject-step, send): global 'workflow:advance' OR being the letter's CREATOR
+// (letters.created_by — exposed to the client as `createdById`, NOT the
+// display-name `createdBy`). The generic 'edit'/'letter:edit' does NOT grant it —
+// editing a letter and driving its approval are distinct (the ownership model).
+// Mirrors `canDriveWorkflow` on the server + the letter submit/approve/send routes
+// so the client affordance matches exactly what the API enforces.
+//
+// FLAG (needs design): the per-step approval-chain role (letter_approval_steps.role
+// holds 'Compliance Officer'/'Department Head'/'Compliance Director') is NOT
+// enforced here or on the server — there is no clean mapping to profiles.role
+// (admin/manager/officer). So any workflow:advance holder (or the creator) can act
+// on ANY step. See the server approve-step route comment.
+export function canDriveLetter(
+  user: User | null,
+  letter: { createdById?: string | null } | null | undefined,
+): boolean {
+  if (!user) return false
+  if (hasPermission(user, 'workflow:advance')) return true
+  return !!letter?.createdById && user.id === letter.createdById
+}
+
+// Alias for the approval verdict (approve-step / reject-step) actions — same gate
+// as driving the workflow. Kept as a distinct name so call sites read clearly.
+export const canApproveLetter = canDriveLetter
+
+// Driving a risk's mitigation workflow (OWNER-SIDE actions: send-to-department,
+// accept-plan, and the resolving mitigation-checklist toggle): global
+// 'workflow:advance' OR being the risk's owner (risks.owner_id). The generic
+// 'edit'/'audit:edit' does NOT grant it. Mirrors `canDriveWorkflow` on the
+// server + the risk workflow routes, so the client affordance matches exactly
+// what the API enforces. Note: this gates OWNER-SIDE actions only — the
+// department-side submit-plan is NOT gated by this helper.
+export function canAdvanceRisk(
+  user: User | null,
+  risk: { ownerId?: string | null } | null | undefined,
+): boolean {
+  if (!user) return false
+  if (hasPermission(user, 'workflow:advance')) return true
+  return !!risk?.ownerId && user.id === risk.ownerId
 }
 
 // ── React hooks for permission checks (RBAC-016) ─────────────────────────────

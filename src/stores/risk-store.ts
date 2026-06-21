@@ -501,7 +501,9 @@ export const useRiskStore = create<RiskState>()((set, get) => ({
   },
 
   update: async (id, data) => {
-    requirePermission('Manage Audit Findings', { storeName: 'risk', actionName: 'update', id })
+    // Ownership model: gated server-side (risk:edit for fields; workflow:advance OR
+    // risk ownership for status/owner) — no blanket 'Manage Audit Findings' label
+    // gate (it blocked owning officers from editing their own risk).
     // OPTIMISTIC: snapshot, apply patch, restore on failure.
     const snapshot = get().byId[id]
     if (snapshot) {
@@ -573,7 +575,8 @@ export const useRiskStore = create<RiskState>()((set, get) => ({
   },
 
   updateStatus: (id, newStatus) => {
-    requirePermission('Manage Audit Findings', { storeName: 'risk', actionName: `updateStatus:${newStatus}`, id })
+    // Ownership model: status is gated server-side (workflow:advance OR risk
+    // ownership) — no blanket label gate (it blocked owning officers).
     const previous = get().byId[id]
     if (!previous) return
     // Optimistic local update so the UI flips immediately.
@@ -795,7 +798,8 @@ export const useRiskStore = create<RiskState>()((set, get) => ({
   toggleMitigationItem: async (riskId, itemId) => {
     const previous = get().byId[riskId]
     if (!previous) return
-    requirePermission('Manage Audit Findings', { storeName: 'risk', actionName: 'toggleMitigationItem', id: riskId })
+    // Ownership model: the completion toggle (which can resolve the risk) is gated
+    // server-side (workflow:advance OR risk ownership) — no blanket label gate.
     const now = new Date().toISOString()
     const currentItem = (previous.mitigationChecklist ?? []).find((i) => i.id === itemId)
     const targetCompleted = currentItem ? !currentItem.completed : true
@@ -1131,7 +1135,12 @@ export const useRiskStore = create<RiskState>()((set, get) => ({
   },
 
   acceptDepartmentPlan: (riskId, actingUser) => {
-    requirePermission('Manage Audit Findings', { storeName: 'risk', actionName: 'acceptDepartmentPlan', id: riskId })
+    // Ownership model: accept-plan is an OWNER-SIDE workflow action. We do NOT
+    // gate it on the manager-tier 'Manage Audit Findings' label here — that
+    // would throw client-side for an owner-officer who legitimately drives the
+    // workflow (server allows owner OR 'workflow:advance' via canDriveWorkflow).
+    // The button is gated by canAdvanceRisk; the server is the source of truth.
+    // Mirrors policy/circular advance store actions (no store-level requirePermission).
     const previous = get().byId[riskId]
     if (!previous?.departmentProposedPlan) return
     const now = new Date().toISOString()

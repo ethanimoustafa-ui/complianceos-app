@@ -106,7 +106,9 @@ export async function POST(req: NextRequest) {
       due_date: input.due_date,
       remediation_submission_due: input.remediation_submission_due ?? null,
       department: input.department ?? null,
-      leader_id: input.leader_id ?? null,
+      // Ownership model: creator becomes the observation's leader unless one was
+      // explicitly chosen — so the creator can manage/review/close it.
+      leader_id: input.leader_id ?? user.id,
       creator_id: user.id,
       framework_ids: input.framework_ids ?? [],
     }

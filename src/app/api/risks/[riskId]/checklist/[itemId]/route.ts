@@ -6,8 +6,8 @@
 // (This matches the existing plan-toggle route's terminal behaviour.)
 
 import type { NextRequest } from 'next/server'
-import { requireAnyPerm } from '@/lib/api/auth'
-import { handle, NotFound } from '@/lib/api/errors'
+import { requireAnyPerm, requireUser, canDriveWorkflow } from '@/lib/api/auth'
+import { handle, NotFound, Forbidden } from '@/lib/api/errors'
 import { ok } from '@/lib/api/response'
 import { parseJson } from '@/lib/api/validate'
 import { cacheTags, revalidate, revalidateAll } from '@/lib/api/cache'
@@ -34,9 +34,27 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     const { riskId, itemId } = await params
     if (!UUID_RE.test(itemId)) throw NotFound(`Checklist item ${itemId} not found`)
     // Migration 117: accept 'risk:checklist' OR the legacy 'audit:edit' key.
-    const { supabase, user, profile } = await requireAnyPerm(['risk:checklist', 'audit:edit'])
+    const ctx = await requireUser()
+    const { supabase, user, profile } = ctx
+    if (!ctx.permissions.includes('risk:checklist') && !ctx.permissions.includes('audit:edit')) {
+      throw Forbidden('Missing permission: risk:checklist')
+    }
     await assertRiskExists(supabase, riskId)
     const patch = await parseJson(req, UpdateRiskChecklistItemSchema)
+
+    // RBAC (ownership model): toggling completion can RESOLVE the risk (a terminal
+    // lifecycle transition) — gate that specific action like the risk workflow
+    // routes (workflow:advance OR risk ownership) so a non-owner can't drive the
+    // risk to 'resolved' via the checklist. Text/sort/deadline edits stay on
+    // risk:checklist.
+    if (patch.completed !== undefined) {
+      const { data: ownerRow } = await supabase
+        .from('risks').select('owner_id').eq('id', riskId)
+        .maybeSingle<{ owner_id: string | null }>()
+      if (!canDriveWorkflow(ctx, ownerRow?.owner_id)) {
+        throw Forbidden('Missing permission: workflow:advance (or risk ownership) to change checklist completion')
+      }
+    }
 
     const update: Record<string, unknown> = {}
     if (patch.text !== undefined) update.text = patch.text

@@ -52,7 +52,7 @@ export default function ForgotPasswordPage() {
       const supabase = createClient()
       const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? window.location.origin
       const { error } = await supabase.auth.resetPasswordForEmail(data.email, {
-        redirectTo: `${appUrl}/api/auth/callback`,
+        redirectTo: `${appUrl}/api/auth/callback?next=/reset-password`,
       })
       if (error) {
         console.error('Failed to send reset email:', error)
@@ -83,7 +83,7 @@ export default function ForgotPasswordPage() {
       const supabase = createClient()
       const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? window.location.origin
       const { error } = await supabase.auth.resetPasswordForEmail(submittedEmail, {
-        redirectTo: `${appUrl}/api/auth/callback`,
+        redirectTo: `${appUrl}/api/auth/callback?next=/reset-password`,
       })
       if (error) {
         console.error('Failed to resend email:', error)

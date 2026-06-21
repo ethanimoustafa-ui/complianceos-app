@@ -9,14 +9,13 @@
 // shape; we don't query it.
 
 import type { NextRequest } from 'next/server'
-import { requirePerm } from '@/lib/api/auth'
-import { handle, NotFound } from '@/lib/api/errors'
+import { requireUser, canDriveWorkflow } from '@/lib/api/auth'
+import { handle, NotFound, Forbidden } from '@/lib/api/errors'
 import { ok } from '@/lib/api/response'
 import { cacheTags, revalidate, revalidateAll } from '@/lib/api/cache'
 import { writeAudit } from '@/lib/api/audit'
 import {
   RISK_CHECKLIST_COLUMNS,
-  assertRiskExists,
   writeRiskHistory,
 } from '@/lib/api/services/risks'
 
@@ -30,8 +29,26 @@ type Params = {
 export async function PATCH(_req: NextRequest, { params }: Params) {
   try {
     const { riskId, planId, itemId } = await params
-    const { supabase, user, profile } = await requirePerm('audit:edit')
-    await assertRiskExists(supabase, riskId)
+    // Ownership model: toggling a mitigation-checklist item drives the risk's
+    // workflow (the LAST item completing auto-resolves the risk), so it's an
+    // OWNER-SIDE action — requires the global 'workflow:advance' grant
+    // (managers/admins by role; officers via the Access Matrix) OR being the
+    // risk's owner (risks.owner_id). The generic 'audit:edit' no longer grants
+    // it. Mirrors the audit/policy/circular workflow routes. We fetch owner_id
+    // here (replacing assertRiskExists, which only confirmed existence).
+    const ctx = await requireUser()
+    const { supabase, user, profile } = ctx
+
+    const { data: risk, error: riskErr } = await supabase
+      .from('risks')
+      .select('id, owner_id')
+      .eq('id', riskId)
+      .maybeSingle<{ id: string; owner_id: string | null }>()
+    if (riskErr) throw riskErr
+    if (!risk) throw NotFound(`Risk ${riskId} not found`)
+    if (!canDriveWorkflow(ctx, risk.owner_id)) {
+      throw Forbidden('Missing permission: workflow:advance (or risk ownership)')
+    }
 
     const { data: current, error: readErr } = await supabase
       .from('risk_mitigation_checklist')

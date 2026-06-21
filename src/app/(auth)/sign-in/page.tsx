@@ -12,6 +12,7 @@ import { useTranslation } from '@/i18n'
 import type { TranslationKey } from '@/i18n'
 import { useAuthStore } from '@/stores/auth-store'
 import { pushToast } from '@/stores/toast-store'
+import { setSessionPersistence } from '@/lib/auth/session-persistence'
 
 // i18n-aware schema factory: refine messages are resolved through `t()` so
 // Arabic users see localized validation copy instead of hardcoded English.
@@ -23,11 +24,24 @@ const makeSignInSchema = (t: (key: TranslationKey) => string) =>
 
 type SignInInput = z.infer<ReturnType<typeof makeSignInSchema>>
 
+// Only honor a same-origin, absolute path for the post-login redirect (the proxy
+// sets `?next=` to the originally-requested page). Reject protocol-relative
+// (`//host`), backslash tricks, and anything pointing back at an auth page —
+// falling back to the dashboard — so `next` can never become an open-redirect.
+function safeNext(raw: string | null): string {
+  const fallback = '/dashboard'
+  if (!raw || !raw.startsWith('/')) return fallback
+  if (raw.startsWith('//') || raw.startsWith('/\\') || raw.includes('\\')) return fallback
+  if (/^\/(sign-in|sign-up|forgot-password|verify-email)\b/.test(raw)) return fallback
+  return raw
+}
+
 export default function SignInPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const [showPassword, setShowPassword] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
+  const [rememberMe, setRememberMe] = useState(true)
   const [submitError, setSubmitError] = useState<string | null>(null)
   const { t } = useTranslation()
   const signIn = useAuthStore((s) => s.signIn)
@@ -47,12 +61,12 @@ export default function SignInPage() {
     }
   }, [searchParams])
 
-  // Already authenticated → bounce to dashboard.
+  // Already authenticated → bounce to the originally-requested page (or dashboard).
   useEffect(() => {
     if (hasMounted && isAuthenticated) {
-      router.replace('/dashboard')
+      router.replace(safeNext(searchParams.get('next')))
     }
-  }, [hasMounted, isAuthenticated, router])
+  }, [hasMounted, isAuthenticated, router, searchParams])
 
   const {
     register,
@@ -70,8 +84,15 @@ export default function SignInPage() {
     const result = await signIn(data.email, data.password)
     setIsLoading(false)
     if (result.ok) {
-      router.push('/dashboard')
-      router.refresh()
+      // Record the "remember me" choice so the session is (or isn't) kept alive
+      // across browser restarts. See lib/auth/session-persistence.
+      setSessionPersistence(rememberMe)
+      // Hard navigation (NOT router.push) so the server proxy + server components
+      // see the freshly-set Supabase session cookie on a clean request. A soft
+      // client navigation here intermittently re-rendered with the pre-login RSC
+      // payload, leaving the user on /sign-in until a manual refresh.
+      window.location.assign(safeNext(searchParams.get('next')))
+      return
     } else {
       // The auth store already mapped the raw Supabase error to a stable i18n
       // key (see stores/auth-store signIn). Resolve it for clear, localized,
@@ -158,6 +179,8 @@ export default function SignInPage() {
               <label className="flex items-center gap-2 cursor-pointer group">
                 <input
                   type="checkbox"
+                  checked={rememberMe}
+                  onChange={(e) => setRememberMe(e.target.checked)}
                   className="w-4 h-4 text-emerald-600 border-slate-300 rounded focus:ring-emerald-500 cursor-pointer"
                 />
                 <span className="text-sm text-slate-600 group-hover:text-slate-900 transition-colors">
@@ -211,15 +234,30 @@ export default function SignInPage() {
               </div>
             </div>
 
+            {/* SSO providers are not wired up yet — disabled + greyed out with a
+                "Coming soon" badge so users don't think sign-in is broken. */}
             <div className="mt-6 grid grid-cols-2 gap-4">
-              <Button variant="outline" type="button" className="py-3">
-                <Icon icon="flat-color-icons:google" className="text-xl" />
-                {t('auth.google')}
-              </Button>
-              <Button variant="outline" type="button" className="py-3">
-                <Icon icon="logos:microsoft-icon" className="text-xl" />
-                {t('auth.microsoft')}
-              </Button>
+              {[
+                { icon: 'flat-color-icons:google', label: t('auth.google') },
+                { icon: 'logos:microsoft-icon', label: t('auth.microsoft') },
+              ].map((provider) => (
+                <div key={provider.label} className="relative">
+                  <Button
+                    variant="outline"
+                    type="button"
+                    disabled
+                    aria-disabled="true"
+                    title={t('common.comingSoon')}
+                    className="w-full py-3 grayscale opacity-60 cursor-not-allowed"
+                  >
+                    <Icon icon={provider.icon} className="text-xl" />
+                    {provider.label}
+                  </Button>
+                  <span className="pointer-events-none absolute -top-2 end-2 rounded-full bg-slate-900 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white shadow-sm">
+                    {t('common.comingSoon')}
+                  </span>
+                </div>
+              ))}
             </div>
           </div>
         </div>

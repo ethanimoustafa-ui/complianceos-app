@@ -3,8 +3,8 @@
 // risk_department_proposed_plan + (optionally) risk_mitigation_checklist rows.
 
 import type { NextRequest } from 'next/server'
-import { requirePerm } from '@/lib/api/auth'
-import { handle, NotFound } from '@/lib/api/errors'
+import { requireUser, canDriveWorkflow } from '@/lib/api/auth'
+import { handle, NotFound, Forbidden } from '@/lib/api/errors'
 import { ok } from '@/lib/api/response'
 import { parseJson } from '@/lib/api/validate'
 import { cacheTags, revalidate, revalidateAll } from '@/lib/api/cache'
@@ -24,17 +24,37 @@ type Params = { params: Promise<{ riskId: string }> }
 export async function POST(req: NextRequest, { params }: Params) {
   try {
     const { riskId } = await params
-    const { supabase, user, profile } = await requirePerm('audit:edit')
+    const ctx = await requireUser()
+    const { supabase, user, profile } = ctx
     const input = await parseJson(req, SubmitRiskPlanSchema)
 
     const { data: current, error: readErr } = await supabase
       .from('risks')
-      .select('id, mitigation_workflow_status')
+      .select('id, mitigation_workflow_status, owner_id, intended_department_id')
       .eq('id', riskId)
       .is('deleted_at', null)
-      .maybeSingle<{ id: string; mitigation_workflow_status: string }>()
+      .maybeSingle<{
+        id: string
+        mitigation_workflow_status: string
+        owner_id: string | null
+        intended_department_id: string | null
+      }>()
     if (readErr) throw readErr
     if (!current) throw NotFound(`Risk ${riskId} not found`)
+    // RBAC (ownership model — department-side submit): the proposed mitigation
+    // plan may be submitted by the risk's OWNER or a workflow:advance holder
+    // (covers the compliance officer who proxies on the department's behalf from
+    // their own risk drawer) OR by a member of the INTENDED department the risk
+    // was sent to. Replaces the old blanket 'audit:edit' gate (which let ANY
+    // officer org-wide submit). A null intended department falls back to the
+    // owner/advancer path.
+    const isIntendedDeptMember =
+      !!profile.department_id && profile.department_id === current.intended_department_id
+    if (!canDriveWorkflow(ctx, current.owner_id) && !isIntendedDeptMember) {
+      throw Forbidden(
+        'Missing permission: workflow:advance, risk ownership, or membership of the intended department',
+      )
+    }
     assertWorkflowTransition(current.mitigation_workflow_status, 'plan-proposed')
 
     // Upsert proposed plan.

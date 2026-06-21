@@ -8,8 +8,8 @@
 //   - DELETE: optional If-Match guard before hard-delete (migration 041)
 
 import type { NextRequest } from 'next/server'
-import { requireAnyPerm, requireUser } from '@/lib/api/auth'
-import { handle, NotFound, PreconditionFailed } from '@/lib/api/errors'
+import { requireAnyPerm, requireUser, canDriveWorkflow } from '@/lib/api/auth'
+import { handle, NotFound, PreconditionFailed, Forbidden } from '@/lib/api/errors'
 import { ok } from '@/lib/api/response'
 import { assertNotStale, assertUuid, parseJson, readIfMatch } from '@/lib/api/validate'
 import { cacheTags, revalidate, revalidateAll } from '@/lib/api/cache'
@@ -82,7 +82,11 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     const { policyId } = await params
     // SEC-5.
     assertUuid(policyId)
-    const { supabase, user, profile } = await requireAnyPerm(['policy:edit', 'edit'])
+    const ctx = await requireUser()
+    const { supabase, user, profile } = ctx
+    if (!ctx.permissions.includes('policy:edit') && !ctx.permissions.includes('edit')) {
+      throw Forbidden('Missing permission: policy:edit')
+    }
     await assertPolicyExists(supabase, policyId)
 
     // SEC-1: optimistic-concurrency token.
@@ -110,6 +114,20 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       if (v === undefined) continue
       if (guardedArrayKeys.has(k) && !(k in rawBody)) continue
       update[k] = v
+    }
+
+    // RBAC (ownership model): status / approved_date drive the policy lifecycle and
+    // owner_id transfers ownership — gate all three like the workflow advance route
+    // (workflow:advance OR policy ownership) so PATCH can't bypass it. Plain
+    // 'policy:edit'/'edit' (checked above) covers only non-lifecycle edits.
+    const POLICY_LIFECYCLE_KEYS = ['status', 'approved_date', 'owner_id']
+    if (POLICY_LIFECYCLE_KEYS.some((k) => k in update)) {
+      const { data: ownerRow } = await supabase
+        .from('policies').select('owner_id').eq('id', policyId)
+        .maybeSingle<{ owner_id: string | null }>()
+      if (!canDriveWorkflow(ctx, ownerRow?.owner_id)) {
+        throw Forbidden('Missing permission: workflow:advance (or policy ownership) to change status/owner')
+      }
     }
 
     if (Object.keys(update).length === 0) {

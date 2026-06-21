@@ -93,7 +93,9 @@ export async function POST(req: NextRequest) {
         category: input.category ?? null,
         priority: input.priority ?? 'medium',
         due_date: input.due_date,
-        assignee_id: input.assignee_id ?? null,
+        // Ownership model: creator becomes the audit's assignee (owner) unless
+        // one was explicitly chosen — so the creator can start/complete it.
+        assignee_id: input.assignee_id ?? user.id,
         frequency: input.frequency ?? null,
         review_schedule: input.review_schedule ?? null,
       })
