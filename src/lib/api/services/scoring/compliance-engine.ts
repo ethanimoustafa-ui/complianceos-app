@@ -469,9 +469,13 @@ function generateTrend(
     })
   }
 
-  // Monthly trend
+  // Monthly trend — exactly N points for an N-month period. startDate is N
+  // months before now, so flooring to the 1st of the start month and looping
+  // `<= end` double-counts the partial leading month AND the current month
+  // (fencepost → N+1). Start one month later to drop the partial leading month;
+  // the current month stays as the final point. (JS normalizes a Dec +1 → Jan.)
   const points: TrendDataPoint[] = []
-  const cursor = new Date(period.startDate.getFullYear(), period.startDate.getMonth(), 1)
+  const cursor = new Date(period.startDate.getFullYear(), period.startDate.getMonth() + 1, 1)
   const end = period.endDate
 
   while (cursor <= end) {

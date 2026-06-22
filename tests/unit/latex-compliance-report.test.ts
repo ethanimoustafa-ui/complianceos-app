@@ -48,6 +48,8 @@ describe('buildComplianceReportTex — English', () => {
     expect(tex).toContain('SAMA')
     expect(tex).toContain('2 critical observations open')
     expect(tex).toContain('\\begin{axis}') // at least one pgfplots chart
+    // Bar charts cap visible ticks/gridlines at 100 (0–100 scale, no 110 tick).
+    expect(tex).toContain('xtick={0,10,20,30,40,50,60,70,80,90,100}')
   })
 
   it('ships the letterhead + badge assets', () => {

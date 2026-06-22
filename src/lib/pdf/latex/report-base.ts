@@ -169,6 +169,9 @@ export function xbarChart(
   // (drawn to the right of each bar) don't bleed past the plot frame when a bar
   // sits at/near the max — pgfplots will not auto-enlarge an explicit xmax.
   const axisMax = Math.ceil(max * 1.12)
+  // Cap the visible ticks/gridlines at `max` so the chart reads as a clean
+  // 0–max scale, even though the axis extends slightly past it for label room.
+  const xticks = Array.from({ length: 11 }, (_, i) => (max / 10) * i).join(',')
   const height = opts.height ?? `${Math.max(3, rows.length * 0.95 + 1.2)}cm`
   // symbolic y coords listed bottom->top; reverse so first row is on top.
   const cats = rows.map((r) => `{${escapeLatex(r.label)}}`).join(',')
@@ -178,6 +181,7 @@ export function xbarChart(
 \begin{axis}[
   xbar, bar width=13pt, width=\textwidth, height=${height},
   xmin=0, xmax=${axisMax},
+  xtick={${xticks}},
   symbolic y coords={${cats}}, ytick=data,
   y dir=reverse,
   axis lines=left, x axis line style={slate300}, y axis line style={slate300},
