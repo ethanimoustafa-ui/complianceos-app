@@ -17,7 +17,7 @@ import { useDashboardHealth } from '@/hooks/useDashboardHealth'
 import { useFrameworkConfigStore } from '@/stores/framework-config-store'
 import { useRiskCategoryStore } from '@/stores/risk-category-store'
 import type { PeriodFilter } from '@/lib/compliance-engine.types'
-import { exportExecutiveReport, generatePrintableReport } from '@/lib/export'
+import { exportExecutiveReport } from '@/lib/export'
 import { ExportMenu } from '@/components/ui/export-menu'
 import { downloadPdf } from '@/lib/pdf-client'
 import { Gate } from '@/components/auth/gate'
@@ -366,6 +366,52 @@ export default function ReportsExecutivePage() {
       console.error(err)
     } finally {
       setPdfBusy(false)
+    }
+  }
+
+  // "Generate Detailed Report (PDF)" in the Risk Breakdown modal — produces the
+  // same branded xelatex risk-register PDF as the Risk Register page export
+  // (was a browser-print HTML page via generatePrintableReport).
+  const [riskPdfBusy, setRiskPdfBusy] = useState(false)
+  const handleRiskRegisterPdf = async () => {
+    if (riskPdfBusy || risks.length === 0) return
+    setRiskPdfBusy(true)
+    try {
+      const sorted = [...risks].sort((a, b) => b.likelihood * b.impact - a.likelihood * a.impact)
+      const rows = sorted.map((r, idx) => ({
+        id: `R-${String(idx + 1).padStart(2, '0')}`,
+        name: r.title,
+        category: riskCatLabel(r.category),
+        likelihood: r.likelihood,
+        impact: r.impact,
+        score: r.likelihood * r.impact,
+        owner: r.owner?.name ?? '',
+        status: r.status,
+      }))
+      await downloadPdf(
+        {
+          template: 'risk-register',
+          locale: isRTL ? 'ar' : 'en',
+          options: { engine: 'latex' },
+          data: {
+            organization: isRTL
+              ? 'الشركة المتحدة للخدمات المالية'
+              : 'United Company for Financial Services',
+            date: new Date().toLocaleDateString(isRTL ? 'ar-SA' : 'en-GB', {
+              year: 'numeric',
+              month: 'long',
+              day: 'numeric',
+            }),
+            subtitle: `${rows.length} ${isRTL ? 'خطر' : 'risks'}`,
+            risks: rows,
+          },
+        },
+        'Risk-Register.pdf',
+      )
+    } catch (err) {
+      console.error('Failed to export risk register PDF:', err)
+    } finally {
+      setRiskPdfBusy(false)
     }
   }
 
@@ -959,28 +1005,11 @@ export default function ReportsExecutivePage() {
               {t('reports.dismiss')}
             </button>
             <button
-              onClick={() => {
-                if (risks.length === 0) return
-                const sorted = [...risks].sort((a, b) => (b.likelihood * b.impact) - (a.likelihood * a.impact))
-                const rows = sorted.map((r) => ({
-                  [t('reports.id')]: r.id,
-                  Title: r.title,
-                  Category: riskCatLabel(r.category),
-                  [t('reports.likelihood' as TranslationKey)]: r.likelihood,
-                  [t('reports.impact' as TranslationKey)]: r.impact,
-                  [t('reports.score')]: r.likelihood * r.impact,
-                  [t('reports.status')]: r.status,
-                }))
-                const distSummary = riskDistribution
-                  .map((d) => `${d.label}: ${d.percentage}%`)
-                  .join(' • ')
-                generatePrintableReport(t('reports.detailedRiskBreakdown'), rows, {
-                  subtitle: `${t('reports.totalRegisteredRisks' as TranslationKey)}: ${risks.length}  •  ${distSummary}`,
-                })
-              }}
-              className="flex-1 bg-emerald-600 text-white py-3 rounded-xl font-bold text-sm hover:bg-emerald-700 transition-all shadow-lg flex items-center justify-center gap-2 cursor-pointer"
+              onClick={handleRiskRegisterPdf}
+              disabled={riskPdfBusy || risks.length === 0}
+              className="flex-1 bg-emerald-600 text-white py-3 rounded-xl font-bold text-sm hover:bg-emerald-700 transition-all shadow-lg flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60"
             >
-              <Icon icon="lucide:file-text" />
+              <Icon icon={riskPdfBusy ? 'lucide:loader-2' : 'lucide:file-text'} className={riskPdfBusy ? 'animate-spin' : ''} />
               {t('reports.generateDetailedReportPdf')}
             </button>
           </div>
