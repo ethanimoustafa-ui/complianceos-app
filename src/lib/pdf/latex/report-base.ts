@@ -58,7 +58,6 @@ export function reportPreamble(opts: { docTitle: string; headerTitle: string }, 
   const headerTitle = escapeLatex(opts.headerTitle)
   const footer = isEn ? FOOTER_TEXT.en : FOOTER_TEXT.ar
   const pageWord = isEn ? 'Page' : 'صفحة'
-  const ofWord = isEn ? 'of' : 'من'
 
   return RAW`\documentclass[11pt,a4paper]{article}
 \usepackage{fontspec}
@@ -100,7 +99,7 @@ ${fontSetup}
 \fancyhead[L]{\includegraphics[height=0.8cm]{letterhead.png}}
 \fancyhead[R]{\footnotesize\color{slate500} ${headerTitle}}
 \fancyfoot[L]{\footnotesize\color{footgray} ${footer}}
-\fancyfoot[R]{\footnotesize\color{slate500} ${pageWord}~\thepage~${ofWord}~\pageref{LastPage}}`
+\fancyfoot[R]{\footnotesize\color{slate500} ${pageWord}~\thepage}`
 }
 
 /** Cover page: big letterhead, title, subtitle, metadata table, classification. */

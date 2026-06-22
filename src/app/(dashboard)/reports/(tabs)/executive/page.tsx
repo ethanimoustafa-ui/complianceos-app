@@ -354,6 +354,11 @@ export default function ReportsExecutivePage() {
               severity: d.severity,
               points: d.points,
             })),
+            trend: complianceScore.trend.map((tp) => ({ label: tp.month, actual: tp.actual, target: tp.target })),
+            kpis: {
+              audits: { overdue: storeAudits.filter((a) => a.status === 'overdue').length },
+              risks: { open: risks.filter((r) => r.status !== 'resolved').length },
+            },
             risksByLevel,
             findings: auditFindings.map((f) => ({
               ref: f.id,
