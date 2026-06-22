@@ -165,6 +165,10 @@ export function xbarChart(
 ): string {
   if (rows.length === 0) return ''
   const max = opts.max ?? 100
+  // Reserve ~12% right-side headroom so the `nodes near coords` value labels
+  // (drawn to the right of each bar) don't bleed past the plot frame when a bar
+  // sits at/near the max — pgfplots will not auto-enlarge an explicit xmax.
+  const axisMax = Math.ceil(max * 1.12)
   const height = opts.height ?? `${Math.max(3, rows.length * 0.95 + 1.2)}cm`
   // symbolic y coords listed bottom->top; reverse so first row is on top.
   const cats = rows.map((r) => `{${escapeLatex(r.label)}}`).join(',')
@@ -173,7 +177,7 @@ export function xbarChart(
   return RAW`\begin{tikzpicture}
 \begin{axis}[
   xbar, bar width=13pt, width=\textwidth, height=${height},
-  xmin=0, xmax=${max},
+  xmin=0, xmax=${axisMax},
   symbolic y coords={${cats}}, ytick=data,
   y dir=reverse,
   axis lines=left, x axis line style={slate300}, y axis line style={slate300},

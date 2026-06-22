@@ -22,6 +22,7 @@ import {
   ListAuditsQuerySchema,
 } from '@/lib/api/schemas/audits'
 import { AUDIT_LIST_COLUMNS, insertAuditTimeline } from '@/lib/api/services/audits'
+import { getAdminClient, hasServiceRole } from '@/lib/api/admin'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -83,32 +84,69 @@ export async function POST(req: NextRequest) {
     // W26-A: CreateAuditSchema is now strict + HTML-stripped + open-string enums.
     const input = await parseJson(req, CreateAuditSchema)
 
-    const { data, error } = await supabase
+    // Server-generated `reference` → AUD-YYYY-00001 (5-digit, per calendar year).
+    // Mirrors the observations scheme: read the max via the service-role client
+    // (so soft-deleted refs past RLS are seen) and advance the sequence on each
+    // retry so concurrent POSTs / deleted-row gaps never collide (23505).
+    const audYear = new Date().getUTCFullYear()
+    const audPrefix = `AUD-${audYear}-`
+    const refReadClient = hasServiceRole() ? getAdminClient() : supabase
+    const { data: existingRefs, error: refReadErr } = await refReadClient
       .from('audits')
-      .insert({
-        title: input.title,
-        description: input.description ?? null,
-        type: input.type,
-        framework_ids: input.framework_ids ?? [],
-        category: input.category ?? null,
-        priority: input.priority ?? 'medium',
-        due_date: input.due_date,
-        // Ownership model: creator becomes the audit's assignee (owner) unless
-        // one was explicitly chosen — so the creator can start/complete it.
-        assignee_id: input.assignee_id ?? user.id,
-        frequency: input.frequency ?? null,
-        review_schedule: input.review_schedule ?? null,
-      })
-      .select(AUDIT_LIST_COLUMNS)
-      .single()
-    if (error) {
+      .select('reference')
+      .ilike('reference', `${audPrefix}%`)
+    if (refReadErr) throw refReadErr
+    let maxSeq = 0
+    for (const row of (existingRefs ?? []) as { reference: string | null }[]) {
+      const tail = (row.reference ?? '').slice(audPrefix.length)
+      if (/^\d+$/.test(tail)) {
+        const n = Number(tail)
+        if (Number.isFinite(n) && n > maxSeq) maxSeq = n
+      }
+    }
+
+    const auditInsertPayload = {
+      title: input.title,
+      description: input.description ?? null,
+      type: input.type,
+      framework_ids: input.framework_ids ?? [],
+      category: input.category ?? null,
+      priority: input.priority ?? 'medium',
+      due_date: input.due_date,
+      // Ownership model: creator becomes the audit's assignee (owner) unless
+      // one was explicitly chosen — so the creator can start/complete it.
+      assignee_id: input.assignee_id ?? user.id,
+      frequency: input.frequency ?? null,
+      review_schedule: input.review_schedule ?? null,
+    }
+
+    let data: Record<string, unknown> | null = null
+    let lastInsertError: unknown = null
+    for (let attempt = 0; attempt < 8; attempt++) {
+      if (attempt > 0) {
+        await new Promise((r) => setTimeout(r, 10 + Math.floor(Math.random() * 50)))
+      }
+      const auditSeq = maxSeq + 1 + attempt
+      const auditRef = `${audPrefix}${String(auditSeq).padStart(5, '0')}`
+      const { data: inserted, error: insertErr } = await supabase
+        .from('audits')
+        .insert({ ...auditInsertPayload, reference: auditRef })
+        .select(AUDIT_LIST_COLUMNS)
+        .single()
+      if (!insertErr && inserted) {
+        data = inserted as Record<string, unknown>
+        break
+      }
+      lastInsertError = insertErr
+      if (insertErr && (insertErr as { code?: string }).code !== '23505') break
+    }
+    if (!data) {
       // W43: friendly 409 instead of an opaque 500 on unique violations.
-      if ((error as { code?: string }).code === '23505') {
+      if ((lastInsertError as { code?: string } | null)?.code === '23505') {
         throw Conflict('An audit with this title/reference already exists.')
       }
-      throw error
+      throw lastInsertError ?? NotFound('Insert returned no row')
     }
-    if (!data) throw NotFound('Insert returned no row')
 
     const created = data as { id: string; title: string }
     const actorName = profile.name ?? profile.email ?? user.id

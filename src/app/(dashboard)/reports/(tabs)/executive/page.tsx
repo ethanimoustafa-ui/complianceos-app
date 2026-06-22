@@ -155,12 +155,26 @@ export default function ReportsExecutivePage() {
     }))
   }, [risks])
 
+  // Risk distribution by severity level (for the PDF "risks by level" chart) —
+  // score = likelihood × impact, matching the dashboard rollup bands.
+  const risksByLevel = useMemo(() => {
+    const lvl = { critical: 0, high: 0, medium: 0, low: 0 }
+    for (const r of risks) {
+      const score = (r.likelihood ?? 0) * (r.impact ?? 0)
+      if (score >= 20) lvl.critical++
+      else if (score >= 12) lvl.high++
+      else if (score >= 6) lvl.medium++
+      else lvl.low++
+    }
+    return lvl
+  }, [risks])
+
   // Derive audit findings
   const auditFindings: AuditFinding[] = useMemo(() => {
     const statusMap: Record<string, FindingStatus> = { pending: 'open', in_progress: 'remediation', completed: 'resolved', overdue: 'open' }
     return storeAudits
       .map((audit): AuditFinding => ({
-        id: audit.id.slice(0, 8),
+        id: audit.reference ?? audit.id.slice(0, 8),
         sourceAuditId: audit.id,
         auditName: audit.title,
         category: audit.type,
@@ -288,6 +302,14 @@ export default function ReportsExecutivePage() {
                 (d.descriptionKey ? t(d.descriptionKey as TranslationKey, d.descriptionParams) : ''),
               severity: d.severity,
               points: d.points,
+            })),
+            risksByLevel,
+            findings: auditFindings.map((f) => ({
+              ref: f.id,
+              name: f.auditName,
+              severity: f.severity,
+              status: statusLabels[f.status],
+              owner: f.owner.name,
             })),
           },
         },
@@ -767,7 +789,7 @@ export default function ReportsExecutivePage() {
                     <tbody className="divide-y divide-slate-50">
                       {auditFindings.map((finding) => (
                         <tr key={finding.sourceAuditId} onClick={() => handleFindingClick(finding)} className="group hover:bg-slate-50/50 cursor-pointer transition-colors">
-                          <td className="px-2 py-2 text-[10px] font-bold text-slate-400">#{finding.id}</td>
+                          <td className="px-2 py-2 text-[10px] font-bold text-slate-400">{finding.id}</td>
                           <td className="px-2 py-2">
                             <div className="flex flex-col">
                               <span className="text-[11px] font-bold text-slate-900">{finding.auditName}</span>

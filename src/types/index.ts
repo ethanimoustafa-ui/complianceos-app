@@ -127,6 +127,8 @@ export type AuditAuthority = 'internal' | RegulatoryBodyId
 
 export interface Audit {
   id: string
+  /** Human-readable reference code, e.g. AUD-2026-00001. */
+  reference?: string
   title: string
   type: AuditAuthority
   status: 'pending' | 'in_progress' | 'completed' | 'overdue'

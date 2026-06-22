@@ -20,11 +20,11 @@ import { getAdminClient, hasServiceRole } from '../admin'
 // W45: + frequency — the schedule column rendered blank because list rows
 // never carried it (it was detail-only).
 export const AUDIT_LIST_COLUMNS =
-  'id, title, description, type, status, priority, due_date, completed_at, closed_overdue, assignee_id, progress, category, frequency, framework_ids, created_at, updated_at'
+  'id, reference, title, description, type, status, priority, due_date, completed_at, closed_overdue, assignee_id, progress, category, frequency, framework_ids, created_at, updated_at'
 
 /** Detail columns include everything except soft-delete bookkeeping. */
 export const AUDIT_DETAIL_COLUMNS =
-  'id, title, description, type, status, due_date, assignee_id, progress, category, frequency, priority, closed_overdue, completed_at, review_schedule, framework_ids, created_at, updated_at'
+  'id, reference, title, description, type, status, due_date, assignee_id, progress, category, frequency, priority, closed_overdue, completed_at, review_schedule, framework_ids, created_at, updated_at'
 
 /** Columns returned by `audit_team_members` endpoints. */
 export const AUDIT_TEAM_MEMBER_COLUMNS =

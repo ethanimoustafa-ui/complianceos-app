@@ -15,6 +15,8 @@ import {
   xbarChart,
   severityBars,
   trendLineChart,
+  longTable,
+  severityBadge,
   REPORT_ASSETS,
   type LatexLocale,
 } from './report-base'
@@ -54,6 +56,21 @@ export const ComplianceReportDataSchema = z.object({
   deductions: z
     .array(z.object({ reason: z.string(), severity: z.string().optional(), points: z.number() }))
     .default([]),
+
+  // Optional findings table (e.g. Team Score "Recent Audit Findings"). `status`
+  // arrives already localized; `severity` is a raw key (critical/high/…) so it
+  // can be colour-coded.
+  findings: z
+    .array(
+      z.object({
+        ref: z.string().optional(),
+        name: z.string(),
+        severity: z.string().optional(),
+        status: z.string().optional(),
+        owner: z.string().optional(),
+      }),
+    )
+    .default([]),
 })
 
 export type ComplianceReportData = z.infer<typeof ComplianceReportDataSchema>
@@ -89,6 +106,8 @@ const LABELS = {
     critical: 'Critical', high: 'High', medium: 'Medium', low: 'Low',
     overdueAudits: 'Overdue audits', openObs: 'Open observations', overdueObs: 'Overdue observations',
     openRisks: 'Open risks', overduePolicies: 'Overdue policies', overdueLetters: 'Overdue letters',
+    findings: 'Recent Audit Findings',
+    fRef: 'Reference', fAudit: 'Audit', fSeverity: 'Severity', fStatus: 'Status', fOwner: 'Owner',
   },
   ar: {
     docTitle: 'تقرير حالة الامتثال',
@@ -120,6 +139,8 @@ const LABELS = {
     critical: 'حرجة', high: 'عالية', medium: 'متوسطة', low: 'منخفضة',
     overdueAudits: 'مراجعات متأخرة', openObs: 'ملاحظات مفتوحة', overdueObs: 'ملاحظات متأخرة',
     openRisks: 'مخاطر مفتوحة', overduePolicies: 'سياسات متأخرة', overdueLetters: 'خطابات متأخرة',
+    findings: 'أحدث نتائج المراجعة',
+    fRef: 'المرجع', fAudit: 'المراجعة', fSeverity: 'الخطورة', fStatus: 'الحالة', fOwner: 'المسؤول',
   },
 } as const
 
@@ -253,6 +274,22 @@ ${obsBars}
 ${riskBars}`
       : ''
 
+  // Optional findings table (status already localized; severity is a raw key).
+  const findingsSection = d.findings.length
+    ? RAW`\section{${L.findings}}
+${longTable({
+  colSpec: '@{}p{2.6cm} X l l p{3cm}@{}',
+  headers: [L.fRef, L.fAudit, L.fSeverity, L.fStatus, L.fOwner],
+  rows: d.findings.map((f) => [
+    escapeLatex(f.ref ?? '—'),
+    escapeLatex(f.name),
+    severityBadge(f.severity, sevLabels),
+    escapeLatex(f.status ?? '—'),
+    escapeLatex(f.owner ?? '—'),
+  ]),
+})}`
+    : ''
+
   // §5 Deductions
   const deductionsSection = RAW`\section{${L.deductions}}
 ${
@@ -282,6 +319,8 @@ ${trendSection}
 ${frameworkSection}
 
 ${kpiSection}
+
+${findingsSection}
 
 ${deductionsSection}
 \end{document}

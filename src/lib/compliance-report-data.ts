@@ -117,5 +117,7 @@ export function toComplianceReportData(
     observationsBySeverity: { critical: sev('critical'), high: sev('high'), medium: sev('medium'), low: sev('low') },
     risksByLevel: metrics.risks.byLevel,
     deductions,
+    // The dashboard compliance report has no findings table.
+    findings: [],
   }
 }

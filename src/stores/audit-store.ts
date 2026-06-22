@@ -41,6 +41,7 @@ import { requirePermission } from '@/lib/rbac-store-gate'
 
 interface AuditApiRow {
   id: string
+  reference: string | null
   title: string
   type: string
   status: string
@@ -204,6 +205,7 @@ function normalizeAuditCategory(raw: string | null | undefined): AuditCategory |
 function mapAuditRow(row: AuditApiRow, previous?: Audit): Audit {
   return {
     id: row.id,
+    reference: row.reference ?? previous?.reference,
     title: row.title,
     type: row.type as AuditAuthority,
     status: row.status as Audit['status'],
