@@ -111,7 +111,9 @@ export function ManagerialView({ metrics }: ManagerialViewProps) {
   // Hero values driven by the active toggle mode.
   const healthScore = heroMode === 'business'
     ? Math.round(metrics.health.businessComplianceScore)
-    : Math.round(metrics.departmentHealthScore)
+    // Department mode = the weighted compliance engine (same score as the Team
+    // Score report), so the two surfaces always agree.
+    : Math.round(metrics.compliance.overall)
   const healthEvaluated = heroMode === 'business'
     ? metrics.health.businessComplianceEvaluated
     : 1 // department score is always available once loaded

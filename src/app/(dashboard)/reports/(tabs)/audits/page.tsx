@@ -20,7 +20,7 @@ import { downloadPdf } from '@/lib/pdf-client'
 import type { TranslationKey } from '@/i18n'
 import { ExportMenu } from '@/components/ui/export-menu'
 import { useFormattedDate } from '@/hooks/useFormattedDate'
-import { useDashboardHealth } from '@/hooks/useDashboardHealth'
+import { useComplianceScore } from '@/hooks/useComplianceScore'
 import { EntityGate } from '@/components/auth/gate'
 import { useAuditCategoryStore } from '@/stores/audit-category-store'
 import { useAuthStore } from '@/stores/auth-store'
@@ -147,11 +147,10 @@ export default function ReportsAuditsPage() {
   const router = useRouter()
   const { formatDate } = useFormattedDate()
 
-  // Compliance Department Health — same source as the dashboard hero's
-  // "Department Health" toggle (useDashboardHealth().overall, 7-component,
-  // default period) so the two always agree. Was useComplianceScore (a separate
-  // 5-component engine + 12-month period), which never matched the dashboard.
-  const complianceResult = useDashboardHealth()
+  // Compliance Department score — the weighted compliance engine (5-component,
+  // 12-month), the same source the dashboard hero's "Department" toggle and the
+  // Team Score report use, so all three surfaces always agree.
+  const complianceResult = useComplianceScore('12months')
 
   // Audit store connection
   const { audits: storeAudits, fetchAll: fetchAudits, delete: deleteAudit } = useAuditStore()
