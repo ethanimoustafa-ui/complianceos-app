@@ -67,7 +67,7 @@ export function ManagerialView({ metrics }: ManagerialViewProps) {
     }
     // Observations past their remediation deadline — a hard compliance breach.
     if (metrics.observations.overdueCount > 0) {
-      list.push({ type: 'critical', title: t('dashboard.criticalActionRequired'), message: t('dashboard.alertObsOverdue', { count: String(metrics.observations.overdueCount) }), route: '/observations?status=open' })
+      list.push({ type: 'critical', title: t('dashboard.criticalActionRequired'), message: t('dashboard.alertObsOverdue', { count: String(metrics.observations.overdueCount) }), route: '/correspondence/observations?status=open' })
     }
     // Suppress the trend alert when nothing has been evaluated yet (§1.A);
     // a fully-pending org is "neutral pending", not "at risk".
@@ -128,7 +128,7 @@ export function ManagerialView({ metrics }: ManagerialViewProps) {
   const criticalActions = useMemo(() => {
     const componentRoutes: Record<string, { label: string; route: string; icon: string }> = {
       audits: { label: t('dashboard.reviewAudits'), route: '/reports', icon: 'lucide:clipboard-check' },
-      observations: { label: t('dashboard.reviewObservations'), route: '/observations', icon: 'lucide:eye' },
+      observations: { label: t('dashboard.reviewObservations'), route: '/correspondence/observations', icon: 'lucide:eye' },
       letters: { label: t('dashboard.reviewLetters'), route: '/correspondence/letters', icon: 'lucide:file-text' },
       policies: { label: t('dashboard.reviewPolicies'), route: '/correspondence/regulatory-updates/policies', icon: 'lucide:file-check' },
       circulars: { label: t('dashboard.reviewCirculars'), route: '/correspondence/regulatory-updates/rules', icon: 'lucide:scale' },

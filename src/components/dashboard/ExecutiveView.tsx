@@ -69,7 +69,7 @@ export function ExecutiveView({ metrics }: ExecutiveViewProps) {
         type: 'critical',
         title: t('dashboard.criticalActionRequired'),
         message: t('dashboard.alertCriticalObs', { count: String(criticalObs) }),
-        route: '/observations?status=open&severity=critical',
+        route: '/correspondence/observations?status=open&severity=critical',
       })
     }
 
@@ -79,7 +79,7 @@ export function ExecutiveView({ metrics }: ExecutiveViewProps) {
         type: 'critical',
         title: t('dashboard.criticalActionRequired'),
         message: t('dashboard.alertObsOverdue', { count: String(metrics.observations.overdueCount) }),
-        route: '/observations?status=open',
+        route: '/correspondence/observations?status=open',
       })
     }
 
@@ -168,7 +168,7 @@ export function ExecutiveView({ metrics }: ExecutiveViewProps) {
   const primaryAction = useMemo(() => {
     const componentRoutes: Record<string, { label: string; route: string }> = {
       audits: { label: t('dashboard.reviewAudits'), route: '/reports' },
-      observations: { label: t('dashboard.reviewObservations'), route: '/observations' },
+      observations: { label: t('dashboard.reviewObservations'), route: '/correspondence/observations' },
       letters: { label: t('dashboard.reviewLetters'), route: '/correspondence/letters' },
       policies: { label: t('dashboard.reviewPolicies'), route: '/correspondence/regulatory-updates/policies' },
       circulars: { label: t('dashboard.reviewCirculars'), route: '/correspondence/regulatory-updates/rules' },

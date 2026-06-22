@@ -297,7 +297,7 @@ export function OfficerView({ metrics }: OfficerViewProps) {
             ) : (
             <>
             {myObservations.length > 0 && (
-              <Button variant="dark" loading={pendingKey === 'off-observations'} onClick={() => navigate('off-observations', '/observations')} className="gap-2 active:scale-[0.98]">
+              <Button variant="dark" loading={pendingKey === 'off-observations'} onClick={() => navigate('off-observations', '/correspondence/observations')} className="gap-2 active:scale-[0.98]">
                 {pendingKey !== 'off-observations' && <Icon icon="lucide:eye" className="w-4 h-4" />}
                 {t('dashboard.closeObservations', { count: String(myObservations.length) })}
               </Button>
