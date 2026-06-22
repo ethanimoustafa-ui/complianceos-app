@@ -15,6 +15,7 @@ import { useRiskStore } from '@/stores/risk-store'
 import { useComplianceScore } from '@/hooks/useComplianceScore'
 import { useDashboardHealth } from '@/hooks/useDashboardHealth'
 import { useFrameworkConfigStore } from '@/stores/framework-config-store'
+import { useRiskCategoryStore } from '@/stores/risk-category-store'
 import type { PeriodFilter } from '@/lib/compliance-engine.types'
 import { exportExecutiveReport, generatePrintableReport } from '@/lib/export'
 import { ExportMenu } from '@/components/ui/export-menu'
@@ -44,6 +45,7 @@ interface AuditFinding {
 
 interface RiskDistribution {
   category: string
+  label: string
   percentage: number
   color: string
 }
@@ -69,6 +71,26 @@ const riskCategoryBarColors: Record<string, string> = {
   compliance: 'bg-purple-500',
   strategic: 'bg-amber-500',
   reputational: 'bg-rose-500',
+}
+
+// Distinct bar colors for custom risk categories (stable per category key) so
+// the distribution isn't all-gray. Seed categories keep their canonical color.
+const RISK_BAR_PALETTE = [
+  'bg-blue-500', 'bg-emerald-500', 'bg-purple-500', 'bg-amber-500', 'bg-rose-500',
+  'bg-cyan-500', 'bg-indigo-500', 'bg-teal-500', 'bg-orange-500', 'bg-pink-500',
+]
+function hashIndex(s: string, mod: number): number {
+  let h = 0
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0
+  return h % mod
+}
+// 'compliance-risk' → 'Compliance Risk' (fallback when a category has no stored name).
+function deslugifyCategory(key: string): string {
+  return key
+    .split(/[-_\s]+/)
+    .filter(Boolean)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(' ')
 }
 
 // Helper functions
@@ -105,6 +127,8 @@ export default function ReportsExecutivePage() {
   const fetchAudits = useAuditStore((s) => s.fetchAll)
   const storeRisks = useRiskStore((s) => s.risks)
   const allFrameworks = useFrameworkConfigStore((s) => s.frameworks)
+  const storeRiskCategories = useRiskCategoryStore((s) => s.categories)
+  const fetchRiskCategories = useRiskCategoryStore((s) => s.fetchAll)
   // Wave-3 skeleton boundary — first-fetch placeholder for the findings table
   // and risk distribution. Avoids the empty "no findings" flash on initial
   // mount (OPTIMIZATION-PATTERNS §2).
@@ -132,7 +156,8 @@ export default function ReportsExecutivePage() {
   useEffect(() => {
     void fetchAudits()
     void fetchRisks()
-  }, [fetchAudits, fetchRisks])
+    void fetchRiskCategories()
+  }, [fetchAudits, fetchRisks, fetchRiskCategories])
 
   // Compliance score
   const complianceScore = useComplianceScore(periodFilter as PeriodFilter)
@@ -143,6 +168,27 @@ export default function ReportsExecutivePage() {
 
   // Derive risk distribution
   const risks = useMemo(() => storeRisks, [storeRisks])
+
+  // Resolve a risk-category key → friendly label + a stable distinct bar color.
+  // Seed categories keep their canonical i18n label/color; custom categories use
+  // their configured name (or a de-slugified key) and a deterministic palette
+  // color, so the distribution never shows raw "foo-risk" slugs in gray.
+  const riskCatLabel = (key: string): string => {
+    const seed: Record<string, string> = {
+      operational: t('reports.operational'),
+      financial: t('reports.financial'),
+      compliance: t('reports.compliance'),
+      strategic: t('reports.strategic'),
+      reputational: t('reports.reputational'),
+    }
+    if (seed[key]) return seed[key]
+    const item = storeRiskCategories.find((c) => c.id === key)
+    if (item) return isRTL ? item.labelAr : item.label
+    return deslugifyCategory(key)
+  }
+  const riskBarColor = (key: string): string =>
+    riskCategoryBarColors[key] ?? RISK_BAR_PALETTE[hashIndex(key, RISK_BAR_PALETTE.length)]
+
   const riskDistribution: RiskDistribution[] = useMemo(() => {
     if (risks.length === 0) return []
     const counts: Record<string, number> = {}
@@ -150,10 +196,12 @@ export default function ReportsExecutivePage() {
     const total = risks.length
     return Object.entries(counts).map(([category, count]) => ({
       category,
+      label: riskCatLabel(category),
       percentage: Math.round((count / total) * 100),
-      color: riskCategoryBarColors[category as RiskCategory] || 'bg-slate-400',
+      color: riskBarColor(category),
     }))
-  }, [risks])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [risks, storeRiskCategories, t, isRTL])
 
   // Risk distribution by severity level (for the PDF "risks by level" chart) —
   // score = likelihood × impact, matching the dashboard rollup bands.
@@ -199,7 +247,6 @@ export default function ReportsExecutivePage() {
   }
   const severityLabels: Record<Severity, string> = { critical: t('reports.critical'), high: t('reports.high'), medium: t('reports.medium'), low: t('reports.low') }
   const statusLabels: Record<FindingStatus, string> = { remediation: t('reports.remediation'), resolved: t('reports.resolved'), verified: t('reports.verified'), open: t('reports.open') }
-  const riskDistributionLabels: Record<string, string> = { operational: t('reports.operational'), financial: t('reports.financial'), compliance: t('reports.compliance'), strategic: t('reports.strategic'), reputational: t('reports.reputational') }
   // Audit-type label map — shared between the findings table and the detail drawer.
   const auditCategoryLabels: Record<string, string> = {
     sama: t('reports.samaInspection'),
@@ -733,7 +780,7 @@ export default function ReportsExecutivePage() {
                     {riskDistribution.map((risk, idx) => (
                       <div key={idx}>
                         <div className="flex justify-between text-[10px] font-bold mb-1">
-                          <span className="text-slate-600">{riskDistributionLabels[risk.category] || risk.category}</span>
+                          <span className="text-slate-600">{risk.label}</span>
                           <span className="text-slate-900">{risk.percentage}%</span>
                         </div>
                         <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
@@ -860,7 +907,7 @@ export default function ReportsExecutivePage() {
                     {riskDistribution.map((risk, idx) => (
                       <div key={idx} className="flex flex-col gap-1">
                         <div className="flex justify-between items-center">
-                          <span className="text-sm font-bold text-slate-700">{riskDistributionLabels[risk.category] || risk.category}</span>
+                          <span className="text-sm font-bold text-slate-700">{risk.label}</span>
                           <span className="text-xs font-bold text-slate-600">{risk.percentage}%</span>
                         </div>
                         <div className={`h-2 bg-slate-100 rounded-full ${isRTL ? 'rotate-180' : ''}`}>
@@ -918,14 +965,14 @@ export default function ReportsExecutivePage() {
                 const rows = sorted.map((r) => ({
                   [t('reports.id')]: r.id,
                   Title: r.title,
-                  Category: riskDistributionLabels[r.category] || r.category,
+                  Category: riskCatLabel(r.category),
                   [t('reports.likelihood' as TranslationKey)]: r.likelihood,
                   [t('reports.impact' as TranslationKey)]: r.impact,
                   [t('reports.score')]: r.likelihood * r.impact,
                   [t('reports.status')]: r.status,
                 }))
                 const distSummary = riskDistribution
-                  .map((d) => `${riskDistributionLabels[d.category] || d.category}: ${d.percentage}%`)
+                  .map((d) => `${d.label}: ${d.percentage}%`)
                   .join(' • ')
                 generatePrintableReport(t('reports.detailedRiskBreakdown'), rows, {
                   subtitle: `${t('reports.totalRegisteredRisks' as TranslationKey)}: ${risks.length}  •  ${distSummary}`,
