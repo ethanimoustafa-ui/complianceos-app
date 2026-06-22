@@ -49,7 +49,7 @@ interface ExportMenuProps {
  * ```
  */
 export function ExportMenu({ options, className, size = 'md', iconOnly = false }: ExportMenuProps) {
-  const { t } = useTranslation()
+  const { t, isRTL } = useTranslation()
   const [open, setOpen] = useState(false)
   const [mounted, setMounted] = useState(false)
   const triggerRef = useRef<HTMLDivElement>(null)
@@ -67,17 +67,20 @@ export function ExportMenu({ options, className, size = 'md', iconOnly = false }
     const DROPDOWN_HEIGHT = 44 * options.length + 16 // approx item height + padding
     const spaceBelow = viewportHeight - rect.bottom
     const flipUp = spaceBelow < DROPDOWN_HEIGHT && rect.top > DROPDOWN_HEIGHT
+    const panelWidth = Math.max(rect.width, 180)
     setDropdownStyle({
       position: 'fixed',
       ...(flipUp
         ? { bottom: viewportHeight - rect.top + 4, top: 'auto' }
         : { top: rect.bottom + 4, bottom: 'auto' }),
-      // Align dropdown right edge with trigger right edge
-      left: rect.right - Math.max(rect.width, 180),
-      width: Math.max(rect.width, 180),
+      // Anchor on the side the trigger sits: LTR aligns the panel's right edge
+      // to the trigger's right edge (extends left); RTL aligns the left edges
+      // (extends right) so it doesn't run off-screen.
+      left: isRTL ? rect.left : rect.right - panelWidth,
+      width: panelWidth,
       zIndex: 9999,
     })
-  }, [open, options.length])
+  }, [open, options.length, isRTL])
 
   // Close on outside click and Escape
   useEffect(() => {
@@ -177,7 +180,8 @@ export function ExportMenu({ options, className, size = 'md', iconOnly = false }
                 setOpen(false)
               }}
               className={cn(
-                'w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-slate-700 text-left',
+                'w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-slate-700',
+                isRTL ? 'text-right flex-row-reverse' : 'text-left',
                 'hover:bg-slate-50 transition-colors',
                 'disabled:opacity-60 disabled:cursor-not-allowed',
                 idx < options.length - 1 && 'border-b border-slate-100',

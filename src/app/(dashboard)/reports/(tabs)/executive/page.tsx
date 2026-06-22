@@ -374,7 +374,9 @@ export default function ReportsExecutivePage() {
             period: periodLabel(periodFilter),
             overallScore: Math.round(complianceScore.overall),
             change: complianceScore.change,
-            confidence: complianceScore.confidence,
+            // Localized confidence label (not the raw enum) so the Arabic PDF
+            // reads "عالية" rather than "high".
+            confidence: t(('reports.' + confidenceConfig[complianceScore.confidence].label) as TranslationKey),
             components: componentKeys.map((c) => ({
               name: t(`reports.${c.i18n}` as TranslationKey),
               score: Math.round(complianceScore.components[c.key].score),
@@ -388,7 +390,9 @@ export default function ReportsExecutivePage() {
               severity: d.severity,
               points: d.points,
             })),
-            trend: complianceScore.trend.map((tp) => ({ label: tp.month, actual: tp.actual, target: tp.target })),
+            // Localize the x-axis month/quarter labels (Gregorian-in-Arabic via
+            // monthLabels, NOT Hijri) so the Arabic PDF trend matches the page.
+            trend: complianceScore.trend.map((tp) => ({ label: monthLabels[tp.month] ?? tp.month, actual: tp.actual, target: tp.target })),
             kpis: {
               audits: { overdue: storeAudits.filter((a) => a.status === 'overdue').length },
               risks: { open: risks.filter((r) => r.status !== 'resolved').length },
@@ -769,6 +773,10 @@ export default function ReportsExecutivePage() {
                 const firstX = toXPct(0)
                 const lastX = toXPct(currentTrend.length - 1)
                 const areaPath = `M${firstX},${toYPct(currentTrend[0].actual)} ${currentTrend.map((d, i) => `L${toXPct(i)},${toYPct(d.actual)}`).join(' ')} L${lastX},${chartBotPct} L${firstX},${chartBotPct} Z`
+                // Signature of the plotted data — when it changes (period/year
+                // switch or fresh fetch) the keyed elements remount and replay
+                // the draw-in animation. Hover/re-renders keep the same sig.
+                const trendSig = `${periodFilter}:${currentTrend.map((d) => Math.round(d.actual)).join(',')}`
 
                 return (
                   <div className="relative h-36" onMouseLeave={() => setHoveredTrendIdx(null)}>
@@ -780,9 +788,10 @@ export default function ReportsExecutivePage() {
                         </linearGradient>
                       </defs>
                       <line x1={padXPct} y1={targetYPct} x2={100 - padXPct} y2={targetYPct} stroke="#e2e8f0" strokeWidth="0.5" strokeDasharray="1.5 1" />
-                      <path d={areaPath} fill="url(#trendGradient)" opacity="0.3" />
-                      <polyline points={linePoints} fill="none" stroke="#10b981" strokeWidth="0.7" strokeLinecap="round" strokeLinejoin="round" />
+                      <path key={`area-${trendSig}`} className="trend-area-fade" d={areaPath} fill="url(#trendGradient)" opacity="0.3" />
+                      <polyline key={`line-${trendSig}`} className="trend-line-draw" pathLength={1} points={linePoints} fill="none" stroke="#10b981" strokeWidth="0.7" strokeLinecap="round" strokeLinejoin="round" />
                     </svg>
+                    <div key={`dots-${trendSig}`} className="trend-dot-fade absolute inset-0">
                     {currentTrend.map((d, i) => {
                       const leftPct = toXPct(i)
                       const topPct = toYPct(d.actual)
@@ -814,6 +823,7 @@ export default function ReportsExecutivePage() {
                         </React.Fragment>
                       )
                     })}
+                    </div>
                   </div>
                 )
               })()}

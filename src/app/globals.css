@@ -1003,3 +1003,43 @@ body::-webkit-scrollbar {
     transform: scale(1);
   }
 }
+
+/* Compliance-trend chart draw-in (Team Score). The polyline uses pathLength=1
+   so the dash math is length-independent regardless of point count (3/6/12 or
+   4 quarters). Elements are keyed on the plotted data so the draw replays
+   whenever the values change (e.g. switching the period/year). */
+.trend-line-draw {
+  stroke-dasharray: 1;
+  animation: trend-line-draw 1300ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+@keyframes trend-line-draw {
+  from { stroke-dashoffset: 1; }
+  to { stroke-dashoffset: 0; }
+}
+
+.trend-area-fade {
+  animation: trend-area-fade 1300ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+@keyframes trend-area-fade {
+  from { opacity: 0; }
+  to { opacity: 0.3; }
+}
+
+.trend-dot-fade {
+  animation: trend-dot-fade 1500ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+@keyframes trend-dot-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .trend-line-draw,
+  .trend-area-fade,
+  .trend-dot-fade {
+    animation: none;
+  }
+}

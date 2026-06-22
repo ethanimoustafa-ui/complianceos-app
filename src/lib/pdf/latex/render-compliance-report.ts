@@ -95,6 +95,7 @@ const LABELS = {
     actual: 'Actual',
     target: 'Target',
     byFramework: 'Compliance by Framework',
+    noFrameworks: 'No correspondence-based frameworks are currently tracked.',
     keyMetrics: 'Key Metrics',
     obsBySeverity: 'Open observations by severity',
     risksByLevel: 'Open risks by level',
@@ -128,6 +129,7 @@ const LABELS = {
     actual: 'الفعلي',
     target: 'المستهدف',
     byFramework: 'الامتثال حسب الإطار',
+    noFrameworks: 'لا توجد أطر قائمة على المراسلات قيد التتبع حاليًا.',
     keyMetrics: 'المؤشرات الرئيسية',
     obsBySeverity: 'الملاحظات المفتوحة حسب الخطورة',
     risksByLevel: 'المخاطر المفتوحة حسب المستوى',
@@ -226,11 +228,14 @@ ${trendLineChart(
 )}`
     : ''
 
-  // §3 By framework
-  const frameworkSection = d.frameworks.length
-    ? RAW`\section{${L.byFramework}}
-${xbarChart(d.frameworks.map((f) => ({ label: f.name, value: Math.round(f.score) })))}`
-    : ''
+  // §3 By framework — always render the section; show a placeholder when no
+  // correspondence-based framework has a score yet (was silently omitted).
+  const frameworkSection = RAW`\section{${L.byFramework}}
+${
+  d.frameworks.length
+    ? xbarChart(d.frameworks.map((f) => ({ label: f.name, value: Math.round(f.score) })))
+    : RAW`{\color{slate500} ${L.noFrameworks}}`
+}`
 
   // §4 Key metrics: KPI table + severity/level bars
   const kpiRows: Array<[string, number, string]> = []
