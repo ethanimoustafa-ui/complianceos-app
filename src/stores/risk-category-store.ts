@@ -14,6 +14,8 @@ export interface RiskCategoryItem {
   labelAr: string
   isDefault?: boolean
   color?: string
+  /** Iconify id (e.g. 'lucide:shield'); set via Settings. */
+  icon?: string
   /** Underlying Postgres UUID (server-assigned). */
   _serverId?: string
 }
@@ -24,6 +26,7 @@ interface RiskCategoryApiRow {
   name_en: string
   name_ar: string
   color: string | null
+  icon: string | null
   is_default: boolean
   created_at: string
   updated_at: string
@@ -36,6 +39,7 @@ function mapRow(row: RiskCategoryApiRow): RiskCategoryItem {
     labelAr: row.name_ar,
     isDefault: row.is_default,
     color: row.color ?? undefined,
+    icon: row.icon ?? undefined,
     _serverId: row.id,
   }
 }
@@ -65,7 +69,7 @@ interface RiskCategoryState {
   lastFetched: number | null
 
   fetchAll: (force?: boolean) => Promise<void>
-  add: (label: string, labelAr?: string) => string
+  add: (label: string, labelAr?: string, appearance?: { color?: string; icon?: string }) => string
   update: (id: string, patch: Partial<Omit<RiskCategoryItem, 'id'>>) => void
   remove: (id: string) => void
   resetToDefaults: () => void
@@ -95,7 +99,7 @@ export const useRiskCategoryStore = create<RiskCategoryState>()((set, get) => ({
     }
   },
 
-  add: (label, labelAr) => {
+  add: (label, labelAr, appearance) => {
     requirePermission('Configure Lists & Categories', { storeName: 'riskCategory', actionName: 'add' })
     const baseKey = slugify(label) || `cat-${Date.now()}`
     const existingIds = new Set(get().categories.map((c) => c.id))
@@ -103,7 +107,9 @@ export const useRiskCategoryStore = create<RiskCategoryState>()((set, get) => ({
     let n = 2
     while (existingIds.has(id)) id = `${baseKey}-${n++}`
 
-    const optimistic: RiskCategoryItem = { id, label, labelAr: labelAr ?? label }
+    const optimistic: RiskCategoryItem = {
+      id, label, labelAr: labelAr ?? label, color: appearance?.color, icon: appearance?.icon,
+    }
     set((s) => ({ categories: [...s.categories, optimistic], isMutating: true, error: null }))
 
     void (async () => {
@@ -112,6 +118,8 @@ export const useRiskCategoryStore = create<RiskCategoryState>()((set, get) => ({
           key: id,
           name_en: label,
           name_ar: labelAr ?? label,
+          color: appearance?.color,
+          icon: appearance?.icon,
           is_default: false,
         })
         const mapped = mapRow(row)
@@ -153,6 +161,7 @@ export const useRiskCategoryStore = create<RiskCategoryState>()((set, get) => ({
         if (patch.label !== undefined) body.name_en = patch.label
         if (patch.labelAr !== undefined) body.name_ar = patch.labelAr
         if (patch.color !== undefined) body.color = patch.color
+        if (patch.icon !== undefined) body.icon = patch.icon
         const row = await api.patch<RiskCategoryApiRow>(
           `/risk-categories/${previous._serverId}`,
           body,

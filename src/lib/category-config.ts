@@ -33,6 +33,25 @@ export const fallbackColor: CategoryColor = {
   icon: 'lucide:tag',
 }
 
+// Named color tokens for user-chosen category colors (Settings picker). The
+// stored `color` is one of these keys; the picker renders a swatch per token and
+// the display maps the token → these Tailwind class sets. Keep keys in sync with
+// the picker in the settings UI.
+export const CATEGORY_COLOR_TOKENS: Record<string, CategoryColor> = {
+  blue:    { dot: 'bg-blue-500',    bg: 'bg-blue-50',    text: 'text-blue-700',    border: 'border-blue-200',    pill: 'bg-blue-100 text-blue-700' },
+  emerald: { dot: 'bg-emerald-500', bg: 'bg-emerald-50', text: 'text-emerald-700', border: 'border-emerald-200', pill: 'bg-emerald-100 text-emerald-700' },
+  purple:  { dot: 'bg-purple-500',  bg: 'bg-purple-50',  text: 'text-purple-700',  border: 'border-purple-200',  pill: 'bg-purple-100 text-purple-700' },
+  amber:   { dot: 'bg-amber-500',   bg: 'bg-amber-50',   text: 'text-amber-700',   border: 'border-amber-200',   pill: 'bg-amber-100 text-amber-700' },
+  rose:    { dot: 'bg-rose-500',    bg: 'bg-rose-50',    text: 'text-rose-700',    border: 'border-rose-200',    pill: 'bg-rose-100 text-rose-700' },
+  cyan:    { dot: 'bg-cyan-500',    bg: 'bg-cyan-50',    text: 'text-cyan-700',    border: 'border-cyan-200',    pill: 'bg-cyan-100 text-cyan-700' },
+  indigo:  { dot: 'bg-indigo-500',  bg: 'bg-indigo-50',  text: 'text-indigo-700',  border: 'border-indigo-200',  pill: 'bg-indigo-100 text-indigo-700' },
+  teal:    { dot: 'bg-teal-500',    bg: 'bg-teal-50',    text: 'text-teal-700',    border: 'border-teal-200',    pill: 'bg-teal-100 text-teal-700' },
+  orange:  { dot: 'bg-orange-500',  bg: 'bg-orange-50',  text: 'text-orange-700',  border: 'border-orange-200',  pill: 'bg-orange-100 text-orange-700' },
+  pink:    { dot: 'bg-pink-500',    bg: 'bg-pink-50',    text: 'text-pink-700',    border: 'border-pink-200',    pill: 'bg-pink-100 text-pink-700' },
+}
+
+export const CATEGORY_COLOR_TOKEN_KEYS = Object.keys(CATEGORY_COLOR_TOKENS)
+
 // ── Built-in seed palettes ───────────────────────────────────────────────────
 
 const POLICY: Record<string, CategoryConfig> = {
@@ -96,23 +115,25 @@ const REGISTRY: Record<CategoryKind, Record<string, CategoryConfig>> = {
 export function getCategoryConfig(
   kind: CategoryKind,
   id: string | null | undefined,
-  overrideLabel?: { label?: string; labelAr?: string },
+  override?: { label?: string; labelAr?: string; color?: string; icon?: string },
 ): CategoryConfig {
   if (!id) {
     return { ...fallbackColor, label: '—', labelAr: '—' }
   }
   const seed = REGISTRY[kind][id]
-  if (seed) {
-    return {
-      ...seed,
-      label: overrideLabel?.label ?? seed.label,
-      labelAr: overrideLabel?.labelAr ?? seed.labelAr,
-    }
-  }
+  // Colors: a stored color token wins, else the seed palette, else slate.
+  const tokenColor = override?.color ? CATEGORY_COLOR_TOKENS[override.color] : undefined
+  const colors: CategoryColor = tokenColor ?? seed ?? fallbackColor
   return {
-    ...fallbackColor,
-    label: overrideLabel?.label ?? id,
-    labelAr: overrideLabel?.labelAr ?? overrideLabel?.label ?? id,
+    dot: colors.dot,
+    bg: colors.bg,
+    text: colors.text,
+    border: colors.border,
+    pill: colors.pill,
+    // Icon: a stored icon wins, else the seed icon, else the tag fallback.
+    icon: override?.icon ?? seed?.icon ?? fallbackColor.icon,
+    label: override?.label ?? seed?.label ?? id,
+    labelAr: override?.labelAr ?? override?.label ?? seed?.labelAr ?? id,
   }
 }
 

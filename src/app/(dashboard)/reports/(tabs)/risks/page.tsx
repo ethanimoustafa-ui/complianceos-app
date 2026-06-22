@@ -99,8 +99,16 @@ interface RiskRegisterItem {
 // Thin wrapper around the central category-config helper. Always returns a
 // renderable shape — if the id is a user-added category not in the seed
 // palette, we fall back to neutral slate via getCategoryConfig.
-function getRiskCatConfig(id: string | undefined | null): { label: string; icon: string; color: string } {
-  const conf = getCategoryConfig('risk', id)
+function getRiskCatConfig(
+  id: string | undefined | null,
+  cats: { id: string; label?: string; labelAr?: string; color?: string; icon?: string }[] = [],
+): { label: string; icon: string; color: string } {
+  const item = id ? cats.find((c) => c.id === id) : undefined
+  const conf = getCategoryConfig(
+    'risk',
+    id,
+    item ? { label: item.label, labelAr: item.labelAr, color: item.color, icon: item.icon } : undefined,
+  )
   return {
     label: conf.label,
     icon: conf.icon ?? 'lucide:tag',
@@ -709,7 +717,7 @@ export default function ReportsRisksPage() {
       const risks = sortedRisks.map((r, idx) => ({
         id: `R-${String(idx + 1).padStart(2, '0')}`,
         name: r.name,
-        category: getRiskCatConfig(r.category).label,
+        category: getRiskCatConfig(r.category, riskCategoryItems).label,
         likelihood: r.likelihood,
         impact: r.impact,
         score: r.likelihood * r.impact,
@@ -951,7 +959,7 @@ export default function ReportsRisksPage() {
               })().map(category => {
                 const count = filteredByMonitoringFrequency.filter(r => r.category === category).length
                 if (count === 0) return null
-                const config = getRiskCatConfig(category)
+                const config = getRiskCatConfig(category, riskCategoryItems)
                 const categoryItem = riskCategoryItems.find((c) => c.id === category)
                 const dueCount = getDueCountForCategory(category)
                 const nextReview = getNextReviewForCategory(category)
@@ -1079,7 +1087,7 @@ export default function ReportsRisksPage() {
                   {paginatedRisks.map(risk => {
                     const score = getRiskScore(risk.likelihood, risk.impact)
                     const level = getRiskLevel(score)
-                    const categoryConfig = getRiskCatConfig(risk.category)
+                    const categoryConfig = getRiskCatConfig(risk.category, riskCategoryItems)
                     const riskCatItem = riskCategoryItems.find((c) => c.id === risk.category)
                     const statusConf = riskStatusConfig[risk.status]
                     const reviewState = getReviewState(risk.nextReviewDate, new Date())
@@ -1163,7 +1171,7 @@ export default function ReportsRisksPage() {
         {selectedRisk && (() => {
           const score = getRiskScore(selectedRisk.likelihood, selectedRisk.impact)
           const level = getRiskLevel(score)
-          const categoryConfig = getRiskCatConfig(selectedRisk.category)
+          const categoryConfig = getRiskCatConfig(selectedRisk.category, riskCategoryItems)
           const selectedCatItem = riskCategoryItems.find((c) => c.id === selectedRisk.category)
           const reviewState = getReviewState(selectedRisk.nextReviewDate, new Date())
           return (

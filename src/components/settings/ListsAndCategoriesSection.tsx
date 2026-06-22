@@ -21,6 +21,14 @@ import { Button } from '@/components/ui/button'
 import { Modal } from '@/components/ui/modal'
 import { Input } from '@/components/ui/input'
 import { EditableSelect } from '@/components/ui/editable-select'
+import { CATEGORY_COLOR_TOKENS, CATEGORY_COLOR_TOKEN_KEYS } from '@/lib/category-config'
+
+// Curated icon choices for the risk-category appearance picker (Iconify ids).
+const RISK_ICON_CHOICES = [
+  'lucide:settings', 'lucide:dollar-sign', 'lucide:shield', 'lucide:target', 'lucide:users',
+  'lucide:alert-triangle', 'lucide:server', 'lucide:scale', 'lucide:lock', 'lucide:trending-up',
+  'lucide:file-text', 'lucide:globe', 'lucide:briefcase', 'lucide:activity', 'lucide:flag', 'lucide:gavel',
+]
 
 // ── Stores actually used to count usage ──────────────────────────────────────
 import { Gate } from '@/components/auth/gate'
@@ -73,6 +81,15 @@ interface ListItem {
   label: string
   labelAr?: string
   isDefault?: boolean
+  /** Appearance (risk categories) — color token + Iconify id. */
+  color?: string
+  icon?: string
+}
+
+/** Optional appearance payload for sections that support color/icon. */
+interface Appearance {
+  color?: string
+  icon?: string
 }
 
 interface ListSectionProps {
@@ -86,9 +103,11 @@ interface ListSectionProps {
    * cheaper to compute than the full cross-store reference scan.
    */
   getReferenceCount?: (id: string) => number
-  onAdd: (label: string, labelAr?: string) => string | void | Promise<string | void>
-  onEdit: (id: string, label: string, labelAr?: string) => void
+  onAdd: (label: string, labelAr?: string, appearance?: Appearance) => string | void | Promise<string | void>
+  onEdit: (id: string, label: string, labelAr?: string, appearance?: Appearance) => void
   onDelete: (id: string) => void
+  /** When true, the add/edit rows expose a color + icon picker (risk categories). */
+  supportsAppearance?: boolean
   onResetSection?: () => void
   /** When set, the "Add" button calls this instead of the inline add-row —
    *  used by Letter Type to open the full letter-template create modal (its
@@ -102,11 +121,13 @@ interface ListSectionProps {
 
 function ListSection({
   title, description, items, countUsage, getReferenceCount,
-  onAdd, onEdit, onDelete, onResetSection, onAddClick, addLabel, isRTL, t,
+  onAdd, onEdit, onDelete, onResetSection, onAddClick, addLabel, isRTL, t, supportsAppearance,
 }: ListSectionProps) {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [draftLabel, setDraftLabel] = useState('')
   const [draftLabelAr, setDraftLabelAr] = useState('')
+  const [draftColor, setDraftColor] = useState('')
+  const [draftIcon, setDraftIcon] = useState('')
   const [adding, setAdding] = useState(false)
   const [saving, setSaving] = useState(false)
   const [confirmReset, setConfirmReset] = useState(false)
@@ -116,6 +137,8 @@ function ListSection({
     setEditingId(item.id)
     setDraftLabel(item.label)
     setDraftLabelAr(item.labelAr ?? '')
+    setDraftColor(item.color ?? '')
+    setDraftIcon(item.icon ?? '')
     setAdding(false)
   }
   const startAdd = () => {
@@ -123,28 +146,65 @@ function ListSection({
     setEditingId(null)
     setDraftLabel('')
     setDraftLabelAr('')
+    setDraftColor('')
+    setDraftIcon('')
   }
   const cancel = () => {
     setEditingId(null)
     setAdding(false)
     setDraftLabel('')
     setDraftLabelAr('')
+    setDraftColor('')
+    setDraftIcon('')
   }
   const save = async () => {
     const label = draftLabel.trim()
     if (!label || saving) return
     const labelAr = draftLabelAr.trim() || undefined
+    const appearance: Appearance | undefined = supportsAppearance
+      ? { color: draftColor || undefined, icon: draftIcon || undefined }
+      : undefined
     setSaving(true)
     try {
       // Await so the confirm icon shows a spinner across the real request
       // (add/edit hit the server) before the row commits and the editor closes.
-      if (editingId) await onEdit(editingId, label, labelAr)
-      else if (adding) await onAdd(label, labelAr)
+      if (editingId) await onEdit(editingId, label, labelAr, appearance)
+      else if (adding) await onAdd(label, labelAr, appearance)
       cancel()
     } finally {
       setSaving(false)
     }
   }
+
+  // Compact color-swatch + icon-grid picker, shown in the add/edit rows when the
+  // section supports appearance (risk categories).
+  const appearancePicker = supportsAppearance ? (
+    <div className="mt-2 space-y-1.5">
+      <div className="flex flex-wrap gap-1.5">
+        {CATEGORY_COLOR_TOKEN_KEYS.map((tok) => (
+          <button
+            key={tok}
+            type="button"
+            title={tok}
+            onClick={() => setDraftColor(tok)}
+            className={`w-5 h-5 rounded-full cursor-pointer ${CATEGORY_COLOR_TOKENS[tok].dot} ${draftColor === tok ? 'ring-2 ring-offset-1 ring-slate-900' : ''}`}
+          />
+        ))}
+      </div>
+      <div className="flex flex-wrap gap-1">
+        {RISK_ICON_CHOICES.map((ic) => (
+          <button
+            key={ic}
+            type="button"
+            onClick={() => setDraftIcon(ic)}
+            className={`w-7 h-7 rounded-md flex items-center justify-center cursor-pointer ${draftIcon === ic ? 'bg-emerald-100 ring-1 ring-emerald-500' : 'hover:bg-slate-100'}`}
+          >
+            <Icon icon={ic} className="text-sm text-slate-600" />
+          </button>
+        ))}
+      </div>
+    </div>
+  ) : null
 
   const requestDelete = (item: ListItem) => {
     const counter = getReferenceCount ?? countUsage
@@ -215,9 +275,19 @@ function ListSection({
                 <tr key={item.id} className="hover:bg-slate-50/60">
                   <td className="px-6 py-3">
                     {isEditing ? (
-                      <Input value={draftLabel} onChange={(e) => setDraftLabel(e.target.value)} autoFocus />
+                      <>
+                        <Input value={draftLabel} onChange={(e) => setDraftLabel(e.target.value)} autoFocus />
+                        {appearancePicker}
+                      </>
                     ) : (
-                      <span className="text-xs font-bold text-slate-800">{item.label}</span>
+                      <span className="inline-flex items-center gap-1.5">
+                        {supportsAppearance && (
+                          <span className={`w-5 h-5 shrink-0 rounded-md flex items-center justify-center text-xs ${item.color && CATEGORY_COLOR_TOKENS[item.color] ? CATEGORY_COLOR_TOKENS[item.color].pill : 'bg-slate-100 text-slate-500'}`}>
+                            <Icon icon={item.icon ?? 'lucide:tag'} />
+                          </span>
+                        )}
+                        <span className="text-xs font-bold text-slate-800">{item.label}</span>
+                      </span>
                     )}
                   </td>
                   <td className="px-6 py-3">
@@ -264,7 +334,10 @@ function ListSection({
             })}
             {adding && (
               <tr className="bg-emerald-50/40">
-                <td className="px-6 py-3"><Input value={draftLabel} onChange={(e) => setDraftLabel(e.target.value)} placeholder={t('editableSelect.name')} autoFocus /></td>
+                <td className="px-6 py-3">
+                  <Input value={draftLabel} onChange={(e) => setDraftLabel(e.target.value)} placeholder={t('editableSelect.name')} autoFocus />
+                  {appearancePicker}
+                </td>
                 <td className="px-6 py-3"><Input value={draftLabelAr} onChange={(e) => setDraftLabelAr(e.target.value)} placeholder={t('editableSelect.arabicNameOptional')} dir="rtl" /></td>
                 <td className="px-6 py-3"><span className="text-xs text-slate-400">0</span></td>
                 <td className="px-6 py-3">
@@ -687,8 +760,10 @@ export function ListsAndCategoriesSection() {
               description={t('listsAndCategories.sectionRiskCategoryDesc')}
               items={riskCat.categories}
               countUsage={countRiskCategory}
-              onAdd={riskCat.add}
-              onEdit={(id, label, labelAr) => riskCat.update(id, { label, labelAr })}
+              supportsAppearance
+              onAdd={(label, labelAr, appearance) => riskCat.add(label, labelAr, appearance)}
+              onEdit={(id, label, labelAr, appearance) =>
+                riskCat.update(id, { label, labelAr, color: appearance?.color, icon: appearance?.icon })}
               onDelete={riskCat.remove}
               onResetSection={riskCat.resetToDefaults}
               isRTL={isRTL}

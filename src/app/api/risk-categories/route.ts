@@ -14,7 +14,7 @@ export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
 const RISK_CATEGORY_COLUMNS =
-  'id, key, name_en, name_ar, color, is_default, created_at, updated_at'
+  'id, key, name_en, name_ar, color, icon, is_default, created_at, updated_at'
 
 export async function GET(req: NextRequest) {
   try {

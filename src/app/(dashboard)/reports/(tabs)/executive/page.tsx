@@ -16,6 +16,7 @@ import { useComplianceScore } from '@/hooks/useComplianceScore'
 import { useDashboardHealth } from '@/hooks/useDashboardHealth'
 import { useFrameworkConfigStore } from '@/stores/framework-config-store'
 import { useRiskCategoryStore } from '@/stores/risk-category-store'
+import { CATEGORY_COLOR_TOKENS } from '@/lib/category-config'
 import type { PeriodFilter } from '@/lib/compliance-engine.types'
 import { exportExecutiveReport } from '@/lib/export'
 import { ExportMenu } from '@/components/ui/export-menu'
@@ -186,8 +187,11 @@ export default function ReportsExecutivePage() {
     if (item) return isRTL ? item.labelAr : item.label
     return deslugifyCategory(key)
   }
-  const riskBarColor = (key: string): string =>
-    riskCategoryBarColors[key] ?? RISK_BAR_PALETTE[hashIndex(key, RISK_BAR_PALETTE.length)]
+  const riskBarColor = (key: string): string => {
+    const stored = storeRiskCategories.find((c) => c.id === key)?.color
+    if (stored && CATEGORY_COLOR_TOKENS[stored]) return CATEGORY_COLOR_TOKENS[stored].dot
+    return riskCategoryBarColors[key] ?? RISK_BAR_PALETTE[hashIndex(key, RISK_BAR_PALETTE.length)]
+  }
 
   const riskDistribution: RiskDistribution[] = useMemo(() => {
     if (risks.length === 0) return []

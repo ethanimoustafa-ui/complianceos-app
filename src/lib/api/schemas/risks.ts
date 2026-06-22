@@ -135,6 +135,7 @@ export const CreateRiskCategorySchema = z.object({
   name_en: z.string().min(1).max(200),
   name_ar: z.string().min(1).max(200),
   color: z.string().max(50).optional(),
+  icon: z.string().max(100).optional(),
   is_default: z.boolean().default(false),
 })
 export type CreateRiskCategoryInput = z.infer<typeof CreateRiskCategorySchema>
