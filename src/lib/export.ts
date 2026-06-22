@@ -677,6 +677,55 @@ export function exportRisksLocalized(
 }
 
 /**
+ * Export the Compliance Review per-department breakdown to CSV.
+ * One row per department (the table the page renders).
+ */
+export function exportComplianceReviewLocalized(
+  rows: Array<{
+    departmentName: string
+    score: number
+    compliantCount: number
+    nonCompliantCount: number
+    naCount: number
+    pendingCount: number
+    evaluatedItems: number
+    total: number
+    observationCount: number
+  }>,
+  filename = 'compliance-review',
+  t?: TranslationFunction,
+  _isRTL = false,
+): void {
+  const getText = (key: string, fallback: string) => (t ? t(key) : fallback)
+
+  const headers = [
+    getText('export.department', 'Department'),
+    getText('export.score', 'Score'),
+    getText('export.compliant', 'Compliant'),
+    getText('export.nonCompliant', 'Non-Compliant'),
+    getText('export.na', 'N/A'),
+    getText('export.pending', 'Pending'),
+    getText('export.evaluated', 'Evaluated'),
+    getText('export.totalItems', 'Total Items'),
+    getText('export.observations', 'Observations'),
+  ]
+
+  const exportData = rows.map((r) => ({
+    [headers[0]]: r.departmentName,
+    [headers[1]]: `${r.score}%`,
+    [headers[2]]: r.compliantCount,
+    [headers[3]]: r.nonCompliantCount,
+    [headers[4]]: r.naCount,
+    [headers[5]]: r.pendingCount,
+    [headers[6]]: r.evaluatedItems,
+    [headers[7]]: r.total,
+    [headers[8]]: r.observationCount,
+  }))
+
+  exportToCSV(exportData, { filename, headers })
+}
+
+/**
  * Export correspondence to CSV with localization support
  */
 export function exportCorrespondenceLocalized(

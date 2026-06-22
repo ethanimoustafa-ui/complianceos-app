@@ -239,6 +239,26 @@ export function AccessMatrixSection() {
     }
   }
 
+  // Per-member bulk toggle: set EVERY permission on or off for one member in a
+  // single batched PATCH (the permissions endpoint takes the whole set at once),
+  // so an admin doesn't have to flip each chip one by one.
+  function applyAllForMember(member: TeamMember, on: boolean) {
+    const before = getEnabledIds(member)
+    const afterIds = on ? new Set<string>(ALL_TOGGLE_IDS) : new Set<string>()
+    void updateMember(member.id, { accessControls: buildAccessControls(afterIds) })
+    log({
+      userId: currentUser?.id ?? 'anonymous',
+      action: 'team.permissions_changed',
+      target: `member:${member.id}`,
+      metadata: {
+        targetMemberName: member.name,
+        granted: on ? ALL_TOGGLE_IDS.filter((id) => !before.has(id)) : [],
+        revoked: on ? [] : [...before],
+        source: 'apply-all',
+      },
+    })
+  }
+
   // A single labelled toggle chip (a label OR a granular key) with a custom
   // tooltip and an in-flight spinner.
   function PermChip({
@@ -373,6 +393,20 @@ export function AccessMatrixSection() {
                             <Icon icon="lucide:info" className="text-sm" />
                             {t('accessMatrix.adminAlwaysOn')}
                           </p>
+                        )}
+
+                        {/* Per-member bulk toggle (only for editable members). */}
+                        {!allOn && (
+                          <div className="mb-3 flex items-center gap-2">
+                            <LoadingButton variant="outline" loading={isMutating} onClick={() => applyAllForMember(m, true)}>
+                              <Icon icon="lucide:check-check" />
+                              {t('accessMatrix.applyAllOn')}
+                            </LoadingButton>
+                            <LoadingButton variant="outline" loading={isMutating} onClick={() => applyAllForMember(m, false)}>
+                              <Icon icon="lucide:x" />
+                              {t('accessMatrix.applyAllOff')}
+                            </LoadingButton>
+                          </div>
                         )}
 
                         {/* By page (label tier) */}

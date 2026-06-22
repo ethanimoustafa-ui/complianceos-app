@@ -21,6 +21,10 @@ import { calculateComplianceReviewScore } from '@/lib/compliance-review-score'
 import { paginate } from '@/lib/pagination'
 import { ListSkeleton, CardSkeleton } from '@/components/ui/skeleton'
 import { formatLocalizedDate } from '@/lib/format-date'
+import { ExportMenu } from '@/components/ui/export-menu'
+import { downloadPdf } from '@/lib/pdf-client'
+import { exportComplianceReviewLocalized } from '@/lib/export'
+import { Gate } from '@/components/auth/gate'
 
 // Color/icon channels are static; the user-visible label comes from i18n
 // (`verdictLabelKeys`). Keeping these split avoids a per-render translate
@@ -212,6 +216,55 @@ export default function ComplianceReviewPage() {
     }
   }
 
+  // ── Export (CSV + PDF). Gated by the "Export Compliance Data" permission since
+  // this is a cross-entity report with no per-entity export key of its own. ──
+  const [pdfBusy, setPdfBusy] = useState(false)
+
+  const buildExportRows = () =>
+    departmentScores.map((d) => ({
+      departmentName: isRTL ? d.dept.nameAr : d.dept.name,
+      score: d.score,
+      compliantCount: d.compliantCount,
+      nonCompliantCount: d.nonCompliantCount,
+      naCount: d.naCount,
+      pendingCount: d.pendingCount,
+      evaluatedItems: d.evaluatedItems,
+      total: d.total,
+      observationCount: d.observationCount,
+    }))
+
+  const handleExportCsv = () =>
+    exportComplianceReviewLocalized(buildExportRows(), 'compliance-review', t, isRTL)
+
+  const handleExportPdf = async () => {
+    if (pdfBusy) return
+    setPdfBusy(true)
+    try {
+      await downloadPdf(
+        {
+          template: 'compliance-report',
+          locale: isRTL ? 'ar' : 'en',
+          options: { engine: 'latex' },
+          data: {
+            date: new Date().toLocaleDateString(isRTL ? 'ar-SA' : 'en-US', {
+              year: 'numeric',
+              month: '2-digit',
+              day: '2-digit',
+            }),
+            generatedBy: user?.name ?? undefined,
+            overallScore: Math.round(overallScore),
+            components: buildExportRows().map((r) => ({ name: r.departmentName, score: r.score })),
+          },
+        },
+        'Compliance-Review.pdf',
+      )
+    } catch (err) {
+      console.error(err)
+    } finally {
+      setPdfBusy(false)
+    }
+  }
+
   return (
     <div className={`flex flex-col h-full ${isRTL ? 'rtl' : ''}`}>
       <header className="h-20 bg-white border-b border-slate-200 px-8 flex items-center justify-between shrink-0">
@@ -240,6 +293,15 @@ export default function ComplianceReviewPage() {
             </Link>
           </div>
         </div>
+        <Gate perm="Export Compliance Data">
+          <ExportMenu
+            iconOnly
+            options={[
+              { label: t('common.exportCsv'), icon: 'lucide:table', onSelect: handleExportCsv },
+              { label: t('common.exportPdf'), icon: 'lucide:file-text', onSelect: handleExportPdf, loading: pdfBusy },
+            ]}
+          />
+        </Gate>
       </header>
 
       <div className="flex-1 overflow-y-auto p-8 space-y-8">

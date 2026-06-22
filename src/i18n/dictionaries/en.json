@@ -2896,7 +2896,13 @@
     "userLogAction": "Action",
     "ipAddress": "IP Address",
     "device": "Device",
-    "location": "Location"
+    "location": "Location",
+    "compliant": "Compliant",
+    "nonCompliant": "Non-Compliant",
+    "pending": "Pending",
+    "evaluated": "Evaluated",
+    "totalItems": "Total Items",
+    "observations": "Observations"
   },
   "auditDetail": {
     "audits": "Audits",
@@ -3293,6 +3299,8 @@
     "member": "Member",
     "applyRoleDefaults": "Apply role defaults",
     "clearAll": "Clear all (non-admin)",
+    "applyAllOn": "All on",
+    "applyAllOff": "All off",
     "adminAlwaysOn": "Admin role grants every permission automatically",
     "adminFootnote": "Admin members inherit every permission via their role. To restrict an admin, change their role in the team directory first.",
     "groupPolicies": "Policies",

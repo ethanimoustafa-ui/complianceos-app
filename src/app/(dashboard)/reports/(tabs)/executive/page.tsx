@@ -4,7 +4,6 @@ import React, { useState, useMemo, useEffect } from 'react'
 import { usePathname } from 'next/navigation'
 import Link from 'next/link'
 import { Icon } from '@iconify/react'
-import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Drawer } from '@/components/ui/drawer'
@@ -18,6 +17,9 @@ import { useDashboardHealth } from '@/hooks/useDashboardHealth'
 import { useFrameworkConfigStore } from '@/stores/framework-config-store'
 import type { PeriodFilter } from '@/lib/compliance-engine.types'
 import { exportExecutiveReport, generatePrintableReport } from '@/lib/export'
+import { ExportMenu } from '@/components/ui/export-menu'
+import { downloadPdf } from '@/lib/pdf-client'
+import { Gate } from '@/components/auth/gate'
 import type { TranslationKey } from '@/i18n'
 import { dicebearAvatar } from '@/lib/avatar'
 import { ListSkeleton, Skeleton } from '@/components/ui/skeleton'
@@ -253,6 +255,51 @@ export default function ReportsExecutivePage() {
     return '#ef4444'
   }
 
+  // ── Full-page PDF export (reuses the generic compliance-report LaTeX
+  // template). CSV reuses the existing exportExecutiveReport. ──
+  const [pdfBusy, setPdfBusy] = useState(false)
+  const handleExportPdf = async () => {
+    if (pdfBusy) return
+    setPdfBusy(true)
+    try {
+      await downloadPdf(
+        {
+          template: 'compliance-report',
+          locale: isRTL ? 'ar' : 'en',
+          options: { engine: 'latex' },
+          data: {
+            date: new Date().toLocaleDateString(isRTL ? 'ar-SA' : 'en-US', {
+              year: 'numeric',
+              month: '2-digit',
+              day: '2-digit',
+            }),
+            overallScore: Math.round(complianceScore.overall),
+            change: complianceScore.change,
+            confidence: complianceScore.confidence,
+            components: componentKeys.map((c) => ({
+              name: t(`reports.${c.i18n}` as TranslationKey),
+              score: Math.round(complianceScore.components[c.key].score),
+              weight: complianceScore.components[c.key].weight,
+            })),
+            frameworks: frameworkEntries.map((f) => ({ name: f.name, score: Math.round(f.score) })),
+            deductions: complianceScore.deductions.map((d) => ({
+              reason:
+                d.description ||
+                (d.descriptionKey ? t(d.descriptionKey as TranslationKey, d.descriptionParams) : ''),
+              severity: d.severity,
+              points: d.points,
+            })),
+          },
+        },
+        'Team-Score.pdf',
+      )
+    } catch (err) {
+      console.error(err)
+    } finally {
+      setPdfBusy(false)
+    }
+  }
+
   return (
     <div className={`flex flex-col h-full ${isRTL ? 'rtl' : ''}`}>
       <header className="h-20 bg-white border-b border-slate-200 px-8 flex items-center justify-between shrink-0">
@@ -311,13 +358,20 @@ export default function ReportsExecutivePage() {
               </div>
             )}
           </div>
-          <Button
-            className="shadow-lg shadow-emerald-100"
-            onClick={() => exportExecutiveReport(complianceScore, auditFindings, riskDistribution, 'executive-report', t, isRTL)}
-          >
-            <Icon icon="lucide:download" />
-            {t('common.exportCsv')}
-          </Button>
+          <Gate perm="Export Compliance Data">
+            <ExportMenu
+              iconOnly
+              options={[
+                {
+                  label: t('common.exportCsv'),
+                  icon: 'lucide:table',
+                  onSelect: () =>
+                    exportExecutiveReport(complianceScore, auditFindings, riskDistribution, 'executive-report', t, isRTL),
+                },
+                { label: t('common.exportPdf'), icon: 'lucide:file-text', onSelect: handleExportPdf, loading: pdfBusy },
+              ]}
+            />
+          </Gate>
         </div>
       </header>
 

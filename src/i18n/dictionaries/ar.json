@@ -2896,7 +2896,13 @@
     "userLogAction": "الإجراء",
     "ipAddress": "عنوان IP",
     "device": "الجهاز",
-    "location": "الموقع"
+    "location": "الموقع",
+    "compliant": "متوافق",
+    "nonCompliant": "غير متوافق",
+    "pending": "قيد الانتظار",
+    "evaluated": "تم التقييم",
+    "totalItems": "إجمالي البنود",
+    "observations": "الملاحظات"
   },
   "auditDetail": {
     "audits": "التدقيقات",
@@ -3293,6 +3299,8 @@
     "member": "العضو",
     "applyRoleDefaults": "تطبيق إعدادات الدور الافتراضية",
     "clearAll": "مسح الكل (غير المسؤولين)",
+    "applyAllOn": "تفعيل الكل",
+    "applyAllOff": "إيقاف الكل",
     "adminAlwaysOn": "دور المسؤول يمنح جميع الصلاحيات تلقائياً",
     "adminFootnote": "يمتلك المسؤولون جميع الصلاحيات عبر دورهم. لتقييد مسؤول، غيّر دوره من دليل الفريق أولاً.",
     "groupPolicies": "السياسات",
