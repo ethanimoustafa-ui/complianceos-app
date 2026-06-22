@@ -38,6 +38,18 @@ import type {
   DashboardWeights,
 } from './dashboard-health.types'
 import type { FrameworkWeights } from '@/types'
+import { toFrameworkId } from '@/lib/letter-authority'
+
+// Merge an item's explicit framework tags with the framework implied by its
+// authority/source/audit-type, so correspondence (addressed to e.g. SAMA)
+// counts toward that framework even when never explicitly tagged. Returns a
+// de-duped list. Pass the entity's authority/source/type as `authority`.
+function withAuthority(frameworkIds: string[] | null, authority: string | null | undefined): string[] {
+  const base = frameworkIds ?? []
+  const fw = toFrameworkId(authority)
+  if (!fw || base.includes(fw)) return base
+  return [...base, fw]
+}
 
 // ---------- raw row types (subset of columns we select) -----------------------
 
@@ -90,6 +102,7 @@ interface CircularRow {
   status: 'pending' | 'in-progress' | 'completed' | 'overdue'
   progress: number
   framework_ids: string[] | null
+  authority: string | null
   created_at: string
 }
 interface LetterRow {
@@ -97,6 +110,7 @@ interface LetterRow {
   status: LetterSlice['status']
   response_deadline: string | null
   framework_ids: string[] | null
+  authority: string | null
 }
 interface FrameworkRow {
   id: string
@@ -263,13 +277,13 @@ async function fetchViaSelects(
       .lte('created_at', endISO),
     supabase
       .from('circulars')
-      .select('id, priority, status, progress, framework_ids, created_at')
+      .select('id, priority, status, progress, framework_ids, authority, created_at')
       .is('deleted_at', null)
       .gte('created_at', startISO)
       .lte('created_at', endISO),
     supabase
       .from('letters')
-      .select('id, status, response_deadline, framework_ids')
+      .select('id, status, response_deadline, framework_ids, authority')
       .is('deleted_at', null),
     supabase
       .from('frameworks')
@@ -335,7 +349,7 @@ export async function gatherScoringInputs(
     createdAt: r.created_at,
     progress: r.progress,
     priority: (r.priority as AuditSlice['priority']) ?? undefined,
-    frameworkIds: r.framework_ids ?? [],
+    frameworkIds: withAuthority(r.framework_ids, r.type),
   }))
 
   const observations: ObservationSlice[] = (slices.observations as ObservationRow[]).map((r) => ({
@@ -345,7 +359,7 @@ export async function gatherScoringInputs(
     status: r.status,
     dueDate: r.due_date,
     createdAt: r.created_at,
-    frameworkIds: r.framework_ids ?? [],
+    frameworkIds: withAuthority(r.framework_ids, r.source),
   }))
 
   const risks: RiskSlice[] = (slices.risks as RiskRow[]).map((r) => ({
@@ -378,7 +392,7 @@ export async function gatherScoringInputs(
     priority: r.priority,
     status: r.status,
     progress: r.progress,
-    frameworkIds: r.framework_ids ?? [],
+    frameworkIds: withAuthority(r.framework_ids, r.authority),
     createdAt: r.created_at,
   }))
 
@@ -386,7 +400,7 @@ export async function gatherScoringInputs(
     id: r.id,
     status: r.status,
     responseDeadline: r.response_deadline ?? undefined,
-    frameworkIds: r.framework_ids ?? [],
+    frameworkIds: withAuthority(r.framework_ids, r.authority),
   }))
 
   const frameworks = slices.frameworks as FrameworkRow[]

@@ -46,6 +46,18 @@ function key(authority: string | undefined): string {
   return lower
 }
 
+// Map an entity's authority / source / audit-type to a canonical framework id
+// for per-framework scoring. Returns null for non-framework values ('internal',
+// empty) so those items count toward no framework. Used by the scoring
+// gather step to associate correspondence by authority, not just framework_ids.
+export function toFrameworkId(authority: string | null | undefined): string | null {
+  if (!authority) return null
+  const lower = authority.toLowerCase()
+  if (lower === 'internal' || lower === 'custom' || lower === 'other') return null
+  if (lower === 'sharia') return 'sharia-board'
+  return lower
+}
+
 export function getAuthorityFullName(authority: string | undefined, lang: 'en' | 'ar' = 'en'): string {
   const entry = AUTHORITY_FULL_NAMES[key(authority)]
   if (!entry) return authority ?? ''

@@ -13,6 +13,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Modal } from '@/components/ui/modal'
 import { EditableSelect } from '@/components/ui/editable-select'
+import { FrameworkTagSelector } from '@/components/ui/framework-tag-selector'
 import { ReviewSchedulePicker } from '@/components/ui/ReviewSchedulePicker'
 import { computeNextReview, cadenceToReviewCycleDays } from '@/lib/review-schedule'
 import { pushToast } from '@/stores/toast-store'
@@ -33,6 +34,7 @@ import type {
   PolicyVersionEntry,
   PolicyActivityEntry,
   ReviewSchedule,
+  RegulatoryBodyId,
 } from '@/types'
 
 // Client-side limits for the policy document (mirrors RegisterPolicyModal).
@@ -177,6 +179,7 @@ export function EditPolicyModal({ isOpen, onClose, policy, onSaved, t, isRTL }: 
   const [docError, setDocError] = useState<string | null>(null)
   const [formAffectedDepartments, setFormAffectedDepartments] = useState<string[]>([])
   const [formBusinessOwnerDepartmentId, setFormBusinessOwnerDepartmentId] = useState<string>('')
+  const [formFrameworkIds, setFormFrameworkIds] = useState<RegulatoryBodyId[]>([])
   const formDocFileRef = useRef<HTMLInputElement>(null)
   // W37: when the approval tier changes, prompt whether to also reset the
   // workflow steps to match the new tier (see doSave / the confirm overlay).
@@ -200,6 +203,7 @@ export function EditPolicyModal({ isOpen, onClose, policy, onSaved, t, isRTL }: 
     setDocError(null)
     setFormAffectedDepartments(policy.affectedDepartments ?? [])
     setFormBusinessOwnerDepartmentId(policy.businessOwnerDepartmentId ?? '')
+    setFormFrameworkIds((policy.frameworkIds ?? []) as RegulatoryBodyId[])
   }, [isOpen, policy, OWNERS])
 
   // Wire file input onChange via ref. Validate size/type before storing the file
@@ -255,6 +259,7 @@ export function EditPolicyModal({ isOpen, onClose, policy, onSaved, t, isRTL }: 
     const departmentsChanged = !sortedEq(formAffectedDepartments, policy.affectedDepartments ?? [])
     const ownerDeptChanged =
       (formBusinessOwnerDepartmentId || undefined) !== (policy.businessOwnerDepartmentId ?? undefined)
+    const frameworksChanged = !sortedEq(formFrameworkIds, (policy.frameworkIds ?? []) as string[])
 
     // Build human-readable change summary for version history + activity log.
     const changes: string[] = []
@@ -267,6 +272,7 @@ export function EditPolicyModal({ isOpen, onClose, policy, onSaved, t, isRTL }: 
     if (scheduleChanged && editNextReview !== policy.nextReviewDate) changes.push(`Next review: ${policy.nextReviewDate} → ${editNextReview}`)
     if (departmentsChanged) changes.push('Affected departments updated')
     if (ownerDeptChanged) changes.push('Business owner department updated')
+    if (frameworksChanged) changes.push('Frameworks updated')
     if (formDocFile) changes.push(`Document replaced: "${formDocFile.name}"`)
 
     // P8: nothing actually changed → close without appending a version-history
@@ -327,6 +333,7 @@ export function EditPolicyModal({ isOpen, onClose, policy, onSaved, t, isRTL }: 
       owner,
       affectedDepartments: formAffectedDepartments,
       businessOwnerDepartmentId: formBusinessOwnerDepartmentId || undefined,
+      frameworkIds: formFrameworkIds,
       // Only push schedule-derived fields when the schedule actually changed, so
       // a no-op save never re-anchors next_review_date (server version gate).
       ...(scheduleChanged
@@ -517,6 +524,12 @@ export function EditPolicyModal({ isOpen, onClose, policy, onSaved, t, isRTL }: 
                 </div>
               )}
             </div>
+            <FrameworkTagSelector
+              value={formFrameworkIds}
+              onChange={setFormFrameworkIds}
+              label={t('regulatoryUpdates.frameworks' as any)}
+              selfAssessmentOnly
+            />
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('policies.description')}<span className="text-rose-500"> *</span></label>
               <textarea

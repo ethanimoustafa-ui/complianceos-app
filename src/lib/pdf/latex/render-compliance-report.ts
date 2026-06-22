@@ -23,7 +23,7 @@ import {
 
 const RAW = String.raw
 
-const ScoredItem = z.object({ name: z.string(), score: z.number(), weight: z.number().optional() })
+const ScoredItem = z.object({ name: z.string(), score: z.number(), weight: z.number().optional(), insufficient: z.boolean().optional() })
 const Severity = z.object({ critical: z.number(), high: z.number(), medium: z.number(), low: z.number() })
 
 export const ComplianceReportDataSchema = z.object({
@@ -96,6 +96,7 @@ const LABELS = {
     target: 'Target',
     byFramework: 'Compliance by Framework',
     noFrameworks: 'No correspondence-based frameworks are currently tracked.',
+    frameworkInsufficient: 'insufficient data to score',
     keyMetrics: 'Key Metrics',
     obsBySeverity: 'Open observations by severity',
     risksByLevel: 'Open risks by level',
@@ -130,6 +131,7 @@ const LABELS = {
     target: 'المستهدف',
     byFramework: 'الامتثال حسب الإطار',
     noFrameworks: 'لا توجد أطر قائمة على المراسلات قيد التتبع حاليًا.',
+    frameworkInsufficient: 'بيانات غير كافية للتقييم',
     keyMetrics: 'المؤشرات الرئيسية',
     obsBySeverity: 'الملاحظات المفتوحة حسب الخطورة',
     risksByLevel: 'المخاطر المفتوحة حسب المستوى',
@@ -228,13 +230,19 @@ ${trendLineChart(
 )}`
     : ''
 
-  // §3 By framework — always render the section; show a placeholder when no
-  // correspondence-based framework has a score yet (was silently omitted).
+  // §3 By framework — always render the section. Plot scored frameworks as bars;
+  // list low-data ones as "insufficient data" instead of a misleading 0 bar.
+  const scoredFw = d.frameworks.filter((f) => !f.insufficient)
+  const insufficientFw = d.frameworks.filter((f) => f.insufficient).map((f) => escapeLatex(f.name))
   const frameworkSection = RAW`\section{${L.byFramework}}
 ${
-  d.frameworks.length
-    ? xbarChart(d.frameworks.map((f) => ({ label: f.name, value: Math.round(f.score) })))
-    : RAW`{\color{slate500} ${L.noFrameworks}}`
+  d.frameworks.length === 0
+    ? RAW`{\color{slate500} ${L.noFrameworks}}`
+    : RAW`${scoredFw.length ? xbarChart(scoredFw.map((f) => ({ label: f.name, value: Math.round(f.score) }))) : ''}${
+        insufficientFw.length
+          ? `${scoredFw.length ? '\\vspace{6pt}\n' : ''}{\\color{slate500} ${insufficientFw.join(', ')} — ${L.frameworkInsufficient}}`
+          : ''
+      }`
 }`
 
   // §4 Key metrics: KPI table + severity/level bars

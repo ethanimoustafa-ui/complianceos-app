@@ -16,6 +16,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Modal } from '@/components/ui/modal'
 import { EditableSelect } from '@/components/ui/editable-select'
+import { FrameworkTagSelector } from '@/components/ui/framework-tag-selector'
 import { ReviewSchedulePicker } from '@/components/ui/ReviewSchedulePicker'
 import { computeNextReview, cadenceToReviewCycleDays } from '@/lib/review-schedule'
 import { api } from '@/lib/api-client'
@@ -37,6 +38,7 @@ import type {
   PolicyApprovalTier,
   PolicyActivityEntry,
   ReviewSchedule,
+  RegulatoryBodyId,
 } from '@/types'
 
 // Tier-driven default workflow. Keys align with the five tiers seeded by
@@ -384,6 +386,7 @@ export function RegisterPolicyModal({ isOpen, onClose, onCreated, t, isRTL }: Pr
   const [docError, setDocError] = useState<string | null>(null)
   const [formAffectedDepartments, setFormAffectedDepartments] = useState<string[]>([])
   const [formBusinessOwnerDepartmentId, setFormBusinessOwnerDepartmentId] = useState<string>('')
+  const [formFrameworkIds, setFormFrameworkIds] = useState<RegulatoryBodyId[]>([])
   const formDocFileRef = useRef<HTMLInputElement>(null)
 
   // Wire native file input onChange via ref. Validate size/type before storing
@@ -422,6 +425,7 @@ export function RegisterPolicyModal({ isOpen, onClose, onCreated, t, isRTL }: Pr
     setDocError(null)
     setFormAffectedDepartments([])
     setFormBusinessOwnerDepartmentId('')
+    setFormFrameworkIds([])
   }
 
   function handleTemplateSelect(templateId: string) {
@@ -495,6 +499,7 @@ export function RegisterPolicyModal({ isOpen, onClose, onCreated, t, isRTL }: Pr
         owner,
         affectedDepartments: formAffectedDepartments,
         businessOwnerDepartmentId: formBusinessOwnerDepartmentId || undefined,
+        frameworkIds: formFrameworkIds,
         lastReviewDate: '',
         nextReviewDate: computeNextReview(formReviewSchedule),
         reviewCycleDays: cadenceToReviewCycleDays(formReviewSchedule.cadence),
@@ -767,6 +772,12 @@ export function RegisterPolicyModal({ isOpen, onClose, onCreated, t, isRTL }: Pr
                 </div>
               )}
             </div>
+            <FrameworkTagSelector
+              value={formFrameworkIds}
+              onChange={setFormFrameworkIds}
+              label={t('regulatoryUpdates.frameworks' as any)}
+              selfAssessmentOnly
+            />
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('policies.description')}<span className="text-rose-500" aria-hidden="true"> *</span><span className="sr-only"> ({t('common.required')})</span></label>
               <textarea

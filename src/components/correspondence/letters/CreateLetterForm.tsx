@@ -11,6 +11,7 @@ import { useFrameworkSubCategoryStore } from '@/stores/framework-sub-category-st
 import { useAuthStore } from '@/stores/auth-store'
 import { pushToast } from '@/stores/toast-store'
 import { EditableSelect } from '@/components/ui/editable-select'
+import { FrameworkTagSelector } from '@/components/ui/framework-tag-selector'
 import {
   getAuthorityDepartments,
   getDefaultDepartmentId,
@@ -26,6 +27,7 @@ import type {
   LetterTemplate,
   CircularAuthority,
   PlaceholderValue,
+  RegulatoryBodyId,
 } from '@/types'
 import { DynamicAuthoritySelect } from './DynamicAuthoritySelect'
 import { EditableAuthorityDeptField } from './EditableAuthorityDeptField'
@@ -54,6 +56,7 @@ export function CreateLetterForm({
   const { user } = useAuthStore()
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [priority, setPriority] = useState<'standard' | 'urgent'>('standard')
+  const [frameworkIds, setFrameworkIds] = useState<RegulatoryBodyId[]>([])
 
   // Resolve a letter type id to a label, falling back to legacy seed translations
   // when the id is one of the four built-ins.
@@ -280,6 +283,7 @@ export function CreateLetterForm({
       templateId: effectiveTemplateId,
       attachments: draftAttachments,
       relatedObservations: [] as string[],
+      frameworkIds,
       // Carry the placeholder defs + values forward so the draft editor
       // surface can offer chips and a defs editor on reopen.
       placeholderDefs: autoPromoteTypedTokens(
@@ -533,6 +537,15 @@ export function CreateLetterForm({
             </div>
           </div>
         </div>
+      </div>
+
+      {/* Self-assessment framework tags (the correspondence authority above is
+          tracked separately and also feeds per-framework scoring). */}
+      <div className="mb-6">
+        <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-2">
+          {t('regulatoryUpdates.frameworks' as any)}
+        </label>
+        <FrameworkTagSelector value={frameworkIds} onChange={setFrameworkIds} selfAssessmentOnly />
       </div>
 
       {/* Placeholder completion banner — surface only how many tokens are still

@@ -620,6 +620,9 @@ export interface Letter {
   signatureImageUrl?: string   // base64, stamped from template at letter creation
   attachments: Attachment[]
   relatedObservations: string[]
+  // Self-assessment frameworks this letter is tagged to (the correspondence
+  // authority is carried separately by `authority` and also feeds scoring).
+  frameworkIds?: RegulatoryBodyId[]
   // Smart placeholder definitions for {{token}} chips embedded in body/subject.
   // When the letter ships post-draft, body/subject are flattened via renderTemplate
   // and these defs become a historical record.

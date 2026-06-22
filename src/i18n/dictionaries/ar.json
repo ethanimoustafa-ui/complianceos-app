@@ -2539,6 +2539,7 @@
     "componentBreakdown": "تفصيل المكونات",
     "frameworkScores": "درجات الأطر التنظيمية",
     "frameworkScoresEmpty": "لا توجد درجات للأطر بعد — فعّل الأطر المراسلاتية من الإعدادات وستظهر الدرجات فور توفر نشاط لها.",
+    "frameworkInsufficient": "بيانات غير كافية",
     "whatsImpactingScore": "ما الذي يؤثر على درجتك",
     "totalImpact": "إجمالي التأثير",
     "pts": "نقاط",

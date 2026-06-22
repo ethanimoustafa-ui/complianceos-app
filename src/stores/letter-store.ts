@@ -36,6 +36,7 @@ import type {
   LetterApprovalStep,
   LetterTimelineEvent,
   CircularAuthority,
+  RegulatoryBodyId,
   PaginationState,
   SortState,
   Attachment,
@@ -278,6 +279,7 @@ function mapRow(row: LetterApiRow, previous?: Letter): Letter {
       ? row.attachments.map(mapAttachment)
       : (previous?.attachments ?? EMPTY_ATTACHMENTS),
     relatedObservations: row.observations ?? previous?.relatedObservations ?? EMPTY_RELATED_OBSERVATIONS,
+    frameworkIds: (row.framework_ids ?? previous?.frameworkIds ?? []) as RegulatoryBodyId[],
     placeholderDefs: row.placeholder_defs ?? previous?.placeholderDefs ?? undefined,
     placeholderValues: row.placeholder_values ?? previous?.placeholderValues ?? undefined,
     createdAt: row.created_at,
@@ -317,7 +319,7 @@ function toCreatePayload(
     signer_name_ar: data.signerNameAr || undefined,
     signer_title_ar: data.signerTitleAr || undefined,
     signature_image_url: data.signatureImageUrl || undefined,
-    framework_ids: data.relatedObservations?.length ? [] : [], // framework_ids not on Letter type yet
+    framework_ids: data.frameworkIds ?? [],
     placeholder_defs: data.placeholderDefs ?? [],
     placeholder_values: data.placeholderValues ?? {},
     template_id: data.templateId || undefined,

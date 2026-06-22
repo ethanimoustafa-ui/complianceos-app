@@ -340,6 +340,9 @@ export default function ReportsExecutivePage() {
         name: fw ? (isRTL ? fw.nameAr : fw.name) : fs.frameworkName,
         icon: fw?.icon ?? 'lucide:shield',
         score: fs.overall,
+        // A framework with too few scored items reads 0/insufficient — surface
+        // that as a neutral "insufficient data" state instead of a red 0%.
+        insufficient: fs.confidence === 'insufficient',
       }
     }),
     [dashboardHealth.frameworkScores, allFrameworks, isRTL]
@@ -382,7 +385,7 @@ export default function ReportsExecutivePage() {
               score: Math.round(complianceScore.components[c.key].score),
               weight: complianceScore.components[c.key].weight,
             })),
-            frameworks: frameworkEntries.map((f) => ({ name: f.name, score: Math.round(f.score) })),
+            frameworks: frameworkEntries.map((f) => ({ name: f.name, score: Math.round(f.score), insufficient: f.insufficient })),
             deductions: complianceScore.deductions.map((d) => ({
               reason:
                 d.description ||
@@ -639,24 +642,33 @@ export default function ReportsExecutivePage() {
                 </div>
               ) : (
                 <div className="flex items-center justify-around">
-                  {frameworkEntries.map(({ key, name, icon, score }) => {
+                  {frameworkEntries.map(({ key, name, icon, score, insufficient }) => {
                     const fwScore = score
-                    const fwOffset = miniCirc - (fwScore / 100) * miniCirc
+                    const fwOffset = insufficient ? miniCirc : miniCirc - (fwScore / 100) * miniCirc
                     return (
                       <div key={key} className="flex flex-col items-center gap-1">
                         <div className="relative" style={{ width: 68, height: 68 }}>
                           <svg width="68" height="68" className="transform -rotate-90">
                             <circle cx="34" cy="34" r={miniRadius} fill="none" stroke="#f1f5f9" strokeWidth="5" />
-                            <circle cx="34" cy="34" r={miniRadius} fill="none" stroke={getGaugeColor(fwScore)} strokeWidth="5" strokeLinecap="round" strokeDasharray={miniCirc} strokeDashoffset={fwOffset} className="transition-all duration-700" />
+                            {!insufficient && (
+                              <circle cx="34" cy="34" r={miniRadius} fill="none" stroke={getGaugeColor(fwScore)} strokeWidth="5" strokeLinecap="round" strokeDasharray={miniCirc} strokeDashoffset={fwOffset} className="transition-all duration-700" />
+                            )}
                           </svg>
                           <div className="absolute inset-0 flex items-center justify-center">
-                            <span className="text-sm font-bold text-slate-900">{Math.round(fwScore)}%</span>
+                            {insufficient ? (
+                              <Icon icon="lucide:minus" className="w-4 h-4 text-slate-300" />
+                            ) : (
+                              <span className="text-sm font-bold text-slate-900">{Math.round(fwScore)}%</span>
+                            )}
                           </div>
                         </div>
                         <div className="flex items-center gap-1">
                           <Icon icon={icon} className="w-3 h-3 text-slate-400" />
                           <span className="text-[10px] font-medium text-slate-600">{name}</span>
                         </div>
+                        {insufficient && (
+                          <span className="text-[9px] text-slate-400">{t('reports.frameworkInsufficient' as TranslationKey)}</span>
+                        )}
                       </div>
                     )
                   })}

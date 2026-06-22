@@ -2539,6 +2539,7 @@
     "componentBreakdown": "Component Breakdown",
     "frameworkScores": "Framework Scores",
     "frameworkScoresEmpty": "No framework scores yet — enable correspondence-based frameworks in Settings and scores will appear once they have activity.",
+    "frameworkInsufficient": "Insufficient data",
     "whatsImpactingScore": "What's Impacting Your Score",
     "totalImpact": "Total Impact",
     "pts": "pts",
