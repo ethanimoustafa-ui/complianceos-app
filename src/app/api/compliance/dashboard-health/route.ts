@@ -17,6 +17,7 @@ import { enqueueRecompute, readScoreCache } from '@/lib/api/services/compliance'
 import { gatherScoringInputs } from '@/lib/api/services/scoring/gather-inputs'
 import { calculateDashboardHealth } from '@/lib/api/services/scoring/dashboard-health'
 import { computeBusinessCompliance } from '@/lib/api/services/scoring/business-compliance'
+import type { PeriodFilter } from '@/lib/api/services/scoring/compliance-engine.types'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -27,9 +28,10 @@ const DASHBOARD_KEY = 'dashboard-health'
 export async function GET(req: NextRequest) {
   try {
     const { supabase } = await requireUser()
-    const q = DashboardHealthQuerySchema.parse(
+    const parsed = DashboardHealthQuerySchema.parse(
       Object.fromEntries(req.nextUrl.searchParams.entries()),
     )
+    const q = { ...parsed, period: parsed.period as PeriodFilter }
     const frameworkId = q.framework_id ?? DASHBOARD_KEY
 
     // 1. Cache HIT.

@@ -1,5 +1,8 @@
 // ── Period Configuration ──────────────────────────────────────────────
-export type PeriodFilter = '3months' | '6months' | '12months' | 'fiscal'
+// 'fiscal' = current fiscal (calendar) year. `fiscal-YYYY` selects a specific
+// past fiscal year (UI year-picker) — same Jan–Dec window, capped at Dec 31 of
+// that year. Purely a retrieval key; no schema/data changes involved.
+export type PeriodFilter = '3months' | '6months' | '12months' | 'fiscal' | `fiscal-${number}`
 
 export interface PeriodConfig {
   filter: PeriodFilter

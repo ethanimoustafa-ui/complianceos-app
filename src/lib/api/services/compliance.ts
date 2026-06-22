@@ -7,12 +7,13 @@
 //     or stale.
 
 import type { SupabaseClient } from '@supabase/supabase-js'
+import type { PeriodFilter } from './scoring/compliance-engine.types'
 
 export const SCORE_CACHE_COLUMNS =
   'id, framework_id, period_filter, department_id, inputs_hash, overall, change_pct, confidence, components, deductions, trend, calculated_at, expires_at'
 
 export interface ScoreCacheKey {
-  period: '3months' | '6months' | '12months' | 'fiscal'
+  period: PeriodFilter
   framework_id: string
   department_id: string | null
 }

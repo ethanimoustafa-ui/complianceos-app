@@ -16,7 +16,12 @@ import { stripHtml } from '../sanitize'
 const Uuid = z.string().uuid()
 const EvaluationKind = z.enum(['rule', 'policy'])
 const Verdict = z.enum(['compliant', 'non-compliant', 'na', 'unknown'])
-const Period = z.enum(['3months', '6months', '12months', 'fiscal'])
+// '3months' | '6months' | '12months' | 'fiscal' | 'fiscal-YYYY' (specific year).
+const Period = z
+  .string()
+  .refine((v) => /^(3months|6months|12months|fiscal|fiscal-\d{4})$/.test(v), {
+    message: 'invalid period',
+  })
 
 // SEC-4: plain-text transform for free-text fields.
 const PlainText = (max: number) => z.string().max(max).transform(stripHtml)

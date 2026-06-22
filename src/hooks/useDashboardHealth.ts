@@ -11,6 +11,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { api, ApiClientError } from '@/lib/api-client'
 import type { DashboardHealthResult } from '@/lib/dashboard-health.types'
+import type { PeriodFilter } from '@/lib/compliance-engine.types'
 
 interface DashboardHealthFetchResponse {
   overall: number
@@ -61,7 +62,7 @@ function emptyResult(): DashboardHealthResult {
 }
 
 export function useDashboardHealth(
-  options?: { period?: '3months' | '6months' | '12months' | 'fiscal' },
+  options?: { period?: PeriodFilter },
 ): UseDashboardHealthResult {
   const period = options?.period ?? '3months'
 

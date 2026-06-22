@@ -20,13 +20,21 @@ import type {
 export function getPeriodConfig(filter: PeriodFilter): PeriodConfig {
   const now = new Date()
   const endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999)
-  let startDate: Date
 
+  // Fiscal year (Saudi FY = calendar year, Jan 1 – Dec 31). 'fiscal' = current
+  // year; 'fiscal-YYYY' = a specific year chosen from the UI year-picker. A past
+  // year ends Dec 31; the current/future year is capped at today.
+  const fiscalYearMatch = /^fiscal-(\d{4})$/.exec(filter)
+  if (filter === 'fiscal' || fiscalYearMatch) {
+    const year = fiscalYearMatch ? Number(fiscalYearMatch[1]) : now.getFullYear()
+    const startDate = new Date(year, 0, 1, 0, 0, 0, 0)
+    const yearEnd =
+      year >= now.getFullYear() ? endDate : new Date(year, 11, 31, 23, 59, 59, 999)
+    return { filter, startDate, endDate: yearEnd }
+  }
+
+  let startDate: Date
   switch (filter) {
-    case '3months':
-      startDate = new Date(now)
-      startDate.setMonth(startDate.getMonth() - 3)
-      break
     case '6months':
       startDate = new Date(now)
       startDate.setMonth(startDate.getMonth() - 6)
@@ -35,9 +43,10 @@ export function getPeriodConfig(filter: PeriodFilter): PeriodConfig {
       startDate = new Date(now)
       startDate.setFullYear(startDate.getFullYear() - 1)
       break
-    case 'fiscal':
-      // Saudi fiscal year = calendar year (Jan 1 - Dec 31)
-      startDate = new Date(now.getFullYear(), 0, 1)
+    case '3months':
+    default:
+      startDate = new Date(now)
+      startDate.setMonth(startDate.getMonth() - 3)
       break
   }
 
@@ -452,7 +461,7 @@ function generateTrend(
   // periodAudits/periodObservations are already filtered to the period window.
   // For each month/quarter, we take the cumulative subset created by that point.
 
-  if (period.filter === 'fiscal') {
+  if (period.filter === 'fiscal' || period.filter.startsWith('fiscal-')) {
     const year = period.startDate.getFullYear()
     const quarters = [
       { label: 'Q1', end: new Date(year, 2, 31, 23, 59, 59, 999) },

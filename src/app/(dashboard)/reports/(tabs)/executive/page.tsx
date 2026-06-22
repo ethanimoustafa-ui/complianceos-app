@@ -145,6 +145,7 @@ export default function ReportsExecutivePage() {
   // State
   const [periodFilter, setPeriodFilter] = useState('12months')
   const [showFilterDropdown, setShowFilterDropdown] = useState(false)
+  const [showYearPicker, setShowYearPicker] = useState(false)
   const [showBreakdownModal, setShowBreakdownModal] = useState(false)
   const [showDeductionsModal, setShowDeductionsModal] = useState(false)
   const [selectedFinding, setSelectedFinding] = useState<AuditFinding | null>(null)
@@ -169,6 +170,30 @@ export default function ReportsExecutivePage() {
 
   // Derive risk distribution
   const risks = useMemo(() => storeRisks, [storeRisks])
+
+  // Fiscal-year picker: the dropdown shows recent periods + the last fiscal
+  // year inline; older years live behind a "More years" popup. The selectable
+  // range runs from this year back to the earliest record the app holds
+  // (oldest audit/risk createdAt) — purely a retrieval key, no backend change.
+  const currentYear = new Date().getFullYear()
+  const availableYears = useMemo(() => {
+    let earliest = currentYear
+    const note = (iso?: string) => {
+      if (!iso) return
+      const y = new Date(iso).getFullYear()
+      if (Number.isFinite(y) && y < earliest) earliest = y
+    }
+    for (const a of storeAudits) note(a.createdAt)
+    for (const r of storeRisks) note(r.createdAt)
+    const years: number[] = []
+    for (let y = currentYear; y >= earliest; y--) years.push(y)
+    return years
+  }, [storeAudits, storeRisks, currentYear])
+
+  // A fiscal year → period key. The current year keeps the canonical 'fiscal'
+  // value so it shares the dashboard-health cache row with the rest of the app.
+  const yearToPeriod = (year: number): string =>
+    year >= currentYear ? 'fiscal' : `fiscal-${year}`
 
   // Resolve a risk-category key → friendly label + a stable distinct bar color.
   // Seed categories keep their canonical i18n label/color; custom categories use
@@ -242,12 +267,20 @@ export default function ReportsExecutivePage() {
 
   const handleFindingClick = (finding: AuditFinding) => { setSelectedFinding(finding); setIsDrawerOpen(true) }
 
-  // Labels
-  const filterLabels: Record<string, string> = {
-    '3months': t('reports.last3Months'),
-    '6months': t('reports.last6Months'),
-    '12months': t('reports.last12Months'),
-    'fiscal': t('reports.fiscalYear2025'),
+  // Labels. Fiscal labels are dynamic — 'fiscal' = current year, `fiscal-YYYY`
+  // = that year (e.g. "Fiscal Year 2024"), so the picker never shows a stale
+  // hardcoded year.
+  const periodLabel = (val: string): string => {
+    switch (val) {
+      case '3months': return t('reports.last3Months')
+      case '6months': return t('reports.last6Months')
+      case '12months': return t('reports.last12Months')
+      case 'fiscal': return `${t('reports.fiscalYear')} ${currentYear}`
+      default: {
+        const m = /^fiscal-(\d{4})$/.exec(val)
+        return m ? `${t('reports.fiscalYear')} ${m[1]}` : val
+      }
+    }
   }
   const severityLabels: Record<Severity, string> = { critical: t('reports.critical'), high: t('reports.high'), medium: t('reports.medium'), low: t('reports.low') }
   const statusLabels: Record<FindingStatus, string> = { remediation: t('reports.remediation'), resolved: t('reports.resolved'), verified: t('reports.verified'), open: t('reports.open') }
@@ -338,6 +371,7 @@ export default function ReportsExecutivePage() {
               month: '2-digit',
               day: '2-digit',
             }),
+            period: periodLabel(periodFilter),
             overallScore: Math.round(complianceScore.overall),
             change: complianceScore.change,
             confidence: complianceScore.confidence,
@@ -462,11 +496,14 @@ export default function ReportsExecutivePage() {
               className="flex items-center gap-2 bg-white border border-slate-200 px-4 py-2 rounded-lg text-sm font-bold text-slate-900 hover:bg-slate-50 transition-colors cursor-pointer"
             >
               <Icon icon="lucide:filter" className="text-slate-400" />
-              <span>{filterLabels[periodFilter]}</span>
+              <span>{periodLabel(periodFilter)}</span>
               <Icon icon="lucide:chevron-down" className={cn('text-slate-400 transition-transform', showFilterDropdown && 'rotate-180')} />
             </button>
             {showFilterDropdown && (
-              <div className={`absolute ${isRTL ? 'left-0' : 'right-0'} mt-2 w-48 bg-white border border-slate-200 rounded-xl shadow-xl z-50 overflow-hidden`}>
+              <div className={`absolute ${isRTL ? 'left-0' : 'right-0'} mt-2 w-52 bg-white border border-slate-200 rounded-xl shadow-xl z-50 overflow-hidden`}>
+                {/* Rolling windows + current fiscal year + last fiscal year
+                    (when data reaches back that far). Older years live behind
+                    "More years" so the menu stays compact. */}
                 {(['3months', '6months', '12months', 'fiscal'] as const).map(val => (
                   <button
                     key={val}
@@ -476,9 +513,29 @@ export default function ReportsExecutivePage() {
                       periodFilter === val ? 'text-emerald-600 bg-emerald-50/30 font-bold' : 'text-slate-700'
                     )}
                   >
-                    {filterLabels[val]}
+                    {periodLabel(val)}
                   </button>
                 ))}
+                {availableYears.includes(currentYear - 1) && (
+                  <button
+                    onClick={() => applyFilter(yearToPeriod(currentYear - 1))}
+                    className={cn(
+                      `w-full ${isRTL ? 'text-right' : 'text-left'} px-4 py-3 text-sm hover:bg-slate-50 font-medium border-b border-slate-100 transition-colors cursor-pointer`,
+                      periodFilter === yearToPeriod(currentYear - 1) ? 'text-emerald-600 bg-emerald-50/30 font-bold' : 'text-slate-700'
+                    )}
+                  >
+                    {periodLabel(yearToPeriod(currentYear - 1))}
+                  </button>
+                )}
+                {availableYears.some((y) => y <= currentYear - 2) && (
+                  <button
+                    onClick={() => { setShowFilterDropdown(false); setShowYearPicker(true) }}
+                    className={`w-full ${isRTL ? 'text-right' : 'text-left'} px-4 py-3 text-sm hover:bg-slate-50 font-bold text-slate-500 transition-colors cursor-pointer flex items-center gap-2`}
+                  >
+                    <Icon icon="lucide:calendar-range" className="w-3.5 h-3.5" />
+                    {t('reports.moreYears' as TranslationKey)}
+                  </button>
+                )}
               </div>
             )}
           </div>
@@ -548,7 +605,7 @@ export default function ReportsExecutivePage() {
                     <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${conf.bg} ${conf.color}`}>
                       {t(('reports.' + conf.label) as TranslationKey)}
                     </span>
-                    <span className="text-[10px] text-slate-400">{filterLabels[periodFilter]}</span>
+                    <span className="text-[10px] text-slate-400">{periodLabel(periodFilter)}</span>
                   </div>
                 </div>
               </div>
@@ -1214,6 +1271,49 @@ export default function ReportsExecutivePage() {
           )
         })()}
       </Drawer>
+
+      {/* Fiscal-year picker — opened from the period dropdown's "More years".
+          Lists every fiscal year back to the earliest record so the dropdown
+          itself stays short. Selecting a year is purely a retrieval key; the
+          on-page trend chart and the PDF both follow whatever is chosen. */}
+      <Modal isOpen={showYearPicker} onClose={() => setShowYearPicker(false)} size="md">
+        <div className={`flex flex-col -m-6 ${isRTL ? 'rtl' : ''}`}>
+          <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+            <div className={isRTL ? 'text-right' : ''}>
+              <h2 className="text-lg font-bold font-display text-slate-900">{t('reports.selectFiscalYear' as TranslationKey)}</h2>
+              <p className="text-xs text-slate-500">{t('reports.selectFiscalYearHint' as TranslationKey)}</p>
+            </div>
+            <button onClick={() => setShowYearPicker(false)} className="text-slate-400 hover:text-slate-600 transition-colors p-2 cursor-pointer">
+              <Icon icon="lucide:x" className="text-2xl" />
+            </button>
+          </div>
+          <div className="p-6 max-h-[60vh] overflow-y-auto hide-scrollbar">
+            <div className="grid grid-cols-3 gap-2.5">
+              {availableYears.map((year) => {
+                const val = yearToPeriod(year)
+                const active = periodFilter === val
+                return (
+                  <button
+                    key={year}
+                    onClick={() => { applyFilter(val); setShowYearPicker(false) }}
+                    className={cn(
+                      'flex flex-col items-center justify-center gap-0.5 py-3 rounded-xl border text-sm font-bold transition-all cursor-pointer',
+                      active
+                        ? 'border-emerald-500 bg-emerald-50 text-emerald-700 shadow-sm'
+                        : 'border-slate-200 text-slate-700 hover:border-slate-300 hover:bg-slate-50'
+                    )}
+                  >
+                    <span>{year}</span>
+                    {year === currentYear && (
+                      <span className="text-[9px] font-medium text-slate-400">{t('reports.current' as TranslationKey)}</span>
+                    )}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        </div>
+      </Modal>
     </div>
   )
 }

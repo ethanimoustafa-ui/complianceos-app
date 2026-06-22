@@ -22,6 +22,7 @@ import { ScoreReadQuerySchema } from '@/lib/api/schemas/reports'
 import { enqueueRecompute, readScoreCache } from '@/lib/api/services/compliance'
 import { gatherScoringInputs } from '@/lib/api/services/scoring/gather-inputs'
 import { calculateComplianceScore } from '@/lib/api/services/scoring/compliance-engine'
+import type { PeriodFilter } from '@/lib/api/services/scoring/compliance-engine.types'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -31,9 +32,12 @@ const COMPUTE_TIMEOUT_MS = 45_000
 export async function GET(req: NextRequest) {
   try {
     const { supabase } = await requireUser()
-    const q = ScoreReadQuerySchema.parse(
+    const parsed = ScoreReadQuerySchema.parse(
       Object.fromEntries(req.nextUrl.searchParams.entries()),
     )
+    // `period` is validated by the schema regex; cast the inferred `string`
+    // back to the engine's PeriodFilter union (incl. `fiscal-YYYY`).
+    const q = { ...parsed, period: parsed.period as PeriodFilter }
 
     // 1. Cache HIT — serve immediately.
     const row = await readScoreCache(supabase, {
