@@ -40,6 +40,9 @@ yarn-error.log*
 .env*
 !.env.example
 
+# Handover login credentials — shared out-of-band, never committed
+/CREDENTIALS.md
+
 # vercel
 .vercel
 
