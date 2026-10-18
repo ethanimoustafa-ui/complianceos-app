@@ -13,7 +13,7 @@ import { test, expect } from '@playwright/test'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { ADMIN } from './_helpers/sign-in'
-import { attachMeasure, readPerfTiming, probeUiArtifacts, type RouteMetrics } from './utils/measure'
+import { attachMeasure, readPerfTiming, probeUiArtifacts, type RouteMetrics } from './_helpers/measure'
 
 /**
  * Local sign-in with retry. The shared helper occasionally clicks the submit

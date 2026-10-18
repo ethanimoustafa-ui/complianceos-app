@@ -89,7 +89,7 @@ export async function runOptimistic<T extends { id: string }, R extends { id: st
 
 import { pushToast, type ToastMessage } from '@/stores/toast-store'
 import { ApiClientError } from '@/lib/api-client'
-import { RBACError } from '@/lib/rbac-error'
+import { RBACError } from '@/lib/rbac/rbac-error'
 
 /**
  * True when an error is a permission denial — either a client-side gate

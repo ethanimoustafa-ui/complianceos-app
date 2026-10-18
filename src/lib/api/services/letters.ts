@@ -172,7 +172,7 @@ export async function nextLetterReference(
   return `${prefix}${String(next).padStart(4, '0')}`
 }
 
-// ---------- placeholder render (server clone of lib/letter-placeholders.ts) -
+// ---------- placeholder render (server clone of lib/letters/letter-placeholders.ts) -
 
 const PLACEHOLDER_RE = /\{\{\s*([a-zA-Z0-9_\-.]+)\s*\}\}/g
 
@@ -211,7 +211,7 @@ export function renderTemplate(
  *
  * For now this helper just returns the rendered text so callers can decide
  * whether to persist it. The frontend continues to render live preview using
- * `src/lib/letter-placeholders.ts`.
+ * `src/lib/letters/letter-placeholders.ts`.
  */
 export function renderLetterFields(
   fields: { subject?: string; subject_ar?: string; body?: string; body_ar?: string },

@@ -19,8 +19,8 @@ import type { TeamMember } from '@/types'
 import { Gate } from '@/components/auth/gate'
 import { dicebearAvatar } from '@/lib/avatar'
 import { paginate } from '@/lib/pagination'
-import { formatAuditAction } from '@/lib/audit-log-format'
-import { formatTimelineDate } from '@/lib/format-date'
+import { formatAuditAction } from '@/lib/format/audit-log-format'
+import { formatTimelineDate } from '@/lib/format/format-date'
 import { isUuid } from '@/lib/user-activity-meta'
 import { useTeamSectionGuard } from '@/hooks/useTeamSectionGuard'
 
@@ -379,7 +379,7 @@ export default function TeamLogsPage() {
             </button>
             <Gate perm="Export Compliance Data">
               <Button size="sm" onClick={() => {
-                import('@/lib/export').then(({ exportUserLogsLocalized }) => {
+                import('@/lib/export/export').then(({ exportUserLogsLocalized }) => {
                   exportUserLogsLocalized(filteredLogs, 'user-logs', t)
                 })
               }}>
@@ -528,7 +528,7 @@ export default function TeamLogsPage() {
                               <Gate perm="Export Compliance Data">
                                 <Button variant="ghost" size="sm" onClick={(e) => {
                                   e.stopPropagation()
-                                  import('@/lib/export').then(({ exportUserLogsLocalized }) => {
+                                  import('@/lib/export/export').then(({ exportUserLogsLocalized }) => {
                                     exportUserLogsLocalized([log], `log-${log.id}`, t)
                                   })
                                 }}>

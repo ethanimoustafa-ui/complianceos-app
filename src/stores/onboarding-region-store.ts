@@ -6,7 +6,7 @@
 
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import { requirePermission } from '@/lib/rbac-store-gate'
+import { requirePermission } from '@/lib/rbac/rbac-store-gate'
 
 export interface OnboardingRegion {
   id: string

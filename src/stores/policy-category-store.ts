@@ -8,7 +8,7 @@
 
 import { create } from 'zustand'
 import { api, ApiClientError } from '@/lib/api-client'
-import { requirePermission } from '@/lib/rbac-store-gate'
+import { requirePermission } from '@/lib/rbac/rbac-store-gate'
 
 export interface PolicyCategoryItem {
   id: string                    // slug / key — what UI and other stores reference

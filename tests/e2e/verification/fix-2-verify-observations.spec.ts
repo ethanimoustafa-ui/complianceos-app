@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test'
-import { signIn } from './_helpers/sign-in'
+import { signIn } from '../_helpers/sign-in'
 
 /**
  * Fix-2 verification — observations dropdown + comments 500 + child-resource

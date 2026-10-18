@@ -35,7 +35,7 @@ import { isPermissionDenied } from '@/lib/optimistic'
 import { useAuditLogStore } from './audit-log-store'
 import { useAuthStore } from './auth-store'
 import { useTeamStore } from './team-store'
-import { requirePermission } from '@/lib/rbac-store-gate'
+import { requirePermission } from '@/lib/rbac/rbac-store-gate'
 
 // ---------- API row shapes (snake_case from Route Handlers) -----------------
 

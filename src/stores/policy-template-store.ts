@@ -11,7 +11,7 @@
 import { create } from 'zustand'
 import type { PolicyTemplate, PolicyCategory, PolicyApprovalTier, RegulatoryBodyId, AuditFrequency, FrequencySchedule } from '@/types'
 import { api, ApiClientError } from '@/lib/api-client'
-import { requirePermission } from '@/lib/rbac-store-gate'
+import { requirePermission } from '@/lib/rbac/rbac-store-gate'
 
 // ---------- API row shape ----------------------------------------------------
 

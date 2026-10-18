@@ -8,18 +8,18 @@ import { Icon } from '@iconify/react'
 import { Modal } from '@/components/ui/modal'
 import { NoDataEmptyState, NoResultsEmptyState } from '@/components/ui/empty-state'
 import { ListSkeleton, Skeleton } from '@/components/ui/skeleton'
-import { formatTimelineDate, formatLocalizedDate } from '@/lib/format-date'
+import { formatTimelineDate, formatLocalizedDate } from '@/lib/format/format-date'
 import { paginate } from '@/lib/pagination'
 import { TablePagination } from '@/components/ui/table-pagination'
 import { cn } from '@/lib/utils'
 import { useTranslation } from '@/i18n'
 import { Gate, EntityGate } from '@/components/auth/gate'
-import { useCanCreateEntity, canDriveLetter } from '@/lib/permissions'
+import { useCanCreateEntity, canDriveLetter } from '@/lib/rbac/permissions'
 import { useLetterStore } from '@/stores/letter-store'
 import { useAuthStore } from '@/stores/auth-store'
 import type { Letter, LetterType, LetterStatus, LetterTemplate, TemplateStatus, CircularAuthority } from '@/types'
 import { useLetterTemplateStore } from '@/stores/letter-template-store'
-import { formatBytes as fmtBytes } from '@/lib/format'
+import { formatBytes as fmtBytes } from '@/lib/format/bytes'
 import { dicebearAvatar } from '@/lib/avatar'
 import { useTeamStore } from '@/stores/team-store'
 import { useFrameworkConfigStore } from '@/stores/framework-config-store'
@@ -31,7 +31,7 @@ import {
   getDepartmentLabel,
   getDepartmentEmail,
   getDefaultDepartmentId,
-} from '@/lib/letter-authority'
+} from '@/lib/letters/letter-authority'
 import { useLetterTypeStore } from '@/stores/letter-type-store'
 import { EditableSelect } from '@/components/ui/editable-select'
 import { PlaceholderDefEditor } from '@/components/correspondence/letter-placeholders/PlaceholderDefEditor'
@@ -40,8 +40,8 @@ import {
   placeholderValuesComplete,
   autoPromoteTypedTokens,
   renderTemplate,
-} from '@/lib/letter-placeholders'
-import { downloadPdf, PdfError } from '@/lib/pdf-client'
+} from '@/lib/letters/letter-placeholders'
+import { downloadPdf, PdfError } from '@/lib/export/pdf-client'
 import { formatDualDates } from '@/lib/pdf/latex/hijri'
 import type { PlaceholderDef, PlaceholderValue } from '@/types'
 import {

@@ -4,7 +4,7 @@ import { useState, useRef } from 'react'
 import { Icon } from '@iconify/react'
 import { Modal } from '@/components/ui/modal'
 import { useTranslation } from '@/i18n'
-import { formatBytes } from '@/lib/format'
+import { formatBytes } from '@/lib/format/bytes'
 
 interface FileUploadModalProps {
   isOpen: boolean

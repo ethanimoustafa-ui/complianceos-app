@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { Icon } from '@iconify/react'
 import { cn } from '@/lib/utils'
-import { formatRelativeTime } from '@/lib/time-utils'
+import { formatRelativeTime } from '@/lib/format/time-utils'
 import { useMessageStore } from '@/stores/message-store'
 import { useAuthStore } from '@/stores/auth-store'
 import { useTeamStore } from '@/stores/team-store'

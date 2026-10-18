@@ -11,7 +11,7 @@ import type { CircularArticle, ArticleRiskLevel, ArticleComplianceStatus } from 
 import { useDepartmentStore } from '@/stores/department-store'
 import { useTeamStore } from '@/stores/team-store'
 import { useAuthStore } from '@/stores/auth-store'
-import { canEditCircular, useEntityCan } from '@/lib/permissions'
+import { canEditCircular, useEntityCan } from '@/lib/rbac/permissions'
 import { EditableSelect } from '@/components/ui/editable-select'
 import { InlineDeadlinePicker } from '@/components/ui/inline-deadline-picker'
 import { useDeepLinkHighlight } from '@/hooks/useDeepLink'

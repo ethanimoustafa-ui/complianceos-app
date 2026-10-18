@@ -12,7 +12,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { api, ApiClientError } from '@/lib/api-client'
-import type { PeriodFilter, ComplianceScoreResult } from '@/lib/compliance-engine.types'
+import type { PeriodFilter, ComplianceScoreResult } from '@/lib/api/services/scoring/compliance-engine.types'
 
 interface ScoreFetchResponse {
   overall: number

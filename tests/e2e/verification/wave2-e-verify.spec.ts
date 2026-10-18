@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { signIn } from './_helpers/sign-in'
+import { signIn } from '../_helpers/sign-in'
 
 /**
  * Wave 2 / Agent E verification.

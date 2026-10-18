@@ -17,7 +17,7 @@
  */
 
 import { test, expect, type Page } from '@playwright/test'
-import { signIn } from './_helpers/sign-in'
+import { signIn } from '../_helpers/sign-in'
 import fs from 'node:fs'
 import path from 'node:path'
 

@@ -2,7 +2,7 @@
 
 import { ReactNode } from 'react'
 import { useAuthStore } from '@/stores/auth-store'
-import { hasPermission, hasRole, isAdmin, canEdit, canDelete, useEffectivePermissions } from '@/lib/permissions'
+import { hasPermission, hasRole, isAdmin, canEdit, canDelete, useEffectivePermissions } from '@/lib/rbac/permissions'
 import type { User } from '@/types'
 
 interface RoleGuardProps {

@@ -17,7 +17,7 @@
 // default category filter set silently drops every seeded row.
 
 import { test, expect } from '@playwright/test'
-import { signIn } from './_helpers/sign-in'
+import { signIn } from '../_helpers/sign-in'
 
 test.describe('Wave2-B: seeded list rendering', () => {
   test.beforeEach(async ({ page }) => {

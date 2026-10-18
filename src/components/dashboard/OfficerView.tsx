@@ -15,7 +15,7 @@ import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
 import { CircularProgressRing } from './CircularProgressRing'
-import { formatTimelineDate } from '@/lib/format-date'
+import { formatTimelineDate } from '@/lib/format/format-date'
 import type { DashboardMetrics } from '@/hooks/useDashboardMetrics'
 
 interface OfficerViewProps {

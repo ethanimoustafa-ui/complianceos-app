@@ -13,7 +13,7 @@ import { useCalendarStore } from '@/stores/calendar-store'
 import { useDeepLinkStore, deepLinkTargetFromItemId } from '@/stores/deep-link-store'
 import { LoadingButton } from '@/components/ui/loading-button'
 import { Modal } from '@/components/ui/modal'
-import { formatTimelineDate } from '@/lib/format-date'
+import { formatTimelineDate } from '@/lib/format/format-date'
 import { pushToast } from '@/stores/toast-store'
 
 function exportItemsToCsv(items: UnifiedCalendarItem[], dateLabel: string) {

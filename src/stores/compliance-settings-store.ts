@@ -11,7 +11,7 @@
 // without flicker (skeleton rule: `isLoading && lastFetched === null`).
 
 import { create } from 'zustand'
-import type { ComponentWeights, ComplianceConfig } from '@/lib/compliance-engine.types'
+import type { ComponentWeights, ComplianceConfig } from '@/lib/api/services/scoring/compliance-engine.types'
 import { api, ApiClientError } from '@/lib/api-client'
 
 const DEFAULT_WEIGHTS: ComponentWeights = {

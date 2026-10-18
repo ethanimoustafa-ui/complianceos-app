@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { Icon } from '@iconify/react'
 import { useTranslation } from '@/i18n'
-import { RBACError } from '@/lib/rbac-error'
+import { RBACError } from '@/lib/rbac/rbac-error'
 
 // Round 4 Phase 6 — global RBAC toast.
 //

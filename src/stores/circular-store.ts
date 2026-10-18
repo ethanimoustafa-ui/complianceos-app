@@ -33,10 +33,10 @@ import type {
   CAPStatus,
   RegulatoryBodyId,
 } from '@/types'
-import { validateChildDeadline } from '@/lib/deadline-validation'
+import { validateChildDeadline } from '@/lib/workflow/deadline-validation'
 import { api, ApiClientError } from '@/lib/api-client'
 import { pushToast, type ToastMessage } from '@/stores/toast-store'
-import { computeCircularProgress } from '@/lib/progress-formula'
+import { computeCircularProgress } from '@/lib/workflow/progress-formula'
 import { optimisticMutation, isPermissionDenied } from '@/lib/optimistic'
 
 // Wave-19.4 / Item-3 — the synthetic "Initial registration" entry shown when a
@@ -223,7 +223,7 @@ export function buildInitialWorkflowSteps(): CircularWorkflowStep[] {
 
 function recalcProgress(c: Circular): number {
   // FORENSIC §5 / Task-B: the GAP-16 dynamic 50/50 formula now lives in ONE
-  // shared module (`src/lib/progress-formula.ts`) imported by both this client
+  // shared module (`src/lib/workflow/progress-formula.ts`) imported by both this client
   // store and the server's `recomputeCircularProgress` — it can no longer
   // drift between layers. This function just gathers the four counts.
   const steps = c.workflowSteps ?? []

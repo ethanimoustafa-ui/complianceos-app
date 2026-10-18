@@ -22,7 +22,7 @@ import { useEntityTemplateStore } from '@/stores/entity-template-store'
 import { useTranslation } from '@/i18n'
 import { Gate } from '@/components/auth/gate'
 import { SortHeader, type SortState } from '@/components/ui/sort-header'
-import { formatLocalizedDate } from '@/lib/format-date'
+import { formatLocalizedDate } from '@/lib/format/format-date'
 import { AddAuditModal } from '@/components/reports/audits/add-audit-modal'
 import type { AuditTemplateCategory } from '@/types'
 

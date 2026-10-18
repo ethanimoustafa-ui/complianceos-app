@@ -535,7 +535,7 @@ export type LetterStatus =
 // ('non-objection' | 'inquiry' | 'submission' | 'notification') so existing
 // letters and templates remain valid.
 export type LetterType = string
-// Department id is now an opaque string scoped per authority (see src/lib/letter-authority.ts).
+// Department id is now an opaque string scoped per authority (see src/lib/letters/letter-authority.ts).
 // Existing SAMA dept IDs (banking-supervision, payment-systems, compliance-aml) remain valid.
 export type SAMADepartment = string
 // Sub-category id is now an opaque string. Default seeds match the legacy

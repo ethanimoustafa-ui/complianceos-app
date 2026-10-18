@@ -3,7 +3,7 @@
 import { Icon } from '@iconify/react'
 import { cn } from '@/lib/utils'
 import type { PlaceholderDef, PlaceholderRefKind, PlaceholderType } from '@/types'
-import { reconcilePlaceholderDefs, refKindLabel } from '@/lib/letter-placeholders'
+import { reconcilePlaceholderDefs, refKindLabel } from '@/lib/letters/letter-placeholders'
 import { useTranslation } from '@/i18n'
 
 interface PlaceholderDefEditorProps {

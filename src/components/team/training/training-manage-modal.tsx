@@ -15,7 +15,7 @@ import { useTrainingCategoryStore } from '@/stores/training-category-store'
 import { useTrainingStore } from '@/stores/training-store'
 import { EditableSelect } from '@/components/ui/editable-select'
 import { getCategoryConfig } from '@/lib/category-config'
-import { formatTimelineDate } from '@/lib/format-date'
+import { formatTimelineDate } from '@/lib/format/format-date'
 
 interface TrainingManageModalProps {
   isOpen: boolean

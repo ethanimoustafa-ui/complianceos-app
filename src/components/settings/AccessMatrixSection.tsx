@@ -18,7 +18,7 @@ import {
   GRANULAR_ACTIONS,
   type GranularAction,
   type Permission,
-} from '@/lib/permissions-registry'
+} from '@/lib/rbac/permissions-registry'
 import type { TeamMember } from '@/types'
 
 // Plan §2.1 default permission bundles per role (label tier).

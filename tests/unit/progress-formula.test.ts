@@ -11,7 +11,7 @@ import { describe, it, expect } from 'vitest'
 import {
   computeCircularProgress,
   type CircularProgressInput,
-} from '@/lib/progress-formula'
+} from '@/lib/workflow/progress-formula'
 
 // Two intentionally trivial wrappers — they exist to model the two import
 // sites the formula is used from. If anyone copy-pasted the formula back

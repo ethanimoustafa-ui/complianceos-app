@@ -8,7 +8,7 @@ import { useObservationStore } from '@/stores/observation-store'
 import { useAuthStore } from '@/stores/auth-store'
 import { useTeamStore } from '@/stores/team-store'
 import { useTranslation } from '@/i18n'
-import { canTransferLeadership, canReviewRemediation, canSubmitRemediation, canUploadDocument, canRequestClosure, canReviewClosure, useCan } from '@/lib/permissions'
+import { canTransferLeadership, canReviewRemediation, canSubmitRemediation, canUploadDocument, canRequestClosure, canReviewClosure, useCan } from '@/lib/rbac/permissions'
 // C(#31): scroll to + glow a checklist item the user clicked on the calendar.
 import { useDeepLinkHighlight } from '@/hooks/useDeepLink'
 import { TransferLeadershipModal } from './transfer-leadership-modal'

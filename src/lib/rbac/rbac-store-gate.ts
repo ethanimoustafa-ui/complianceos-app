@@ -17,8 +17,8 @@
 import { useAuthStore } from '@/stores/auth-store'
 import { useTeamStore } from '@/stores/team-store'
 import { useUserLogStore } from '@/stores/user-log-store'
-import { getEffectivePermissions, type Permission } from '@/lib/permissions'
-import { RBACError } from '@/lib/rbac-error'
+import { getEffectivePermissions, type Permission } from '@/lib/rbac/permissions'
+import { RBACError } from '@/lib/rbac/rbac-error'
 import type { User } from '@/types'
 
 export interface GateContext {

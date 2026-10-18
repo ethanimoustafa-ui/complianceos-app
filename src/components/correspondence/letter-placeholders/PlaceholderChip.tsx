@@ -4,7 +4,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Icon } from '@iconify/react'
 import { cn } from '@/lib/utils'
 import type { PlaceholderDef, PlaceholderValue } from '@/types'
-import { formatRef } from '@/lib/letter-placeholders'
+import { formatRef } from '@/lib/letters/letter-placeholders'
 import { PlaceholderPicker } from './PlaceholderPicker'
 import { useTranslation } from '@/i18n'
 

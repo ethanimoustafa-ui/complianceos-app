@@ -6,7 +6,7 @@ import { Observation } from './observation-types'
 import { NoResultsEmptyState, NoDataEmptyState } from '@/components/ui/empty-state'
 import { useTranslation } from '@/i18n'
 import { useAuthStore } from '@/stores/auth-store'
-import { canEditObservation, useEntityCan } from '@/lib/permissions'
+import { canEditObservation, useEntityCan } from '@/lib/rbac/permissions'
 import { ObservationTableRow } from './observation-table-row'
 import { TablePagination } from '@/components/ui/table-pagination'
 

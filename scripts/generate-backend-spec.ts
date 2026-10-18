@@ -1928,7 +1928,7 @@ function section9(): (Paragraph | Table)[] {
     p('Provisioning rule: POST /api/team/invite with role=officer creates a backend user with role=auditor by default. If the invite payload sets readOnly=true, the backend user is created with role=viewer instead. This decision is one-way at provisioning time; changing later requires an admin to edit the user record.'),
     spacer(),
     h2('9.3 Permission Matrix'),
-    p('Derived from src/lib/permissions.ts (25 permissions × 4 backend roles). Viewer is strictly read-only; auditor adds observation create/edit/comment to match the frontend officer role:'),
+    p('Derived from src/lib/rbac/permissions.ts (25 permissions × 4 backend roles). Viewer is strictly read-only; auditor adds observation create/edit/comment to match the frontend officer role:'),
     tbl(['Permission', 'Viewer', 'Auditor', 'Manager', 'Admin'], [
       ['view', '✓', '✓', '✓', '✓'],
       ['comment', '—', '✓', '✓', '✓'],

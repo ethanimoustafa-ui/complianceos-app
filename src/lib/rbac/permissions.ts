@@ -2,7 +2,7 @@ import { useMemo } from 'react'
 import type { TeamMember, User } from '@/types'
 import { useAuthStore } from '@/stores/auth-store'
 import { useTeamStore } from '@/stores/team-store'
-import { PERMISSIONS, STANDARD_PERMISSIONS, type Permission } from '@/lib/permissions-registry'
+import { PERMISSIONS, STANDARD_PERMISSIONS, type Permission } from '@/lib/rbac/permissions-registry'
 
 // ── Backend permission keys (Supabase `public.permissions` seed) ─────────────
 // The DB-backed permissions registry exposes 25 lowercase:colon keys. These

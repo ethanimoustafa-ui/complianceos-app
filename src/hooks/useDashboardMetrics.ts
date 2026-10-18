@@ -8,8 +8,8 @@ import { useComplianceScore } from '@/hooks/useComplianceScore'
 import { useDashboardHealth } from '@/hooks/useDashboardHealth'
 import { useDashboardSummary } from '@/hooks/useDashboardSummary'
 import type { FrameworkConfig } from '@/types'
-import type { ComplianceScoreResult } from '@/lib/compliance-engine.types'
-import type { DashboardHealthResult } from '@/lib/dashboard-health.types'
+import type { ComplianceScoreResult } from '@/lib/api/services/scoring/compliance-engine.types'
+import type { DashboardHealthResult } from '@/lib/api/services/scoring/dashboard-health.types'
 
 export interface DashboardMetrics {
   compliance: ComplianceScoreResult

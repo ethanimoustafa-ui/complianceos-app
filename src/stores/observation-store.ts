@@ -32,7 +32,7 @@ import type {
 } from '@/types'
 import { api, ApiClientError } from '@/lib/api-client'
 import { supabase as supabaseClient } from '@/lib/supabase/client'
-import { requirePermission } from '@/lib/rbac-store-gate'
+import { requirePermission } from '@/lib/rbac/rbac-store-gate'
 import { newTempId, optimisticMutation } from '@/lib/optimistic'
 // Wave-20.cleanup — the `optimisticMutation` helper calls `pushToast`
 // internally with the keyed `errorMessage`; we just supply the key spec.

@@ -2,7 +2,7 @@
 import {
   getAuthorityRecipientDefaults,
   getDepartmentLabel,
-} from '@/lib/letter-authority'
+} from '@/lib/letters/letter-authority'
 
 // Sort types
 export type LetterSortCol = 'authority' | 'reference' | 'type' | 'subject' | 'status' | 'updatedAt'
@@ -41,7 +41,7 @@ export function buildLetterEmailBody(type: LetterType, lang: 'en' | 'ar', refere
   return intros[type] ?? intros['notification']
 }
 
-// Recipient defaults derived from authority + department (see src/lib/letter-authority.ts).
+// Recipient defaults derived from authority + department (see src/lib/letters/letter-authority.ts).
 export function getRecipientDefaults(
   authority: CircularAuthority,
   deptId: string,

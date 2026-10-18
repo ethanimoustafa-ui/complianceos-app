@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test'
-import { signIn } from './_helpers/sign-in'
+import { signIn } from '../_helpers/sign-in'
 
 /**
  * The auth flow is racy in dev — the AuthListener occasionally misses the

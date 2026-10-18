@@ -20,10 +20,10 @@ import { useTeamStore } from '@/stores/team-store'
 import { calculateComplianceReviewScore } from '@/lib/compliance-review-score'
 import { paginate } from '@/lib/pagination'
 import { ListSkeleton, CardSkeleton } from '@/components/ui/skeleton'
-import { formatLocalizedDate } from '@/lib/format-date'
+import { formatLocalizedDate } from '@/lib/format/format-date'
 import { ExportMenu } from '@/components/ui/export-menu'
-import { downloadPdf } from '@/lib/pdf-client'
-import { exportComplianceReviewLocalized } from '@/lib/export'
+import { downloadPdf } from '@/lib/export/pdf-client'
+import { exportComplianceReviewLocalized } from '@/lib/export/export'
 import { Gate } from '@/components/auth/gate'
 
 // Color/icon channels are static; the user-visible label comes from i18n

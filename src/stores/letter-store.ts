@@ -44,7 +44,7 @@ import type {
   PlaceholderValue,
 } from '@/types'
 import { api, ApiClientError } from '@/lib/api-client'
-import { requirePermission } from '@/lib/rbac-store-gate'
+import { requirePermission } from '@/lib/rbac/rbac-store-gate'
 import { useAuthStore } from '@/stores/auth-store'
 // newTempId removed — W28-D1 create no longer uses a temp row
 import { useUserLogStore } from '@/stores/user-log-store'

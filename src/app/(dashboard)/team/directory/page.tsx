@@ -279,7 +279,7 @@ export default function TeamDirectoryPage() {
                   </div>
                 <button
                   onClick={() => {
-                    import('@/lib/export').then(({ exportToCSV }) => {
+                    import('@/lib/export/export').then(({ exportToCSV }) => {
                       const data = members.map(m => ({
                         Name: m.name,
                         Email: m.email,

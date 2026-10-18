@@ -6,7 +6,7 @@ import { Modal } from '@/components/ui/modal'
 import { Button } from '@/components/ui/button'
 import { LoadingButton } from '@/components/ui/loading-button'
 import { useTranslation } from '@/i18n'
-import { formatBytes } from '@/lib/format'
+import { formatBytes } from '@/lib/format/bytes'
 import type { RemediationPlanStatus } from '@/types'
 
 interface PlanDocument {

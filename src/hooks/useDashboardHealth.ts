@@ -10,8 +10,8 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { api, ApiClientError } from '@/lib/api-client'
-import type { DashboardHealthResult } from '@/lib/dashboard-health.types'
-import type { PeriodFilter } from '@/lib/compliance-engine.types'
+import type { DashboardHealthResult } from '@/lib/api/services/scoring/dashboard-health.types'
+import type { PeriodFilter } from '@/lib/api/services/scoring/compliance-engine.types'
 
 interface DashboardHealthFetchResponse {
   overall: number

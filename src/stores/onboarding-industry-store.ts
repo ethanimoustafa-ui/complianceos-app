@@ -9,7 +9,7 @@
 
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import { requirePermission } from '@/lib/rbac-store-gate'
+import { requirePermission } from '@/lib/rbac/rbac-store-gate'
 
 // Onboarding industry picker — opaque string id seeded with the original
 // hard-coded options. New entries added by the user persist here so any

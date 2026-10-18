@@ -11,7 +11,7 @@ import { usePolicyStore } from '@/stores/policy-store'
 import type { Circular, Policy } from '@/types'
 import { EditableSelect } from '@/components/ui/editable-select'
 import { Skeleton } from '@/components/ui/skeleton'
-import { formatLocalizedDate } from '@/lib/format-date'
+import { formatLocalizedDate } from '@/lib/format/format-date'
 
 type RegistryRow = {
   id: string

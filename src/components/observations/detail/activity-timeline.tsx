@@ -2,7 +2,7 @@
 
 import { memo, useMemo, useState } from 'react'
 import { useTranslation } from '@/i18n'
-import { formatTimelineDate } from '@/lib/format-date'
+import { formatTimelineDate } from '@/lib/format/format-date'
 import { dicebearAvatar } from '@/lib/avatar'
 import { Skeleton } from '@/components/ui/skeleton'
 import type { ObservationTimelineEntry } from '@/types'

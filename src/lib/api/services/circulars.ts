@@ -3,7 +3,7 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { NotFound } from '../errors'
-import { computeCircularProgress } from '../../progress-formula'
+import { computeCircularProgress } from '@/lib/workflow/progress-formula'
 
 // Wave-19 / Q3 — `is_overdue` is a real bool column on `circulars` (migration
 // 055), populated by a BEFORE INSERT/UPDATE trigger on (`due_date`, `status`)
@@ -373,7 +373,7 @@ export async function getCircularHeader(
  * Recompute and persist a circular's progress percentage.
  *
  * GAP-16 — DYNAMIC 50/50 WEIGHTING. The formula is the shared pure function
- * `computeCircularProgress` in `src/lib/progress-formula.ts`, imported here AND
+ * `computeCircularProgress` in `src/lib/workflow/progress-formula.ts`, imported here AND
  * by the client store's `recalcProgress` — the two layers can no longer drift.
  *
  *   totalSteps      = circular's workflow steps
@@ -440,7 +440,7 @@ export async function recomputeCircularProgress(
 
     // GAP-16: dynamic 50/50 weighting — fresh value, no sticky clamp.
     // FORENSIC §5 / Task-B: the formula lives in ONE shared module
-    // (`src/lib/progress-formula.ts`) imported by both this server service and
+    // (`src/lib/workflow/progress-formula.ts`) imported by both this server service and
     // the client store's `recalcProgress` — it can no longer drift.
     const progress = computeCircularProgress({
       stepsTotal,

@@ -12,7 +12,7 @@ import { useTranslation } from '@/i18n'
 import { Gate } from '@/components/auth/gate'
 import { SortHeader, type SortState } from '@/components/ui/sort-header'
 import { EditableSelect } from '@/components/ui/editable-select'
-import { formatLocalizedDate } from '@/lib/format-date'
+import { formatLocalizedDate } from '@/lib/format/format-date'
 import type { PolicyTemplate, PolicyCategory, PolicyApprovalTier, AuditFrequency, FrequencySchedule } from '@/types'
 
 type SortCol = 'name' | 'category' | 'updatedAt' | 'usageCount'

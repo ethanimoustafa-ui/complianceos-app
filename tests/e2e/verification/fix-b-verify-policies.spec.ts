@@ -6,7 +6,7 @@
 // (the bug Fix-B closes) the post-reload assertion fails.
 
 import { test, expect } from '@playwright/test'
-import { signIn } from './_helpers/sign-in'
+import { signIn } from '../_helpers/sign-in'
 
 const POLICIES_PATH = '/correspondence/regulatory-updates/policies'
 

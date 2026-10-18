@@ -18,7 +18,7 @@ import type { Audit, AuditAuthority, ReviewSchedule, RegulatoryBodyId } from '@/
 import { pushToast } from '@/stores/toast-store'
 import { ApiClientError } from '@/lib/api-client'
 import { ReviewSchedulePicker } from '@/components/ui/ReviewSchedulePicker'
-import { computeNextReview } from '@/lib/review-schedule'
+import { computeNextReview } from '@/lib/workflow/review-schedule'
 import { useFrameworkConfigStore, frameworkIconTextClass } from '@/stores/framework-config-store'
 import { FrameworkTagSelector } from '@/components/ui/framework-tag-selector'
 import { useAuditCategoryStore } from '@/stores/audit-category-store'

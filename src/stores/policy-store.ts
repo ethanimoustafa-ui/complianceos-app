@@ -31,9 +31,9 @@ import type {
   ReviewSchedule,
 } from '@/types'
 import { api, ApiClientError } from '@/lib/api-client'
-import { computeNextReview, cadenceToReviewCycleDays } from '@/lib/review-schedule'
-import { validateChildDeadline } from '@/lib/deadline-validation'
-import { requirePermission } from '@/lib/rbac-store-gate'
+import { computeNextReview, cadenceToReviewCycleDays } from '@/lib/workflow/review-schedule'
+import { validateChildDeadline } from '@/lib/workflow/deadline-validation'
+import { requirePermission } from '@/lib/rbac/rbac-store-gate'
 import { pushToast, type ToastMessage } from '@/stores/toast-store'
 import { isPermissionDenied } from '@/lib/optimistic'
 

@@ -23,7 +23,7 @@
 
 import type { NextRequest } from 'next/server'
 import { canDriveWorkflow, requireUser } from '@/lib/api/auth'
-import { callerMeetsStepRole } from '@/lib/letter-approval-roles'
+import { callerMeetsStepRole } from '@/lib/letters/letter-approval-roles'
 import { Conflict, Forbidden, handle, NotFound } from '@/lib/api/errors'
 import { ok } from '@/lib/api/response'
 import { parseJson } from '@/lib/api/validate'

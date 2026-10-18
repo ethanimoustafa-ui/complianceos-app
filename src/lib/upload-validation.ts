@@ -10,7 +10,7 @@
 // Copy follows the product UX-writing rules: states what happened AND how to fix
 // it, no jargon, no blame.
 
-import { formatBytes } from '@/lib/format'
+import { formatBytes } from '@/lib/format/bytes'
 import type { ToastMessage } from '@/stores/toast-store'
 
 /**

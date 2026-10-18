@@ -26,8 +26,8 @@ import {
   PERMISSION_BACKEND_KEYS,
   accessControlsFromGrants,
   type Permission,
-} from '@/lib/permissions-registry'
-import { requirePermission } from '@/lib/rbac-store-gate'
+} from '@/lib/rbac/permissions-registry'
+import { requirePermission } from '@/lib/rbac/rbac-store-gate'
 import { useUserLogStore } from '@/stores/user-log-store'
 import { api, ApiClientError } from '@/lib/api-client'
 

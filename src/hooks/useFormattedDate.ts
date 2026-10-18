@@ -1,6 +1,6 @@
 import { useCallback } from 'react'
 import { useUserPreferencesStore } from '@/stores/user-preferences-store'
-import { formatDateWithPreference } from '@/lib/date-format'
+import { formatDateWithPreference } from '@/lib/format/date-format'
 import { useTranslation } from '@/i18n'
 
 export function useFormattedDate() {

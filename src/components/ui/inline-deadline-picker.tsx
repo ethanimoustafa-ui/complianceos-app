@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Icon } from '@iconify/react'
 import { cn } from '@/lib/utils'
-import { validateChildDeadline, isOverdue } from '@/lib/deadline-validation'
+import { validateChildDeadline, isOverdue } from '@/lib/workflow/deadline-validation'
 import { useTranslation } from '@/i18n'
 
 interface InlineDeadlinePickerProps {

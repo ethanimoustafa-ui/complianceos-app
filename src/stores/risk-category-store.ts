@@ -6,7 +6,7 @@
 
 import { create } from 'zustand'
 import { api, ApiClientError } from '@/lib/api-client'
-import { requirePermission } from '@/lib/rbac-store-gate'
+import { requirePermission } from '@/lib/rbac/rbac-store-gate'
 
 export interface RiskCategoryItem {
   id: string

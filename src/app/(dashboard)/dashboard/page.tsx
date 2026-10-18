@@ -13,8 +13,8 @@ import {
   ManagerialSkeleton,
   OfficerSkeleton,
 } from '@/components/dashboard/DashboardSkeletons'
-import { downloadPdf } from '@/lib/pdf-client'
-import { toComplianceReportData } from '@/lib/compliance-report-data'
+import { downloadPdf } from '@/lib/export/pdf-client'
+import { toComplianceReportData } from '@/lib/export/compliance-report-data'
 import { ExportMenu } from '@/components/ui/export-menu'
 import { pushToast } from '@/stores/toast-store'
 import type { DashboardView } from '@/types'
@@ -65,7 +65,7 @@ export default function DashboardPage() {
 
   // Executive Compliance Status Report — rendered server-side via the xelatex
   // microservice (engine: 'latex'), enqueued as a `pdf.latex` job. Replaces the
-  // legacy jsPDF dashboard export (src/lib/dashboard-pdf.ts).
+  // legacy jsPDF dashboard export (since removed).
   const [pdfBusy, setPdfBusy] = useState(false)
   const handleExport = useCallback(async () => {
     if (pdfBusy) return

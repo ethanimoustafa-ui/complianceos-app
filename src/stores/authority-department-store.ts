@@ -14,7 +14,7 @@
 // `isLoading && departments.length === 0` (first fetch only).
 
 import { create } from 'zustand'
-import type { DeptDescriptor } from '@/lib/letter-authority'
+import type { DeptDescriptor } from '@/lib/letters/letter-authority'
 import { api, ApiClientError } from '@/lib/api-client'
 
 interface AuthorityDeptApiRow {

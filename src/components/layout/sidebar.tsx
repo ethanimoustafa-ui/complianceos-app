@@ -16,7 +16,7 @@ import { SignOutModal } from '@/components/auth/sign-out-modal'
 import { ProfileModal } from '@/components/profile/profile-modal'
 import { useNotificationEngine } from '@/hooks/useNotificationEngine'
 import { dicebearAvatar } from '@/lib/avatar'
-import { hasRole } from '@/lib/permissions'
+import { hasRole } from '@/lib/rbac/permissions'
 import { APP_VERSION } from '@/lib/version'
 
 // `href` is the navigation target (the section's default tab, so clicking skips

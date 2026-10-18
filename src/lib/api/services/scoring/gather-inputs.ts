@@ -38,7 +38,7 @@ import type {
   DashboardWeights,
 } from './dashboard-health.types'
 import type { FrameworkWeights } from '@/types'
-import { toFrameworkId } from '@/lib/letter-authority'
+import { toFrameworkId } from '@/lib/letters/letter-authority'
 
 // Merge an item's explicit framework tags with the framework implied by its
 // authority/source/audit-type, so correspondence (addressed to e.g. SAMA)

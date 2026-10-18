@@ -1,8 +1,8 @@
 'use client'
 
 import { ReactNode } from 'react'
-import { useCan, useCanAny, useEntityCan, type EntityAction } from '@/lib/permissions'
-import type { Permission } from '@/lib/permissions-registry'
+import { useCan, useCanAny, useEntityCan, type EntityAction } from '@/lib/rbac/permissions'
+import type { Permission } from '@/lib/rbac/permissions-registry'
 
 interface GateProps {
   /** Permission(s) required to render the children. Array means ALL required. */

@@ -13,7 +13,7 @@
 import { useState } from 'react'
 import { Icon } from '@iconify/react'
 import type { VersionFieldChange } from '@/types'
-import { renderFieldLabel } from '@/lib/timeline-message'
+import { renderFieldLabel } from '@/lib/format/timeline-message'
 
 export interface VersionHistoryItem {
   version: number

@@ -15,12 +15,12 @@ import { FrameworkTagSelector } from '@/components/ui/framework-tag-selector'
 import {
   getAuthorityDepartments,
   getDefaultDepartmentId,
-} from '@/lib/letter-authority'
+} from '@/lib/letters/letter-authority'
 import {
   reconcilePlaceholderDefs,
   placeholderValuesComplete,
   autoPromoteTypedTokens,
-} from '@/lib/letter-placeholders'
+} from '@/lib/letters/letter-placeholders'
 import type {
   LetterType,
   Attachment,

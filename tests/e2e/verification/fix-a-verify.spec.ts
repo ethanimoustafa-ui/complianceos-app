@@ -1,5 +1,5 @@
 import { test, expect, type ConsoleMessage } from '@playwright/test'
-import { signIn } from './_helpers/sign-in'
+import { signIn } from '../_helpers/sign-in'
 
 /**
  * Fix-A verification — confirms that opening the "create letter" and

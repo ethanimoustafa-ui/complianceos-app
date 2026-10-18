@@ -34,8 +34,8 @@ import type {
   User,
 } from '@/types'
 import { api, ApiClientError } from '@/lib/api-client'
-import { computeNextReview } from '@/lib/review-schedule'
-import { requirePermission } from '@/lib/rbac-store-gate'
+import { computeNextReview } from '@/lib/workflow/review-schedule'
+import { requirePermission } from '@/lib/rbac/rbac-store-gate'
 import { newTempId, isPermissionDenied } from '@/lib/optimistic'
 import { pushToast } from '@/stores/toast-store'
 

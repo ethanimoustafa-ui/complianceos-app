@@ -38,6 +38,7 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+!.env.example
 
 # vercel
 .vercel
@@ -49,8 +50,8 @@ next-env.d.ts
 # Random
 
 *.txt
-# Keep scope reference text (HANDOFF.md references it)
-!scope/*.txt
+# Keep scope reference text (docs/history/HANDOFF.md references it)
+!docs/product/scope/*.txt
 
 # Sessions
 /sessions

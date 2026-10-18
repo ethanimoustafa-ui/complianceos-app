@@ -3,7 +3,7 @@
 import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuthStore } from '@/stores/auth-store'
-import { hasRole } from '@/lib/permissions'
+import { hasRole } from '@/lib/rbac/permissions'
 
 // Officers only get the Training sub-page of the Team section — the
 // directory (member roster, pending approvals, burnout) and user logs are

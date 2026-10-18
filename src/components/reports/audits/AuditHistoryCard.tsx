@@ -12,8 +12,8 @@ import { Button } from '@/components/ui/button'
 import { useTranslation } from '@/i18n'
 import { useAuditStore, type AuditCycleSummary, type AuditCycleDetail } from '@/stores/audit-store'
 import { useTeamStore } from '@/stores/team-store'
-import { generateAuditCyclePdf } from '@/lib/audit-cycle-pdf'
-import { formatAuditAction } from '@/lib/audit-log-format'
+import { generateAuditCyclePdf } from '@/lib/export/audit-cycle-pdf'
+import { formatAuditAction } from '@/lib/format/audit-log-format'
 import { supabase as supabaseClient } from '@/lib/supabase/client'
 
 const STATUS_STYLE: Record<string, string> = {

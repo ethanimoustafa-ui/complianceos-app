@@ -10,11 +10,11 @@ import { Input } from '@/components/ui/input'
 import { DeleteConfirmationDialog } from '@/components/ui/delete-confirmation-dialog'
 import { useTranslation } from '@/i18n'
 import type { TranslationKey } from '@/i18n'
-import { downloadPdf } from '@/lib/pdf-client'
+import { downloadPdf } from '@/lib/export/pdf-client'
 import { EntityGate } from '@/components/auth/gate'
 import { useAuthStore } from '@/stores/auth-store'
 import { ExportMenu } from '@/components/ui/export-menu'
-import { hasRole } from '@/lib/permissions'
+import { hasRole } from '@/lib/rbac/permissions'
 import { useTrainingStore } from '@/stores/training-store'
 import { useDepartmentStore } from '@/stores/department-store'
 import { EditableSelect } from '@/components/ui/editable-select'
@@ -334,7 +334,7 @@ function TeamTrainingPageContent() {
                   label: t('common.exportCsv'),
                   icon: 'lucide:table',
                   onSelect: () => {
-                    void import('@/lib/export').then(({ exportTrainingDataLocalized }) => {
+                    void import('@/lib/export/export').then(({ exportTrainingDataLocalized }) => {
                       exportTrainingDataLocalized(employees, courses, 'training-data', t)
                     })
                   },
@@ -455,7 +455,7 @@ function TeamTrainingPageContent() {
             onRemoveEmployee={setEmployeeToRemove}
             onHrReminder={() => setIsHrReminderOpen(true)}
             onExport={() => {
-              import('@/lib/export').then(({ exportTrainingDataLocalized }) => {
+              import('@/lib/export/export').then(({ exportTrainingDataLocalized }) => {
                 exportTrainingDataLocalized(employees, courses, 'training-data', t)
               })
             }}
@@ -471,7 +471,7 @@ function TeamTrainingPageContent() {
         onAssignTraining={handleAssignTraining}
         onToast={showToast}
         onExport={(emp) => {
-          import('@/lib/export').then(({ exportTrainingDataLocalized }) => {
+          import('@/lib/export/export').then(({ exportTrainingDataLocalized }) => {
             exportTrainingDataLocalized([emp], courses, `training-${emp.name}`, t)
           })
         }}

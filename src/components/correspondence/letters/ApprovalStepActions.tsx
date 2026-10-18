@@ -3,8 +3,8 @@
 import { useState } from 'react'
 import { Icon } from '@iconify/react'
 import { useTranslation } from '@/i18n'
-import { canApproveLetter } from '@/lib/permissions'
-import { callerMeetsStepRole } from '@/lib/letter-approval-roles'
+import { canApproveLetter } from '@/lib/rbac/permissions'
+import { callerMeetsStepRole } from '@/lib/letters/letter-approval-roles'
 import { useAuthStore } from '@/stores/auth-store'
 import { useLetterStore } from '@/stores/letter-store'
 

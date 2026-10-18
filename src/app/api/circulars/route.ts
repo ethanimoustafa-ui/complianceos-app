@@ -17,7 +17,7 @@ import {
   insertCircularTimeline,
   nextCircularReference,
 } from '@/lib/api/services/circulars'
-import { buildDefaultWorkflowStepRows } from '@/lib/workflow-defaults'
+import { buildDefaultWorkflowStepRows } from '@/lib/workflow/workflow-defaults'
 // Wave-19.1 / Q8 — server-side bilingual renderer for dual-store timeline rows.
 import { renderBilingual } from '@/lib/i18n/server'
 
